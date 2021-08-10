@@ -1,0 +1,17 @@
+[package]
+name = "zff"
+version = "0.1.0"
+authors = ["ph0llux <ph0llux@pm.me"]
+edition = "2018"
+license = "MIT"
+description = "Placeholder, for a future project."
+repository = "https://github.com/ph0llux/zff"
+
+[lib]
+name = "zff"
+path = "src/lib/mod.rs"
+test = true
+bench = true
+doc = true
+edition = "2018"
+crate-type = ["lib"]
