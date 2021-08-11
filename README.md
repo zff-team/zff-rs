@@ -8,7 +8,7 @@
 
 | Name                |      Type         | Length in bytes |
 |---------------------|:-----------------:|:---------------:|
-| Magic bytes         | 0x7A6666          | 3               |
+| Magic bytes         | 0x7A66666d        | 4               |
 | Header version      | uint8             | 1               |
 | description header  | object            | variable        |
 | split size in bytes | uint64            | 8               |
