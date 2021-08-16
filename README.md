@@ -20,13 +20,16 @@
 
 #### Layout of encryption subheader
 
-| Name                     | Type       | Length in bytes |
-|--------------------------|:----------:|:---------------:|
-| Magic bytes              | 0x7a666665 | 4               |
-| Header length in bytes   | uint64     | 8               |
-| Header version           | uint8      | 1               |
-| Encryption algorithm     | uint8      | 1               |
-| encrypted encryption key |
+| Name                        | Type       | Length in bytes |
+|-----------------------------|:----------:|:---------------:|
+| Magic bytes                 | 0x7A666665 | 4               |
+| Header length in bytes      | uint64     | 8               |
+| Header version              | uint8      | 1               |
+| PBE header                  | object     | variable        |
+| Encryption algorithm        | uint8      | 1               |
+| encr. encryption key length | uint32     | 4               |
+| encrypted encryption key    | bytes      | variable        |
+| encryption key nonce        | bytes      | 12              |
 
 ##### encryption algorithms
 
@@ -34,6 +37,31 @@
 |----------------|:----------:|
 | AES128-GCM-SIV | 0          |
 | AES256-GCM-SIV | 1          |
+
+##### Layout of password-based encryption (PBE) subheader (PCKS#5 / PBES2)
+
+| Name                        | Type       | Length in bytes |
+|-----------------------------|:----------:|:---------------:|
+| Magic bytes                 | 0x7A666670 | 4               |
+| Header length in bytes      | uint64     | 8               |
+| Header version              | uint8      | 1               |
+| KDF flag					  | uint8      | 1               |
+| encryption scheme flag	  | uint8	   | 1  			 |
+| KDF parameters			  | object	   | variable        |
+| AES Nonce/IV 				  | bytes      | 16              |
+
+###### KDF Flag
+
+| Scheme         | type value |
+|----------------|:----------:|
+| PBKDF2/SHA256	 | 0          |
+
+###### Encryption scheme Flag
+
+| Scheme         | type value |
+|----------------|:----------:|
+| AES128CBC		 | 0          |
+| AES256CBC		 | 1   		  |
 
 #### Layout of compression subheader
 
