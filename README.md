@@ -63,6 +63,15 @@
 | AES128CBC		 | 0          |
 | AES256CBC		 | 1   		  |
 
+###### KDF parameters
+
+| PBKDF2 / SHA256                               |
+|----------------|:----------:|:---------------:|
+| Name           | Type       | Length in bytes |
+| iterations     | uint16     | 2               |
+| salt           | bytes      | 32              |
+
+
 #### Layout of compression subheader
 
 | Name                    | Type       | Length in bytes |
