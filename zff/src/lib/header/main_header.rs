@@ -3,6 +3,7 @@ use crate::{
 	HeaderEncoder,
 	HeaderObject,
 	ValueType,
+	CompressionHeader,
 	DescriptionHeader,
 	HEADER_IDENTIFIER_MAIN_HEADER
 };
@@ -10,6 +11,7 @@ use crate::{
 #[derive(Debug,Clone)]
 pub struct MainHeader {
 	header_version: u8,
+	compression_header: CompressionHeader,
 	description_header: DescriptionHeader,
 	length_of_data: u64,
 }
@@ -17,10 +19,12 @@ pub struct MainHeader {
 impl MainHeader {
 	pub fn new(
 		header_version: u8,
+		compression_header: CompressionHeader,
 		description_header: DescriptionHeader,
 		length_of_data: u64) -> MainHeader {
 		Self {
 			header_version: header_version,
+			compression_header: compression_header,
 			description_header: description_header,
 			length_of_data: length_of_data,
 		}
