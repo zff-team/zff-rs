@@ -16,3 +16,6 @@ bench = true
 doc = true
 edition = "2018"
 crate-type = ["lib"]
+
+[dependencies]
+zstd = "0.9.0"
