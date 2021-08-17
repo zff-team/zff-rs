@@ -1,19 +1,12 @@
+#[repr(u8)]
+#[non_exhaustive]
+#[derive(Debug,Clone)]
 pub enum ValueType {
-	Uint8,
-	Uint32,
-	Uint64,
-	String,
-	Object,
-}
-
-impl ValueType {
-	pub fn as_raw_value(&self) -> u8 {
-		match self {
-			ValueType::Uint8 => 0,
-			ValueType::Uint32 => 1,
-			ValueType::Uint64 => 2,
-			ValueType::String => 3,
-			ValueType::Object => 4,
-		}
-	}
+	Uint8 = 0,
+	Uint16 = 1,
+	Uint32 = 2,
+	Uint64 = 3,
+	String = 4,
+	Object = 5,
+	Bytes = 6,
 }
