@@ -8,7 +8,7 @@
 
 | Name                    |      Type         | Length in bytes |
 |-------------------------|:-----------------:|:---------------:|
-| Magic bytes             | 0x7A66666d        | 4               |
+| Magic bytes             | 0x7A66666D        | 4               |
 | Header length in bytes  | uint64            | 8               |
 | Header version          | uint8             | 1               |
 | encryption flag         | uint8             | 1               |
@@ -48,7 +48,7 @@
 | KDF flag					  | uint8      | 1               |
 | encryption scheme flag	  | uint8	   | 1  			 |
 | KDF parameters			  | object	   | variable        |
-| AES Nonce/IV 				  | bytes      | 16              |
+| PBEncryption Nonce/IV 	  | bytes      | 16              |
 
 ##### KDF Flag
 
@@ -67,10 +67,12 @@
 
 ###### PBKDF2 / SHA256
 
-| Name           | Type       | Length in bytes |
-|----------------|:----------:|:---------------:|
-| iterations     | uint16     | 2               |
-| salt           | bytes      | 32              |
+| Name                        | Type       | Length in bytes |
+|-----------------------------|:----------:|:---------------:|
+| Magic bytes                 | 0x6b646670 | 4               |
+| Header length in bytes      | uint64     | 8               |
+| iterations                  | uint16     | 2               |
+| salt                        | bytes      | 32              |
 
 
 ### Layout of compression subheader
@@ -102,10 +104,6 @@
 | Examiner name          | String     | "ex"       |           |
 | Notes                  | String     | "no"       |           |
 | Acquisition date/time  | uint32     | "ad"       |           |
-
-### Layout of encryption subheader
-
-todo.
 
 ### Layout of split subheader
 
