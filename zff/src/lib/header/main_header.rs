@@ -1,10 +1,12 @@
 // - internal
 use crate::{
+	Result,
 	HeaderEncoder,
 	HeaderObject,
 	ValueType,
 	CompressionHeader,
 	DescriptionHeader,
+	EncryptionHeader,
 	HEADER_IDENTIFIER_MAIN_HEADER
 };
 
@@ -28,6 +30,14 @@ impl MainHeader {
 			description_header: description_header,
 			length_of_data: length_of_data,
 		}
+	}
+
+	pub fn new_from_encrypted_header(
+		header_version: u8,
+		encryption_header: EncryptionHeader,
+		encrypted_data: Vec<u8>,
+		) -> Result<MainHeader> {
+		unimplemented!()
 	}
 
 	pub fn header_version(&self) -> u8 {
