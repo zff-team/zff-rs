@@ -4,6 +4,8 @@ use std::io;
 
 // - internal
 
+// - external
+use pkcs5::CryptoError as PKCS5CryptoError;
 
 /// The main error-type of this crate.
 #[derive(Debug, Clone)]
@@ -16,6 +18,7 @@ pub struct ZffError {
 #[derive(Debug, Clone)]
 pub enum ZffErrorKind {
 	IoError,
+	PKCS5CryptoError,
 	Custom,
 }
 
@@ -23,6 +26,7 @@ impl fmt::Display for ZffErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let err_msg = match self {
 			ZffErrorKind::IoError => "IoError",
+			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
 			ZffErrorKind::Custom => "Custom",
 		};
 	write!(f, "{}", err_msg)
@@ -63,6 +67,12 @@ impl ZffError {
 impl From<io::Error> for ZffError {
 	fn from(e: io::Error) -> ZffError {
 		ZffError::new(ZffErrorKind::IoError, e.to_string())
+	}
+}
+
+impl From<PKCS5CryptoError> for ZffError {
+	fn from(e: PKCS5CryptoError) -> ZffError {
+		ZffError::new(ZffErrorKind::PKCS5CryptoError, e.to_string())
 	}
 }
 
