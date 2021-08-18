@@ -19,3 +19,4 @@ crate-type = ["lib"]
 
 [dependencies]
 zstd = "0.9.0"
+pkcs5 = { version = "0.3.0", features = [ "pbes2", "alloc" ] }
