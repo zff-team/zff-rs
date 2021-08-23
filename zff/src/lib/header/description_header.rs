@@ -20,7 +20,7 @@ pub struct DescriptionHeader {
 	evidence_number: Option<String>,
 	examiner_name: Option<String>,
 	notes: Option<String>,
-	acquisition_date: Option<u32>,
+	acquisition_date: Option<u64>,
 }
 
 impl DescriptionHeader {
@@ -78,10 +78,10 @@ impl DescriptionHeader {
 		}
 	}
 
-	pub fn set_acquisition_date(&mut self, value: u32) {
+	pub fn set_acquisition_date(&mut self, value: u64) {
 		self.acquisition_date = Some(value)
 	}
-	pub fn acquisition_date(&self) -> Option<u32> {
+	pub fn acquisition_date(&self) -> Option<u64> {
 		match &self.acquisition_date {
 			Some(x) => Some(*x),
 			None => None

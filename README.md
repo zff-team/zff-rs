@@ -103,7 +103,7 @@
 | Evidence number        | String     | "ev"       |           |
 | Examiner name          | String     | "ex"       |           |
 | Notes                  | String     | "no"       |           |
-| Acquisition date/time  | uint32     | "ad"       |           |
+| Acquisition date/time  | uint64     | "ad"       |           |
 
 ### Layout of split subheader
 
