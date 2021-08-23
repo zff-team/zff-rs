@@ -1,0 +1,15 @@
+[package]
+name = "zffacquire"
+authors = ["ph0llux <ph0llux@pm.me>"]
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "zffacquire"
+path = "src/bin/main.rs"
+test = true
+bench = true
+
+[dependencies]
+clap = "2.33"
+zff = { path = "../zff" }

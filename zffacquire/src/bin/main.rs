@@ -1,0 +1,128 @@
+// - STD
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
+
+// - extern crates
+extern crate clap;
+
+// - modules
+mod lib;
+
+// - internal
+use crate::lib::*;
+use zff::{
+    DescriptionHeader,
+    CompressionHeader,
+    CompressionAlgorithm,
+};
+
+// - external
+use clap::{
+    Arg,
+    App,
+    SubCommand,
+    ArgMatches
+};
+
+fn arguments() -> ArgMatches<'static> {
+    let matches = App::new(PROGRAM_NAME)
+                    .version(PROGRAM_VERSION)
+                    .author(PROGRAM_AUTHOR)
+                    .about(PROGRAM_DESCRIPTION)
+                    .arg(Arg::with_name(CLAP_ARG_NAME_INPUT_FILE)
+                        .help(CLAP_ARG_HELP_INPUT_FILE)
+                        .short(CLAP_ARG_SHORT_INPUT_FILE)
+                        .long(CLAP_ARG_LONG_INPUT_FILE)
+                        .required(true)
+                        .takes_value(true))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_OUTPUT_FILE)
+                        .help(CLAP_ARG_HELP_OUTPUT_FILE)
+                        .short(CLAP_ARG_SHORT_OUTPUT_FILE)
+                        .long(CLAP_ARG_LONG_OUTPUT_FILE)
+                        .required(true)
+                        .takes_value(true))
+                    .subcommand(SubCommand::with_name(CLAP_SUBCOMMAND_NAME_SET_COMPRESSION)
+                                      .arg(Arg::with_name(CLAP_ARG_NAME_COMPRESSION_ALGORITHM)
+                                        .help(CLAP_ARG_HELP_COMPRESSION_ALGORITHM)
+                                        .short(CLAP_ARG_SHORT_COMPRESSION_ALGORITHM)
+                                        .long(CLAP_ARG_LONG_COMPRESSION_ALGORITHM)
+                                        .possible_values(&CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_ALGORITHM)
+                                        .takes_value(true))
+                                      .arg(Arg::with_name(CLAP_ARG_NAME_COMPRESSION_LEVEL)
+                                        .help(CLAP_ARG_HELP_COMPRESSION_LEVEL)
+                                        .short(CLAP_ARG_SHORT_COMPRESSION_LEVEL)
+                                        .long(CLAP_ARG_LONG_COMPRESSION_LEVEL)
+                                        .possible_values(&CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_LEVEL)
+                                        .takes_value(true))
+                                )
+                    .subcommand(SubCommand::with_name(CLAP_SUBCOMMAND_NAME_ADD_DESCRIPTIONS)
+                                      .arg(Arg::with_name(CLAP_ARG_NAME_CASE_NUMBER)
+                                        .help(CLAP_ARG_HELP_CASE_NUMBER)
+                                        .short(CLAP_ARG_SHORT_CASE_NUMBER)
+                                        .long(CLAP_ARG_LONG_CASE_NUMBER)
+                                        .takes_value(true))
+                                      .arg(Arg::with_name(CLAP_ARG_NAME_EVIDENCE_NUMBER)
+                                        .help(CLAP_ARG_HELP_EVIDENCE_NUMBER)
+                                        .short(CLAP_ARG_SHORT_EVIDENCE_NUMBER)
+                                        .long(CLAP_ARG_LONG_EVIDENCE_NUMBER)
+                                        .takes_value(true))
+                                      .arg(Arg::with_name(CLAP_ARG_NAME_EXAMINER_NAME)
+                                        .help(CLAP_ARG_HELP_EXAMINER_NAME)
+                                        .short(CLAP_ARG_SHORT_EXAMINER_NAME)
+                                        .long(CLAP_ARG_LONG_EXAMINER_NAME)
+                                        .takes_value(true))
+                                      .arg(Arg::with_name(CLAP_ARG_NAME_NOTES)
+                                        .help(CLAP_ARG_HELP_NOTES)
+                                        .short(CLAP_ARG_SHORT_NOTES)
+                                        .long(CLAP_ARG_LONG_NOTES)
+                                        .takes_value(true))
+                                )
+                    .get_matches();
+    matches
+}
+
+fn compression_header(arguments: &ArgMatches) -> CompressionHeader {
+    if let Some(compression_matches) = arguments.subcommand_matches(CLAP_SUBCOMMAND_NAME_SET_COMPRESSION) {
+        let compression_algorithm = match compression_matches.value_of(CLAP_ARG_NAME_COMPRESSION_ALGORITHM) {
+            None => CompressionAlgorithm::Zstd,
+            Some(algo) => CompressionAlgorithm::from(algo),
+        };
+        let compression_level = match compression_matches.value_of(CLAP_ARG_NAME_COMPRESSION_LEVEL) {
+            None => DEFAULT_COMPRESSION_LEVEL,
+            Some(level) => level.parse().unwrap_or(DEFAULT_COMPRESSION_LEVEL),
+        };
+        return CompressionHeader::new(COMPRESSION_HEADER_VERSION, compression_algorithm, compression_level);
+    }
+    CompressionHeader::new(COMPRESSION_HEADER_VERSION, CompressionAlgorithm::Zstd, 3)
+}
+
+fn description_header(arguments: &ArgMatches) -> DescriptionHeader {
+    let mut description_header = DescriptionHeader::new_empty(DESCRIPTION_HEADER_VERSION);
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(now) => description_header.set_acquisition_date(now.as_secs()),
+        Err(_) => ()
+    };
+    if let Some(description_matches) = arguments.subcommand_matches(CLAP_SUBCOMMAND_NAME_ADD_DESCRIPTIONS) {
+        if let Some(value) = description_matches.value_of(CLAP_ARG_NAME_CASE_NUMBER) {
+            description_header.set_case_number(value);
+        };
+        if let Some(value) = description_matches.value_of(CLAP_ARG_NAME_EVIDENCE_NUMBER) {
+            description_header.set_evidence_number(value);
+        };
+        if let Some(value) = description_matches.value_of(CLAP_ARG_NAME_EXAMINER_NAME) {
+            description_header.set_examiner_name(value);
+        };
+        if let Some(value) = description_matches.value_of(CLAP_ARG_NAME_NOTES) {
+            description_header.set_notes(value);
+        };
+    }
+    description_header
+}
+
+fn main() {
+	let arguments = arguments();
+    let compression_header = compression_header(&arguments);
+    let description_header = description_header(&arguments);
+}
