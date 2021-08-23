@@ -80,3 +80,13 @@ pub enum CompressionAlgorithm {
 	None = 0,
 	Zstd = 1,
 }
+
+impl From<&str> for CompressionAlgorithm {
+	fn from(algorithm: &str) -> CompressionAlgorithm {
+		let algorithm = algorithm.to_lowercase();
+		match algorithm.as_str() {
+			"zstd" => CompressionAlgorithm::Zstd,
+			"none" | _ => CompressionAlgorithm::None,
+		}
+	}
+}
