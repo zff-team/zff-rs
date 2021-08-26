@@ -1,7 +1,10 @@
 // - STD
-use std::time::{
-    SystemTime,
-    UNIX_EPOCH,
+use std::{
+    time::{SystemTime,UNIX_EPOCH},
+    path::{PathBuf},
+    fs::{File},
+    process::exit,
+    io::{Write},
 };
 
 // - extern crates
@@ -13,9 +16,11 @@ mod lib;
 // - internal
 use crate::lib::*;
 use zff::{
+    MainHeader,
     DescriptionHeader,
     CompressionHeader,
     CompressionAlgorithm,
+    HeaderEncoder,
 };
 
 // - external
@@ -125,4 +130,41 @@ fn main() {
 	let arguments = arguments();
     let compression_header = compression_header(&arguments);
     let description_header = description_header(&arguments);
+
+    // Calling .unwrap() is safe here because the arguments are *required*.
+    let input_path = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
+    let input_file = match File::open(input_path) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("{}{}", ERROR_OPEN_INPUT_FILE, e.to_string());
+            exit(1);
+        },
+    };
+    let input_file_len = match input_file.metadata() {
+        Ok(metadata) => metadata.len(),
+        Err(e) => {
+            println!("{}{}", ERROR_READ_METADATA_INPUT_FILE, e.to_string());
+            exit(1);
+        }
+    };
+    let output_filename = arguments.value_of(CLAP_ARG_NAME_OUTPUT_FILE).unwrap();
+    let main_header = MainHeader::new(MAIN_HEADER_VERSION, compression_header, description_header, input_file_len);
+
+    let mut output_path = PathBuf::from(output_filename);
+    output_path.set_extension(".z01"); //TODO
+
+    let mut output_file = match File::create(&output_path) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("{}{}; {}", ERROR_CREATE_OUTPUT_FILE, output_path.to_string_lossy(), e.to_string());
+            exit(1);
+        }
+    };
+    match output_file.write(&main_header.encode_directly()) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("{}{}", ERROR_WRITE_MAIN_HEADER, e.to_string());
+            exit(1);
+        }
+    };
 }

@@ -54,8 +54,15 @@ pub const CLAP_ARG_LONG_COMPRESSION_LEVEL: &str = "compression-level";
 pub const CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_LEVEL: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 // - header versions
+pub const MAIN_HEADER_VERSION: u8 = 1;
 pub const COMPRESSION_HEADER_VERSION: u8 = 1;
 pub const DESCRIPTION_HEADER_VERSION: u8 = 1;
 
 // compression
 pub const DEFAULT_COMPRESSION_LEVEL: u8 = 3;
+
+//Error messages
+pub const ERROR_OPEN_INPUT_FILE: &'static str = "Could not open input file: ";
+pub const ERROR_READ_METADATA_INPUT_FILE: &'static str = "Could not read metadata of input file: ";
+pub const ERROR_CREATE_OUTPUT_FILE: &'static str = "Could not create output file: ";
+pub const ERROR_WRITE_MAIN_HEADER: &'static str = "Could not write main header to file: ";
