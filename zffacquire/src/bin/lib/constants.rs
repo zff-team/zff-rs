@@ -15,9 +15,6 @@ pub const CLAP_ARG_HELP_OUTPUT_FILE: &str = "The the name/path of the output-fil
 pub const CLAP_ARG_SHORT_OUTPUT_FILE: &str = "o";
 pub const CLAP_ARG_LONG_OUTPUT_FILE: &str = "outputfile";
 
-// - subcommand: add_descriptions
-pub const CLAP_SUBCOMMAND_NAME_ADD_DESCRIPTIONS: &str = "add_descriptions";
-// -- args
 pub const CLAP_ARG_NAME_CASE_NUMBER: &str = "CASE_NUMBER";
 pub const CLAP_ARG_HELP_CASE_NUMBER: &str = "The case number. This field is OPTIONAL.";
 pub const CLAP_ARG_SHORT_CASE_NUMBER: &str = "c";
@@ -38,12 +35,9 @@ pub const CLAP_ARG_HELP_NOTES: &str = "Some notes. This field is OPTIONAL.";
 pub const CLAP_ARG_SHORT_NOTES: &str = "n";
 pub const CLAP_ARG_LONG_NOTES: &str = "notes";
 
-// - subcommand: set_compression
-pub const CLAP_SUBCOMMAND_NAME_SET_COMPRESSION: &str = "set_compression";
-
 pub const CLAP_ARG_NAME_COMPRESSION_ALGORITHM: &str = "COMPRESSION_ALGORITHM";
 pub const CLAP_ARG_HELP_COMPRESSION_ALGORITHM: &str = "sets the compression algorithm. Default is zstd.";
-pub const CLAP_ARG_SHORT_COMPRESSION_ALGORITHM: &str = "c";
+pub const CLAP_ARG_SHORT_COMPRESSION_ALGORITHM: &str = "z";
 pub const CLAP_ARG_LONG_COMPRESSION_ALGORITHM: &str = "compression-algorithm";
 pub const CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_ALGORITHM: [&str; 2] = ["none", "zstd"];
 
