@@ -10,7 +10,7 @@ use crate::{
 // - external
 use zstd;
 
-pub fn compress_filestream<R>(input: R, algorithm: CompressionAlgorithm, compression_level: u8) -> Result<Box<dyn Read>>
+pub fn compress_filestream<R>(input: R, algorithm: &CompressionAlgorithm, compression_level: &u8) -> Result<Box<dyn Read>>
 where
 	R: Read + 'static,
 {
@@ -19,7 +19,7 @@ where
 			return Ok(Box::new(input))
 		}
 		CompressionAlgorithm::Zstd => {
-			let encoder = zstd::stream::read::Encoder::new(input, compression_level.into())?;
+			let encoder = zstd::stream::read::Encoder::new(input, *compression_level as i32)?;
 			return Ok(Box::new(encoder));
 		},
 	}
