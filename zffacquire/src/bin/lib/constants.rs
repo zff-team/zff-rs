@@ -60,3 +60,6 @@ pub const ERROR_OPEN_INPUT_FILE: &'static str = "Could not open input file: ";
 pub const ERROR_READ_METADATA_INPUT_FILE: &'static str = "Could not read metadata of input file: ";
 pub const ERROR_CREATE_OUTPUT_FILE: &'static str = "Could not create output file: ";
 pub const ERROR_WRITE_MAIN_HEADER: &'static str = "Could not write main header to file: ";
+pub const ERROR_CREATE_COMPRESS_FILESTREAM: &'static str = "Could not create a compression stream around the input file. Maybe you want to try to dump uncompressed?";
+pub const ERROR_COPY_FILESTREAM_TO_OUTPUT: &'static str = "An I/O error occurred while trying to copy data from input to output file(s): ";
+pub const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred while trying to rewrite the main header to the output file. The written data length specified is not correctly listed in the header: ";

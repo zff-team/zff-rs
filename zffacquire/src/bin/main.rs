@@ -4,7 +4,7 @@ use std::{
     path::{PathBuf},
     fs::{File},
     process::exit,
-    io::{Write},
+    io::{Write, Seek, SeekFrom, copy},
 };
 
 // - extern crates
@@ -21,6 +21,7 @@ use zff::{
     CompressionHeader,
     CompressionAlgorithm,
     HeaderEncoder,
+    compress_filestream,
 };
 
 // - external
@@ -130,15 +131,8 @@ fn main() {
             exit(1);
         },
     };
-    let input_file_len = match input_file.metadata() {
-        Ok(metadata) => metadata.len(),
-        Err(e) => {
-            println!("{}{}", ERROR_READ_METADATA_INPUT_FILE, e.to_string());
-            exit(1);
-        }
-    };
     let output_filename = arguments.value_of(CLAP_ARG_NAME_OUTPUT_FILE).unwrap();
-    let main_header = MainHeader::new(MAIN_HEADER_VERSION, compression_header, description_header, input_file_len);
+    let mut main_header = MainHeader::new(MAIN_HEADER_VERSION, compression_header.clone(), description_header, 0);
 
     let mut output_path = PathBuf::from(output_filename);
     output_path.set_extension("z01"); //TODO
@@ -150,10 +144,46 @@ fn main() {
             exit(1);
         }
     };
+
+    let mut filestream = match compress_filestream(
+        input_file,
+        compression_header.compression_algorithm(),
+        compression_header.compression_level()) {
+        Ok(stream) => stream,
+        Err(_) => {
+            println!("{}", ERROR_CREATE_COMPRESS_FILESTREAM);
+            exit(1);
+        }
+    };
+
     match output_file.write(&main_header.encode_directly()) {
         Ok(_) => (),
         Err(e) => {
             println!("{}{}", ERROR_WRITE_MAIN_HEADER, e.to_string());
+            exit(1);
+        }
+    };
+    let written_bytes = match copy(&mut filestream, &mut output_file) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            println!("{}{}", ERROR_CREATE_COMPRESS_FILESTREAM, e.to_string());
+            exit(1);
+        }
+    };
+
+    //rewrite main_header with the correct number of bytes of the COMPRESSED data.
+    main_header.set_length_of_data(written_bytes);
+    match output_file.seek(SeekFrom::Start(0)) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("{}{}", ERROR_REWRITE_MAIN_HEADER, e.to_string());
+            exit(1);
+        }
+    }
+    match output_file.write(&main_header.encode_directly()) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("{}{}", ERROR_REWRITE_MAIN_HEADER, e.to_string());
             exit(1);
         }
     };
