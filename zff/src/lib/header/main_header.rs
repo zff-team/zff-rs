@@ -40,6 +40,10 @@ impl MainHeader {
 		unimplemented!()
 	}
 
+	pub fn set_length_of_data(&mut self, len: u64) {
+		self.length_of_data = len;
+	}
+
 	pub fn header_version(&self) -> u8 {
 		self.header_version
 	}
