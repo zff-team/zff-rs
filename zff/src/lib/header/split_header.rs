@@ -26,6 +26,35 @@ impl SplitHeader {
 			length_of_split: length_of_split,
 		}
 	}
+
+	pub fn header_version(&self) -> u8 {
+		self.header_version
+	}
+
+	pub fn unique_identifier(&self) -> u64 {
+		self.unique_identifier
+	}
+
+	pub fn split_number(&self) -> u64 {
+		self.split_number
+	}
+
+	pub fn length_of_split(&self) -> u64 {
+		self.length_of_split
+	}
+
+	pub fn set_length_of_split(&mut self, value: u64) {
+		self.length_of_split = value
+	}
+
+	pub fn next_header(&self) -> SplitHeader {
+		SplitHeader {
+			header_version: self.header_version,
+			unique_identifier: self.unique_identifier,
+			split_number: self.split_number+1,
+			length_of_split: 0
+		}
+	}
 }
 
 impl HeaderObject for SplitHeader {
