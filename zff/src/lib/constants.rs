@@ -14,3 +14,14 @@ pub const ENCODING_KEY_EVIDENCE_NUMBER: &str = "ev";
 pub const ENCODING_KEY_EXAMINER_NAME: &str = "ex";
 pub const ENCODING_KEY_NOTES: &str = "no";
 pub const ENCODING_KEY_ACQISITION_DATE: &str = "ad";
+
+//ZFF File extension
+pub const FILE_EXTENSION_START: char = 'z';
+pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
+
+//Error messages
+pub const FILE_EXTENSION_PARSER_ERROR: &str = "Error while trying to parse extension value";
+
+
+//Other
+pub const MINIMUM_SECTOR_SIZE: usize = 512;
