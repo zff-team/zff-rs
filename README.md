@@ -15,7 +15,9 @@
 | Encryption header       | object            | variable        |
 | Compression header      | object            | variable        |
 | Description header      | object            | variable        |
+| sector size			  | uint8			  | 1               |
 | Split size in bytes     | uint64            | 8               |
+| Split header 			  | object			  | variable        |
 | Length of data in bytes | uint64            | 8               |
 
 ### Layout of encryption subheader
@@ -115,3 +117,8 @@
 | Unique identifier      | uint64			 | 8               |
 | split number           | uint64            | 8               |
 | length of split        | uint64            | 8               |
+
+
+# TODO
+- hashsum of image file
+- Keyfile support for encryption
