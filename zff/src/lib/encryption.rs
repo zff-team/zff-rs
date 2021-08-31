@@ -8,6 +8,8 @@ use pkcs5::{
 	EncryptionScheme,
 	pbes2::Parameters as PBES2Parameters,
 };
+use aes_gcm_siv::Nonce;
+use byteorder::{LittleEndian, WriteBytesExt};
 
 pub struct Encryption;
 
@@ -21,5 +23,12 @@ impl Encryption {
 		let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
+	}
+
+	pub fn sector_as_crypto_nonce(sector_no: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(sector_no)?;
+		buffer.append(&mut vec!(0u8; 4));
+		Ok(*Nonce::from_slice(&buffer))
 	}
 }
