@@ -12,4 +12,5 @@ bench = true
 
 [dependencies]
 clap = "2.33"
+rand = "0.8.4"
 zff = { path = "../zff" }
