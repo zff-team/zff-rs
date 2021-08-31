@@ -7,7 +7,9 @@ use crate::{
 	CompressionHeader,
 	DescriptionHeader,
 	EncryptionHeader,
-	HEADER_IDENTIFIER_MAIN_HEADER
+	SplitHeader,
+	HEADER_IDENTIFIER_MAIN_HEADER,
+	MINIMUM_SECTOR_SIZE,
 };
 
 #[derive(Debug,Clone)]
@@ -15,6 +17,9 @@ pub struct MainHeader {
 	header_version: u8,
 	compression_header: CompressionHeader,
 	description_header: DescriptionHeader,
+	sector_size: u8,
+	split_size_in_bytes: u64,
+	split_header: SplitHeader,
 	length_of_data: u64,
 }
 
@@ -23,19 +28,25 @@ impl MainHeader {
 		header_version: u8,
 		compression_header: CompressionHeader,
 		description_header: DescriptionHeader,
+		sector_size: u8,
+		split_size_in_bytes: u64,
+		split_header: SplitHeader,
 		length_of_data: u64) -> MainHeader {
 		Self {
 			header_version: header_version,
 			compression_header: compression_header,
 			description_header: description_header,
+			sector_size: sector_size,
+			split_size_in_bytes: split_size_in_bytes,
+			split_header: split_header,
 			length_of_data: length_of_data,
 		}
 	}
 
 	pub fn new_from_encrypted_header(
-		header_version: u8,
-		encryption_header: EncryptionHeader,
-		encrypted_data: Vec<u8>,
+		_header_version: u8,
+		_encryption_header: EncryptionHeader,
+		_encrypted_data: Vec<u8>,
 		) -> Result<MainHeader> {
 		unimplemented!()
 	}
@@ -44,8 +55,24 @@ impl MainHeader {
 		self.length_of_data = len;
 	}
 
+	pub fn set_split_header(&mut self, split_header: SplitHeader) {
+		self.split_header = split_header
+	}
+
 	pub fn header_version(&self) -> u8 {
 		self.header_version
+	}
+
+	pub fn sector_size(&self) -> usize {
+		MINIMUM_SECTOR_SIZE * (1<<self.sector_size)
+	}
+
+	pub fn split_size(&self) -> u64 {
+		self.split_size_in_bytes.clone()
+	}
+
+	pub fn get_encoded_size(&self) -> usize {
+		self.encode_directly().len()
 	}
 }
 
@@ -59,6 +86,9 @@ impl HeaderObject for MainHeader {
 		vec.push(self.header_version);
 		vec.append(&mut self.compression_header.encode_directly());
 		vec.append(&mut self.description_header.encode_directly());
+		vec.push(self.sector_size);
+		vec.append(&mut self.split_size_in_bytes.encode_directly());
+		vec.append(&mut self.split_header.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
 
 		vec
