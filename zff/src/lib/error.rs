@@ -19,6 +19,7 @@ pub struct ZffError {
 pub enum ZffErrorKind {
 	IoError,
 	PKCS5CryptoError,
+	FileExtensionParserError,
 	Custom,
 }
 
@@ -28,6 +29,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::IoError => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
 			ZffErrorKind::Custom => "Custom",
+			ZffErrorKind::FileExtensionParserError => "FileExtensionParserError",
 		};
 	write!(f, "{}", err_msg)
 	}
