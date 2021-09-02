@@ -1,5 +1,6 @@
 // - internal
 use crate::{
+	EncryptionAlgorithm,
 	HeaderObject,
 	HeaderEncoder,
 	ValueType,
@@ -24,8 +25,8 @@ impl EncryptionHeader {
 		header_version: u8,
 		pbe_header: PBEHeader,
 		encryption_algorithm: EncryptionAlgorithm,
-		encrypted_encryption_key: Vec<u8>,
-		encryption_key_nonce: [u8; 12],
+		encrypted_encryption_key: Vec<u8>, //encrypted with set password
+		encryption_key_nonce: [u8; 12], //used for header encryption
 		) -> EncryptionHeader {
 		Self {
 			header_version: header_version,
@@ -34,6 +35,14 @@ impl EncryptionHeader {
 			encrypted_encryption_key: encrypted_encryption_key,
 			encryption_key_nonce: encryption_key_nonce
 		}
+	}
+
+	pub fn encryption_algorithm(&self) -> &EncryptionAlgorithm {
+		&self.encryption_algorithm
+	}
+
+	pub fn encryption_key_nonce(&self) -> [u8; 12] {
+		self.encryption_key_nonce
 	}
 }
 
@@ -73,12 +82,4 @@ impl HeaderEncoder for EncryptionHeader {
 		vec.append(&mut self.encode_directly());
 		vec
 	}
-}
-
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug,Clone)]
-pub enum EncryptionAlgorithm {
-	AES128GCMSIV = 0,
-	AES256GCMSIV = 1,
 }

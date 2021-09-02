@@ -3,6 +3,8 @@ use crate::{
 	HeaderObject,
 	HeaderEncoder,
 	ValueType,
+	KDFScheme,
+	PBEScheme,
 };
 
 use crate::{
@@ -78,21 +80,6 @@ impl HeaderEncoder for PBEHeader {
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone)]
-pub enum KDFScheme {
-	PBKDF2SHA256 = 0,
-}
-
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug,Clone)]
-pub enum PBEScheme {
-	AES128CBC = 0,
-	AES256CBC = 1,
-}
-
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug,Clone)]
 pub enum KDFParameters {
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
 }
@@ -117,6 +104,15 @@ impl HeaderEncoder for KDFParameters {
 pub struct PBKDF2SHA256Parameters {
 	iterations: u16,
 	salt: [u8; 32],
+}
+
+impl PBKDF2SHA256Parameters {
+	pub fn new(iterations: u16, salt: [u8; 32]) -> PBKDF2SHA256Parameters {
+		Self {
+			iterations: iterations,
+			salt: salt,
+		}
+	}
 }
 
 impl HeaderObject for PBKDF2SHA256Parameters {
