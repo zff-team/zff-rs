@@ -12,5 +12,5 @@ bench = true
 
 [dependencies]
 clap = "2.33"
-rand = "0.8.4"
+rand_core = { version = "0.6.3", features = [ "getrandom" ] }
 zff = { path = "../zff" }
