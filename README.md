@@ -1,24 +1,35 @@
 # zff
 
-## ZFF  general gayout
+## ZFF  general layout
 
 ![alt text](https://github.com/ph0llux/zff/blob/master/assets/zff_general_layout.png?raw=true)
 
 ## Layout of main header
 
+| Name                    |      Type         | Length in bytes | optional |
+|-------------------------|:-----------------:|:---------------:|:--------:|
+| Magic bytes             | 0x7A66666D        | 4               |          |
+| Header length in bytes  | uint64            | 8               |          |
+| Header version          | uint8             | 1               |          |
+| encryption flag         | uint8             | 1               |          |
+| Encryption header       | object            | variable        | :ballot_box_with_check: |
+| Compression header      | object            | variable        |          |
+| Description header      | object            | variable        |          |
+| chunk size			  | uint8			  | 8               |          |
+| Split size in bytes     | uint64            | 8               |          |
+| Split header 			  | object			  | variable        |          |
+| Length of data in bytes | uint64            | 8               |          |
+
+## Layout of encrypted main header
+
 | Name                    |      Type         | Length in bytes |
 |-------------------------|:-----------------:|:---------------:|
-| Magic bytes             | 0x7A66666D        | 4               |
+| Magic bytes             | 0x7a666645        | 4               |
 | Header length in bytes  | uint64            | 8               |
 | Header version          | uint8             | 1               |
 | encryption flag         | uint8             | 1               |
 | Encryption header       | object            | variable        |
-| Compression header      | object            | variable        |
-| Description header      | object            | variable        |
-| sector size			  | uint8			  | 1               |
-| Split size in bytes     | uint64            | 8               |
-| Split header 			  | object			  | variable        |
-| Length of data in bytes | uint64            | 8               |
+| Encrypted data          | bytes             | variable        |
 
 ### Layout of encryption subheader
 
@@ -118,7 +129,18 @@
 | split number           | uint64            | 8               |
 | length of split        | uint64            | 8               |
 
+## chunk header
+
+| Name                   |      Type         | Length in bytes |
+|------------------------|:-----------------:|:---------------:|
+| Magic bytes            | 0x7A666643        | 4               |
+| Header length in bytes | uint64            | 8               |
+| Header version         | uint8             | 1               |
+| chunk number			 | uint64			 | 8 			   |
+| chunk size (in bytes)  | uint64            | 8               |
 
 # TODO
 - hashsum of image file
 - Keyfile support for encryption
+- Serialize EncryptionHeader and encryption flag
+- rename splitheader to segment header
