@@ -1,10 +1,13 @@
 // identifier: magic bytes
 pub const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666d;
+pub const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7a666645;
 pub const HEADER_IDENTIFIER_DESCRIPTION_HEADER: u32 = 0x7A666664;
 pub const HEADER_IDENTIFIER_SPLIT_HEADER: u32 = 0x7A666673;
 pub const HEADER_IDENTIFIER_COMPRESSION_HEADER: u32 = 0x7A666663;
 pub const HEADER_IDENTIFIER_PBE_HEADER: u32 = 0x7A666670;
 pub const HEADER_IDENTIFIER_ENCRYPTION_HEADER: u32 = 0x7A666665;
+pub const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
+
 
 pub const PBE_KDF_PARAMETERS: u32 = 0x6b646670;
 
@@ -22,6 +25,5 @@ pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
 //Error messages
 pub const FILE_EXTENSION_PARSER_ERROR: &str = "Error while trying to parse extension value";
 
-
-//Other
-pub const MINIMUM_SECTOR_SIZE: usize = 512;
+// Default values
+pub const DEFAULT_CHUNK_SIZE: u8 = 15;

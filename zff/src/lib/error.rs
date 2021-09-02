@@ -6,6 +6,7 @@ use std::io;
 
 // - external
 use pkcs5::CryptoError as PKCS5CryptoError;
+use aes_gcm_siv::aead::Error as EncryptionError;
 
 /// The main error-type of this crate.
 #[derive(Debug, Clone)]
@@ -20,6 +21,9 @@ pub enum ZffErrorKind {
 	IoError,
 	PKCS5CryptoError,
 	FileExtensionParserError,
+	EncryptionError,
+	MissingEncryptionHeader,
+	ReadEOF,
 	Custom,
 }
 
@@ -30,6 +34,9 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
 			ZffErrorKind::Custom => "Custom",
 			ZffErrorKind::FileExtensionParserError => "FileExtensionParserError",
+			ZffErrorKind::EncryptionError => "EncryptionCrateError",
+			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
+			ZffErrorKind::ReadEOF => "ReadEOF"
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -64,6 +71,10 @@ impl ZffError {
 			details: details.into()
 		}
 	}
+
+	pub fn get_kind(&self) -> &ZffErrorKind {
+		return &self.kind
+	}
 }
 
 impl From<io::Error> for ZffError {
@@ -75,6 +86,12 @@ impl From<io::Error> for ZffError {
 impl From<PKCS5CryptoError> for ZffError {
 	fn from(e: PKCS5CryptoError) -> ZffError {
 		ZffError::new(ZffErrorKind::PKCS5CryptoError, e.to_string())
+	}
+}
+
+impl From<EncryptionError> for ZffError {
+	fn from(e: EncryptionError) -> ZffError {
+		ZffError::new(ZffErrorKind::EncryptionError, e.to_string())
 	}
 }
 
