@@ -319,7 +319,7 @@ where
     let header_size = main_header.get_encoded_size();
 
     let chunk_size = main_header.chunk_size();
-    let chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0);
+    let mut chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0);
 
     let first_segment_size = split_size as usize - header_size;
     let mut first_segment_filename = PathBuf::from(&output_filename);
@@ -365,7 +365,7 @@ where
         &mut input_file,
         &mut output_file,
         chunk_size,
-        chunk_header.clone(),
+        &mut chunk_header,
         compression_header.compression_algorithm(),
         compression_header.compression_level(),
         first_segment_size as usize,
@@ -411,7 +411,7 @@ where
             &mut input_file,
             &mut output_file,
             chunk_size,
-            chunk_header.clone(),
+            &mut chunk_header,
             compression_header.compression_algorithm(),
             compression_header.compression_level(),
             split_size as usize,
