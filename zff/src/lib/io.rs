@@ -9,6 +9,8 @@ use crate::{
 	HeaderEncoder,
 	ZffError,
 	ZffErrorKind,
+	Encryption,
+	EncryptionAlgorithm,
 };
 
 fn buffer_chunk<R>(
@@ -37,7 +39,7 @@ where
     return Ok(buf)
 }
 
-fn source_read_chunk<R>(
+fn read_chunk<R>(
 	input: &mut R,
 	chunk_size: usize,
 	algorithm: &CompressionAlgorithm,
@@ -65,14 +67,14 @@ fn write_unencrypted_chunk<R, W>(
 	input: &mut R,
 	output: &mut W,
 	chunk_size: usize,
-	mut chunk_header: ChunkHeader,
+	chunk_header: &mut ChunkHeader,
 	compression_algorithm: &CompressionAlgorithm,
 	compression_level: &u8) -> Result<u64>
 where
 	R: Read,
 	W: Write
 {
-	let compressed_chunk = source_read_chunk(input, chunk_size, compression_algorithm, compression_level)?;
+	let compressed_chunk = read_chunk(input, chunk_size, compression_algorithm, compression_level)?;
 	chunk_header.set_chunk_size(compressed_chunk.len() as u64);
 
 	let mut written_bytes = 0;
@@ -81,14 +83,42 @@ where
 	Ok(written_bytes as u64)
 }
 
+fn write_encrypted_chunk<R, W>(
+	input: &mut R,
+	output: &mut W,
+	chunk_size: usize,
+	chunk_header: &mut ChunkHeader,
+	compression_algorithm: &CompressionAlgorithm,
+	compression_level: &u8,
+	encryption_key: &Vec<u8>,
+	encryption_algorithm: &EncryptionAlgorithm) -> Result<u64>
+where
+	R: Read,
+	W: Write
+{
+	let compressed_chunk = read_chunk(input, chunk_size, compression_algorithm, compression_level)?;
+	let encrypted_data = Encryption::encrypt_message(
+		encryption_key,
+		&compressed_chunk,
+		chunk_header.chunk_number(),
+		&encryption_algorithm)?;
+	chunk_header.set_chunk_size(encrypted_data.len() as u64);
+
+	let mut written_bytes = 0;
+	written_bytes += output.write(&chunk_header.encode_directly())?;
+	written_bytes += output.write(&encrypted_data)?;
+	Ok(written_bytes as u64)
+}
+
 pub fn write_segment<R, W>(
 	input: &mut R,
 	output: &mut W,
 	chunk_size: usize,
-	mut chunk_header: ChunkHeader,
+	chunk_header: &mut ChunkHeader,
 	compression_algorithm: &CompressionAlgorithm,
 	compression_level: &u8,
-	split_size: usize) -> Result<u64>
+	split_size: usize,
+	encryption: &Option<(&Vec<u8>, EncryptionAlgorithm)>) -> Result<u64>
 where
 	R: Read,
 	W: Write
@@ -98,20 +128,42 @@ where
 		if (written_bytes + chunk_size as u64) > split_size as u64 {
 			return Ok(written_bytes);
 		};
-		let chunk_header = chunk_header.next_header();
-		let written_in_chunk = match write_unencrypted_chunk(
-			input,
-			output,
-			chunk_size,
-			chunk_header,
-			compression_algorithm,
-			compression_level) {
-			Ok(data) => data,
-			Err(e) => match e.get_kind() {
-				ZffErrorKind::ReadEOF => return Ok(written_bytes),
-				_ => return Err(e),
+		chunk_header.next_number();
+		match encryption {
+			None => {
+				let written_in_chunk = match write_unencrypted_chunk(
+					input,
+					output,
+					chunk_size,
+					chunk_header,
+					compression_algorithm,
+					compression_level) {
+					Ok(data) => data,
+					Err(e) => match e.get_kind() {
+						ZffErrorKind::ReadEOF => return Ok(written_bytes),
+						_ => return Err(e),
+					},
+				};
+				written_bytes += written_in_chunk;
 			},
-		};
-		written_bytes += written_in_chunk;
+			Some(ref encryption) => {
+				let written_in_chunk = match write_encrypted_chunk(
+					input,
+					output,
+					chunk_size,
+					chunk_header,
+					compression_algorithm,
+					compression_level,
+					&encryption.0,
+					&encryption.1) {
+					Ok(data) => data,
+					Err(e) => match e.get_kind() {
+						ZffErrorKind::ReadEOF => return Ok(written_bytes),
+						_ => return Err(e),
+					},
+				};
+				written_bytes += written_in_chunk;
+			}
+		}
 	}
 }

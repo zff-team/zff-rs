@@ -72,21 +72,21 @@ impl Encryption {
 	///
 	/// fn main() -> Result<()> {
 	///		let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
-	///		let sector_no = 1; // 12Byte/96Bit Key
+	///		let chunk_no = 1; // 12Byte/96Bit Key
 	///		let message = "My message";
 	/// 
-	///		let ciphertext = Encryption::encrypt_message(key, message, sector_no, EncryptionAlgorithm::AES256GCMSIV)?;
+	///		let ciphertext = Encryption::encrypt_message(key, message, chunk_no, EncryptionAlgorithm::AES256GCMSIV)?;
 	/// 
 	///		assert_eq!(ciphertext.hexify(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
 	///		Ok(())
 	/// }
 	///	```
-	pub fn encrypt_message<K, M>(key: K, message: M, sector_no: u64, algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
+	pub fn encrypt_message<K, M>(key: K, message: M, chunk_no: u64, algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 	{
-		let nonce = Encryption::sector_as_crypto_nonce(sector_no)?;
+		let nonce = Encryption::sector_as_crypto_nonce(chunk_no)?;
 		match algorithm {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));

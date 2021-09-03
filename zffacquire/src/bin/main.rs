@@ -298,7 +298,8 @@ fn write_to_output<O>(
     mut main_header: MainHeader,
     compression_header: CompressionHeader,
     mut split_header: SplitHeader,
-    encryption_key: Option<Vec<u8>>,)
+    encryption_key: Option<Vec<u8>>,
+    encryption_header: Option<EncryptionHeader>)
 where
     O: Into<String>,
 {
@@ -351,6 +352,14 @@ where
             exit(EXIT_STATUS_ERROR);
         }
     };
+
+    let encryption = match encryption_key {
+        None => None,
+        Some(ref key) => match encryption_header {
+            None => None,
+            Some(header) => Some((key, header.encryption_algorithm().clone()))
+        },
+    };
     
     let mut written_bytes = match write_segment(
         &mut input_file,
@@ -359,7 +368,8 @@ where
         chunk_header.clone(),
         compression_header.compression_algorithm(),
         compression_header.compression_level(),
-        first_segment_size as usize) {
+        first_segment_size as usize,
+        &encryption) {
         Ok(val) => val,
         Err(e) => {
             println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -404,7 +414,8 @@ where
             chunk_header.clone(),
             compression_header.compression_algorithm(),
             compression_header.compression_level(),
-            split_size as usize) {
+            split_size as usize,
+            &encryption) {
             Ok(val) => val,
             Err(e) => {
                 println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -486,7 +497,7 @@ fn main() {
 
     let main_header = MainHeader::new(
         MAIN_HEADER_VERSION,
-        encryption_header,
+        encryption_header.clone(),
         compression_header.clone(),
         description_header,
         chunk_size,
@@ -494,5 +505,5 @@ fn main() {
         split_header.clone(),
         0);
 
-    write_to_output(&input_path, output_filename, main_header, compression_header, split_header, encryption_key);
+    write_to_output(&input_path, output_filename, main_header, compression_header, split_header, encryption_key, encryption_header);
 }

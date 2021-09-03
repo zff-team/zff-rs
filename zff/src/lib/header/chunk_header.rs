@@ -26,12 +26,12 @@ impl ChunkHeader {
 		self.chunk_size = size
 	}
 
-	pub fn next_header(&mut self) -> ChunkHeader {
-		Self {
-			header_version: self.header_version,
-			chunk_number: self.chunk_number+1,
-			chunk_size: 0,
-		}
+	pub fn next_number(&mut self) {
+		self.chunk_number += 1;
+	}
+
+	pub fn chunk_number(&self) -> u64 {
+		self.chunk_number
 	}
 }
 

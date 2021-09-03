@@ -80,6 +80,10 @@ pub const CLAP_ARG_HELP_ENCRYPTED_HEADER: &str = "Encrypts the data AND parts of
 pub const CLAP_ARG_SHORT_ENCRYPTED_HEADER: &str = "H";
 pub const CLAP_ARG_LONG_ENCRYPTED_HEADER: &str = "encrypted-header";
 
+// default values
+pub const DEFAULT_COMPRESSION_LEVEL: u8 = 3;
+pub const DEFAULT_CHUNK_STARTVALUE: u64 = 1;
+
 // - header versions
 pub const MAIN_HEADER_VERSION: u8 = 1;
 pub const ENCRYPTION_HEADER_VERSION: u8 = 1;
@@ -88,11 +92,6 @@ pub const COMPRESSION_HEADER_VERSION: u8 = 1;
 pub const DESCRIPTION_HEADER_VERSION: u8 = 1;
 pub const SPLIT_HEADER_VERSION: u8 = 1;
 pub const CHUNK_HEADER_VERSION: u8 = 1;
-
-
-// default values
-pub const DEFAULT_COMPRESSION_LEVEL: u8 = 3;
-pub const DEFAULT_CHUNK_STARTVALUE: u64 = 1;
 
 //Error messages
 pub const ERROR_OPEN_INPUT_FILE: &'static str = "Could not open input file: ";

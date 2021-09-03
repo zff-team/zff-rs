@@ -10,7 +10,7 @@ use crate::{
 // - external
 use zstd;
 
-pub fn to_compression_stream<R>(input: R, algorithm: &CompressionAlgorithm, compression_level: &u8) -> Result<Box<dyn Read>>
+pub fn compression_stream<R>(input: R, algorithm: &CompressionAlgorithm, compression_level: &u8) -> Result<Box<dyn Read>>
 where
 	R: Read + 'static,
 {
@@ -25,7 +25,7 @@ where
 	}
 }
 
-pub fn to_decompression_stream<R>(input: R, algorithm: CompressionAlgorithm) -> Result<Box<dyn Read>>
+pub fn decompression_stream<R>(input: R, algorithm: CompressionAlgorithm) -> Result<Box<dyn Read>>
 where
 	R: Read + 'static
 {
@@ -40,7 +40,7 @@ where
 	}
 }
 
-pub fn to_compression_writer<W>(output: W, algorithm: CompressionAlgorithm, compression_level: &u8) -> Result<Box<dyn Write>>
+pub fn compression_writer<W>(output: W, algorithm: CompressionAlgorithm, compression_level: &u8) -> Result<Box<dyn Write>>
 where
 	W: Write + 'static
 {
