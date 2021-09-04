@@ -9,4 +9,5 @@ pub enum ValueType {
 	String = 4,
 	Object = 5,
 	Bytes = 6,
+	ObjectArray = 7,
 }

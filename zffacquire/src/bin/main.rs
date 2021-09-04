@@ -5,6 +5,7 @@ use std::{
     fs::{File, remove_file},
     process::exit,
     io::{Write, Seek, SeekFrom},
+    collections::HashMap,
 };
 
 // - extern crates
@@ -25,6 +26,10 @@ use zff::{
     DescriptionHeader,
     CompressionHeader,
     CompressionAlgorithm,
+    HashHeader,
+    HashValue,
+    HashType,
+    Hash,
     SplitHeader,
     ChunkHeader,
     HeaderEncoder,
@@ -129,6 +134,14 @@ fn arguments() -> ArgMatches<'static> {
                         .short(CLAP_ARG_SHORT_ENCRYPTED_HEADER)
                         .long(CLAP_ARG_LONG_ENCRYPTED_HEADER)
                         .requires(CLAP_ARG_NAME_ENCRYPTION_PASSWORD))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_HASH_ALGORITHM)
+                        .help(CLAP_ARG_HELP_HASH_ALGORITHM)
+                        .short(CLAP_ARG_SHORT_HASH_ALGORITHM)
+                        .long(CLAP_ARG_LONG_HASH_ALGORITHM)
+                        .possible_values(&CLAP_ARG_POSSIBLE_VALUES_HASH_ALGORITHM)
+                        .min_values(1)
+                        .multiple(true)
+                        .takes_value(true))
                     .get_matches();
     matches
 }
@@ -292,6 +305,29 @@ fn calculate_chunk_size(arguments: &ArgMatches) -> u8 {
     }
 }
 
+
+fn get_hashes(arguments: &ArgMatches) -> Vec<HashValue> {
+    let mut hashvalues = Vec::new();
+    let values: Vec<_> = match arguments.values_of(CLAP_ARG_NAME_HASH_ALGORITHM) {
+        None => {
+            hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, Hash::default_hashtype()));
+            return hashvalues;
+        },
+        Some(values) => values.collect(),
+    };
+    for value in values {
+        match value {
+            "blake2b-512" => hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::Blake2b512)),
+            "sha3-256" => hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::SHA3_256)),
+            _ => {
+                println!("{}{}", ERROR_GET_HASHTYPES, value);
+                exit(EXIT_STATUS_ERROR)
+            }
+        }
+    }
+    hashvalues
+}
+
 fn write_to_output<O>(
     input_path: &PathBuf,
     output_filename: O,
@@ -299,7 +335,8 @@ fn write_to_output<O>(
     compression_header: CompressionHeader,
     mut split_header: SplitHeader,
     encryption_key: Option<Vec<u8>>,
-    encryption_header: Option<EncryptionHeader>)
+    encryption_header: Option<EncryptionHeader>,
+    hash_values: Vec<HashValue>)
 where
     O: Into<String>,
 {
@@ -360,6 +397,12 @@ where
             Some(header) => Some((key, header.encryption_algorithm().clone()))
         },
     };
+
+    let mut hasher_map = HashMap::new();
+    for value in hash_values {
+        let hasher = Hash::new_hasher(value.hash_type());
+        hasher_map.insert(value.hash_type().clone(), hasher);
+    };
     
     let mut written_bytes = match write_segment(
         &mut input_file,
@@ -369,7 +412,8 @@ where
         compression_header.compression_algorithm(),
         compression_header.compression_level(),
         first_segment_size as usize,
-        &encryption) {
+        &encryption,
+        &mut hasher_map) {
         Ok(val) => val,
         Err(e) => {
             println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -415,7 +459,8 @@ where
             compression_header.compression_algorithm(),
             compression_header.compression_level(),
             split_size as usize,
-            &encryption) {
+            &encryption,
+            &mut hasher_map) {
             Ok(val) => val,
             Err(e) => {
                 println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -446,8 +491,18 @@ where
         }
     }
 
+    let mut hash_values = Vec::new();
+    for (hash_type, hasher) in hasher_map {
+        let hash = hasher.finalize();
+        let mut hash_value = HashValue::new_empty(HASH_VALUE_HEADER_VERSION, hash_type);
+        hash_value.set_hash(hash.to_vec());
+        hash_values.push(hash_value);
+    }
+    let hash_header = HashHeader::new(HASH_HEADER_VERSION, hash_values);
+
     //rewrite main_header with the correct number of bytes of the COMPRESSED data.
     main_header.set_length_of_data(written_bytes);
+    main_header.set_hash_header(hash_header);
     match output_file.seek(SeekFrom::Start(0)) {
         Ok(_) => (),
         Err(e) => {
@@ -495,15 +550,27 @@ fn main() {
         Some((header, key)) => (Some(header), Some(key))
     };
 
+    let hash_values = get_hashes(&arguments);
+    let hash_header = HashHeader::new(HASH_HEADER_VERSION, hash_values.clone());
+
     let main_header = MainHeader::new(
         MAIN_HEADER_VERSION,
         encryption_header.clone(),
         compression_header.clone(),
         description_header,
+        hash_header,
         chunk_size,
         split_size,
         split_header.clone(),
         0);
 
-    write_to_output(&input_path, output_filename, main_header, compression_header, split_header, encryption_key, encryption_header);
+    write_to_output(
+        &input_path,
+        output_filename,
+        main_header,
+        compression_header,
+        split_header,
+        encryption_key,
+        encryption_header,
+        hash_values);
 }

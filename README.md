@@ -15,6 +15,7 @@
 | Encryption header       | object            | variable        | :ballot_box_with_check: |
 | Compression header      | object            | variable        |          |
 | Description header      | object            | variable        |          |
+| Hash header             | object			  | variable        |          |
 | chunk size			  | uint8			  | 8               |          |
 | Split size in bytes     | uint64            | 8               |          |
 | Split header 			  | object			  | variable        |          |
@@ -117,6 +118,33 @@
 | Examiner name          | String     | "ex"       |           |
 | Notes                  | String     | "no"       |           |
 | Acquisition date/time  | uint64     | "ad"       |           |
+
+### Layout of hash subheader
+
+| Name                        | Type         | Length in bytes |
+|-----------------------------|:------------:|:---------------:|
+| Magic bytes                 | 0x7A666668   | 4               |
+| Header length in bytes 	  | uint64       | 8      		   | 
+| Header version         	  | uint8        | 1      		   |
+| Hash values				  | Object Array | variable        |
+
+#### Layout of hash value
+
+| Name                        | Type         | Length in bytes | optional |
+|-----------------------------|:------------:|:---------------:|:--------:|
+| Magic bytes                 | 0x7a666648   | 4               |          |
+| header length				  | uint64       | 8               |          |
+| Header version			  | uint8        | 1               |          |
+| hash type                   | uint8        | 1               |          |
+| Hash 		                  | Bytes        | variable        |:ballot_box_with_check: |
+
+##### Hash type
+
+| Algorithm   | type value |
+|-------------|:----------:|
+| None        | 0          |
+| Blake2b-512 | 1          |
+| SHA3-256    | 2          |
 
 ### Layout of split subheader
 

@@ -7,6 +7,7 @@ use crate::{
 	CompressionHeader,
 	DescriptionHeader,
 	EncryptionHeader,
+	HashHeader,
 	SplitHeader,
 	ZffError,
 	ZffErrorKind,
@@ -21,6 +22,7 @@ pub struct MainHeader {
 	encryption_header: Option<EncryptionHeader>,
 	compression_header: CompressionHeader,
 	description_header: DescriptionHeader,
+	hash_header: HashHeader,
 	chunk_size: u8,
 	split_size_in_bytes: u64,
 	split_header: SplitHeader,
@@ -33,6 +35,7 @@ impl MainHeader {
 		encryption_header: Option<EncryptionHeader>,
 		compression_header: CompressionHeader,
 		description_header: DescriptionHeader,
+		hash_header: HashHeader,
 		chunk_size: u8,
 		split_size_in_bytes: u64,
 		split_header: SplitHeader,
@@ -42,6 +45,7 @@ impl MainHeader {
 			encryption_header: encryption_header,
 			compression_header: compression_header,
 			description_header: description_header,
+			hash_header: hash_header,
 			chunk_size: chunk_size,
 			split_size_in_bytes: split_size_in_bytes,
 			split_header: split_header,
@@ -65,13 +69,8 @@ impl MainHeader {
 		vec.push(encryption_flag);
 		vec.append(&mut encryption_header.encode_directly());
 
-		let data_to_encrypt = Vec::new();
-		vec.append(&mut self.compression_header.encode_directly());
-		vec.append(&mut self.description_header.encode_directly());
-		vec.push(self.chunk_size);
-		vec.append(&mut self.split_size_in_bytes.encode_directly());
-		vec.append(&mut self.split_header.encode_directly());
-		vec.append(&mut self.length_of_data.encode_directly());
+		let mut data_to_encrypt = Vec::new();
+		data_to_encrypt.append(&mut self.encode_content());
 
 		let mut encrypted_data = Encryption::encrypt_header(
 			key, data_to_encrypt,
@@ -106,12 +105,30 @@ impl MainHeader {
 		unimplemented!()
 	}
 
+	pub fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		
+		vec.append(&mut self.compression_header.encode_directly());
+		vec.append(&mut self.description_header.encode_directly());
+		vec.append(&mut self.hash_header.encode_directly());
+		vec.push(self.chunk_size);
+		vec.append(&mut self.split_size_in_bytes.encode_directly());
+		vec.append(&mut self.split_header.encode_directly());
+		vec.append(&mut self.length_of_data.encode_directly());
+
+		vec
+	}
+
 	pub fn set_length_of_data(&mut self, len: u64) {
 		self.length_of_data = len;
 	}
 
 	pub fn set_split_header(&mut self, split_header: SplitHeader) {
 		self.split_header = split_header
+	}
+
+	pub fn set_hash_header(&mut self, hash_header: HashHeader) {
+		self.hash_header = hash_header
 	}
 
 	pub fn header_version(&self) -> u8 {
@@ -150,12 +167,8 @@ impl HeaderObject for MainHeader {
 				vec.append(&mut header.encode_directly());
 			},
 		};
-		vec.append(&mut self.compression_header.encode_directly());
-		vec.append(&mut self.description_header.encode_directly());
-		vec.push(self.chunk_size);
-		vec.append(&mut self.split_size_in_bytes.encode_directly());
-		vec.append(&mut self.split_header.encode_directly());
-		vec.append(&mut self.length_of_data.encode_directly());
+
+		vec.append(&mut self.encode_content());
 
 		vec
 	}

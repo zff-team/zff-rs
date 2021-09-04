@@ -7,6 +7,7 @@ mod description_header;
 mod split_header;
 mod compression_header;
 mod chunk_header;
+mod hash_header;
 
 // - re-exports
 pub use coding::*;
@@ -17,3 +18,4 @@ pub use description_header::*;
 pub use split_header::*;
 pub use compression_header::*;
 pub use chunk_header::*;
+pub use hash_header::*;

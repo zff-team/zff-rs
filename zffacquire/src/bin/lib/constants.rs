@@ -80,6 +80,12 @@ pub const CLAP_ARG_HELP_ENCRYPTED_HEADER: &str = "Encrypts the data AND parts of
 pub const CLAP_ARG_SHORT_ENCRYPTED_HEADER: &str = "H";
 pub const CLAP_ARG_LONG_ENCRYPTED_HEADER: &str = "encrypted-header";
 
+pub const CLAP_ARG_NAME_HASH_ALGORITHM: &str = "HASH_ALGORITHM";
+pub const CLAP_ARG_HELP_HASH_ALGORITHM: &str = "This option adds an additional hash algorithm to calculate. You can use this option multiple times.";
+pub const CLAP_ARG_SHORT_HASH_ALGORITHM: &str = "d";
+pub const CLAP_ARG_LONG_HASH_ALGORITHM: &str = "hash-algorithm";
+pub const CLAP_ARG_POSSIBLE_VALUES_HASH_ALGORITHM: [&str; 2] = ["blake2b-512", "sha3-256"];
+
 // default values
 pub const DEFAULT_COMPRESSION_LEVEL: u8 = 3;
 pub const DEFAULT_CHUNK_STARTVALUE: u64 = 1;
@@ -92,6 +98,8 @@ pub const COMPRESSION_HEADER_VERSION: u8 = 1;
 pub const DESCRIPTION_HEADER_VERSION: u8 = 1;
 pub const SPLIT_HEADER_VERSION: u8 = 1;
 pub const CHUNK_HEADER_VERSION: u8 = 1;
+pub const HASH_HEADER_VERSION: u8 = 1;
+pub const HASH_VALUE_HEADER_VERSION: u8 = 1;
 
 //Error messages
 pub const ERROR_OPEN_INPUT_FILE: &'static str = "Could not open input file: ";
@@ -107,5 +115,6 @@ pub const ERROR_SET_FILE_EXTENSION: &'static str = "Could not set file extension
 pub const ERROR_ENCRYPT_KEY: &'static str = "Could not encrypt your key with the given password. This is a bug.";
 pub const ERROR_UNKNOWN_ENCRYPTION_ALGORITHM: &'static str = "The given encryption algorithm is unknown/not supported by this application. Please use -h to see all supported algorithms.";
 pub const ERROR_UNKNOWN_PASSWORD_KDF: &'static str = "The given password key derivation function is unknown/not supported by this application. Please use -h to see all supported algorithms.";
+pub const ERROR_GET_HASHTYPES: &'static str = "Unknown hashtype: ";
 
 pub const EXIT_STATUS_ERROR: i32 = 1;

@@ -134,23 +134,6 @@ impl HeaderEncoder for [u8; 32] {
 	}
 }
 
-impl HeaderEncoder for Vec<u8> {
-	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut (self.len() as u32).encode_directly());
-		vec.append(&mut self.to_vec());
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.push(ValueType::Bytes.clone() as u8);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
-}
-
 impl HeaderEncoder for String {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
@@ -182,6 +165,29 @@ impl HeaderEncoder for str {
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
 		vec.push(ValueType::String.clone() as u8);
+		vec.append(&mut self.encode_directly());
+		vec
+	}
+}
+
+impl<H> HeaderEncoder for Vec<H>
+where
+	H: HeaderEncoder
+{
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u32).encode_directly());
+		for value in self {
+			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+
+	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
+		let mut vec = Vec::new();
+		let mut encoded_key = Self::encode_key(key);
+		vec.append(&mut encoded_key);
+		vec.push(ValueType::ObjectArray.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}
