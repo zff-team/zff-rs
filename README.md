@@ -140,11 +140,12 @@
 
 ##### Hash type
 
-| Algorithm   | type value |
-|-------------|:----------:|
-| None        | 0          |
-| Blake2b-512 | 1          |
-| SHA3-256    | 2          |
+| Algorithm             | type value |
+|-----------------------|:----------:|
+| Blake2b-512 (default) | 1          |
+| SHA256 	            | 2 		 |
+| SHA512                | 3          |
+| SHA3-256              | 4          |
 
 ### Layout of split subheader
 
@@ -168,7 +169,7 @@
 | chunk size (in bytes)  | uint64            | 8               |
 
 # TODO
-- hashsum of image file
 - Keyfile support for encryption
 - Serialize EncryptionHeader and encryption flag
 - rename splitheader to segment header
+- async impl of hashing<->writing data

@@ -74,7 +74,7 @@ impl HashValue {
 		Self {
 			header_version: header_version,
 			hash_type: hash_type,
-			hash: vec!(0u8; hash_default_len),
+			hash: vec!(0u8; hash_default_len/8),
 		}
 	}
 

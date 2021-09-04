@@ -84,7 +84,7 @@ pub const CLAP_ARG_NAME_HASH_ALGORITHM: &str = "HASH_ALGORITHM";
 pub const CLAP_ARG_HELP_HASH_ALGORITHM: &str = "This option adds an additional hash algorithm to calculate. You can use this option multiple times.";
 pub const CLAP_ARG_SHORT_HASH_ALGORITHM: &str = "d";
 pub const CLAP_ARG_LONG_HASH_ALGORITHM: &str = "hash-algorithm";
-pub const CLAP_ARG_POSSIBLE_VALUES_HASH_ALGORITHM: [&str; 2] = ["blake2b-512", "sha3-256"];
+pub const CLAP_ARG_POSSIBLE_VALUES_HASH_ALGORITHM: [&str; 4] = ["blake2b-512", "sha256", "sha512", "sha3-256"];
 
 // default values
 pub const DEFAULT_COMPRESSION_LEVEL: u8 = 3;

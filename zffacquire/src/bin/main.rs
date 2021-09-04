@@ -139,7 +139,6 @@ fn arguments() -> ArgMatches<'static> {
                         .short(CLAP_ARG_SHORT_HASH_ALGORITHM)
                         .long(CLAP_ARG_LONG_HASH_ALGORITHM)
                         .possible_values(&CLAP_ARG_POSSIBLE_VALUES_HASH_ALGORITHM)
-                        .min_values(1)
                         .multiple(true)
                         .takes_value(true))
                     .get_matches();
@@ -318,6 +317,8 @@ fn get_hashes(arguments: &ArgMatches) -> Vec<HashValue> {
     for value in values {
         match value {
             "blake2b-512" => hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::Blake2b512)),
+            "sha256" => hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::SHA256)),
+            "sha512" => hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::SHA512)),
             "sha3-256" => hashvalues.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::SHA3_256)),
             _ => {
                 println!("{}{}", ERROR_GET_HASHTYPES, value);
