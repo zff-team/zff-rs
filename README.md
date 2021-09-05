@@ -17,8 +17,8 @@
 | Description header      | object            | variable        |          |
 | Hash header             | object			  | variable        |          |
 | chunk size			  | uint8			  | 8               |          |
-| Split size in bytes     | uint64            | 8               |          |
-| Split header 			  | object			  | variable        |          |
+| Segment size in bytes   | uint64            | 8               |          |
+| Segment header 		  | object			  | variable        |          |
 | Length of data in bytes | uint64            | 8               |          |
 
 ## Layout of encrypted main header
@@ -147,7 +147,7 @@
 | SHA512                | 3          |
 | SHA3-256              | 4          |
 
-### Layout of split subheader
+### Layout of segment subheader
 
 | Name                   |      Type         | Length in bytes |
 |------------------------|:-----------------:|:---------------:|
@@ -155,8 +155,8 @@
 | Header length in bytes | uint64            | 8               |
 | Header version         | uint8             | 1               |
 | Unique identifier      | uint64			 | 8               |
-| split number           | uint64            | 8               |
-| length of split        | uint64            | 8               |
+| Segment number         | uint64            | 8               |
+| length of segment      | uint64            | 8               |
 
 ## chunk header
 
@@ -168,8 +168,8 @@
 | chunk number			 | uint64			 | 8 			   |
 | chunk size (in bytes)  | uint64            | 8               |
 
-# TODO
+# TODO / Wishlist
 - Keyfile support for encryption
-- Serialize EncryptionHeader and encryption flag
-- rename splitheader to segment header
-- async impl of hashing<->writing data
+- parallelism impl of hashing<->writing data
+- impl Error handling @zffacquire if IoError->Interupt.
+- signature based authentication/integrity using PGP
