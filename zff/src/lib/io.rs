@@ -131,7 +131,7 @@ pub fn write_segment<R, W, H>(
 	chunk_header: &mut ChunkHeader,
 	compression_algorithm: &CompressionAlgorithm,
 	compression_level: &u8,
-	split_size: usize,
+	segment_size: usize,
 	encryption: &Option<(&Vec<u8>, EncryptionAlgorithm)>,
 	hasher_map: &mut HashMap<HashType, Box<H>>) -> Result<u64>
 where
@@ -141,7 +141,7 @@ where
 {
 	let mut written_bytes: u64 = 0;
 	loop {
-		if (written_bytes + chunk_size as u64) > split_size as u64 {
+		if (written_bytes + chunk_size as u64) > segment_size as u64 {
 			return Ok(written_bytes);
 		};
 		chunk_header.next_number();

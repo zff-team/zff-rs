@@ -3,6 +3,7 @@ name = "zffacquire"
 authors = ["ph0llux <ph0llux@pm.me>"]
 version = "0.1.0"
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 [[bin]]
 name = "zffacquire"
@@ -14,4 +15,3 @@ bench = true
 clap = "2.33"
 rand_core = { version = "0.6.3", features = [ "getrandom" ] }
 zff = { path = "../zff" }
-digest = { version = "0.9.0", features = [ "alloc" ] }

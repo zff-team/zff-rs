@@ -10,6 +10,8 @@ use std::{
 
 // - extern crates
 extern crate clap;
+extern crate rand_core;
+extern crate zff;
 
 // - modules
 mod lib;
@@ -30,7 +32,7 @@ use zff::{
     HashValue,
     HashType,
     Hash,
-    SplitHeader,
+    SegmentHeader,
     ChunkHeader,
     HeaderEncoder,
     KDFScheme,
@@ -79,10 +81,10 @@ fn arguments() -> ArgMatches<'static> {
                         .long(CLAP_ARG_LONG_COMPRESSION_LEVEL)
                         .possible_values(&CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_LEVEL)
                         .takes_value(true))
-                    .arg(Arg::with_name(CLAP_ARG_NAME_SPLIT_SIZE)
-                        .help(CLAP_ARG_HELP_SPLIT_SIZE)
-                        .short(CLAP_ARG_SHORT_SPLIT_SIZE)
-                        .long(CLAP_ARG_LONG_SPLIT_SIZE)
+                    .arg(Arg::with_name(CLAP_ARG_NAME_SEGMENT_SIZE)
+                        .help(CLAP_ARG_HELP_SEGMENT_SIZE)
+                        .short(CLAP_ARG_SHORT_SEGMENT_SIZE)
+                        .long(CLAP_ARG_LONG_SEGMENT_SIZE)
                         .takes_value(true))
                     .arg(Arg::with_name(CLAP_ARG_NAME_CHUNK_SIZE)
                         .help(CLAP_ARG_HELP_CHUNK_SIZE)
@@ -178,12 +180,12 @@ fn description_header(arguments: &ArgMatches) -> DescriptionHeader {
     description_header
 }
 
-fn split_header() -> SplitHeader {
-    let header_version = SPLIT_HEADER_VERSION;
+fn segment_header() -> SegmentHeader {
+    let header_version = SEGMENT_HEADER_VERSION;
     let unique_identifier: u64 = OsRng.next_u64();
-    let split_number = 1;
-    let length_of_split = 0;
-    SplitHeader::new(header_version, unique_identifier, split_number, length_of_split)
+    let segment_number = 1;
+    let length_of_segment = 0;
+    SegmentHeader::new(header_version, unique_identifier, segment_number, length_of_segment)
 }
 
 fn encryption_header(arguments: &ArgMatches) -> Option<(EncryptionHeader, Vec<u8>)> {
@@ -279,13 +281,13 @@ fn encryption_header(arguments: &ArgMatches) -> Option<(EncryptionHeader, Vec<u8
     }
 }
 
-fn calculate_split_size(arguments: &ArgMatches) -> u64 {
-    //TODO: support human readable split size entries, like 4G or 200M.
-    if let Some(value) = arguments.value_of(CLAP_ARG_NAME_SPLIT_SIZE) {
+fn calculate_segment_size(arguments: &ArgMatches) -> u64 {
+    //TODO: support human readable segment size entries, like 4G or 200M.
+    if let Some(value) = arguments.value_of(CLAP_ARG_NAME_SEGMENT_SIZE) {
         match value.parse() {
             Ok(val) => val,
             Err(_) => {
-                println!("{}{}", ERROR_PARSE_STR_SPLIT_SIZE, value);
+                println!("{}{}", ERROR_PARSE_STR_SEGMENT_SIZE, value);
                 exit(EXIT_STATUS_ERROR);
             }
         }
@@ -334,7 +336,7 @@ fn write_to_output<O>(
     output_filename: O,
     mut main_header: MainHeader,
     compression_header: CompressionHeader,
-    mut split_header: SplitHeader,
+    mut segment_header: SegmentHeader,
     encryption_key: Option<Vec<u8>>,
     encryption_header: Option<EncryptionHeader>,
     hash_values: Vec<HashValue>)
@@ -349,9 +351,9 @@ where
         },
     };
     let output_filename = output_filename.into();
-    let split_size = match main_header.split_size() {
+    let segment_size = match main_header.segment_size() {
         0 => u64::MAX,
-        _ => main_header.split_size(),
+        _ => main_header.segment_size(),
     };
 
     let header_size = main_header.get_encoded_size();
@@ -359,7 +361,7 @@ where
     let chunk_size = main_header.chunk_size();
     let mut chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0);
 
-    let first_segment_size = split_size as usize - header_size;
+    let first_segment_size = segment_size as usize - header_size;
     let mut first_segment_filename = PathBuf::from(&output_filename);
     let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
     first_segment_filename.set_extension(&file_extension);
@@ -422,11 +424,11 @@ where
         },
     };
 
-    split_header.set_length_of_split(written_bytes);
-    main_header.set_split_header(split_header.clone());
+    segment_header.set_length_of_segment(written_bytes);
+    main_header.set_segment_header(segment_header.clone());
 
     loop {
-        let mut segment_split_header = split_header.next_header();
+        let mut segment_header = segment_header.next_header();
         file_extension = match file_extension_next_value(&file_extension) {
             Ok(val) => val,
             Err(e) => {
@@ -444,10 +446,10 @@ where
             }
         };
 
-        match output_file.write(&segment_split_header.encode_directly()) {
+        match output_file.write(&segment_header.encode_directly()) {
             Ok(_) => (),
             Err(_) => {
-                println!("{}{}", ERROR_WRITE_SPLIT_HEADER, segment_filename.to_string_lossy());
+                println!("{}{}", ERROR_WRITE_SEGMENT_HEADER, segment_filename.to_string_lossy());
                 exit(EXIT_STATUS_ERROR);
             }
         };
@@ -459,7 +461,7 @@ where
             &mut chunk_header,
             compression_header.compression_algorithm(),
             compression_header.compression_level(),
-            split_size as usize,
+            segment_size as usize,
             &encryption,
             &mut hasher_map) {
             Ok(val) => val,
@@ -474,7 +476,7 @@ where
         } else {
             written_bytes += written_bytes_in_segment;
             //rewrite segment header with the correct number of bytes.
-            segment_split_header.set_length_of_split(written_bytes_in_segment);
+            segment_header.set_length_of_segment(written_bytes_in_segment);
             match output_file.seek(SeekFrom::Start(0)) {
                 Ok(_) => (),
                 Err(e) => {
@@ -482,7 +484,7 @@ where
                     exit(EXIT_STATUS_ERROR);
                 }
             };
-            match output_file.write(&segment_split_header.encode_directly()) {
+            match output_file.write(&segment_header.encode_directly()) {
                 Ok(_) => (),
                 Err(e) => {
                     println!("{}{}", ERROR_REWRITE_SEGMENT_HEADER, e.to_string());
@@ -539,9 +541,9 @@ fn main() {
 	let arguments = arguments();
     let compression_header = compression_header(&arguments);
     let description_header = description_header(&arguments);
-    let split_size = calculate_split_size(&arguments);
+    let segment_size = calculate_segment_size(&arguments);
     let chunk_size = calculate_chunk_size(&arguments);
-    let split_header = split_header();
+    let segment_header = segment_header();
 
     // Calling .unwrap() is safe here because the arguments are *required*.
     let input_path = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
@@ -561,8 +563,8 @@ fn main() {
         description_header,
         hash_header,
         chunk_size,
-        split_size,
-        split_header.clone(),
+        segment_size,
+        segment_header.clone(),
         0);
 
     write_to_output(
@@ -570,7 +572,7 @@ fn main() {
         output_filename,
         main_header,
         compression_header,
-        split_header,
+        segment_header,
         encryption_key,
         encryption_header,
         hash_values);

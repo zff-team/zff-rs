@@ -6,24 +6,24 @@ use crate::{
 	HeaderObject,
 	HeaderEncoder,
 	ValueType,
-	HEADER_IDENTIFIER_SPLIT_HEADER
+	HEADER_IDENTIFIER_SEGMENT_HEADER
 };
 
 #[derive(Debug,Clone,Eq)]
-pub struct SplitHeader {
+pub struct SegmentHeader {
 	header_version: u8,
 	unique_identifier: u64,
-	split_number: u64,
-	length_of_split: u64,
+	segment_number: u64,
+	length_of_segment: u64,
 }
 
-impl SplitHeader {
-	pub fn new(header_version: u8, unique_identifier: u64, split_number: u64, length_of_split: u64) -> SplitHeader {
+impl SegmentHeader {
+	pub fn new(header_version: u8, unique_identifier: u64, segment_number: u64, length_of_segment: u64) -> SegmentHeader {
 		Self {
 			header_version: header_version,
 			unique_identifier: unique_identifier,
-			split_number: split_number,
-			length_of_split: length_of_split,
+			segment_number: segment_number,
+			length_of_segment: length_of_segment,
 		}
 	}
 
@@ -35,45 +35,45 @@ impl SplitHeader {
 		self.unique_identifier
 	}
 
-	pub fn split_number(&self) -> u64 {
-		self.split_number
+	pub fn segment_number(&self) -> u64 {
+		self.segment_number
 	}
 
-	pub fn length_of_split(&self) -> u64 {
-		self.length_of_split
+	pub fn length_of_segment(&self) -> u64 {
+		self.length_of_segment
 	}
 
-	pub fn set_length_of_split(&mut self, value: u64) {
-		self.length_of_split = value
+	pub fn set_length_of_segment(&mut self, value: u64) {
+		self.length_of_segment = value
 	}
 
-	pub fn next_header(&self) -> SplitHeader {
-		SplitHeader {
+	pub fn next_header(&self) -> SegmentHeader {
+		SegmentHeader {
 			header_version: self.header_version,
 			unique_identifier: self.unique_identifier,
-			split_number: self.split_number+1,
-			length_of_split: 0
+			segment_number: self.segment_number+1,
+			length_of_segment: 0
 		}
 	}
 }
 
-impl HeaderObject for SplitHeader {
+impl HeaderObject for SegmentHeader {
 	fn identifier() -> u32 {
-		HEADER_IDENTIFIER_SPLIT_HEADER
+		HEADER_IDENTIFIER_SEGMENT_HEADER
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
 		vec.append(&mut self.header_version.encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());
-		vec.append(&mut self.split_number.encode_directly());
-		vec.append(&mut self.length_of_split.encode_directly());
+		vec.append(&mut self.segment_number.encode_directly());
+		vec.append(&mut self.length_of_segment.encode_directly());
 
 		vec
 	}
 }
 
-impl HeaderEncoder for SplitHeader {
+impl HeaderEncoder for SegmentHeader {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		let mut encoded_header = self.encode_header();
@@ -95,8 +95,8 @@ impl HeaderEncoder for SplitHeader {
 	}
 }
 
-impl PartialEq for SplitHeader {
+impl PartialEq for SegmentHeader {
     fn eq(&self, other: &Self) -> bool {
-        self.split_number == other.split_number
+        self.segment_number == other.segment_number
     }
 }

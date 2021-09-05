@@ -8,7 +8,7 @@ use crate::{
 	DescriptionHeader,
 	EncryptionHeader,
 	HashHeader,
-	SplitHeader,
+	SegmentHeader,
 	ZffError,
 	ZffErrorKind,
 	Encryption,
@@ -24,8 +24,8 @@ pub struct MainHeader {
 	description_header: DescriptionHeader,
 	hash_header: HashHeader,
 	chunk_size: u8,
-	split_size_in_bytes: u64,
-	split_header: SplitHeader,
+	segment_size_in_bytes: u64,
+	segment_header: SegmentHeader,
 	length_of_data: u64,
 }
 
@@ -37,8 +37,8 @@ impl MainHeader {
 		description_header: DescriptionHeader,
 		hash_header: HashHeader,
 		chunk_size: u8,
-		split_size_in_bytes: u64,
-		split_header: SplitHeader,
+		segment_size_in_bytes: u64,
+		segment_header: SegmentHeader,
 		length_of_data: u64) -> MainHeader {
 		Self {
 			header_version: header_version,
@@ -47,8 +47,8 @@ impl MainHeader {
 			description_header: description_header,
 			hash_header: hash_header,
 			chunk_size: chunk_size,
-			split_size_in_bytes: split_size_in_bytes,
-			split_header: split_header,
+			segment_size_in_bytes: segment_size_in_bytes,
+			segment_header: segment_header,
 			length_of_data: length_of_data,
 		}
 	}
@@ -112,8 +112,8 @@ impl MainHeader {
 		vec.append(&mut self.description_header.encode_directly());
 		vec.append(&mut self.hash_header.encode_directly());
 		vec.push(self.chunk_size);
-		vec.append(&mut self.split_size_in_bytes.encode_directly());
-		vec.append(&mut self.split_header.encode_directly());
+		vec.append(&mut self.segment_size_in_bytes.encode_directly());
+		vec.append(&mut self.segment_header.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
 
 		vec
@@ -123,8 +123,8 @@ impl MainHeader {
 		self.length_of_data = len;
 	}
 
-	pub fn set_split_header(&mut self, split_header: SplitHeader) {
-		self.split_header = split_header
+	pub fn set_segment_header(&mut self, segment_header: SegmentHeader) {
+		self.segment_header = segment_header
 	}
 
 	pub fn set_hash_header(&mut self, hash_header: HashHeader) {
@@ -139,8 +139,8 @@ impl MainHeader {
 		1<<self.chunk_size
 	}
 
-	pub fn split_size(&self) -> u64 {
-		self.split_size_in_bytes.clone()
+	pub fn segment_size(&self) -> u64 {
+		self.segment_size_in_bytes.clone()
 	}
 
 	pub fn get_encoded_size(&self) -> usize {
