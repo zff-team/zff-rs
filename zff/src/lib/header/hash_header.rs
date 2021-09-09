@@ -2,7 +2,6 @@
 use crate::{
 	HeaderEncoder,
 	HeaderObject,
-	ValueType,
 	HashType,
 	HEADER_IDENTIFIER_HASH_HEADER,
 	HEADER_IDENTIFIER_HASH_VALUE,
@@ -53,7 +52,6 @@ impl HeaderEncoder for HashHeader {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}
@@ -117,7 +115,6 @@ impl HeaderEncoder for HashValue {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}

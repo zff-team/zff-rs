@@ -5,7 +5,6 @@ use std::cmp::{PartialEq};
 use crate::{
 	HeaderObject,
 	HeaderEncoder,
-	ValueType,
 	HEADER_IDENTIFIER_SEGMENT_HEADER
 };
 
@@ -89,7 +88,6 @@ impl HeaderEncoder for SegmentHeader {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}

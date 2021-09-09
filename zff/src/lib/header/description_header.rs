@@ -2,7 +2,6 @@
 use crate::{
 	HeaderObject,
 	HeaderEncoder,
-	ValueType,
 };
 use crate::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
@@ -132,7 +131,6 @@ impl HeaderEncoder for DescriptionHeader {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}

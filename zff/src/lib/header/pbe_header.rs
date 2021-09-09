@@ -2,7 +2,6 @@
 use crate::{
 	HeaderObject,
 	HeaderEncoder,
-	ValueType,
 	KDFScheme,
 	PBEScheme,
 };
@@ -71,7 +70,6 @@ impl HeaderEncoder for PBEHeader {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}
@@ -94,7 +92,6 @@ impl HeaderEncoder for KDFParameters {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}
@@ -143,7 +140,6 @@ impl HeaderEncoder for PBKDF2SHA256Parameters {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}

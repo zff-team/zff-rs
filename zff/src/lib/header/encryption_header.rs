@@ -3,7 +3,6 @@ use crate::{
 	EncryptionAlgorithm,
 	HeaderObject,
 	HeaderEncoder,
-	ValueType,
 	PBEHeader,
 };
 
@@ -78,7 +77,6 @@ impl HeaderEncoder for EncryptionHeader {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}

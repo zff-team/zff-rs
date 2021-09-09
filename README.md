@@ -180,4 +180,3 @@
 	-> Number of retries / sectors used as error granularity
 - LZ4 compression algorithm
 - documentation
-- remove ValueTypes from Coding

@@ -5,7 +5,6 @@ use ed25519_dalek::{SIGNATURE_LENGTH};
 use crate::{
 	HeaderEncoder,
 	HeaderObject,
-	ValueType,
 	HEADER_IDENTIFIER_CHUNK_HEADER,
 };
 
@@ -86,7 +85,6 @@ impl HeaderEncoder for ChunkHeader {
 		let mut vec = Vec::new();
 		let mut encoded_key = Self::encode_key(key);
 		vec.append(&mut encoded_key);
-		vec.push(ValueType::Object.clone() as u8);
 		vec.append(&mut self.encode_directly());
 		vec
 	}
