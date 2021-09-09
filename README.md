@@ -172,11 +172,12 @@
 | ed25519 signature      | bytes			 | 64 			   |:ballot_box_with_check: |
 
 # TODO / Wishlist
+- testing / unit tests
+- documentation (with deny nodoc)
 - Keyfile support for encryption
 - parallelism impl of hashing/crc/signing<->writing data
 - impl Error handling @zffacquire if IoError->Interupt.
 	-> Number of retries / sectors used as error granularity
-- signature based authentication/integrity using EdDSA/ED25519
 - LZ4 compression algorithm
 - documentation
 - add apache license file
