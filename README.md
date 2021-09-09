@@ -17,6 +17,7 @@
 | Description header      | object            | variable        |          |
 | Hash header             | object			  | variable        |          |
 | chunk size			  | uint8			  | 8               |          |
+| signature flag          | uint8			  | 1               |		   |
 | Segment size in bytes   | uint64            | 8               |          |
 | Segment header 		  | object			  | variable        |          |
 | Length of data in bytes | uint64            | 8               |          |
@@ -160,16 +161,23 @@
 
 ## chunk header
 
-| Name                   |      Type         | Length in bytes |
-|------------------------|:-----------------:|:---------------:|
-| Magic bytes            | 0x7A666643        | 4               |
-| Header length in bytes | uint64            | 8               |
-| Header version         | uint8             | 1               |
-| chunk number			 | uint64			 | 8 			   |
-| chunk size (in bytes)  | uint64            | 8               |
+| Name                   |      Type         | Length in bytes | optional |
+|------------------------|:-----------------:|:---------------:|:--------:|
+| Magic bytes            | 0x7A666643        | 4               |		  |
+| Header length in bytes | uint64            | 8               |		  |
+| Header version         | uint8             | 1               |		  |
+| chunk number			 | uint64			 | 8 			   |		  |
+| chunk size (in bytes)  | uint64            | 8               |		  |
+| CRC32					 | uint32			 | 4  			   |		  |
+| ed25519 signature      | bytes			 | 64 			   |:ballot_box_with_check: |
 
 # TODO / Wishlist
 - Keyfile support for encryption
-- parallelism impl of hashing<->writing data
+- parallelism impl of hashing/crc/signing<->writing data
 - impl Error handling @zffacquire if IoError->Interupt.
-- signature based authentication/integrity using PGP
+	-> Number of retries / sectors used as error granularity
+- signature based authentication/integrity using EdDSA/ED25519
+- LZ4 compression algorithm
+- documentation
+- add apache license file
+- remove ValueTypes from Coding

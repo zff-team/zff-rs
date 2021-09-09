@@ -24,6 +24,7 @@ pub struct MainHeader {
 	description_header: DescriptionHeader,
 	hash_header: HashHeader,
 	chunk_size: u8,
+	signature_flag: u8,
 	segment_size_in_bytes: u64,
 	segment_header: SegmentHeader,
 	length_of_data: u64,
@@ -37,6 +38,7 @@ impl MainHeader {
 		description_header: DescriptionHeader,
 		hash_header: HashHeader,
 		chunk_size: u8,
+		signature_flag: u8,
 		segment_size_in_bytes: u64,
 		segment_header: SegmentHeader,
 		length_of_data: u64) -> MainHeader {
@@ -47,6 +49,7 @@ impl MainHeader {
 			description_header: description_header,
 			hash_header: hash_header,
 			chunk_size: chunk_size,
+			signature_flag: signature_flag,
 			segment_size_in_bytes: segment_size_in_bytes,
 			segment_header: segment_header,
 			length_of_data: length_of_data,
@@ -112,6 +115,7 @@ impl MainHeader {
 		vec.append(&mut self.description_header.encode_directly());
 		vec.append(&mut self.hash_header.encode_directly());
 		vec.push(self.chunk_size);
+		vec.push(self.signature_flag);
 		vec.append(&mut self.segment_size_in_bytes.encode_directly());
 		vec.append(&mut self.segment_header.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
@@ -145,6 +149,10 @@ impl MainHeader {
 
 	pub fn get_encoded_size(&self) -> usize {
 		self.encode_directly().len()
+	}
+
+	pub fn has_signature(&self) -> bool {
+		self.signature_flag != 0
 	}
 }
 

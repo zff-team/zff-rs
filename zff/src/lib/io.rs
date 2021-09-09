@@ -16,6 +16,8 @@ use crate::{
 };
 
 // - external
+use crc32fast::Hasher as CRC32Hasher;
+use ed25519_dalek::{Keypair,Signer,SIGNATURE_LENGTH};
 use digest::DynDigest;
 
 fn buffer_chunk<R>(
@@ -44,12 +46,14 @@ where
     return Ok(buf)
 }
 
-fn read_chunk<R, H>(
+//TODO: optimization/code cleanup
+fn prepare_chunk<R, H>(
 	input: &mut R,
 	chunk_size: usize,
 	algorithm: &CompressionAlgorithm,
 	compression_level: &u8,
-	hasher_map: &mut HashMap<HashType, Box<H>>) -> Result<Vec<u8>>
+	hasher_map: &mut HashMap<HashType, Box<H>>,
+	signature_key: &Option<Keypair>) -> Result<(Vec<u8>, u32, Option<[u8; SIGNATURE_LENGTH]>)>
 where
     R: Read,
     H: DynDigest + ?Sized
@@ -61,18 +65,26 @@ where
     for (_, hasher) in hasher_map {
     	hasher.update(&buf);
     }
+    let mut crc32_hasher = CRC32Hasher::new();
+    crc32_hasher.update(&buf);
+    let crc32 = crc32_hasher.finalize();
+
+    let signature = match signature_key {
+    	None => None,
+    	Some(keypair) => Some(keypair.sign(&buf).to_bytes()),
+    };
 
     match algorithm {
-    	CompressionAlgorithm::None => return Ok(buf),
+    	CompressionAlgorithm::None => return Ok((buf, crc32, signature)),
     	CompressionAlgorithm::Zstd => {
     		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), *compression_level as i32)?;
     		let buf = buffer_chunk(&mut stream, chunk_size*4)?;
-    		Ok(buf)
+    		Ok((buf, crc32, signature))
     	}
     }
 }
 
-
+//TODO: optimization/code cleanup
 fn write_unencrypted_chunk<R, W, H>(
 	input: &mut R,
 	output: &mut W,
@@ -80,14 +92,17 @@ fn write_unencrypted_chunk<R, W, H>(
 	chunk_header: &mut ChunkHeader,
 	compression_algorithm: &CompressionAlgorithm,
 	compression_level: &u8,
-	hasher_map: &mut HashMap<HashType, Box<H>>) -> Result<u64>
+	hasher_map: &mut HashMap<HashType, Box<H>>,
+	signature_key: &Option<Keypair>) -> Result<u64>
 where
 	R: Read,
 	W: Write,
 	H: DynDigest + ?Sized
 {
-	let compressed_chunk = read_chunk(input, chunk_size, compression_algorithm, compression_level, hasher_map)?;
+	let (compressed_chunk, crc32, signature) = prepare_chunk(input, chunk_size, compression_algorithm, compression_level, hasher_map, signature_key)?;
 	chunk_header.set_chunk_size(compressed_chunk.len() as u64);
+	chunk_header.set_crc32(crc32);
+	chunk_header.set_signature(signature);
 
 	let mut written_bytes = 0;
 	written_bytes += output.write(&chunk_header.encode_directly())?;
@@ -95,6 +110,7 @@ where
 	Ok(written_bytes as u64)
 }
 
+//TODO: optimization/code cleanup
 fn write_encrypted_chunk<R, W, H>(
 	input: &mut R,
 	output: &mut W,
@@ -104,19 +120,22 @@ fn write_encrypted_chunk<R, W, H>(
 	compression_level: &u8,
 	encryption_key: &Vec<u8>,
 	encryption_algorithm: &EncryptionAlgorithm,
-	hasher_map: &mut HashMap<HashType, Box<H>>) -> Result<u64>
+	hasher_map: &mut HashMap<HashType, Box<H>>,
+	signature_key: &Option<Keypair>) -> Result<u64>
 where
 	R: Read,
 	W: Write,
 	H: DynDigest + ?Sized
 {
-	let compressed_chunk = read_chunk(input, chunk_size, compression_algorithm, compression_level, hasher_map)?;
+	let (compressed_chunk, crc32, signature) = prepare_chunk(input, chunk_size, compression_algorithm, compression_level, hasher_map, signature_key)?;
 	let encrypted_data = Encryption::encrypt_message(
 		encryption_key,
 		&compressed_chunk,
 		chunk_header.chunk_number(),
 		&encryption_algorithm)?;
 	chunk_header.set_chunk_size(encrypted_data.len() as u64);
+	chunk_header.set_crc32(crc32);
+	chunk_header.set_signature(signature);
 
 	let mut written_bytes = 0;
 	written_bytes += output.write(&chunk_header.encode_directly())?;
@@ -133,7 +152,8 @@ pub fn write_segment<R, W, H>(
 	compression_level: &u8,
 	segment_size: usize,
 	encryption: &Option<(&Vec<u8>, EncryptionAlgorithm)>,
-	hasher_map: &mut HashMap<HashType, Box<H>>) -> Result<u64>
+	hasher_map: &mut HashMap<HashType, Box<H>>,
+	signature_key: &Option<Keypair>) -> Result<u64>
 where
 	R: Read,
 	W: Write,
@@ -154,7 +174,8 @@ where
 					chunk_header,
 					compression_algorithm,
 					compression_level,
-					hasher_map) {
+					hasher_map,
+					signature_key) {
 					Ok(data) => data,
 					Err(e) => match e.get_kind() {
 						ZffErrorKind::ReadEOF => return Ok(written_bytes),
@@ -173,7 +194,8 @@ where
 					compression_level,
 					&encryption.0,
 					&encryption.1,
-					hasher_map) {
+					hasher_map,
+					signature_key) {
 					Ok(data) => data,
 					Err(e) => match e.get_kind() {
 						ZffErrorKind::ReadEOF => return Ok(written_bytes),

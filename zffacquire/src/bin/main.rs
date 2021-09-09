@@ -40,6 +40,7 @@ use zff::{
     write_segment,
     file_extension_next_value,
     Encryption,
+    Signature,
     FILE_EXTENSION_FIRST_VALUE,
     DEFAULT_CHUNK_SIZE,
 };
@@ -51,6 +52,7 @@ use clap::{
     ArgMatches
 };
 use rand_core::{RngCore, OsRng};
+use ed25519_dalek::Keypair;
 
 fn arguments() -> ArgMatches<'static> {
     let matches = App::new(PROGRAM_NAME)
@@ -143,8 +145,35 @@ fn arguments() -> ArgMatches<'static> {
                         .possible_values(&CLAP_ARG_POSSIBLE_VALUES_HASH_ALGORITHM)
                         .multiple(true)
                         .takes_value(true))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_SIGN_DATA)
+                        .help(CLAP_ARG_HELP_SIGN_DATA)
+                        .short(CLAP_ARG_SHORT_SIGN_DATA)
+                        .long(CLAP_ARG_LONG_SIGN_DATA)
+                        .takes_value(false))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_SIGN_KEYPAIR)
+                        .help(CLAP_ARG_HELP_SIGN_KEYPAIR)
+                        .short(CLAP_ARG_SHORT_SIGN_KEYPAIR)
+                        .long(CLAP_ARG_LONG_SIGN_KEYPAIR)
+                        .requires(CLAP_ARG_NAME_SIGN_DATA)
+                        .takes_value(true))
                     .get_matches();
     matches
+}
+
+fn signer(arguments: &ArgMatches) -> Option<Keypair> {
+    if !arguments.is_present(CLAP_ARG_NAME_SIGN_DATA) {
+        return None;
+    }
+    match arguments.value_of(CLAP_ARG_NAME_SIGN_KEYPAIR) {
+        None => Some(Signature::new_keypair()),
+        Some(value) => match Signature::new_keypair_from_base64(value.trim()) {
+            Ok(keypair) => return Some(keypair),
+            Err(_) => {
+                println!("{}", ERROR_PARSE_KEY);
+                exit(EXIT_STATUS_ERROR);
+            },
+        }
+    }
 }
 
 fn compression_header(arguments: &ArgMatches) -> CompressionHeader {
@@ -339,7 +368,8 @@ fn write_to_output<O>(
     mut segment_header: SegmentHeader,
     encryption_key: Option<Vec<u8>>,
     encryption_header: Option<EncryptionHeader>,
-    hash_values: Vec<HashValue>)
+    hash_values: Vec<HashValue>,
+    signature_key: Option<Keypair>)
 where
     O: Into<String>,
 {
@@ -359,7 +389,7 @@ where
     let header_size = main_header.get_encoded_size();
 
     let chunk_size = main_header.chunk_size();
-    let mut chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0);
+    let mut chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0, 0, None);
 
     let first_segment_size = segment_size as usize - header_size;
     let mut first_segment_filename = PathBuf::from(&output_filename);
@@ -416,7 +446,8 @@ where
         compression_header.compression_level(),
         first_segment_size as usize,
         &encryption,
-        &mut hasher_map) {
+        &mut hasher_map,
+        &signature_key) {
         Ok(val) => val,
         Err(e) => {
             println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -463,7 +494,8 @@ where
             compression_header.compression_level(),
             segment_size as usize,
             &encryption,
-            &mut hasher_map) {
+            &mut hasher_map,
+            &signature_key) {
             Ok(val) => val,
             Err(e) => {
                 println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -555,6 +587,11 @@ fn main() {
 
     let hash_values = get_hashes(&arguments);
     let hash_header = HashHeader::new(HASH_HEADER_VERSION, hash_values.clone());
+    let signature_key = signer(&arguments);
+    let signature_flag = match signature_key {
+        None => 0,
+        Some(_) => 1,
+    };
 
     let main_header = MainHeader::new(
         MAIN_HEADER_VERSION,
@@ -563,6 +600,7 @@ fn main() {
         description_header,
         hash_header,
         chunk_size,
+        signature_flag,
         segment_size,
         segment_header.clone(),
         0);
@@ -575,5 +613,6 @@ fn main() {
         segment_header,
         encryption_key,
         encryption_header,
-        hash_values);
+        hash_values,
+        signature_key);
 }

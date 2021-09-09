@@ -7,6 +7,8 @@ use std::io;
 // - external
 use pkcs5::CryptoError as PKCS5CryptoError;
 use aes_gcm_siv::aead::Error as EncryptionError;
+use ed25519_dalek::ed25519::Error as Ed25519Error;
+use base64::DecodeError as Base64DecodingError;
 
 /// The main error-type of this crate.
 #[derive(Debug, Clone)]
@@ -22,6 +24,9 @@ pub enum ZffErrorKind {
 	PKCS5CryptoError,
 	FileExtensionParserError,
 	EncryptionError,
+	Ed25519Error,
+	Base64DecodingError,
+	WrongSignatureKeyLength,
 	MissingEncryptionHeader,
 	ReadEOF,
 	Custom,
@@ -34,9 +39,12 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
 			ZffErrorKind::Custom => "Custom",
 			ZffErrorKind::FileExtensionParserError => "FileExtensionParserError",
-			ZffErrorKind::EncryptionError => "EncryptionCrateError",
+			ZffErrorKind::EncryptionError => "EncryptionError",
+			ZffErrorKind::Ed25519Error => "Ed25519Error",
+			ZffErrorKind::Base64DecodingError => "Base64DecodingError",
+			ZffErrorKind::WrongSignatureKeyLength => "WrongSignatureKeyLength",
 			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
-			ZffErrorKind::ReadEOF => "ReadEOF"
+			ZffErrorKind::ReadEOF => "ReadEOF",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -94,6 +102,19 @@ impl From<EncryptionError> for ZffError {
 		ZffError::new(ZffErrorKind::EncryptionError, e.to_string())
 	}
 }
+
+impl From<Ed25519Error> for ZffError {
+	fn from(e: Ed25519Error) -> ZffError {
+		ZffError::new(ZffErrorKind::Ed25519Error, e.to_string())
+	}
+}
+
+impl From<Base64DecodingError> for ZffError {
+	fn from(e: Base64DecodingError) -> ZffError {
+		ZffError::new(ZffErrorKind::Base64DecodingError, e.to_string())
+	}
+}
+
 
 impl fmt::Display for ZffError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

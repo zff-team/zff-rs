@@ -8,6 +8,7 @@ mod encryption;
 mod file_extension;
 mod io;
 mod hashing;
+mod signatures;
 
 // - re-exports
 pub use error::*;
@@ -19,6 +20,7 @@ pub use encryption::*;
 pub use file_extension::*;
 pub use io::*;
 pub use hashing::*;
+pub use signatures::*;
 
 // - types
 pub type Result<T> = std::result::Result<T, ZffError>;

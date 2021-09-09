@@ -1,3 +1,6 @@
+// - external
+use ed25519_dalek::{SIGNATURE_LENGTH};
+
 // - internal
 use crate::{
 	HeaderEncoder,
@@ -10,20 +13,32 @@ use crate::{
 pub struct ChunkHeader {
 	header_version: u8,
 	chunk_number: u64,
-	chunk_size: u64
+	chunk_size: u64,
+	crc32: u32,
+	ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,
 }
 
 impl ChunkHeader {
-	pub fn new(header_version: u8, chunk_number: u64, chunk_size: u64) -> ChunkHeader {
+	pub fn new(header_version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
 		Self {
 			header_version: header_version,
 			chunk_number: chunk_number,
 			chunk_size: chunk_size,
+			crc32: crc32,
+			ed25519_signature: ed25519_signature
 		}
 	}
 
 	pub fn set_chunk_size(&mut self, size: u64) {
 		self.chunk_size = size
+	}
+
+	pub fn set_crc32(&mut self, crc32: u32) {
+		self.crc32 = crc32
+	}
+
+	pub fn set_signature(&mut self, signature: Option<[u8; SIGNATURE_LENGTH]>) {
+		self.ed25519_signature = signature
 	}
 
 	pub fn next_number(&mut self) {
@@ -45,7 +60,12 @@ impl HeaderObject for ChunkHeader {
 		vec.push(self.header_version);
 		vec.append(&mut self.chunk_number.encode_directly());
 		vec.append(&mut self.chunk_size.encode_directly());
-
+		vec.append(&mut self.crc32.encode_directly());
+		match self.ed25519_signature {
+			None => (),
+			Some(signature) => vec.append(&mut signature.encode_directly()),
+		};
+		
 		vec
 	}
 }

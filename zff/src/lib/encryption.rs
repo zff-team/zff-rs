@@ -13,7 +13,7 @@ use aes_gcm_siv::{
 	aead::{Aead, NewAead},
 };
 use byteorder::{LittleEndian, WriteBytesExt};
-use rand_core::{RngCore, OsRng};
+use rand::{rngs::OsRng, RngCore};
 
 #[repr(u8)]
 #[non_exhaustive]
@@ -119,25 +119,29 @@ impl Encryption {
 
 	pub fn gen_random_key(length: usize) -> Vec<u8> {
 		let mut key = vec!(0u8; length/8);
-		OsRng.fill_bytes(&mut key);
+		let mut rng = OsRng;
+		rng.fill_bytes(&mut key);
 		key
 	}
 
 	pub fn gen_random_iv() -> [u8; 16] {
 		let mut iv = [0; 16];
-		OsRng.fill_bytes(&mut iv);
+		let mut rng = OsRng;
+		rng.fill_bytes(&mut iv);
 		iv
 	}
 
 	pub fn gen_random_salt() -> [u8; 32] {
 		let mut salt = [0; 32];
-		OsRng.fill_bytes(&mut salt);
+		let mut rng = OsRng;
+		rng.fill_bytes(&mut salt);
 		salt
 	}
 
 	pub fn gen_random_header_nonce() -> [u8; 12] {
 		let mut nonce = [0; 12];
-		OsRng.fill_bytes(&mut nonce);
+		let mut rng = OsRng;
+		rng.fill_bytes(&mut nonce);
 		nonce
 	}
 

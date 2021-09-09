@@ -15,3 +15,5 @@ bench = true
 clap = "2.33"
 rand_core = { version = "0.6.3", features = [ "getrandom" ] }
 zff = { path = "../zff" }
+#signing
+ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }
