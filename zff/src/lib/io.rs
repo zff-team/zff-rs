@@ -5,7 +5,7 @@ use std::io::{Read,Write};
 // - internal
 use crate::{
 	Result,
-	ChunkHeader,
+	header::ChunkHeader,
 	CompressionAlgorithm,
 	HeaderEncoder,
 	ZffError,
@@ -143,6 +143,7 @@ where
 	Ok(written_bytes as u64)
 }
 
+/// reads the data from given source and writes the data as segment to the given destination with the given options/values.
 pub fn write_segment<R, W, H>(
 	input: &mut R,
 	output: &mut W,

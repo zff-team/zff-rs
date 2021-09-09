@@ -15,33 +15,47 @@ use aes_gcm_siv::{
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
 
+/// Defines all encryption algorithms (for use in data and header encryption), which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone)]
 pub enum EncryptionAlgorithm {
+	/// AES (128-Bit) in Galois/Counter Mode operation with misuse resistance in the event of the reuse of a cryptographic nonce.\
+	/// Encoded with value 0.
 	AES128GCMSIV = 0,
+	/// AES (256-Bit) in Galois/Counter Mode operation with misuse resistance in the event of the reuse of a cryptographic nonce.\
+	/// Encoded with value 1.
 	AES256GCMSIV = 1,
 }
 
+/// Defines all KDF schemes, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone)]
 pub enum KDFScheme {
+	/// KDF scheme PBKDF2-SHA256, with encoding value 0.
 	PBKDF2SHA256 = 0,
 }
 
-//TODO: Migrate to enum EncryptionAlgorithm
+/// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone)]
 pub enum PBEScheme {
+	/// AES128-CBC encryption scheme used in pbe with the encoding value 0.
 	AES128CBC = 0,
+	/// AES128-CBC encryption scheme used in pbe with the encoding value 1.
 	AES256CBC = 1,
 }
 
+/// structure contains serveral methods to handle encryption
 pub struct Encryption;
 
 impl Encryption {
+	/// encrypts the given plaintext with the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
 	pub fn encrypt_pbkdf2sha256_aes128cbc(
 		iterations: u16,
 		salt: &[u8; 32],
@@ -53,6 +67,10 @@ impl Encryption {
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
 
+	// encrypts the given plaintext with the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
 	pub fn encrypt_pbkdf2sha256_aes256cbc(
 		iterations: u16,
 		salt: &[u8; 32],
@@ -64,7 +82,9 @@ impl Encryption {
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
 
-	/// method to encrypt a message with a key and nonce.
+	/// method to encrypt a message with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given chunk data (if selected, then **after the compression**).
+	/// Returns a the cipthertext as ```Vec<u8>```.
 	/// # Example
 	///	```
 	/// use zff::*;
@@ -81,12 +101,14 @@ impl Encryption {
 	///		Ok(())
 	/// }
 	///	```
+	/// # Error
+	/// This method will fail, if the encryption fails.
 	pub fn encrypt_message<K, M>(key: K, message: M, chunk_no: u64, algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 	{
-		let nonce = Encryption::sector_as_crypto_nonce(chunk_no)?;
+		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
 		match algorithm {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
@@ -99,6 +121,27 @@ impl Encryption {
 		};
 	}
 
+	/// encrypts the given header with the given nonce.
+	/// This method should primary used to encrypt the given header.
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	/// # Example
+	///	```
+	/// use zff::*;
+	/// use phollaits::ToHex;
+	///
+	/// fn main() -> Result<()> {
+	///		let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
+	///		let nonce = gen_random_header_nonce(); // 12Byte/96Bit Key
+	///		let message = "My header_data";
+	/// 
+	///		let ciphertext = Encryption::encrypt_header(key, message, nonce, EncryptionAlgorithm::AES256GCMSIV)?;
+	/// 
+	///		assert_eq!(ciphertext.hexify(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
+	///		Ok(())
+	/// }
+	///	```
+	/// # Error
+	/// This method will fail, if the encryption fails.
 	pub fn encrypt_header<K, M>(key: K, message: M, nonce: [u8; 12], algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -117,6 +160,16 @@ impl Encryption {
 		};
 	}
 
+	/// Generates a new random key, with the given key size.
+	/// # Example
+	/// ```no_run
+	/// use zff::*;
+	/// fn main() {
+	/// 	let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
+	/// 	let my_new_random_super_secret_key = gen_random_key(keysize);
+	/// 	...
+	/// }
+	/// ```
 	pub fn gen_random_key(length: usize) -> Vec<u8> {
 		let mut key = vec!(0u8; length/8);
 		let mut rng = OsRng;
@@ -124,6 +177,7 @@ impl Encryption {
 		key
 	}
 
+	/// Generates a new random IV/Nonce as ```[u8; 16]``` for use in PBE header.
 	pub fn gen_random_iv() -> [u8; 16] {
 		let mut iv = [0; 16];
 		let mut rng = OsRng;
@@ -131,6 +185,7 @@ impl Encryption {
 		iv
 	}
 
+	/// Generates a new random salt as ```[u8; 32]``` for use in PBE header.
 	pub fn gen_random_salt() -> [u8; 32] {
 		let mut salt = [0; 32];
 		let mut rng = OsRng;
@@ -138,6 +193,7 @@ impl Encryption {
 		salt
 	}
 
+	/// Generates a new random IV/Nonce as ```[u8; 12]``` for use in encryption header.
 	pub fn gen_random_header_nonce() -> [u8; 12] {
 		let mut nonce = [0; 12];
 		let mut rng = OsRng;
@@ -145,9 +201,9 @@ impl Encryption {
 		nonce
 	}
 
-	fn sector_as_crypto_nonce(sector_no: u64) -> Result<Nonce> {
+	fn chunk_as_crypto_nonce(chunk_no: u64) -> Result<Nonce> {
 		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(sector_no)?;
+		buffer.write_u64::<LittleEndian>(chunk_no)?;
 		buffer.append(&mut vec!(0u8; 4));
 		Ok(*Nonce::from_slice(&buffer))
 	}

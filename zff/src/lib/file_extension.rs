@@ -6,6 +6,18 @@ use crate::{
 	FILE_EXTENSION_PARSER_ERROR,
 };
 
+/// returns the next file extension value.
+/// # Example
+/// ```
+/// use zff::*;
+/// 
+/// fn main() {
+/// 	let file_extension = "z01";
+/// 	assert_eq!(file_extension_next_value(file_extension), Ok("z02"))
+/// }
+/// ```
+/// # Error
+/// fails if the file-extension is in an unsuitable format.
 pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 	let value = value.into();
 

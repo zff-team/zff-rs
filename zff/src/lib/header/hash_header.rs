@@ -7,6 +7,14 @@ use crate::{
 	HEADER_IDENTIFIER_HASH_VALUE,
 };
 
+/// Header for the hash values of the dumped data stream.
+/// This header is part of the main header and contains 0 or more hash values of the dumped data.\
+/// The header has following layout:
+/// 
+/// |          | Magic bytes    | header length  | header version | hashes                                    |
+/// |----------|----------------|----------------|----------------|-------------------------------------------|
+/// | **size** | 4 bytes        | 8 bytes        | 1 byte         | variable                                  |
+/// | **type** | 0x7A666668     | uint64         | uint8          | Vec\<[HashValue](struct.HashValue.html)\> |
 #[derive(Debug,Clone)]
 pub struct HashHeader {
 	header_version: u8,
@@ -14,6 +22,7 @@ pub struct HashHeader {
 }
 
 impl HashHeader {
+	/// creates a new HashHeader by given values/hashes.
 	pub fn new(header_version: u8, hashes: Vec<HashValue>) -> HashHeader {
 		Self {
 			header_version: header_version,
@@ -57,8 +66,8 @@ impl HeaderEncoder for HashHeader {
 	}
 }
 
-
-
+/// This is a part of the [HashHeader](struct.HashHeader.html).
+/// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
 #[derive(Debug,Clone)]
 pub struct HashValue {
 	header_version: u8,
@@ -67,6 +76,7 @@ pub struct HashValue {
 }
 
 impl HashValue {
+	/// creates a new, empty [HashValue](struct.HashValue.html) for a given hashtype.
 	pub fn new_empty(header_version: u8, hash_type: HashType) -> HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
@@ -76,10 +86,12 @@ impl HashValue {
 		}
 	}
 
+	/// returns the type of hash as [HashType](enum.HashType.html).
 	pub fn hash_type(&self) -> &HashType {
 		&self.hash_type
 	}
 
+	/// sets the hash value.
 	pub fn set_hash(&mut self, hash: Vec<u8>) {
 		self.hash = hash
 	}

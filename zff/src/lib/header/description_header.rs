@@ -12,6 +12,19 @@ use crate::{
 	ENCODING_KEY_ACQISITION_DATE,
 };
 
+/// The description header contains all data,
+/// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
+/// This header is part of the main header and has the following layout:
+/// 
+/// |                | Magic bytes    | Header length | header version | case number<br>\<OPTIONAL\> | evidence number<br>\<OPTIONAL\> | examiner name<br>\<OPTIONAL\> | notes<br>\<OPTIONAL\> | acqusition date<br>\<OPTIONAL\> |
+/// |----------------|----------------|---------------|-----------------------------|---------------------------------|-------------------------------|-----------------------|---------------------------------|----------------|
+/// | **size**       | 4 bytes        | 8 bytes       | 1 byte         | variable                    | variable                        | variable                      | variable              | 8 bytes                         |
+/// | **type**       | 0x7A666664     | uint64        | uint8          | String                      | String                          | String                        | String                | uint64                          |
+/// | **identifier** | -              | -             | -              | "cn"                        | "ev"                            | "ex"                          | "no"                  | "ad"                            |
+///
+/// The special thing about this header is that the contained values\
+/// - are all optional except for the version.
+/// - have a prefixed identifier, which is encoded with.
 #[derive(Debug,Clone)]
 pub struct DescriptionHeader {
 	header_version: u8,
@@ -23,6 +36,7 @@ pub struct DescriptionHeader {
 }
 
 impl DescriptionHeader {
+	/// creates a new - empty - header, which can be filled by the set_*-methods.
 	pub fn new_empty(header_version: u8) -> DescriptionHeader {
 		Self {
 			header_version: header_version,
@@ -33,13 +47,18 @@ impl DescriptionHeader {
 			acquisition_date: None,
 		}
 	}
+
+	/// returns the version of the header.
 	pub fn header_version(&self) -> &u8 {
 		&self.header_version
 	}
 
+	/// sets the case number as ```String```.
 	pub fn set_case_number<V: Into<String>>(&mut self, value: V) {
 		self.case_number = Some(value.into())
 	}
+
+	/// returns the case number, if available.
 	pub fn case_number(&self) -> Option<&str> {
 		match &self.case_number {
 			Some(x) => Some(x),
@@ -47,9 +66,12 @@ impl DescriptionHeader {
 		}
 	}
 
+	/// sets the evidence number as ```String```.
 	pub fn set_evidence_number<V: Into<String>>(&mut self, value: V) {
 		self.evidence_number = Some(value.into())
 	}
+
+	/// returns the evidence number, if available
 	pub fn evidence_number(&self) -> Option<&str> {
 		match &self.evidence_number {
 			Some(x) => Some(x),
@@ -57,9 +79,12 @@ impl DescriptionHeader {
 		}
 	}
 
+	/// sets the examiner name as ```String```.
 	pub fn set_examiner_name<V: Into<String>>(&mut self, value: V) {
 		self.examiner_name = Some(value.into())
 	}
+
+	/// returns the examiner name, if available.
 	pub fn examiner_name(&self) -> Option<&str> {
 		match &self.examiner_name {
 			Some(x) => Some(x),
@@ -67,9 +92,12 @@ impl DescriptionHeader {
 		}
 	}
 
+	/// sets some notes as ```String```.
 	pub fn set_notes<V: Into<String>>(&mut self, value: V) {
 		self.notes = Some(value.into())
 	}
+
+	/// returns the notes, if some available.
 	pub fn notes(&self) -> Option<&str> {
 		match &self.notes {
 			Some(x) => Some(x),
@@ -77,9 +105,12 @@ impl DescriptionHeader {
 		}
 	}
 
+	/// sets the acquisition date, as u64 unix timestamp.
 	pub fn set_acquisition_date(&mut self, value: u64) {
 		self.acquisition_date = Some(value)
 	}
+
+	/// returns the acquisition date, if available - as u64 unix timestamp.
 	pub fn acquisition_date(&self) -> Option<u64> {
 		match &self.acquisition_date {
 			Some(x) => Some(*x),

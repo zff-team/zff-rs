@@ -3,11 +3,13 @@ use crate::{
 	Result,
 	HeaderEncoder,
 	HeaderObject,
-	CompressionHeader,
-	DescriptionHeader,
-	EncryptionHeader,
-	HashHeader,
-	SegmentHeader,
+	header::{
+		CompressionHeader,
+		DescriptionHeader,
+		EncryptionHeader,
+		HashHeader,
+		SegmentHeader,
+	},
 	ZffError,
 	ZffErrorKind,
 	Encryption,
@@ -15,6 +17,14 @@ use crate::{
 	HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER,
 };
 
+/// The main header is the first Header, which can be found at the beginning of the first segment.\
+/// This header contains a lot of other headers (e.g. compression header, description header, ...)
+/// and has the following layout:
+///
+/// |          | Magic<br>bytes    | Header<br>length  | header<br>version | encryption<br>flag | encryption<br>header | compression<br>header | description<br>header | Hash<br>header  | chunk<br>size | signature<br>flag | segment<br>size | segment<br>header | Length of<br>data |
+/// |----------|-------------------|-------------------|-------------------|--------------------|----------------------|-----------------------|-----------------------|--------------|---------------|-------------------|-----------------|-------------------|-------------------|
+/// | **size** | 4 bytes           | 8 bytes           | 1 byte            | 1 byte             | variable             | variable              | variable              | variable     | 1 bytes       | 1 byte            | 8 bytes         | variable          | 8 bytes           |
+/// | **type** | 0x7A66666D        | uint64            | uint8             | uint8              | [EncryptionHeader]   | [CompressionHeader]   | [DescriptionHeader]   | [HashHeader] | uint8         | uint8             | uint64          | [SegmentHeader]   | uint64            |
 #[derive(Debug,Clone)]
 pub struct MainHeader {
 	header_version: u8,
@@ -30,6 +40,7 @@ pub struct MainHeader {
 }
 
 impl MainHeader {
+	/// returns a new main header with the given values.
 	pub fn new(
 		header_version: u8,
 		encryption_header: Option<EncryptionHeader>,
@@ -67,7 +78,7 @@ impl MainHeader {
 				header
 			}
 		};
-		let encryption_flag: u8 = 1;
+		let encryption_flag: u8 = 2;
 		vec.push(encryption_flag);
 		vec.append(&mut encryption_header.encode_directly());
 
@@ -76,14 +87,17 @@ impl MainHeader {
 
 		let mut encrypted_data = Encryption::encrypt_header(
 			key, data_to_encrypt,
-			encryption_header.encryption_key_nonce(),
-			encryption_header.encryption_algorithm()
+			encryption_header.encrypted_header_nonce(),
+			encryption_header.algorithm()
 			)?;
 
 		vec.append(&mut encrypted_data);
 		return Ok(vec);
 	}
 
+	/// encodes the main header to a ```Vec<u8>```. The encryption flag will be set to 2.
+	/// # Error
+	/// The method returns an error, if the encryption header is missing (=None).
 	pub fn encode_encrypted_header_directly<K>(&self, key: K) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -99,15 +113,7 @@ impl MainHeader {
 		Ok(vec)
 	}
 
-	pub fn new_from_encrypted_header(
-		_header_version: u8,
-		_encryption_header: EncryptionHeader,
-		_encrypted_data: Vec<u8>,
-		) -> Result<MainHeader> {
-		unimplemented!()
-	}
-
-	pub fn encode_content(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		
 		vec.append(&mut self.compression_header.encode_directly());
@@ -122,34 +128,52 @@ impl MainHeader {
 		vec
 	}
 
+	/// sets the length of the dumped data.
 	pub fn set_length_of_data(&mut self, len: u64) {
 		self.length_of_data = len;
 	}
 
+	/// sets the segment header.
 	pub fn set_segment_header(&mut self, segment_header: SegmentHeader) {
 		self.segment_header = segment_header
 	}
 
+	/// sets the hash header.
 	pub fn set_hash_header(&mut self, hash_header: HashHeader) {
 		self.hash_header = hash_header
 	}
 
+	/// returns the header version.
 	pub fn header_version(&self) -> u8 {
 		self.header_version
 	}
 
+	/// returns the chunk_size.
 	pub fn chunk_size(&self) -> usize {
 		1<<self.chunk_size
 	}
 
+	/// returns the segment size
 	pub fn segment_size(&self) -> u64 {
 		self.segment_size_in_bytes.clone()
 	}
 
+	/// returns the len() of the ```Vec<u8>``` (encoded main header).
 	pub fn get_encoded_size(&self) -> usize {
 		self.encode_directly().len()
 	}
 
+	/// returns the len() of the ```Vec<u8>``` (encoded encrypted main header).
+	/// # Error
+	/// The method fails, if the encryption fails or no encryption header is present.
+	pub fn get_encrypted_encoded_size<K>(&self, key: K) -> Result<usize>
+	where
+		K: AsRef<[u8]>,
+	{
+		Ok(self.encode_encrypted_header_directly(key)?.len())
+	}
+
+	/// returns, if the chunks has a ed25519 signature or not.
 	pub fn has_signature(&self) -> bool {
 		self.signature_flag != 0
 	}

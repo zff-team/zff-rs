@@ -16,9 +16,9 @@
 | Compression header      | object            | variable        |          |
 | Description header      | object            | variable        |          |
 | Hash header             | object			  | variable        |          |
-| chunk size			  | uint8			  | 8               |          |
+| chunk size			  | uint8			  | 1               |          |
 | signature flag          | uint8			  | 1               |		   |
-| Segment size in bytes   | uint64            | 8               |          |
+| Segment size		      | uint64            | 8               |          |
 | Segment header 		  | object			  | variable        |          |
 | Length of data in bytes | uint64            | 8               |          |
 
@@ -179,4 +179,3 @@
 - impl Error handling @zffacquire if IoError->Interupt.
 	-> Number of retries / sectors used as error granularity
 - LZ4 compression algorithm
-- documentation

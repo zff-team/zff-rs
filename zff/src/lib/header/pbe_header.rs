@@ -11,6 +11,17 @@ use crate::{
 	PBE_KDF_PARAMETERS,
 };
 
+/// The pbe header contains all informations for the encryption of the encryption key.\
+/// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
+/// encrypted with an user password.\
+/// This encryption of the encryption key is done via a password-based encryption (PBE).\
+/// All metadata about this PBE can be found in this PBEHeader.\
+/// The PBEHeader has the following layout:
+///
+/// |          | Magic bytes | Header length | header<br>version | KDF flag | encryption<br>scheme<br>flag | KDF<br>parameters | PBEncryption<br>Nonce/IV |
+/// |----------|-------------|---------------|-------------------|----------|------------------------------|-------------------|--------------------------|
+/// | **size** | 4 bytes     | 8 bytes       | 1 byte            | 1 bytes  | 1 byte                       | variable          | 16 bytes                 |
+/// | **type** | 0x7A666670  | uint64        | uint8             | uint8    | uint8                        | [KDFParameters]   | Bytes                    |
 #[derive(Debug,Clone)]
 pub struct PBEHeader {
 	header_version: u8,
@@ -21,6 +32,7 @@ pub struct PBEHeader {
 }
 
 impl PBEHeader {
+	/// returns a new pbe header with the given values.
 	pub fn new(
 		header_version: u8,
 		kdf_scheme: KDFScheme,
@@ -75,10 +87,12 @@ impl HeaderEncoder for PBEHeader {
 	}
 }
 
+/// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone)]
 pub enum KDFParameters {
+	/// stores a struct [PBKDF2SHA256Parameters].
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
 }
 
@@ -97,6 +111,7 @@ impl HeaderEncoder for KDFParameters {
 	}
 }
 
+/// struct to store the parameters for the KDF PBKDF2-SHA256.
 #[derive(Debug,Clone)]
 pub struct PBKDF2SHA256Parameters {
 	iterations: u16,
@@ -104,6 +119,7 @@ pub struct PBKDF2SHA256Parameters {
 }
 
 impl PBKDF2SHA256Parameters {
+	/// returns a new [PBKDF2SHA256Parameters] with the given values.
 	pub fn new(iterations: u16, salt: [u8; 32]) -> PBKDF2SHA256Parameters {
 		Self {
 			iterations: iterations,

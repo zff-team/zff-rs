@@ -3,45 +3,55 @@ use crate::{
 	EncryptionAlgorithm,
 	HeaderObject,
 	HeaderEncoder,
-	PBEHeader,
+	header::PBEHeader,
 };
 
 use crate::{
 	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
 };
 
+/// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
+/// The encryption header is the only optional header part of the main header and has following layout:
+/// 
+/// |          | Magic bytes    | Header length  | header version | pbe header    | algorithm | encrypted<br>encryption<br>key | encryption key<br>nonce |
+/// |----------|----------------|----------------|---------------|-----------|--------------------------------|-------------------------|
+/// | **size** | 4 bytes        | 8 bytes        | 1 byte         | variable      | 1 byte    | variable                       | 12 byte                 |
+/// | **type** | 0x7A666665     | uint64         | uint8          | header object | uint8     | Bytes                          | Bytes                   |
 #[derive(Debug,Clone)]
 pub struct EncryptionHeader {
 	header_version: u8,
 	pbe_header: PBEHeader,
-	encryption_algorithm: EncryptionAlgorithm,
+	algorithm: EncryptionAlgorithm,
 	encrypted_encryption_key: Vec<u8>,
-	encryption_key_nonce: [u8; 12],
+	encrypted_header_nonce: [u8; 12],
 }
 
 impl EncryptionHeader {
+	/// creates a new encryption header by the given values.
 	pub fn new(
 		header_version: u8,
 		pbe_header: PBEHeader,
-		encryption_algorithm: EncryptionAlgorithm,
+		algorithm: EncryptionAlgorithm,
 		encrypted_encryption_key: Vec<u8>, //encrypted with set password
-		encryption_key_nonce: [u8; 12], //used for header encryption
+		encrypted_header_nonce: [u8; 12], //used for header encryption
 		) -> EncryptionHeader {
 		Self {
 			header_version: header_version,
 			pbe_header: pbe_header,
-			encryption_algorithm: encryption_algorithm,
+			algorithm: algorithm,
 			encrypted_encryption_key: encrypted_encryption_key,
-			encryption_key_nonce: encryption_key_nonce
+			encrypted_header_nonce: encrypted_header_nonce
 		}
 	}
 
-	pub fn encryption_algorithm(&self) -> &EncryptionAlgorithm {
-		&self.encryption_algorithm
+	/// returns the used encryption algorithm.
+	pub fn algorithm(&self) -> &EncryptionAlgorithm {
+		&self.algorithm
 	}
 
-	pub fn encryption_key_nonce(&self) -> [u8; 12] {
-		self.encryption_key_nonce
+	/// returns the nonce/iv, used for the header encryption.
+	pub fn encrypted_header_nonce(&self) -> [u8; 12] {
+		self.encrypted_header_nonce
 	}
 }
 
@@ -54,9 +64,9 @@ impl HeaderObject for EncryptionHeader {
 
 		vec.push(self.header_version);
 		vec.append(&mut self.pbe_header.encode_directly());
-		vec.push(self.encryption_algorithm.clone() as u8);
+		vec.push(self.algorithm.clone() as u8);
 		vec.append(&mut self.encrypted_encryption_key.encode_directly());
-		vec.append(&mut self.encryption_key_nonce.encode_directly());
+		vec.append(&mut self.encrypted_header_nonce.encode_directly());
 		vec
 	}
 }

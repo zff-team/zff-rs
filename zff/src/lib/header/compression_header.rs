@@ -2,36 +2,51 @@
 use crate::{
 	HeaderObject,
 	HeaderEncoder,
+	CompressionAlgorithm,
 };
 
 use crate::{
 	HEADER_IDENTIFIER_COMPRESSION_HEADER,
 };
 
+/// Header for the data compression parameters.\
+/// This header is part of the main header and has the following layout:
+/// 
+/// | Magic bytes | Header length | header version | algorithm | level  |
+/// |-------------|---------------|----------------|-----------|--------|
+/// | 4 bytes     | 8 bytes       | 1 byte         | 1 byte    | 1 byte |
+/// | 0x7A666663  | uint64        | uint8          | uint8     | uint8  |
 #[derive(Debug,Clone)]
 pub struct CompressionHeader {
 	header_version: u8,
-	compression_algorithm: CompressionAlgorithm,
-	compression_level: u8
+	algorithm: CompressionAlgorithm,
+	level: u8
 }
 
 impl CompressionHeader {
-	pub fn new(header_version: u8, compression_algo: CompressionAlgorithm, compression_level: u8) -> CompressionHeader {
+	/// returns a new compression header with the given values.
+	pub fn new(header_version: u8,compression_algo: CompressionAlgorithm, level: u8) -> CompressionHeader {
 		Self {
 			header_version: header_version,
-			compression_algorithm: compression_algo,
-			compression_level: compression_level,
+			algorithm: compression_algo,
+			level: level,
 		}
 	}
 
+	/// returns the version of the header.
 	pub fn header_version(&self) -> &u8 {
 		&self.header_version
 	}
-	pub fn compression_algorithm(&self) -> &CompressionAlgorithm {
-		&self.compression_algorithm
+
+	/// Returns the compression algorithm. The appropriate algorithms/values
+	/// could be found at [CompressionAlgorithm](enum.CompressionAlgorithm.html).
+	pub fn algorithm(&self) -> &CompressionAlgorithm {
+		&self.algorithm
 	}
-	pub fn compression_level(&self) -> &u8 {
-		&self.compression_level
+
+	/// returns the compression level.
+	pub fn level(&self) -> &u8 {
+		&self.level
 	}
 }
 
@@ -43,8 +58,8 @@ impl HeaderObject for CompressionHeader {
 		let mut vec = Vec::new();
 
 		vec.push(self.header_version);
-		vec.push(self.compression_algorithm.clone() as u8);
-		vec.push(self.compression_level);
+		vec.push(self.algorithm.clone() as u8);
+		vec.push(self.level);
 		
 		vec
 	}
@@ -69,14 +84,6 @@ impl HeaderEncoder for CompressionHeader {
 		vec.append(&mut self.encode_directly());
 		vec
 	}
-}
-
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug,Clone)]
-pub enum CompressionAlgorithm {
-	None = 0,
-	Zstd = 1,
 }
 
 impl From<&str> for CompressionAlgorithm {

@@ -2,7 +2,8 @@
 
 members = [
 "zff",
-"zffacquire"
+"zffacquire",
+"zffmetareader",
 ]
 
 [profile.release]

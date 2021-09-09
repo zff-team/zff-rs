@@ -20,20 +20,31 @@ pub struct ZffError {
 /// Contains the variants/kinds of errors, which could be find in this crate.
 #[derive(Debug, Clone)]
 pub enum ZffErrorKind {
+	/// contains a std::io::Error.
 	IoError,
+	/// contains a pkcs5::CryptoError.
 	PKCS5CryptoError,
+	/// Error which occurs when parsing the file extension.
 	FileExtensionParserError,
+	/// contains a aes_gcm_siv::aead::Error.
 	EncryptionError,
+	/// contains a ed25519_dalek::ed25519::Error.
 	Ed25519Error,
+	/// contains a base64::DecodeError.
 	Base64DecodingError,
+	/// If the signature key length is != 64.
 	WrongSignatureKeyLength,
+	/// If the encryption header is missing, but you call a method to encrypt the header or data.
 	MissingEncryptionHeader,
+	/// This is not an error in the strict sense. If you read a source file and reach the EOF,
+	/// you will get this error kind to handle your next steps.
 	ReadEOF,
+	/// Custom errors.
 	Custom,
 }
 
 impl fmt::Display for ZffErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let err_msg = match self {
 			ZffErrorKind::IoError => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
@@ -73,6 +84,20 @@ impl ZffError {
 		}
 	}
 
+	/// Creates a new crate-related custom error.
+	/// # Example
+	/// ```
+	/// use zff::{ZffError, ZffErrorKind, Result};
+	/// fn my_func() -> Result<()> {
+	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
+	///		Err(custom_error)
+	/// }
+	/// fn main() {
+	///		match my_func() {
+	///			Err(x) => println!("It work's! Your custom error message is: {}", x),
+	///			_ => ()
+	///		}
+	/// }
 	pub fn new_custom<S: Into<String>>(details: S) -> ZffError {
 		ZffError {
 			kind: ZffErrorKind::Custom,
@@ -80,6 +105,22 @@ impl ZffError {
 		}
 	}
 
+	/// Returns the error kind.
+	/// # Example
+	/// ```
+	/// use zff::{ZffError, ZffErrorKind, Result};
+	/// fn my_func() -> Result<()> {
+	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
+	///		Err(custom_error)
+	/// }
+	/// fn main() {
+	/// 	match my_func() {
+	/// 		Err(x) => {
+	/// 			assert_eq!(x.get_kind(), ZffErrorKind::Custom)
+	/// 		},
+	/// 		_ => ()
+	/// 	}
+	/// }
 	pub fn get_kind(&self) -> &ZffErrorKind {
 		return &self.kind
 	}
@@ -117,7 +158,7 @@ impl From<Base64DecodingError> for ZffError {
 
 
 impl fmt::Display for ZffError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let err_msg = format!("{}: {}", self.kind.to_string(), self.details);
 		write!(f, "{}", err_msg)
 	}

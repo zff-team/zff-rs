@@ -19,21 +19,11 @@ mod lib;
 // - internal
 use crate::lib::*;
 use zff::{
-    MainHeader,
-    PBEHeader,
-    KDFParameters,
-    PBKDF2SHA256Parameters,
-    EncryptionHeader,
+    header::*,
     EncryptionAlgorithm,
-    DescriptionHeader,
-    CompressionHeader,
     CompressionAlgorithm,
-    HashHeader,
-    HashValue,
     HashType,
     Hash,
-    SegmentHeader,
-    ChunkHeader,
     HeaderEncoder,
     KDFScheme,
     PBEScheme,
@@ -427,7 +417,7 @@ where
         None => None,
         Some(ref key) => match encryption_header {
             None => None,
-            Some(header) => Some((key, header.encryption_algorithm().clone()))
+            Some(header) => Some((key, header.algorithm().clone()))
         },
     };
 
@@ -442,8 +432,8 @@ where
         &mut output_file,
         chunk_size,
         &mut chunk_header,
-        compression_header.compression_algorithm(),
-        compression_header.compression_level(),
+        compression_header.algorithm(),
+        compression_header.level(),
         first_segment_size as usize,
         &encryption,
         &mut hasher_map,
@@ -490,8 +480,8 @@ where
             &mut output_file,
             chunk_size,
             &mut chunk_header,
-            compression_header.compression_algorithm(),
-            compression_header.compression_level(),
+            compression_header.algorithm(),
+            compression_header.level(),
             segment_size as usize,
             &encryption,
             &mut hasher_map,

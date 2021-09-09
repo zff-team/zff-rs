@@ -1,9 +1,14 @@
+/// The ```HeaderObject``` trait specifies an interface for the common header methods.
 pub trait HeaderObject {
+	/// returns the identifier (=Magic bytes) of the header.
 	fn identifier() -> u32;
+	/// encodes the header.
 	fn encode_header(&self) -> Vec<u8>;
 }
 
+/// The ```HeaderObject``` trait specifies an interface for the common encoding methods.
 pub trait HeaderEncoder {
+	/// encodes a given key.
 	fn encode_key<K: Into<String>>(key: K) -> Vec<u8> {
 		let mut vec = Vec::new();
 		let key = key.into();
@@ -12,7 +17,9 @@ pub trait HeaderEncoder {
 		vec.append(&mut key.into_bytes());
 		vec
 	}
+	/// encodes the (header) value/object directly (= without key).
 	fn encode_directly(&self) -> Vec<u8>;
+	/// encodes a key to the (header) value/object.
 	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8>;
 
 }
@@ -190,15 +197,5 @@ where
 		vec.append(&mut encoded_key);
 		vec.append(&mut self.encode_directly());
 		vec
-	}
-}
-
-pub trait Unbox<T> {
-	fn unbox(self) -> T;
-}
-
-impl<T> Unbox<T> for Box<T> {
-	fn unbox(self) -> T {
-		*self
 	}
 }
