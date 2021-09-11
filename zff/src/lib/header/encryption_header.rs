@@ -3,6 +3,7 @@ use crate::{
 	EncryptionAlgorithm,
 	HeaderObject,
 	HeaderEncoder,
+	ValueEncoder,
 	header::PBEHeader,
 };
 
@@ -71,23 +72,4 @@ impl HeaderObject for EncryptionHeader {
 	}
 }
 
-impl HeaderEncoder for EncryptionHeader {
-	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_header = self.encode_header();
-		let identifier = Self::identifier();
-		let encoded_header_length = 4 + 8 + (encoded_header.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_header);
-
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
-}
+impl HeaderEncoder for EncryptionHeader {}

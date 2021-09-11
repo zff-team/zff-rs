@@ -10,6 +10,9 @@ pub(crate) const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
 pub(crate) const HEADER_IDENTIFIER_HASH_HEADER: u32 = 0x7a666668;
 pub(crate) const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7a666648;
 
+pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
+pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
+
 pub(crate) const PBE_KDF_PARAMETERS: u32 = 0x6b646670;
 
 // Encoding keys
@@ -27,6 +30,8 @@ pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
 
 //Error messages
 pub(crate) const FILE_EXTENSION_PARSER_ERROR: &str = "Error while trying to parse extension value";
+pub(crate) const ERROR_HEADER_DECODER_HEADER_LENGTH: &'static str = "Unable to read header length from given data.";
+pub(crate) const ERROR_HEADER_DECODER_KEY_POSITION: &'static str = "Key not in position.";
 
 // Default values
 /// the default chunk size as 2^x. This value is 15, so the default chunk size is 2^15 = 32768 bytes.

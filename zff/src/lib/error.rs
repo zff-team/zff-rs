@@ -41,6 +41,8 @@ pub enum ZffErrorKind {
 	ReadEOF,
 	/// Custom errors.
 	Custom,
+	/// Error will be returned, if the data could not be decoded to the given header.
+	HeaderDecodeError,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -56,6 +58,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::WrongSignatureKeyLength => "WrongSignatureKeyLength",
 			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
 			ZffErrorKind::ReadEOF => "ReadEOF",
+			ZffErrorKind::HeaderDecodeError => "HeaderDecodeError",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -87,7 +90,7 @@ impl ZffError {
 	/// Creates a new crate-related custom error.
 	/// # Example
 	/// ```
-	/// use zff::{ZffError, ZffErrorKind, Result};
+	/// use zff::{ZffError, Result};
 	/// fn my_func() -> Result<()> {
 	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
 	///		Err(custom_error)
@@ -102,6 +105,27 @@ impl ZffError {
 		ZffError {
 			kind: ZffErrorKind::Custom,
 			details: details.into()
+		}
+	}
+
+	/// Creates a new crate-related header decode error.
+	/// # Example
+	/// ```
+	/// use zff::{ZffError, Result};
+	/// fn my_func() -> Result<()> {
+	/// 	let decode_error = ZffError::new_header_decode_error("error while trying to decode CompressionHeader from given data");
+	///		Err(decode_error)
+	/// }
+	/// fn main() {
+	///		match my_func() {
+	///			Err(x) => println!("It work's! Your custom error message is: {}", x),
+	///			_ => ()
+	///		}
+	/// }
+	pub fn new_header_decode_error<S: Into<String>>(details: S) -> ZffError {
+		ZffError {
+			kind: ZffErrorKind::HeaderDecodeError,
+			details: details.into(),
 		}
 	}
 
