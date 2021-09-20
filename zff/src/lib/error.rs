@@ -1,5 +1,6 @@
 // - STD
 use std::fmt;
+use std::string::FromUtf8Error;
 use std::io;
 
 // - internal
@@ -24,6 +25,8 @@ pub enum ZffErrorKind {
 	IoError,
 	/// contains a pkcs5::CryptoError.
 	PKCS5CryptoError,
+	/// contains a STD FromUtf8Error.
+	FromUtf8Error,
 	/// Error which occurs when parsing the file extension.
 	FileExtensionParserError,
 	/// contains a aes_gcm_siv::aead::Error.
@@ -43,6 +46,12 @@ pub enum ZffErrorKind {
 	Custom,
 	/// Error will be returned, if the data could not be decoded to the given header.
 	HeaderDecodeError,
+	/// Error will be returned, if the read identifier mismatch with the header identifier.
+	HeaderDecodeMismatchIdentifier,
+	/// Error will be returned, if the given value key is not on position.
+	HeaderDecoderKeyNotOnPosition,
+	/// Error will be returned, if header is encrypted.
+	HeaderDecodeEncryptedMainHeader
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -55,10 +64,14 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::EncryptionError => "EncryptionError",
 			ZffErrorKind::Ed25519Error => "Ed25519Error",
 			ZffErrorKind::Base64DecodingError => "Base64DecodingError",
+			ZffErrorKind::FromUtf8Error => "FromUtf8Error",
 			ZffErrorKind::WrongSignatureKeyLength => "WrongSignatureKeyLength",
 			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
 			ZffErrorKind::ReadEOF => "ReadEOF",
 			ZffErrorKind::HeaderDecodeError => "HeaderDecodeError",
+			ZffErrorKind::HeaderDecodeMismatchIdentifier => "HeaderDecodeMismatchIdentifier",
+			ZffErrorKind::HeaderDecoderKeyNotOnPosition => "HeaderDecoderKeyNotOnPosition",
+			ZffErrorKind::HeaderDecodeEncryptedMainHeader => "HeaderDecodeEncryptedMainHeader",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -180,6 +193,11 @@ impl From<Base64DecodingError> for ZffError {
 	}
 }
 
+impl From<FromUtf8Error> for ZffError {
+	fn from(e: FromUtf8Error) -> ZffError {
+		ZffError::new(ZffErrorKind::FromUtf8Error, e.to_string())
+	}
+}
 
 impl fmt::Display for ZffError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
