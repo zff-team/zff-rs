@@ -1,8 +1,15 @@
+// - STD
+use std::io::Cursor;
+
 // - internal
 use crate::{
+	Result,
 	HeaderObject,
 	HeaderEncoder,
+	HeaderDecoder,
 	ValueEncoder,
+	ValueDecoder,
+	ZffErrorKind,
 };
 use crate::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
@@ -10,30 +17,35 @@ use crate::{
 	ENCODING_KEY_EVIDENCE_NUMBER,
 	ENCODING_KEY_EXAMINER_NAME,
 	ENCODING_KEY_NOTES,
-	ENCODING_KEY_ACQISITION_DATE,
+	ENCODING_KEY_ACQISITION_START,
+	ENCODING_KEY_ACQISITION_END,
 };
+
+// - external
+use serde::{Serialize};
 
 /// The description header contains all data,
 /// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
 /// This header is part of the main header and has the following layout:
 /// 
-/// |                | Magic bytes    | Header length | header version | case number<br>\<OPTIONAL\> | evidence number<br>\<OPTIONAL\> | examiner name<br>\<OPTIONAL\> | notes<br>\<OPTIONAL\> | acqusition date<br>\<OPTIONAL\> |
-/// |----------------|----------------|---------------|-----------------------------|---------------------------------|-------------------------------|-----------------------|---------------------------------|----------------|
-/// | **size**       | 4 bytes        | 8 bytes       | 1 byte         | variable                    | variable                        | variable                      | variable              | 8 bytes                         |
-/// | **type**       | 0x7A666664     | uint64        | uint8          | String                      | String                          | String                        | String                | uint64                          |
-/// | **identifier** | -              | -             | -              | "cn"                        | "ev"                            | "ex"                          | "no"                  | "ad"                            |
+/// |                | Magic bytes    | Header length | header version | case number<br>\<OPTIONAL\> | evidence number<br>\<OPTIONAL\> | examiner name<br>\<OPTIONAL\> | notes<br>\<OPTIONAL\> | acqusition<br>start timestamp | acquisition<br>end timestamp |
+/// |----------------|----------------|---------------|-----------------------------|---------------------------------|-------------------------------|-----------------------|---------------------------------|----------------|----------------------------|
+/// | **size**       | 4 bytes        | 8 bytes       | 1 byte         | variable                    | variable                        | variable                      | variable              | 8 bytes                         | 8 bytes
+/// | **type**       | 0x7A666664     | uint64        | uint8          | String                      | String                          | String                        | String                | uint64                          | uint64
+/// | **identifier** | -              | -             | -              | "cn"                        | "ev"                            | "ex"                          | "no"                  | "as"                            | "ae"
 ///
 /// The special thing about this header is that the contained values\
 /// - are all optional except for the version.
 /// - have a prefixed identifier, which is encoded with.
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Serialize)]
 pub struct DescriptionHeader {
 	header_version: u8,
 	case_number: Option<String>,
 	evidence_number: Option<String>,
 	examiner_name: Option<String>,
 	notes: Option<String>,
-	acquisition_date: Option<u64>,
+	acquisition_start: u64,
+	acquisition_end: u64,
 }
 
 impl DescriptionHeader {
@@ -45,7 +57,8 @@ impl DescriptionHeader {
 			evidence_number: None,
 			examiner_name: None,
 			notes: None,
-			acquisition_date: None,
+			acquisition_start: 0,
+			acquisition_end: 0,
 		}
 	}
 
@@ -106,17 +119,24 @@ impl DescriptionHeader {
 		}
 	}
 
-	/// sets the acquisition date, as u64 unix timestamp.
-	pub fn set_acquisition_date(&mut self, value: u64) {
-		self.acquisition_date = Some(value)
+	/// sets the acquisition start, as u64 unix timestamp.
+	pub fn set_acquisition_start(&mut self, value: u64) {
+		self.acquisition_start = value
 	}
 
-	/// returns the acquisition date, if available - as u64 unix timestamp.
-	pub fn acquisition_date(&self) -> Option<u64> {
-		match &self.acquisition_date {
-			Some(x) => Some(*x),
-			None => None
-		}
+	/// sets the acquisition end, as u64 unix timestamp.
+	pub fn set_acquisition_end(&mut self, value: u64) {
+		self.acquisition_end = value
+	}
+
+	/// returns the acquisition start as u64 unix timestamp - initialized with zero.
+	pub fn acquisition_start(&self) -> u64 {
+		self.acquisition_start.clone()
+	}
+
+	/// returns the acquisition end as u64 unix timestamp - initialized with zero.
+	pub fn acquisition_end(&self) -> u64 {
+		self.acquisition_end.clone()
 	}
 }
 
@@ -140,11 +160,58 @@ impl HeaderObject for DescriptionHeader {
 		if let Some(notes) = self.notes() {
 			vec.append(&mut notes.encode_for_key(ENCODING_KEY_NOTES));
 		};
-		if let Some(acquisition_date) = self.acquisition_date() {
-			vec.append(&mut acquisition_date.encode_for_key(ENCODING_KEY_ACQISITION_DATE));
-		};
+		vec.append(&mut self.acquisition_start.encode_for_key(ENCODING_KEY_ACQISITION_START));
+		vec.append(&mut self.acquisition_end.encode_for_key(ENCODING_KEY_ACQISITION_END));
 		vec
 	}
 }
 
 impl HeaderEncoder for DescriptionHeader {}
+
+impl HeaderDecoder for DescriptionHeader {
+	type Item = DescriptionHeader;
+
+	fn decode_content(data: Vec<u8>) -> Result<DescriptionHeader> {
+		let mut cursor = Cursor::new(data);
+		let header_version = u8::decode_directly(&mut cursor)?;
+		
+		let mut description_header = DescriptionHeader::new_empty(header_version);
+
+		let position = cursor.position();
+		match String::decode_for_key(&mut cursor, ENCODING_KEY_CASE_NUMBER) {
+			Ok(value) => description_header.set_case_number(value),
+			Err(e) => match e.get_kind() {
+				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
+				_ => return Err(e)
+			},
+		}
+		let position = cursor.position();
+		match String::decode_for_key(&mut cursor, ENCODING_KEY_EVIDENCE_NUMBER) {
+			Ok(value) => description_header.set_evidence_number(value),
+			Err(e) => match e.get_kind() {
+				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
+				_ => return Err(e)
+			},
+		}
+		let position = cursor.position();
+		match String::decode_for_key(&mut cursor, ENCODING_KEY_EXAMINER_NAME) {
+			Ok(value) => description_header.set_examiner_name(value),
+			Err(e) => match e.get_kind() {
+				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
+				_ => return Err(e)
+			},
+		}
+		let position = cursor.position();
+		match String::decode_for_key(&mut cursor, ENCODING_KEY_NOTES) {
+			Ok(value) => description_header.set_notes(value),
+			Err(e) => match e.get_kind() {
+				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
+				_ => return Err(e)
+			},
+		}
+		description_header.set_acquisition_start(u64::decode_for_key(&mut cursor, ENCODING_KEY_ACQISITION_START)?);
+		description_header.set_acquisition_end(u64::decode_for_key(&mut cursor, ENCODING_KEY_ACQISITION_END)?);
+
+		Ok(description_header)
+	}
+}

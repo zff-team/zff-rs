@@ -1,12 +1,24 @@
+// - STD
+use std::io::{Cursor};
+
 // - internal
 use crate::{
+	Result,
 	HeaderEncoder,
+	HeaderDecoder,
 	ValueEncoder,
+	ValueDecoder,
 	HeaderObject,
 	HashType,
+	ZffError,
 	HEADER_IDENTIFIER_HASH_HEADER,
 	HEADER_IDENTIFIER_HASH_VALUE,
+	ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE,
 };
+
+// - external
+use serde::ser::{Serialize, Serializer, SerializeStruct};
+use hex::ToHex;
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of the main header and contains 0 or more hash values of the dumped data.\
@@ -67,6 +79,29 @@ impl HeaderEncoder for HashHeader {
 	}
 }
 
+impl HeaderDecoder for HashHeader {
+	type Item = HashHeader;
+
+	fn decode_content(data: Vec<u8>) -> Result<HashHeader> {
+		let mut cursor = Cursor::new(data);
+		let header_version = u8::decode_directly(&mut cursor)?;
+		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
+		Ok(HashHeader::new(header_version, hashes))
+	}
+}
+
+impl Serialize for HashHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("HashHeader", 3)?;
+        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("hash_value", &self.hashes)?;
+        state.end()
+    }
+}
+
 /// This is a part of the [HashHeader](struct.HashHeader.html).
 /// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
 #[derive(Debug,Clone)]
@@ -77,6 +112,14 @@ pub struct HashValue {
 }
 
 impl HashValue {
+	/// creates a new [HashValue](struct.HashValue.html) for the given parameters.
+	pub fn new(header_version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
+		Self {
+			header_version: header_version,
+			hash_type: hash_type,
+			hash: hash
+		}
+	}
 	/// creates a new, empty [HashValue](struct.HashValue.html) for a given hashtype.
 	pub fn new_empty(header_version: u8, hash_type: HashType) -> HashValue {
 		let hash_default_len = hash_type.default_len();
@@ -113,3 +156,34 @@ impl HeaderObject for HashValue {
 }
 
 impl HeaderEncoder for HashValue {}
+
+impl HeaderDecoder for HashValue {
+	type Item = HashValue;
+
+	fn decode_content(data: Vec<u8>) -> Result<HashValue> {
+		let mut cursor = Cursor::new(data);
+		let header_version = u8::decode_directly(&mut cursor)?;
+		let hash_type = match u8::decode_directly(&mut cursor)? {
+			0 => HashType::Blake2b512,
+			1 => HashType::SHA256,
+			2 => HashType::SHA512,
+			3 => HashType::SHA3_256,
+			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE)),
+		};
+	 let hash = Vec::<u8>::decode_directly(&mut cursor)?;
+		Ok(HashValue::new(header_version, hash_type, hash))
+	}
+}
+
+impl Serialize for HashValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("HashValue", 3)?;
+        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("hash_type", &self.hash_type)?;
+        state.serialize_field("hash", &self.hash.encode_hex::<String>())?;
+        state.end()
+    }
+}

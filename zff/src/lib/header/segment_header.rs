@@ -1,13 +1,20 @@
 // - STD
 use std::cmp::{PartialEq};
+use std::io::Cursor;
 
 // - internal
 use crate::{
+	Result,
 	HeaderObject,
 	HeaderEncoder,
+	HeaderDecoder,
 	ValueEncoder,
+	ValueDecoder,
 	HEADER_IDENTIFIER_SEGMENT_HEADER
 };
+
+// - external
+use serde::{Serialize};
 
 /// The segment header contains all informations about the specific segment. Each segment has his own segment header.\
 /// This header is **not** a part of the main header.\
@@ -16,18 +23,18 @@ use crate::{
 /// | Magic <br>bytes | Header<br>length | Header<br>version | Unique<br>identifier | Segment<br>number | Length of the<br>segment |
 /// |-----------------|------------------|-------------------|----------------------|-------------------|--------------------------|
 /// | 4 bytes         | 8 bytes          | 1 byte            | 8 bytes              | 8 bytes           | 8 bytes                  |
-/// | 0x7A666673      | uint64           | uint8             | uint64               | uint64            | uint64                   |
-#[derive(Debug,Clone,Eq)]
+/// | 0x7A666673      | uint64           | uint8             | int64               | uint64            | uint64                   |
+#[derive(Debug,Clone,Eq,Serialize)]
 pub struct SegmentHeader {
 	header_version: u8,
-	unique_identifier: u64,
+	unique_identifier: i64,
 	segment_number: u64,
 	length_of_segment: u64,
 }
 
 impl SegmentHeader {
 	/// returns a new segment header with the given values.
-	pub fn new(header_version: u8, unique_identifier: u64, segment_number: u64, length_of_segment: u64) -> SegmentHeader {
+	pub fn new(header_version: u8, unique_identifier: i64, segment_number: u64, length_of_segment: u64) -> SegmentHeader {
 		Self {
 			header_version: header_version,
 			unique_identifier: unique_identifier,
@@ -42,7 +49,7 @@ impl SegmentHeader {
 	}
 
 	/// returns the unique identifier of image (each segment should have the same identifier).
-	pub fn unique_identifier(&self) -> u64 {
+	pub fn unique_identifier(&self) -> i64 {
 		self.unique_identifier
 	}
 
@@ -91,6 +98,20 @@ impl HeaderObject for SegmentHeader {
 }
 
 impl HeaderEncoder for SegmentHeader {}
+
+impl HeaderDecoder for SegmentHeader {
+	type Item = SegmentHeader;
+
+	fn decode_content(data: Vec<u8>) -> Result<SegmentHeader> {
+		let mut cursor = Cursor::new(data);
+
+		let header_version = u8::decode_directly(&mut cursor)?;
+		let unique_identifier = i64::decode_directly(&mut cursor)?;
+		let segment_number = u64::decode_directly(&mut cursor)?;
+		let length = u64::decode_directly(&mut cursor)?;
+		Ok(SegmentHeader::new(header_version, unique_identifier, segment_number, length))
+	}
+}
 
 impl PartialEq for SegmentHeader {
     fn eq(&self, other: &Self) -> bool {

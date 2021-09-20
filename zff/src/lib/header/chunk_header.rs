@@ -1,12 +1,19 @@
+// - STD
+use std::io::{Cursor,Read};
+
 // - external
 use ed25519_dalek::{SIGNATURE_LENGTH};
 
 // - internal
 use crate::{
+	Result,
 	HeaderEncoder,
+	HeaderDecoder,
 	ValueEncoder,
+	ValueDecoder,
 	HeaderObject,
 	HEADER_IDENTIFIER_CHUNK_HEADER,
+	CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE,
 };
 
 /// Header for chunk data.\
@@ -90,3 +97,24 @@ impl HeaderObject for ChunkHeader {
 }
 
 impl HeaderEncoder for ChunkHeader {}
+
+impl HeaderDecoder for ChunkHeader {
+	type Item = ChunkHeader;
+
+	fn decode_content(data: Vec<u8>) -> Result<ChunkHeader> {
+		let data_len = data.len();
+		let mut cursor = Cursor::new(data);
+		let header_version = u8::decode_directly(&mut cursor)?;
+		let chunk_number = u64::decode_directly(&mut cursor)?;
+		let chunk_size = u64::decode_directly(&mut cursor)?;
+		let crc32 = u32::decode_directly(&mut cursor)?;
+		let mut ed25519_signature = None;
+		if data_len > (CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE) {
+			let mut buffer = [0; SIGNATURE_LENGTH];
+			cursor.read_exact(&mut buffer)?;
+			ed25519_signature = Some(buffer);
+		}
+
+		Ok(ChunkHeader::new(header_version, chunk_number, chunk_size, crc32, ed25519_signature))
+	}
+}
