@@ -19,8 +19,8 @@
 | chunk size			  | uint8			  | 1               |          |
 | signature flag          | uint8			  | 1               |		   |
 | Segment size		      | uint64            | 8               |          |
-| Segment header 		  | object			  | variable        |          |
 | Length of data in bytes | uint64            | 8               |          |
+| Segment header 		  | object			  | variable        |          |
 
 ## Layout of encrypted main header
 
@@ -32,6 +32,14 @@
 | encryption flag         | uint8             | 1               |
 | Encryption header       | object            | variable        |
 | Encrypted data          | bytes             | variable        |
+
+### encryption flags
+
+| Value | description |
+|-------|:-----------:|
+| 0     | no encryption |
+| 1     | data encryption |
+| 2     | data + header encryption |
 
 ### Layout of encryption subheader
 
@@ -111,14 +119,15 @@
 
 | Name                   | Type       | Identifier | Required? |
 |------------------------|:----------:|:----------:|:---------:|
-| Magic bytes            | 0x7A666664 | -          | :ballot_box_with_check: |
-| Header length in bytes | uint64     | -          | :ballot_box_with_check: |
-| Header version         | uint8      | -          | :ballot_box_with_check: |
-| Case number            | String     | "cn"       |           |
-| Evidence number        | String     | "ev"       |           |
-| Examiner name          | String     | "ex"       |           |
-| Notes                  | String     | "no"       |           |
-| Acquisition date/time  | uint64     | "ad"       |           |
+| Magic bytes                 | 0x7A666664 | -          | :ballot_box_with_check: |
+| Header length in bytes      | uint64     | -          | :ballot_box_with_check: |
+| Header version              | uint8      | -          | :ballot_box_with_check: |
+| Case number                 | String     | "cn"       |           |
+| Evidence number             | String     | "ev"       |           |
+| Examiner name               | String     | "ex"       |           |
+| Notes                       | String     | "no"       |           |
+| Acquisition start timestamp | uint64     | "as"       | :ballot_box_with_check: |
+| Acquisition end timestamp   | uint64     | "ae"       | :ballot_box_with_check: |
 
 ### Layout of hash subheader
 
@@ -143,10 +152,10 @@
 
 | Algorithm             | type value |
 |-----------------------|:----------:|
-| Blake2b-512 (default) | 1          |
-| SHA256 	            | 2 		 |
-| SHA512                | 3          |
-| SHA3-256              | 4          |
+| Blake2b-512 (default) | 0          |
+| SHA256 	            | 1 		 |
+| SHA512                | 2          |
+| SHA3-256              | 3          |
 
 ### Layout of segment subheader
 
@@ -155,7 +164,7 @@
 | Magic bytes            | 0x7A666673        | 4               |
 | Header length in bytes | uint64            | 8               |
 | Header version         | uint8             | 1               |
-| Unique identifier      | uint64			 | 8               |
+| Unique identifier      | int64			 | 8               |
 | Segment number         | uint64            | 8               |
 | length of segment      | uint64            | 8               |
 
@@ -179,3 +188,4 @@
 - impl Error handling @zffacquire if IoError->Interupt.
 	-> Number of retries / sectors used as error granularity
 - LZ4 compression algorithm
+- Migrate HeaderEncoder/HeaderDecoder -> HeaderCoding
