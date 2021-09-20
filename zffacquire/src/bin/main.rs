@@ -10,7 +10,7 @@ use std::{
 
 // - extern crates
 extern crate clap;
-extern crate rand_core;
+extern crate rand;
 extern crate zff;
 
 // - modules
@@ -41,7 +41,7 @@ use clap::{
     App,
     ArgMatches
 };
-use rand_core::{RngCore, OsRng};
+use rand::{Rng};
 use ed25519_dalek::Keypair;
 
 fn arguments() -> ArgMatches<'static> {
@@ -181,7 +181,7 @@ fn compression_header(arguments: &ArgMatches) -> CompressionHeader {
 fn description_header(arguments: &ArgMatches) -> DescriptionHeader {
     let mut description_header = DescriptionHeader::new_empty(DESCRIPTION_HEADER_VERSION);
     match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(now) => description_header.set_acquisition_date(now.as_secs()),
+        Ok(now) => description_header.set_acquisition_start(now.as_secs()),
         Err(_) => ()
     };
     if let Some(value) = arguments.value_of(CLAP_ARG_NAME_CASE_NUMBER) {
@@ -200,8 +200,9 @@ fn description_header(arguments: &ArgMatches) -> DescriptionHeader {
 }
 
 fn segment_header() -> SegmentHeader {
+    let mut rng = rand::thread_rng();
     let header_version = SEGMENT_HEADER_VERSION;
-    let unique_identifier: u64 = OsRng.next_u64();
+    let unique_identifier: i64 = rng.gen();
     let segment_number = 1;
     let length_of_segment = 0;
     SegmentHeader::new(header_version, unique_identifier, segment_number, length_of_segment)
@@ -311,7 +312,7 @@ fn calculate_segment_size(arguments: &ArgMatches) -> u64 {
             }
         }
     } else {
-        0
+        u64::MAX
     }
 }
 
@@ -371,16 +372,17 @@ where
         },
     };
     let output_filename = output_filename.into();
-    let segment_size = match main_header.segment_size() {
-        0 => u64::MAX,
-        _ => main_header.segment_size(),
-    };
+    let segment_size = main_header.segment_size();
 
     let header_size = main_header.get_encoded_size();
 
     let chunk_size = main_header.chunk_size();
     let mut chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0, 0, None);
 
+    if (segment_size as usize) < header_size {
+        println!("{}", ERROR_SEGMENT_SIZE_TOO_SMALL_FOR_MAINHEADER);
+        exit(EXIT_STATUS_ERROR);
+    }
     let first_segment_size = segment_size as usize - header_size;
     let mut first_segment_filename = PathBuf::from(&output_filename);
     let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
@@ -528,6 +530,10 @@ where
     //rewrite main_header with the correct number of bytes of the COMPRESSED data.
     main_header.set_length_of_data(written_bytes);
     main_header.set_hash_header(hash_header);
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(now) => main_header.set_acquisition_end(now.as_secs()),
+        Err(_) => ()
+    };
     match output_file.seek(SeekFrom::Start(0)) {
         Ok(_) => (),
         Err(e) => {
@@ -592,8 +598,8 @@ fn main() {
         chunk_size,
         signature_flag,
         segment_size,
-        segment_header.clone(),
-        0);
+        0,
+        segment_header.clone());
 
     write_to_output(
         &input_path,

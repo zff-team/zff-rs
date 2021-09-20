@@ -127,5 +127,6 @@ pub const ERROR_UNKNOWN_ENCRYPTION_ALGORITHM: &'static str = "The given encrypti
 pub const ERROR_UNKNOWN_PASSWORD_KDF: &'static str = "The given password key derivation function is unknown/not supported by this application. Please use -h to see all supported algorithms.";
 pub const ERROR_GET_HASHTYPES: &'static str = "Unknown hashtype: ";
 pub const ERROR_PARSE_KEY: &'static str = "Could not parse your given base64 formatted secret key / keypair.";
+pub const ERROR_SEGMENT_SIZE_TOO_SMALL_FOR_MAINHEADER: &'static str = "Your selected segment size is too small - for the content of the main header. You should either choose a larger segment size, or specify less metadata.";
 
 pub const EXIT_STATUS_ERROR: i32 = 1;
