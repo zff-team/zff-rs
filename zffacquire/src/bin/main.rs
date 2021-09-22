@@ -360,7 +360,8 @@ fn write_to_output<O>(
     encryption_key: Option<Vec<u8>>,
     encryption_header: Option<EncryptionHeader>,
     hash_values: Vec<HashValue>,
-    signature_key: Option<Keypair>)
+    signature_key: Option<Keypair>,
+    encrypt_header: bool)
 where
     O: Into<String>,
 {
@@ -543,18 +544,22 @@ where
     }
     let encoded_main_header = match &encryption_key {
         None => main_header.encode_directly(),
-        Some(key) => match main_header.encode_encrypted_header_directly(key) {
-            Ok(data) => if data.len() == encoded_main_header.len() {
-                data
-            } else {
-                println!("{}", ERROR_REWRITE_MAIN_HEADER);
-                exit(EXIT_STATUS_ERROR);
-            },
-            Err(e) => {
-                println!("{}{}", ERROR_WRITE_ENCRYPTED_MAIN_HEADER, e.to_string());
-                exit(EXIT_STATUS_ERROR);
-            }
-        },
+        Some(key) => if encrypt_header {
+          match main_header.encode_encrypted_header_directly(key) {
+                Ok(data) => if data.len() == encoded_main_header.len() {
+                    data
+                } else {
+                    println!("{}", ERROR_REWRITE_MAIN_HEADER);
+                    exit(EXIT_STATUS_ERROR);
+                },
+                Err(e) => {
+                    println!("{}{}", ERROR_WRITE_ENCRYPTED_MAIN_HEADER, e.to_string());
+                    exit(EXIT_STATUS_ERROR);
+                }
+            }  
+        } else {
+            main_header.encode_directly()
+        }  
     };
     match output_file.write(&encoded_main_header) {
         Ok(_) => (),
@@ -589,6 +594,8 @@ fn main() {
         Some(_) => 1,
     };
 
+    let encrypt_header = arguments.is_present(CLAP_ARG_NAME_ENCRYPTED_HEADER);
+
     let main_header = MainHeader::new(
         MAIN_HEADER_VERSION,
         encryption_header.clone(),
@@ -610,5 +617,6 @@ fn main() {
         encryption_key,
         encryption_header,
         hash_values,
-        signature_key);
+        signature_key,
+        encrypt_header);
 }
