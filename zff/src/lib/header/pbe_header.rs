@@ -24,7 +24,9 @@ use crate::{
 };
 
 // - external
-use serde::{Serialize};
+use serde::Serialize;
+use serde::ser::{Serialize as SerializeTrait, Serializer, SerializeStruct};
+use hex::ToHex;
 
 /// The pbe header contains all informations for the encryption of the encryption key.\
 /// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
@@ -37,7 +39,7 @@ use serde::{Serialize};
 /// |----------|-------------|---------------|-------------------|----------|------------------------------|-------------------|--------------------------|
 /// | **size** | 4 bytes     | 8 bytes       | 1 byte            | 1 bytes  | 1 byte                       | variable          | 16 bytes                 |
 /// | **type** | 0x7A666670  | uint64        | uint8             | uint8    | uint8                        | [KDFParameters]   | Bytes                    |
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub struct PBEHeader {
 	header_version: u8,
 	kdf_scheme: KDFScheme,
@@ -126,6 +128,23 @@ impl HeaderDecoder for PBEHeader {
 	}
 }
 
+impl SerializeTrait for PBEHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("PBEHeader", 10)?;
+        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("kdf_scheme", &self.kdf_scheme)?;
+        state.serialize_field("encryption_scheme", &self.encryption_scheme)?;
+        match &self.kdf_parameters {
+        	KDFParameters::PBKDF2SHA256Parameters(params) => state.serialize_field("pbkdf2sha256_parameters", &params)?,
+        }
+        state.serialize_field("pbencryption_nonce", &self.pbencryption_nonce.encode_hex::<String>())?;
+        state.end()
+    }
+}
+
 /// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
 #[repr(u8)]
 #[non_exhaustive]
@@ -162,7 +181,7 @@ impl ValueDecoder for KDFParameters {
 }
 
 /// struct to store the parameters for the KDF PBKDF2-SHA256.
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub struct PBKDF2SHA256Parameters {
 	iterations: u16,
 	salt: [u8; 32],
@@ -215,4 +234,16 @@ impl HeaderDecoder for PBKDF2SHA256Parameters {
 		Ok(parameters)
 	}
 
+}
+
+impl SerializeTrait for PBKDF2SHA256Parameters {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("PBKDF2SHA256Parameters", 10)?;
+        state.serialize_field("iterations", &self.iterations)?;
+        state.serialize_field("salt", &self.salt.encode_hex::<String>())?;
+        state.end()
+    }
 }

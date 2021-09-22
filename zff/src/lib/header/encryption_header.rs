@@ -24,7 +24,8 @@ use crate::{
 };
 
 // - external
-use serde::{Serialize};
+use serde::ser::{Serialize, Serializer, SerializeStruct};
+use hex::ToHex;
 
 /// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
 /// The encryption header is the only optional header part of the main header and has following layout:
@@ -33,7 +34,7 @@ use serde::{Serialize};
 /// |----------|----------------|----------------|---------------|-----------|--------------------------------|-------------------------|
 /// | **size** | 4 bytes        | 8 bytes        | 1 byte         | variable      | 1 byte    | variable                       | 12 byte                 |
 /// | **type** | 0x7A666665     | uint64         | uint8          | header object | uint8     | Bytes                          | Bytes                   |
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub struct EncryptionHeader {
 	header_version: u8,
 	pbe_header: PBEHeader,
@@ -143,4 +144,19 @@ impl HeaderDecoder for EncryptionHeader {
 		cursor.read_exact(&mut nonce)?;
 		Ok(EncryptionHeader::new(header_version, pbe_header, encryption_algorithm, encryption_key, nonce))
 	}
+}
+
+impl Serialize for EncryptionHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("EncryptionHeader", 10)?;
+        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("pbe_header", &self.pbe_header)?;
+        state.serialize_field("algorithm", &self.algorithm)?;
+        state.serialize_field("encrypted_encryption_key", &self.encrypted_encryption_key.encode_hex::<String>())?;
+        state.serialize_field("encrypted_header_nonce", &self.encrypted_encryption_key.encode_hex::<String>())?;
+        state.end()
+    }
 }
