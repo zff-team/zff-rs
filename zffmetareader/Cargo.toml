@@ -17,6 +17,7 @@ zff = { path = "../zff" }
 #signing
 ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }
 
-#output format serializing crates
+#serializing crates
+serde = "1.0"
 toml = "0.5.8"
 serde_json = "1.0"

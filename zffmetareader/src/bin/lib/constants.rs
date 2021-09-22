@@ -26,6 +26,8 @@ pub const ERROR_OPEN_INPUT_FILE: &str = "An errror occurred while trying to open
 pub const ERROR_SERIALIZE_TOML: &str = "An errror occurred while trying to serialize the decoded information to toml format.";
 pub const ERROR_SERIALIZE_JSON: &str = "An errror occurred while trying to serialize the decoded information to json format.";
 pub const ERROR_SERIALIZE_UNKNOWN_SERIALIZER: &str = "Unknown output format.";
+pub const ERROR_UNKNOWN_HEADER: &str = "Could not read header of this file. Are you sure, this is a correct zff file?:\n";
+pub const ERROR_FILE_READ: &str = "An error occurred while trying to read the input file.";
 
 pub const EXIT_STATUS_ERROR: i32 = 1;
 pub const EXIT_STATUS_SUCCESS: i32 = 0;

@@ -2,6 +2,7 @@
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::exit;
+use std::io::{Seek,SeekFrom};
 
 // - modules
 mod lib;
@@ -18,6 +19,7 @@ use zff::{
 use clap::{Arg, App, ArgMatches};
 use toml;
 use serde_json;
+
 
 fn arguments() -> ArgMatches<'static> {
     let matches = App::new(PROGRAM_NAME)
@@ -103,7 +105,56 @@ fn main() {
         }
     }
 
-    //if this is a segment
-    unimplemented!()
-
+    match input_file.seek(SeekFrom::Start(0)) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("{}: {}", ERROR_FILE_READ, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    match SegmentHeader::decode_directly(&mut input_file) {
+        Ok(header) => {
+            // Calling .unwrap() is safe here because this argument has a default value.
+            match arguments.value_of(CLAP_ARG_NAME_OUTPUT_FORMAT).unwrap() {
+                CLAP_ARG_VALUE_OUTPUT_FORMAT_TOML => match toml::Value::try_from(&header) {
+                    Ok(value) => {
+                        println!("{}", value);
+                        exit(EXIT_STATUS_SUCCESS);
+                    },
+                    Err(_) => {
+                        println!("{}", ERROR_SERIALIZE_TOML);
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                },
+                CLAP_ARG_VALUE_OUTPUT_FORMAT_JSON => match serde_json::to_string(&header) {
+                    Ok(value) => {
+                        println!("{}", value);
+                        exit(EXIT_STATUS_SUCCESS);
+                    },
+                    Err(_) => {
+                        println!("{}", ERROR_SERIALIZE_JSON);
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                },
+                CLAP_ARG_VALUE_OUTPUT_FORMAT_JSON_PRETTY => match serde_json::to_string_pretty(&header) {
+                    Ok(value) => {
+                        println!("{}", value);
+                        exit(EXIT_STATUS_SUCCESS);
+                    },
+                    Err(_) => {
+                        println!("{}", ERROR_SERIALIZE_JSON);
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                }
+                _ => {
+                    println!("{}", ERROR_SERIALIZE_UNKNOWN_SERIALIZER);
+                    exit(EXIT_STATUS_ERROR);
+                }
+            }
+        },
+        Err(e) => {
+            println!("{}{}", ERROR_UNKNOWN_HEADER, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    }
 }
