@@ -8,7 +8,7 @@ Zff is an alternative to the ewf and aff file formats and not compatible with th
 - The disk image can be stored in several split segments.
 - The data can be stored in compressed format (modern compression algorithms used, like __Zstd__)
 - The stored data can be optionally encrypted with a password. Good procedures according to PKCS#5 are used here (PBKDF2-SHA256 with AES-128-CBC and AES-256-CBC is currently implemented). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently, AES-128-GCM-SIV and AES-256-GCM-SIV are used.
-- The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash header](#hash_header) section.
+- The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash header](#hash-header) section.
 - The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm Ed25519 is used for this purpose.
 - The stored data is organized in small chunks. 
 Above mentioned compression, encryption and signature methods are applied to each chunk separatly. This makes it possible to access a corresponding part of the data in real time and not to have to decompress or decrypt the complete image first.
@@ -146,8 +146,8 @@ Authenticity verification can also be applied to individual chunks and does not 
 | Acquisition start timestamp | uint64     | "as"       | :ballot_box_with_check: |
 | Acquisition end timestamp   | uint64     | "ae"       | :ballot_box_with_check: |
 
-### Layout of hash header
-<a href="hash_header"/>
+### hash header
+
 | Name                        | Type         | Length in bytes |
 |-----------------------------|:------------:|:---------------:|
 | Magic bytes                 | 0x7A666668   | 4               |
