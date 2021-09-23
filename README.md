@@ -6,7 +6,7 @@ Zff is an alternative to the ewf and aff file formats and not compatible with th
 
 ## Features included in zff (most of them are optional)
 - The disk image can be stored in several split segments.
-- The data can be stored in compressed format (modern compression algorithms used, like __Zstd__)
+- The data can be stored in compressed format (modern [compression algorithms](compression-algorithms) used, like __Zstd__)
 - The stored data can be optionally encrypted with a password. Good procedures according to PKCS#5 are used here (see [KDF schemes](#kdf-flag) and [encryption schemes](#encryption-scheme-flag) for available implementations). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently implemented algorithms are listed in [encryption algorithms](#encryption-algorithms) section.
 - The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](#hash-types) section.
 - The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm __Ed25519__ is used for this purpose.
@@ -15,36 +15,51 @@ Above mentioned compression, encryption and signature methods are applied to eac
 Authenticity verification can also be applied to individual chunks and does not have to be applied to the entire image.
 - Modular design that promises high maintainability and scalability.
 
-## ZFF  general layout
+## benchmarks
 
-![alt text](https://github.com/ph0llux/zff/blob/master/assets/zff_general_layout.png?raw=true)
+coming soon.
 
+## Zff layout
 
+Zff in general contains a header (called "main header") followed by the chunked data (e.g. from entire disk image, physical memory, ...):
+<p align="center">
+  <img src="https://github.com/ph0llux/zff/blob/master/assets/zff_general_layout.png?raw=true" alt="Zff general layout"/>
+</p>
+But if the Zff image was splitted into multiple segment files, only the first segment file contains a layout with a main header as shown before. The other segment files start with a segment header, followed by the chunked data. Here is an example representation of a dump, segmented into 3 files:
+<p align="center">
+  <img src="https://github.com/ph0llux/zff/blob/master/assets/zff_general_layout_splitted.png?raw=true" alt="Zff general layout splitted"/>
+</p>
+
+The full specifications can be found at [https://ph0llux.github.io/zff](https://ph0llux.github.io/zff).
+
+## File names
+
+The first (or if no segmentation of the image was performed, the only one) segment has the file-extension ".z01". The next segments are simply numbered sequentially, according to the following scheme: \[ ".z01", ".z02", ".z03", ..., ".z99", "z.100", ..., ".z1000", ... \].
 
 ## Layout of main header
 
 | Name                    |      Type         | Length in bytes | optional |
 |-------------------------|:-----------------:|:---------------:|:--------:|
 | Magic bytes             | 0x7A66666D        | 4               |          |
-| Header length			  | uint64            | 8               |          |
+| Header length			      | uint64            | 8               |          |
 | Header version          | uint8             | 1               |          |
 | encryption flag         | uint8             | 1               |          |
 | Encryption header       | object            | variable        | :ballot_box_with_check: |
-| Compression header      | object            | variable        |          |
+| Compression header      | object            | 15		          |          |
 | Description header      | object            | variable        |          |
-| Hash header             | object			  | variable        |          |
-| chunk size			  | uint8			  | 1               |          |
-| signature flag          | uint8			  | 1               |		   |
-| Segment size		      | uint64            | 8               |          |
+| Hash header             | object			      | variable        |          |
+| chunk size			        | uint8			        | 1               |          |
+| signature flag          | uint8			        | 1               |		       |
+| Segment size		        | uint64            | 8               |          |
 | Length of data in bytes | uint64            | 8               |          |
-| Segment header 		  | object			  | variable        |          |
+| Segment header 		      | object			      | 37		          |          |
 
 ## Layout of encrypted main header
 
 | Name                    |      Type         | Length in bytes |
 |-------------------------|:-----------------:|:---------------:|
 | Magic bytes             | 0x7a666645        | 4               |
-| Header length in bytes  | uint64            | 8               |
+| Header length			      | uint64            | 8               |
 | Header version          | uint8             | 1               |
 | encryption flag         | uint8             | 1               |
 | Encryption header       | object            | variable        |
@@ -174,7 +189,7 @@ Authenticity verification can also be applied to individual chunks and does not 
 | SHA512                | 2          |
 | SHA3-256              | 3          |
 
-### Layout of segment subheader
+### Layout of segment header
 
 | Name                   |      Type         | Length in bytes |
 |------------------------|:-----------------:|:---------------:|
