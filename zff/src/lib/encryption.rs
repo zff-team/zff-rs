@@ -1,3 +1,6 @@
+// - STD
+use std::borrow::Borrow;
+
 // - internal
 use crate::{
 	Result,
@@ -134,13 +137,14 @@ impl Encryption {
 	///	```
 	/// # Error
 	/// This method will fail, if the encryption fails.
-	pub fn encrypt_message<K, M>(key: K, message: M, chunk_no: u64, algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
+	pub fn encrypt_message<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
 	{
 		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
-		match algorithm {
+		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
 				return Ok(cipher.encrypt(&nonce, message.as_ref())?);
@@ -155,31 +159,16 @@ impl Encryption {
 	/// encrypts the given header with the given nonce.
 	/// This method should primary used to encrypt the given header.
 	/// Returns a the cipthertext as ```Vec<u8>```.
-	/// # Example
-	///	```
-	/// use zff::*;
-	/// use phollaits::ToHex;
-	///
-	/// fn main() -> Result<()> {
-	///		let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
-	///		let nonce = gen_random_header_nonce(); // 12Byte/96Bit Key
-	///		let message = "My header_data";
-	/// 
-	///		let ciphertext = Encryption::encrypt_header(key, message, nonce, EncryptionAlgorithm::AES256GCMSIV)?;
-	/// 
-	///		assert_eq!(ciphertext.hexify(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
-	///		Ok(())
-	/// }
-	///	```
 	/// # Error
 	/// This method will fail, if the encryption fails.
-	pub fn encrypt_header<K, M>(key: K, message: M, nonce: &[u8; 12], algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
+	pub(crate) fn encrypt_header<K, M, A>(key: K, message: M, nonce: &[u8; 12], algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
 	{
 		let nonce = Nonce::from_slice(nonce);
-		match algorithm {
+		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
 				return Ok(cipher.encrypt(nonce, message.as_ref())?);
@@ -194,31 +183,14 @@ impl Encryption {
 	/// decrypts the given header with the given nonce and encryption key.
 	/// This method should primary used to decrypt the given header.
 	/// Returns a the plaintext as ```Vec<u8>```.
-	/// # Example
-	///	```
-	/// use zff::*;
-	/// use phollaits::ToHex;
-	///
-	/// fn main() -> Result<()> {
-	///		let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
-	///		let nonce = "012345678912"; // 12Byte/96Bit Key
-	///		let ciphertext = "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string().to_bytes();
-	/// 
-	///		let plaintext = Encryption::decrypt_header(key, message, nonce, EncryptionAlgorithm::AES256GCMSIV)?;
-	/// 
-	///		assert_eq!(String::from_utf8(plaintext).unwrap(), "My header_data".to_string());
-	///		Ok(())
-	/// }
-	///	```
-	/// # Error
-	/// This method will fail, if the encryption fails.
-	pub fn decrypt_header<K, C>(key: K, ciphertext: C, nonce: &[u8; 12], algorithm: &EncryptionAlgorithm) -> Result<Vec<u8>>
+	pub(crate) fn decrypt_header<K, C, A>(key: K, ciphertext: C, nonce: &[u8; 12], algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		C: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
 	{
 		let nonce = Nonce::from_slice(nonce);
-		match algorithm {
+		match *algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
 				return Ok(cipher.decrypt(nonce, ciphertext.as_ref())?);
@@ -234,10 +206,11 @@ impl Encryption {
 	/// # Example
 	/// ```no_run
 	/// use zff::*;
+	/// 
 	/// fn main() {
 	/// 	let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
-	/// 	let my_new_random_super_secret_key = gen_random_key(keysize);
-	/// 	...
+	/// 	let my_new_random_super_secret_key = Encryption::gen_random_key(keysize);
+	/// 	//...
 	/// }
 	/// ```
 	pub fn gen_random_key(length: usize) -> Vec<u8> {

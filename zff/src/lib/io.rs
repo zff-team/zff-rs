@@ -132,7 +132,7 @@ where
 		encryption_key,
 		&compressed_chunk,
 		chunk_header.chunk_number(),
-		&encryption_algorithm)?;
+		encryption_algorithm)?;
 	chunk_header.set_chunk_size(encrypted_data.len() as u64);
 	chunk_header.set_crc32(crc32);
 	chunk_header.set_signature(signature);

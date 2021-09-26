@@ -153,7 +153,7 @@ impl ZffError {
 	/// fn main() {
 	/// 	match my_func() {
 	/// 		Err(x) => {
-	/// 			assert_eq!(x.get_kind(), ZffErrorKind::Custom)
+	/// 			assert!(matches!(x.get_kind(), &ZffErrorKind::Custom));
 	/// 		},
 	/// 		_ => ()
 	/// 	}

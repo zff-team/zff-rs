@@ -13,7 +13,7 @@ use crate::{
 /// 
 /// fn main() {
 /// 	let file_extension = "z01";
-/// 	assert_eq!(file_extension_next_value(file_extension), Ok("z02"))
+/// 	assert_eq!(file_extension_next_value(file_extension).unwrap(), "z02");
 /// }
 /// ```
 /// # Error
