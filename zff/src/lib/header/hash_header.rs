@@ -106,25 +106,25 @@ impl Serialize for HashHeader {
 /// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
 #[derive(Debug,Clone)]
 pub struct HashValue {
-	header_version: u8,
+	structure_version: u8,
 	hash_type: HashType,
 	hash: Vec<u8>,
 }
 
 impl HashValue {
 	/// creates a new [HashValue](struct.HashValue.html) for the given parameters.
-	pub fn new(header_version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
+	pub fn new(structure_version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
 		Self {
-			header_version: header_version,
+			structure_version: structure_version,
 			hash_type: hash_type,
 			hash: hash
 		}
 	}
 	/// creates a new, empty [HashValue](struct.HashValue.html) for a given hashtype.
-	pub fn new_empty(header_version: u8, hash_type: HashType) -> HashValue {
+	pub fn new_empty(structure_version: u8, hash_type: HashType) -> HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
-			header_version: header_version,
+			structure_version: structure_version,
 			hash_type: hash_type,
 			hash: vec!(0u8; hash_default_len/8),
 		}
@@ -147,7 +147,7 @@ impl HeaderObject for HashValue {
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.push(self.header_version);
+		vec.push(self.structure_version);
 		vec.push(self.hash_type.clone() as u8);
 		vec.append(&mut self.hash.encode_directly());
 
@@ -162,7 +162,7 @@ impl HeaderDecoder for HashValue {
 
 	fn decode_content(data: Vec<u8>) -> Result<HashValue> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let structure_version = u8::decode_directly(&mut cursor)?;
 		let hash_type = match u8::decode_directly(&mut cursor)? {
 			0 => HashType::Blake2b512,
 			1 => HashType::SHA256,
@@ -171,7 +171,7 @@ impl HeaderDecoder for HashValue {
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE)),
 		};
 	 let hash = Vec::<u8>::decode_directly(&mut cursor)?;
-		Ok(HashValue::new(header_version, hash_type, hash))
+		Ok(HashValue::new(structure_version, hash_type, hash))
 	}
 }
 
@@ -181,7 +181,7 @@ impl Serialize for HashValue {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("HashValue", 3)?;
-        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("structure_version", &self.structure_version)?;
         state.serialize_field("hash_type", &self.hash_type)?;
         state.serialize_field("hash", &self.hash.encode_hex::<String>())?;
         state.end()
