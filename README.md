@@ -23,6 +23,17 @@ coming soon.
 
 See the [wiki pages](https://github.com/ph0llux/zff/wiki) for further information.
 
+## Zff tools and libraries
+
+This repository contains several tools to work zff images (or acquire them). All tools and libraries are written in pure Rust.
+
+| Name | Type | Description | Crates.io | MRSV |
+|------|:----:|:------------|:---------:|:----:|
+| zff  | library | Library to handle the zff format | coming soon | 1.51 |
+| zffacquire | binary | Tool to acquire disk images in zff format | coming soon | 1.51 |
+| zffmetareader | binary | Tool to get meta information about a zff image | coming soon | 1.51 |
+| zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.51 |
+
 # Planned features until zff reaches version 1.0
 - testing / unit tests
 - documentation (with deny nodoc)
