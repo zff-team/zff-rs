@@ -205,7 +205,8 @@ fn segment_header() -> SegmentHeader {
     let unique_identifier: i64 = rng.gen();
     let segment_number = 1;
     let length_of_segment = 0;
-    SegmentHeader::new(header_version, unique_identifier, segment_number, length_of_segment)
+    let footer_offset = 0;
+    SegmentHeader::new(header_version, unique_identifier, segment_number, length_of_segment, footer_offset)
 }
 
 fn encryption_header(arguments: &ArgMatches) -> Option<(EncryptionHeader, Vec<u8>)> {
@@ -433,6 +434,7 @@ where
     let mut written_bytes = match write_segment(
         &mut input_file,
         &mut output_file,
+        &mut segment_header,
         chunk_size,
         &mut chunk_header,
         compression_header.algorithm(),
@@ -449,7 +451,6 @@ where
     };
 
     segment_header.set_length_of_segment(written_bytes);
-    main_header.set_segment_header(segment_header.clone());
 
     loop {
         let mut segment_header = segment_header.next_header();
@@ -481,6 +482,7 @@ where
         let written_bytes_in_segment = match write_segment(
             &mut input_file,
             &mut output_file,
+            &mut segment_header,
             chunk_size,
             &mut chunk_header,
             compression_header.algorithm(),
@@ -571,7 +573,7 @@ where
 }
 
 fn main() {
-	let arguments = arguments();
+    let arguments = arguments();
     let compression_header = compression_header(&arguments);
     let description_header = description_header(&arguments);
     let segment_size = calculate_segment_size(&arguments);
@@ -605,8 +607,8 @@ fn main() {
         chunk_size,
         signature_flag,
         segment_size,
-        0,
-        segment_header.clone());
+        0 //length of data
+        );
 
     write_to_output(
         &input_path,

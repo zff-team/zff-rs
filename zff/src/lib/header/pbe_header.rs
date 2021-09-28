@@ -33,12 +33,6 @@ use hex::ToHex;
 /// encrypted with an user password.\
 /// This encryption of the encryption key is done via a password-based encryption (PBE).\
 /// All metadata about this PBE can be found in this PBEHeader.\
-/// The PBEHeader has the following layout:
-///
-/// |          | Magic bytes | Header length | header<br>version | KDF flag | encryption<br>scheme<br>flag | KDF<br>parameters | PBEncryption<br>Nonce/IV |
-/// |----------|-------------|---------------|-------------------|----------|------------------------------|-------------------|--------------------------|
-/// | **size** | 4 bytes     | 8 bytes       | 1 byte            | 1 bytes  | 1 byte                       | variable          | 16 bytes                 |
-/// | **type** | 0x7A666670  | uint64        | uint8             | uint8    | uint8                        | [KDFParameters]   | Bytes                    |
 #[derive(Debug,Clone)]
 pub struct PBEHeader {
 	header_version: u8,

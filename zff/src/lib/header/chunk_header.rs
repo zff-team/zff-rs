@@ -51,6 +51,11 @@ impl ChunkHeader {
 		self.chunk_size = size
 	}
 
+	/// returns the size of the appropriate chunk
+	pub fn chunk_size(&self) -> &u64 {
+		&self.chunk_size
+	}
+
 	/// overwrites the crc32 value in the header with the given value. This can be useful, if you create an 'empty'
 	/// header (with crc32=0) and want to set the crc32 value after reading the data from source to buffer.
 	pub fn set_crc32(&mut self, crc32: u32) {

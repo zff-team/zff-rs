@@ -9,10 +9,7 @@ pub(crate) const HEADER_IDENTIFIER_ENCRYPTION_HEADER: u32 = 0x7A666665;
 pub(crate) const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
 pub(crate) const HEADER_IDENTIFIER_HASH_HEADER: u32 = 0x7a666668;
 pub(crate) const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7a666648;
-
-pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
-pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
-pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE: usize = 21;
+pub(crate) const HEADER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 
 pub(crate) const PBE_KDF_PARAMETERS: u32 = 0x6b646670;
 
@@ -47,3 +44,8 @@ pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED: &'static str = 
 // Default values
 /// the default chunk size as 2^x. This value is 15, so the default chunk size is 2^15 = 32768 bytes.
 pub const DEFAULT_CHUNK_SIZE: u8 = 15;
+pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
+pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
+pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE: usize = 21;
+pub(crate) const DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY: usize = 21;
+pub(crate) const DEFAULT_SEGMENT_FOOTER_VERSION: u8 = 1;

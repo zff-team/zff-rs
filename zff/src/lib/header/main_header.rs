@@ -14,7 +14,6 @@ use crate::{
 		DescriptionHeader,
 		EncryptionHeader,
 		HashHeader,
-		SegmentHeader,
 	},
 	ZffError,
 	ZffErrorKind,
@@ -32,13 +31,7 @@ use crate::{
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 /// The main header is the first Header, which can be found at the beginning of the first segment.\
-/// This header contains a lot of other headers (e.g. compression header, description header, ...)
-/// and has the following layout:
-///
-/// |          | Magic<br>bytes    | Header<br>length  | header<br>version | encryption<br>flag | encryption<br>header | compression<br>header | description<br>header | Hash<br>header  | chunk<br>size | signature<br>flag | segment<br>size | Length of<br>data | Segment<br>header |
-/// |----------|-------------------|-------------------|-------------------|--------------------|----------------------|-----------------------|-----------------------|--------------|---------------|-------------------|-----------------|-------------------|-------------------|
-/// | **size** | 4 bytes           | 8 bytes           | 1 byte            | 1 byte             | variable             | variable              | variable              | variable     | 1 bytes       | 1 byte            | 8 bytes         | 8 bytes          | variable           |
-/// | **type** | 0x7A66666D        | uint64            | uint8             | uint8              | [EncryptionHeader]   | [CompressionHeader]   | [DescriptionHeader]   | [HashHeader] | uint8         | uint8             | uint64          | uint64	   | [SegmentHeader]            |
+/// This header contains a lot of other headers (e.g. compression header, description header, ...) and start information.
 #[derive(Debug,Clone)]
 pub struct MainHeader {
 	header_version: u8,
@@ -49,7 +42,6 @@ pub struct MainHeader {
 	chunk_size: u8,
 	signature_flag: u8,
 	segment_size: u64,
-	segment_header: SegmentHeader,
 	length_of_data: u64,
 }
 
@@ -63,9 +55,8 @@ impl MainHeader {
 		hash_header: HashHeader,
 		chunk_size: u8,
 		signature_flag: u8,
-		segment_size_in_bytes: u64,
-		length_of_data: u64,
-		segment_header: SegmentHeader) -> MainHeader {
+		segment_size: u64,
+		length_of_data: u64) -> MainHeader {
 		Self {
 			header_version: header_version,
 			encryption_header: encryption_header,
@@ -74,8 +65,7 @@ impl MainHeader {
 			hash_header: hash_header,
 			chunk_size: chunk_size,
 			signature_flag: signature_flag,
-			segment_size: segment_size_in_bytes,
-			segment_header: segment_header,
+			segment_size: segment_size,
 			length_of_data: length_of_data,
 		}
 	}
@@ -139,8 +129,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
-			length_of_data,
-			segment_header) = Self::decode_inner_content(&mut cursor)?;
+			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
 			header_version,
 			Some(encryption_header),
@@ -150,9 +139,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
-			length_of_data,
-			segment_header,
-			);
+			length_of_data);
 		Ok(main_header)
 	}
 
@@ -184,7 +171,6 @@ impl MainHeader {
 		vec.push(self.signature_flag);
 		vec.append(&mut self.segment_size.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
-		vec.append(&mut self.segment_header.encode_directly());
 
 		vec
 	}
@@ -197,8 +183,7 @@ impl MainHeader {
 		u8, // signature flag
 		u64, // segment size
 		u64, // length of data
-		SegmentHeader
-		)> {
+		)>{
 		let compression_header = CompressionHeader::decode_directly(inner_content)?;
 		let description_header = DescriptionHeader::decode_directly(inner_content)?;
 		let hash_header = HashHeader::decode_directly(inner_content)?;
@@ -206,7 +191,6 @@ impl MainHeader {
 		let signature_flag = u8::decode_directly(inner_content)?;
 		let segment_size = u64::decode_directly(inner_content)?;
 		let length_of_data = u64::decode_directly(inner_content)?;
-		let segment_header = SegmentHeader::decode_directly(inner_content)?;
 		let inner_content = (
 			compression_header,
 			description_header,
@@ -214,9 +198,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
-			length_of_data,
-			segment_header
-			);
+			length_of_data);
 		Ok(inner_content)
 	}
 
@@ -225,14 +207,9 @@ impl MainHeader {
 		self.length_of_data = len;
 	}
 
-	/// sets the segment header.
-	pub fn set_segment_header(&mut self, segment_header: SegmentHeader) {
-		self.segment_header = segment_header
-	}
-
 	/// sets the hash header.
 	pub fn set_hash_header(&mut self, hash_header: HashHeader) {
-		self.hash_header = hash_header
+		self.hash_header = hash_header;
 	}
 
 	/// returns the header version.
@@ -324,8 +301,7 @@ impl HeaderDecoder for MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
-			length_of_data,
-			segment_header) = Self::decode_inner_content(&mut cursor)?;
+			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
 			header_version,
 			encryption_header,
@@ -335,9 +311,7 @@ impl HeaderDecoder for MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
-			length_of_data,
-			segment_header,
-			);
+			length_of_data);
 		Ok(main_header)
 	}
 }
@@ -358,7 +332,6 @@ impl Serialize for MainHeader {
 
         state.serialize_field("signature_flag", &(self.signature_flag != 0))?;
         state.serialize_field("segment_size", &self.segment_size.to_string())?;
-        state.serialize_field("first_segment_header", &self.segment_header)?;
 
         state.serialize_field("length_of_data", &self.length_of_data.to_string())?;
         state.end()

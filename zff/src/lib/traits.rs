@@ -214,7 +214,7 @@ impl ValueEncoder for [u8; 64] {
 impl ValueEncoder for String {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let string_length = self.len() as u32;
+		let string_length = self.len() as u64;
 		vec.append(&mut string_length.to_le_bytes().to_vec());
 		vec.append(&mut self.as_bytes().to_vec());
 		vec
@@ -231,7 +231,7 @@ impl ValueEncoder for String {
 impl ValueEncoder for str {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let string_length = self.len() as u32;
+		let string_length = self.len() as u64;
 		vec.append(&mut string_length.to_le_bytes().to_vec());
 		vec.append(&mut self.as_bytes().to_vec());
 		vec
@@ -251,7 +251,7 @@ where
 {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut (self.len() as u32).encode_directly());
+		vec.append(&mut (self.len() as u64).encode_directly());
 		for value in self {
 			vec.append(&mut value.encode_directly());
 		}
@@ -270,7 +270,26 @@ where
 impl ValueEncoder for Vec<u8> {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut (self.len() as u32).encode_directly());
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for value in self {
+			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+
+	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
+		let mut vec = Vec::new();
+		let mut encoded_key = Self::encode_key(key);
+		vec.append(&mut encoded_key);
+		vec.append(&mut self.encode_directly());
+		vec
+	}
+}
+
+impl ValueEncoder for Vec<u64> {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u64).encode_directly());
 		for value in self {
 			vec.append(&mut value.encode_directly());
 		}
@@ -380,7 +399,7 @@ impl ValueDecoder for str {
 	type Item = String;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<String> {
-		let length = data.read_u64::<LittleEndian>()?;
+		let length = u64::decode_directly(data)? as usize;
 		let mut buffer = vec![0u8; length as usize];
 		data.read_exact(&mut buffer)?;
 		Ok(String::from_utf8(buffer)?)
@@ -391,10 +410,24 @@ impl ValueDecoder for Vec<u8> {
 	type Item = Vec<u8>;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u8>> {
-		let length = data.read_u32::<LittleEndian>()?;
+		let length = u64::decode_directly(data)? as usize;
 		let mut buffer = vec![0u8; length as usize];
 		data.read_exact(&mut buffer)?;
 		Ok(buffer)
+	}
+}
+
+impl ValueDecoder for Vec<u64> {
+	type Item = Vec<u64>;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u64>> {
+		let length = u64::decode_directly(data)? as usize;
+		let mut vec = Vec::with_capacity(length);
+		for _ in 0..length {
+			let content = u64::decode_directly(data)?;
+			vec.push(content);
+		}
+		Ok(vec)
 	}
 }
 
@@ -405,7 +438,7 @@ where
 	type Item = Vec<H>;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<H>> {
-		let length = u32::decode_directly(data)? as usize;
+		let length = u64::decode_directly(data)? as usize;
 		let mut vec = Vec::with_capacity(length);
 		for _ in 0..length {
 			let content = H::decode_directly(data)?;

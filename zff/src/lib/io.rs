@@ -1,11 +1,11 @@
 // - STD
 use std::collections::HashMap;
-use std::io::{Read,Write};
+use std::io::{Read,Write,Seek,SeekFrom};
 
 // - internal
 use crate::{
 	Result,
-	header::ChunkHeader,
+	header::{SegmentHeader,SegmentFooter,Segment,ChunkHeader},
 	CompressionAlgorithm,
 	HeaderEncoder,
 	ZffError,
@@ -13,6 +13,11 @@ use crate::{
 	Encryption,
 	EncryptionAlgorithm,
 	HashType,
+};
+
+use crate::{
+	DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY,
+	DEFAULT_SEGMENT_FOOTER_VERSION,
 };
 
 // - external
@@ -143,10 +148,11 @@ where
 	Ok(written_bytes as u64)
 }
 
-/// reads the data from given source and writes the data as segment to the given destination with the given options/values.
+/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
 pub fn write_segment<R, W, H>(
 	input: &mut R,
 	output: &mut W,
+	segment_header: &mut SegmentHeader,
 	chunk_size: usize,
 	chunk_header: &mut ChunkHeader,
 	compression_algorithm: &CompressionAlgorithm,
@@ -157,13 +163,28 @@ pub fn write_segment<R, W, H>(
 	signature_key: &Option<Keypair>) -> Result<u64>
 where
 	R: Read,
-	W: Write,
+	W: Write + Seek,
 	H: DynDigest + ?Sized
 {
 	let mut written_bytes: u64 = 0;
+
+	let segment_header_length = segment_header.encode_directly().len() as u64;
+
+	let mut chunk_offsets = Vec::new();
+
+	let _ = output.write(&segment_header.encode_directly())?;
+
 	loop {
-		if (written_bytes + chunk_size as u64) > segment_size as u64 {
-			return Ok(written_bytes);
+		if (written_bytes +
+			chunk_size as u64 +
+			DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY as u64 +
+			(chunk_offsets.len()*8) as u64) > segment_size as u64 {
+
+			if written_bytes == 0 {
+				return Ok(written_bytes);
+			} else {
+				break;
+			}
 		};
 		chunk_header.next_number();
 		match encryption {
@@ -179,10 +200,17 @@ where
 					signature_key) {
 					Ok(data) => data,
 					Err(e) => match e.get_kind() {
-						ZffErrorKind::ReadEOF => return Ok(written_bytes),
+						ZffErrorKind::ReadEOF => {
+							if written_bytes == 0 {
+								return Ok(written_bytes);
+							} else {
+								break;
+							}
+						},
 						_ => return Err(e),
 					},
 				};
+				chunk_offsets.push(segment_header_length + written_bytes);
 				written_bytes += written_in_chunk;
 			},
 			Some(ref encryption) => {
@@ -199,12 +227,49 @@ where
 					signature_key) {
 					Ok(data) => data,
 					Err(e) => match e.get_kind() {
-						ZffErrorKind::ReadEOF => return Ok(written_bytes),
+						ZffErrorKind::ReadEOF => {
+							if written_bytes == 0 {
+								return Ok(written_bytes);
+							} else {
+								break;
+							}
+						},
 						_ => return Err(e),
 					},
 				};
+				chunk_offsets.push(segment_header_length + written_bytes);
 				written_bytes += written_in_chunk;
 			}
 		}
+	}
+	segment_header.set_footer_offset(written_bytes);
+	let segment_footer = SegmentFooter::new(DEFAULT_SEGMENT_FOOTER_VERSION, chunk_offsets);
+	written_bytes += output.write(&segment_footer.encode_directly())? as u64;
+	segment_header.set_length_of_segment(segment_header_length + written_bytes);
+	output.seek(SeekFrom::Start(0))?;
+	written_bytes += output.write(&segment_header.encode_directly())? as u64;
+	return Ok(written_bytes);
+}
+
+pub struct ZffReader<R: Read + Seek> {
+	segments: HashMap<u64, Segment<R>> //<Segment number, Segment>
+}
+
+impl<R: Read + Seek> ZffReader<R> {
+	pub fn new(mut segment_data: Vec<R>) -> Result<ZffReader<R>> {
+		let mut map = HashMap::new();
+		let mut current_chunk_number = 1;
+		loop {
+			let segment = match segment_data.pop() {
+				Some(data) => Segment::new_from_reader(data, current_chunk_number)?,
+				None => break,
+			};
+			let segment_number = segment.header().segment_number();
+			current_chunk_number += segment.chunk_offsets().len() as u64;
+			map.insert(segment_number, segment);
+		}
+		Ok(Self {
+			segments: map
+		})
 	}
 }
