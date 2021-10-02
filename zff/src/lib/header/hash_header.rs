@@ -22,12 +22,6 @@ use hex::ToHex;
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of the main header and contains 0 or more hash values of the dumped data.\
-/// The header has following layout:
-/// 
-/// |          | Magic bytes    | header length  | header version | hashes                                    |
-/// |----------|----------------|----------------|----------------|-------------------------------------------|
-/// | **size** | 4 bytes        | 8 bytes        | 1 byte         | variable                                  |
-/// | **type** | 0x7A666668     | uint64         | uint8          | Vec\<[HashValue](struct.HashValue.html)\> |
 #[derive(Debug,Clone)]
 pub struct HashHeader {
 	header_version: u8,
@@ -41,6 +35,10 @@ impl HashHeader {
 			header_version: header_version,
 			hashes: hashes,
 		}
+	}
+
+	pub fn hash_values(&self) -> &Vec<HashValue> {
+		&self.hashes
 	}
 }
 
