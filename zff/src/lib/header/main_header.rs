@@ -42,6 +42,7 @@ pub struct MainHeader {
 	chunk_size: u8,
 	signature_flag: u8,
 	segment_size: u64,
+	unique_identifier: i64,
 	length_of_data: u64,
 }
 
@@ -56,6 +57,7 @@ impl MainHeader {
 		chunk_size: u8,
 		signature_flag: u8,
 		segment_size: u64,
+		unique_identifier: i64,
 		length_of_data: u64) -> MainHeader {
 		Self {
 			header_version: header_version,
@@ -66,6 +68,7 @@ impl MainHeader {
 			chunk_size: chunk_size,
 			signature_flag: signature_flag,
 			segment_size: segment_size,
+			unique_identifier: unique_identifier,
 			length_of_data: length_of_data,
 		}
 	}
@@ -129,6 +132,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			unique_identifier,
 			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
 			header_version,
@@ -139,6 +143,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			unique_identifier,
 			length_of_data);
 		Ok(main_header)
 	}
@@ -170,6 +175,7 @@ impl MainHeader {
 		vec.push(self.chunk_size);
 		vec.push(self.signature_flag);
 		vec.append(&mut self.segment_size.encode_directly());
+		vec.append(&mut self.unique_identifier.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
 
 		vec
@@ -182,6 +188,7 @@ impl MainHeader {
 		u8, // chunk size
 		u8, // signature flag
 		u64, // segment size
+		i64, // unique identifier
 		u64, // length of data
 		)>{
 		let compression_header = CompressionHeader::decode_directly(inner_content)?;
@@ -190,6 +197,7 @@ impl MainHeader {
 		let chunk_size = u8::decode_directly(inner_content)?;
 		let signature_flag = u8::decode_directly(inner_content)?;
 		let segment_size = u64::decode_directly(inner_content)?;
+		let unique_identifier = i64::decode_directly(inner_content)?;
 		let length_of_data = u64::decode_directly(inner_content)?;
 		let inner_content = (
 			compression_header,
@@ -198,6 +206,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			unique_identifier,
 			length_of_data);
 		Ok(inner_content)
 	}
@@ -251,6 +260,31 @@ impl MainHeader {
 	pub fn set_acquisition_end(&mut self, timestamp: u64) {
 		self.description_header.set_acquisition_end(timestamp);
 	}
+
+	/// returns a reference to the inner compression header
+	pub fn compression_header(&self) -> &CompressionHeader {
+		&self.compression_header
+	}
+
+	/// returns a reference to the inner encryption header (if available)
+	pub fn encryption_header(&self) -> &Option<EncryptionHeader> {
+		&self.encryption_header
+	}
+
+	/// returns a reference to the inner hash header 
+	pub fn hash_header(&self) -> &HashHeader {
+		&self.hash_header
+	}
+
+	/// returns the length of the content data
+	pub fn length_of_data(&self) -> u64 {
+		self.length_of_data
+	}
+
+	/// returns the unique identifier
+	pub fn unique_identifier(&self) -> i64 {
+		self.unique_identifier
+	}
 }
 
 impl HeaderObject for MainHeader {
@@ -301,6 +335,7 @@ impl HeaderDecoder for MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			unique_identifier,
 			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
 			header_version,
@@ -311,6 +346,7 @@ impl HeaderDecoder for MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			unique_identifier,
 			length_of_data);
 		Ok(main_header)
 	}
