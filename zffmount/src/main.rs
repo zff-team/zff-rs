@@ -1,10 +1,10 @@
 // - STD
 use std::process::exit;
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::{File,read_dir};
 use std::ffi::OsStr;
 use std::time::{UNIX_EPOCH};
-use std::io::{Read};
+use std::io::{Read, Seek, SeekFrom};
 
 // - modules
 mod lib;
@@ -14,6 +14,7 @@ use zff::{
     Result,
     header::*,
     HeaderDecoder,
+    ZffReader,
 };
 use lib::constants::*;
 
@@ -27,21 +28,22 @@ use libc::ENOENT;
 use toml;
 use nix::unistd::{Uid, Gid};
 
-struct ZffFS {
-    zff_header: MainHeader,
+struct ZffFS<R: 'static +  Read + Seek> {
+    zff_reader: ZffReader<R>,
 }
 
-impl ZffFS {
-    fn new<R: Read>(data: &mut R) -> Result<ZffFS> {
-        let main_header = MainHeader::decode_directly(data)?;
+impl<R: Read + Seek> ZffFS<R> {
+    fn new(mut data: Vec<R>) -> Result<ZffFS<R>> {
+        let main_header = MainHeader::decode_directly(&mut data[0])?;
+        let zff_reader = ZffReader::new(data, main_header)?;
         Ok(Self {
-            zff_header: main_header,
+            zff_reader: zff_reader,
         })
     }
 
     //TODO return Result<FileAttr>.
     fn metadata_fileattr(&self) -> FileAttr {
-        let serialized_data = match toml::Value::try_from(&self.zff_header) {
+        let serialized_data = match toml::Value::try_from(&self.zff_reader.main_header()) {
             Ok(value) => value.to_string(),
             Err(_) => {
                 println!("{}", ERROR_SERIALIZE_METADATA);
@@ -51,7 +53,7 @@ impl ZffFS {
         let attr = FileAttr {
             ino: DEFAULT_METADATA_INODE,
             size: serialized_data.len() as u64,
-            blocks: 10,
+            blocks: serialized_data.len() as u64 / DEFAULT_BLOCKSIZE as u64 + 1,
             atime: UNIX_EPOCH, // 1970-01-01 00:00:00
             mtime: UNIX_EPOCH,
             ctime: UNIX_EPOCH,
@@ -68,9 +70,31 @@ impl ZffFS {
         attr
     }
 
+    fn zff_image_fileattr(&self) -> FileAttr {
+        let size = self.zff_reader.main_header().length_of_data();
+        let attr = FileAttr {
+            ino: DEFAULT_ZFF_IMAGE_INODE,
+            size: size,
+            blocks: size / DEFAULT_BLOCKSIZE as u64 + 1,
+            atime: UNIX_EPOCH, // 1970-01-01 00:00:00
+            mtime: UNIX_EPOCH,
+            ctime: UNIX_EPOCH,
+            crtime: UNIX_EPOCH,
+            kind: FileType::RegularFile,
+            perm: DEFAULT_ZFF_IMAGE_FILE_PERMISSION,
+            nlink: DEFAULT_ZFF_IMAGE_HARDLINKS,
+            uid: Uid::effective().into(),
+            gid: Gid::effective().into(),
+            rdev: 0,
+            flags: 0,
+            blksize: DEFAULT_BLOCKSIZE,
+        };
+        attr
+    }
+
     //TODO return Result<String>.
     fn serialize_metadata(&self) -> String {
-        let serialized_data = match toml::Value::try_from(&self.zff_header) {
+        let serialized_data = match toml::Value::try_from(&self.zff_reader.main_header()) {
             Ok(value) => value,
             Err(_) => {
                 println!("{}", ERROR_SERIALIZE_METADATA);
@@ -81,10 +105,12 @@ impl ZffFS {
     }
 }
 
-impl Filesystem for ZffFS {
+impl<R: Read + Seek> Filesystem for ZffFS<R> {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == DEFAULT_DIR_INODE && name.to_str() == Some(DEFAULT_METADATA_NAME) {
             reply.entry(&TTL, &self.metadata_fileattr(), DEFAULT_ENTRY_GENERATION);
+        } else if parent == DEFAULT_DIR_INODE && name.to_str() == Some(DEFAULT_ZFF_IMAGE_NAME) {
+            reply.entry(&TTL, &self.zff_image_fileattr(), DEFAULT_ENTRY_GENERATION);
         } else {
             reply.error(ENOENT);
         }
@@ -94,6 +120,7 @@ impl Filesystem for ZffFS {
         match ino {
             DEFAULT_DIR_INODE => reply.attr(&TTL, &DEFAULT_DIR_ATTR),
             DEFAULT_METADATA_INODE => reply.attr(&TTL, &self.metadata_fileattr()),
+            DEFAULT_ZFF_IMAGE_INODE => reply.attr(&TTL, &self.zff_image_fileattr()),
             _ => reply.error(ENOENT),
         }
     }
@@ -104,13 +131,27 @@ impl Filesystem for ZffFS {
         ino: u64,
         _fh: u64,
         offset: i64,
-        _size: u32,
+        size: u32,
         _flags: i32,
         _lock: Option<u64>,
         reply: ReplyData,
     ) {
         if ino == DEFAULT_METADATA_INODE {
             reply.data(&self.serialize_metadata().as_bytes()[offset as usize..]);
+        } else if ino == DEFAULT_ZFF_IMAGE_INODE {
+            let mut buffer = vec![0u8; size as usize];
+            match self.zff_reader.seek(SeekFrom::Start(offset as u64)) {
+                Ok(_) => (),
+                Err(_) => {
+                    println!("{}", ERROR_ZFFFS_READ_SEEK);
+                    exit(EXIT_STATUS_ERROR);
+                }
+            };
+            match self.zff_reader.read(&mut buffer) {
+                Ok(_) => (),
+                Err(e) => println!("{}{}", ERROR_ZFFFS_READ_READ, e.to_string()),
+            };
+            reply.data(&buffer);
         } else {
             reply.error(ENOENT);
         }
@@ -133,6 +174,7 @@ impl Filesystem for ZffFS {
             (DEFAULT_DIR_INODE, FileType::Directory, "."),
             (DEFAULT_DIR_INODE, FileType::Directory, ".."),
             (DEFAULT_METADATA_INODE, FileType::RegularFile, DEFAULT_METADATA_NAME),
+            (DEFAULT_ZFF_IMAGE_INODE, FileType::RegularFile, DEFAULT_ZFF_IMAGE_NAME),
         ];
 
         for (i, entry) in entries.into_iter().enumerate().skip(offset as usize) {
@@ -170,17 +212,48 @@ fn main() {
     let arguments = arguments();
 
     // Calling .unwrap() is safe here because the arguments are *required*.
-    let input_path = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
-    let mut input_file = match File::open(input_path) {
-        Ok(file) => file,
-        Err(_) => {
-            println!("{}", ERROR_OPEN_INPUT_FILE);
+    let input_filename = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
+    let mut input_file_paths = Vec::new();
+
+    let input_path = match PathBuf::from(&input_filename).parent() {
+        Some(p) => match read_dir(p) {
+            Ok(iter) => iter,
+            Err(_) => {
+                println!("errr");
+                exit(EXIT_STATUS_ERROR);
+            }
+        },
+        None => {
+            println!("could not determine input path!");
             exit(EXIT_STATUS_ERROR);
         }
     };
+    for filename in input_path {
+        match filename {
+            Ok(n) if n.path().is_file() => {
+                if n.path().file_stem() == input_filename.file_stem() {
+                    input_file_paths.push(n.path());
+                }
+            }
+            _ => ()
+        }
+    }
     let mountpoint = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_MOUNT_DIR).unwrap());
 
-    let zff_fs = match ZffFS::new(&mut input_file) {
+    input_file_paths.sort();
+    let mut input_files = Vec::new();
+    for path in input_file_paths {
+        let segment_file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => {
+                println!("{}{}", ERROR_OPEN_INPUT_FILE, path.to_string_lossy());
+                exit(EXIT_STATUS_ERROR);
+            }
+        };
+        input_files.push(segment_file);
+    }
+
+    let zff_fs = match ZffFS::new(input_files) {
         Ok(fs) => fs,
         Err(e) => {
             println!("{}{}", ERROR_CREATE_ZFFFS, e.to_string());

@@ -22,10 +22,12 @@ pub const CLAP_ARG_SHORT_MOUNT_DIR: &str = "m";
 pub const CLAP_ARG_LONG_MOUNT_DIR: &str = "mount-dir";
 
 // - errrors
-pub const ERROR_OPEN_INPUT_FILE: &str = "An errror occurred while trying to open the input file.";
+pub const ERROR_OPEN_INPUT_FILE: &str = "An errror occurred while trying to open the input file: ";
 pub const ERROR_SERIALIZE_METADATA: &str = "Could not serialize the metadata of the main header.";
 pub const ERROR_CREATE_ZFFFS: &str = "Error occurred while trying to create the Zffs-FS: ";
 pub const ERROR_MOUNT_ZFFFS: &str = "Error occurred while trying to mount the file(s): ";
+pub const ERROR_ZFFFS_READ_SEEK: &str = "Could not read data at given offset.";
+pub const ERROR_ZFFFS_READ_READ: &str = "An I/O error has occurred: ";
 
 pub const EXIT_STATUS_ERROR: i32 = 1;
 pub const EXIT_STATUS_SUCCESS: i32 = 0;
@@ -42,6 +44,12 @@ pub const DEFAULT_METADATA_NAME: &'static str = "metadata.toml";
 pub const DEFAULT_METADATA_INODE: u64 = 2;
 pub const DEFAULT_METADATA_FILE_PERMISSION: u16 = 0o644;
 pub const DEFAULT_METADATA_HARDLINKS: u32 = 1;
+
+// zff image file
+pub const DEFAULT_ZFF_IMAGE_NAME: &'static str = "zff_image.dd";
+pub const DEFAULT_ZFF_IMAGE_INODE: u64 = 3;
+pub const DEFAULT_ZFF_IMAGE_FILE_PERMISSION: u16 = 0o644;
+pub const DEFAULT_ZFF_IMAGE_HARDLINKS: u32 = 1;
 
 
 pub const DEFAULT_DIR_ATTR: FileAttr = FileAttr {
