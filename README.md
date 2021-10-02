@@ -36,11 +36,13 @@ This repository contains several tools to work zff images (or acquire them). All
 
 # Planned features until zff reaches version 1.0
 - testing / unit tests
-- documentation (with deny nodoc)
+- documentation (with deny nodoc) 100%
 - Keyfile support for encryption
 - parallelism impl of hashing/crc/signing<->writing data
 - impl Error handling @zffacquire if IoError->Interupt.
 	-> Number of retries / sectors used as error granularity
 - LZ4 compression algorithm
 - Migrate HeaderEncoder/HeaderDecoder -> HeaderCoding
-- data.dd impl for zffmount
+- code cleanup
+--> SegmentWriter
+--> Zff-lib refactoring.
