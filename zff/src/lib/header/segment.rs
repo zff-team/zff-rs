@@ -1,5 +1,6 @@
 // - STD
 use std::cmp::{PartialEq};
+use std::borrow::Borrow;
 use std::io::{Cursor,Read,Seek,SeekFrom};
 use std::collections::HashMap;
 
@@ -9,14 +10,22 @@ use crate::{
 	HeaderObject,
 	HeaderEncoder,
 	HeaderDecoder,
+	header::{ChunkHeader},
 	ValueEncoder,
 	ValueDecoder,
+	ZffError,
+	ZffErrorKind,
+	CompressionAlgorithm,
 	HEADER_IDENTIFIER_SEGMENT_HEADER,
 	HEADER_IDENTIFIER_SEGMENT_FOOTER,
+	CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE,
+	CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE,
 };
 
 // - external
 use serde::{Serialize};
+use slice::IoSlice;
+use zstd;
 
 /// The segment header contains all informations about the specific segment. Each segment has his own segment header.\
 /// This header is **not** a part of the main header.\
@@ -30,6 +39,17 @@ pub struct SegmentHeader {
 }
 
 impl SegmentHeader {
+	/// creates a new empty segment header
+	pub fn new_empty(header_version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
+		Self {
+			header_version: header_version,
+			unique_identifier: unique_identifier,
+			segment_number: segment_number,
+			length_of_segment: 0,
+			footer_offset: 0,
+		}
+	}
+
 	/// returns a new segment header with the given values.
 	pub fn new(header_version: u8, unique_identifier: i64, segment_number: u64, length_of_segment: u64, footer_offset: u64) -> SegmentHeader {
 		Self {
@@ -101,6 +121,7 @@ impl HeaderObject for SegmentHeader {
 		vec.append(&mut self.unique_identifier.encode_directly());
 		vec.append(&mut self.segment_number.encode_directly());
 		vec.append(&mut self.length_of_segment.encode_directly());
+		vec.append(&mut self.footer_offset.encode_directly());
 
 		vec
 	}
@@ -199,8 +220,8 @@ pub struct Segment<R: Read + Seek> {
 	chunk_offsets: HashMap<u64, u64> //<chunk number, offset>
 }
 
-impl<R: Read + Seek> Segment<R> {
-	pub fn new(header: SegmentHeader, data: R, chunk_offsets: HashMap<u64, u64>) -> Segment<R> {
+impl<R: 'static +  Read + Seek> Segment<R> {
+	fn new(header: SegmentHeader, data: R, chunk_offsets: HashMap<u64, u64>) -> Segment<R> {
 		Self {
 			header: header,
 			data: data,
@@ -208,10 +229,12 @@ impl<R: Read + Seek> Segment<R> {
 		}
 	}
 
-	pub fn new_from_reader(mut data: R, initial_chunk_number: u64) -> Result<Segment<R>> {
+	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
+		let stream_position = data.stream_position()?; //uses the current stream position. This is important for the first segment (which contains a main header);
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
-		
 		let footer_offset = segment_header.footer_offset();
+		let initial_chunk_header = ChunkHeader::decode_directly(&mut data)?;
+		let initial_chunk_number = initial_chunk_header.chunk_number();
 		data.seek(SeekFrom::Start(footer_offset))?;
 		let segment_footer = SegmentFooter::decode_directly(&mut data)?;
 		let mut chunk_offsets = HashMap::new();
@@ -220,11 +243,41 @@ impl<R: Read + Seek> Segment<R> {
 			chunk_offsets.insert(chunk_number, *offset);
 			chunk_number += 1;
 		}
-
-		data.seek(SeekFrom::Start(0))?;
+		data.seek(SeekFrom::Start(stream_position))?;
 		let _ = SegmentHeader::decode_directly(&mut data)?;
-
 		Ok(Self::new(segment_header, data, chunk_offsets))
+	}
+
+	pub fn chunk_data<C>(&mut self, chunk_number: u64, compression_algorithm: C) -> Result<Vec<u8>>
+	where
+		C: Borrow<CompressionAlgorithm>,
+	{
+		let chunk_offset = match self.chunk_offsets.get(&chunk_number) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, ""))
+		};
+		self.data.seek(SeekFrom::Start(*chunk_offset))?;
+		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
+		let chunk_size = chunk_header.chunk_size();
+		let chunk_header_size = if chunk_header.signature().is_some() {
+			CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE
+		} else {
+			CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE
+		};
+		let bytes_to_skip = chunk_header_size as u64 + *chunk_offset;
+		let mut chunk_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
+		let mut buffer = Vec::new();
+		match compression_algorithm.borrow() {
+			CompressionAlgorithm::None => {
+				chunk_data.read_to_end(&mut buffer)?;
+				return Ok(buffer);
+			}
+			CompressionAlgorithm::Zstd => {
+				let mut decoder = zstd::stream::read::Decoder::new(chunk_data)?;
+				decoder.read_to_end(&mut buffer)?;
+				return Ok(buffer);
+			}
+		}
 	}
 
 	pub fn header(&self) -> &SegmentHeader {
