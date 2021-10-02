@@ -23,7 +23,7 @@ rand = "0.7.3"
 base64 = "0.13.0"
 serde = { version = "1.0", features = ["derive"] }
 hex = "0.4.3"
-concat-reader = "0.1.0"
+slice = "0.0.4"
 #encryption
 pkcs5 = { version = "0.3.0", features = [ "pbes2", "alloc" ] }
 aes-gcm-siv = "0.10.3"
