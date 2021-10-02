@@ -17,13 +17,7 @@ use crate::{
 };
 
 /// Header for chunk data.\
-/// Each chunk has his own chunk header. A chunk header has the following layout:
-/// 
-/// | Magic bytes | Header length | header version | chunk number | chunk size | crc32   | ed25519 signature<br>\<OPTIONAL\> |
-/// |-------------|---------------|----------------|--------------|------------|---------|-----------------------------------|
-/// | 4 bytes     | 8 bytes       | 1 byte         | 8 bytes      | 8 bytes    | 4 bytes | 64 bytes                          |
-/// | 0x7A666643  | uint64        | uint8          | uint64       | uint64     | uint32  | \<BYTES\>                         |
-/// after the header, the chunked data follows.
+/// Each chunk has his own chunk header. After the header, the chunked data follows.
 #[derive(Debug,Clone)]
 pub struct ChunkHeader {
 	header_version: u8,
@@ -34,6 +28,17 @@ pub struct ChunkHeader {
 }
 
 impl ChunkHeader {
+	/// creates a new empty header
+	pub fn new_empty(header_version: u8, chunk_number: u64) -> ChunkHeader {
+		Self {
+			header_version: header_version,
+			chunk_number: chunk_number,
+			chunk_size: 0,
+			crc32: 0,
+			ed25519_signature: None,
+		}
+	}
+
 	/// creates a new header from the given data.
 	pub fn new(header_version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
 		Self {
@@ -78,6 +83,11 @@ impl ChunkHeader {
 	/// returns the chunk number of the chunk (header).
 	pub fn chunk_number(&self) -> u64 {
 		self.chunk_number
+	}
+
+	/// returns the signature, if available
+	pub fn signature(&self) -> &Option<[u8; SIGNATURE_LENGTH]> {
+		&self.ed25519_signature
 	}
 }
 
