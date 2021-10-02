@@ -41,11 +41,18 @@ pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE: &'static str = "Unknown
 pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED: &'static str = "The main header is encrypted.";
 pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED: &'static str = "The main header is not encrypted.";
 
+pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &'static str = "The segment of the chunk was not found.";
+
+pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &'static str = "Unseekable position (position is negative).";
+
 // Default values
 /// the default chunk size as 2^x. This value is 15, so the default chunk size is 2^15 = 32768 bytes.
 pub const DEFAULT_CHUNK_SIZE: u8 = 15;
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
-pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE: usize = 21;
+pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE: usize = 33;
+pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE: usize = 97;
 pub(crate) const DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY: usize = 21;
 pub(crate) const DEFAULT_SEGMENT_FOOTER_VERSION: u8 = 1;
+pub const DEFAULT_SEGMENT_HEADER_VERSION: u8 = 1;
+pub const DEFAULT_CHUNK_HEADER_VERSION: u8 = 1;
