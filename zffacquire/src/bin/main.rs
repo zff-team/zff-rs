@@ -431,7 +431,7 @@ where
         hasher_map.insert(value.hash_type().clone(), hasher);
     };
     
-    let mut written_bytes = match write_segment(
+    let (_, mut read_bytes) = match write_segment(
         &mut input_file,
         &mut output_file,
         &mut segment_header,
@@ -442,15 +442,14 @@ where
         first_segment_size as usize,
         &encryption,
         &mut hasher_map,
-        &signature_key) {
+        &signature_key,
+        encoded_main_header.len() as u64) {
         Ok(val) => val,
         Err(e) => {
             println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
             exit(EXIT_STATUS_ERROR);
         },
     };
-
-    segment_header.set_length_of_segment(written_bytes);
 
     loop {
         let mut segment_header = segment_header.next_header();
@@ -471,15 +470,7 @@ where
             }
         };
 
-        match output_file.write(&segment_header.encode_directly()) {
-            Ok(_) => (),
-            Err(_) => {
-                println!("{}{}", ERROR_WRITE_SEGMENT_HEADER, segment_filename.to_string_lossy());
-                exit(EXIT_STATUS_ERROR);
-            }
-        };
-
-        let written_bytes_in_segment = match write_segment(
+        let (written_bytes_in_segment, read_bytes_in_segment) = match write_segment(
             &mut input_file,
             &mut output_file,
             &mut segment_header,
@@ -490,7 +481,8 @@ where
             segment_size as usize,
             &encryption,
             &mut hasher_map,
-            &signature_key) {
+            &signature_key,
+            0) {
             Ok(val) => val,
             Err(e) => {
                 println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
@@ -501,23 +493,7 @@ where
             let _ = remove_file(segment_filename);
             break;
         } else {
-            written_bytes += written_bytes_in_segment;
-            //rewrite segment header with the correct number of bytes.
-            segment_header.set_length_of_segment(written_bytes_in_segment);
-            match output_file.seek(SeekFrom::Start(0)) {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("{}{}", ERROR_REWRITE_SEGMENT_HEADER, e.to_string());
-                    exit(EXIT_STATUS_ERROR);
-                }
-            };
-            match output_file.write(&segment_header.encode_directly()) {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("{}{}", ERROR_REWRITE_SEGMENT_HEADER, e.to_string());
-                    exit(EXIT_STATUS_ERROR);
-                }
-            };
+            read_bytes += read_bytes_in_segment;
         }
     }
 
@@ -531,7 +507,7 @@ where
     let hash_header = HashHeader::new(HASH_HEADER_VERSION, hash_values);
 
     //rewrite main_header with the correct number of bytes of the COMPRESSED data.
-    main_header.set_length_of_data(written_bytes);
+    main_header.set_length_of_data(read_bytes);
     main_header.set_hash_header(hash_header);
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(now) => main_header.set_acquisition_end(now.as_secs()),
@@ -598,6 +574,8 @@ fn main() {
 
     let encrypt_header = arguments.is_present(CLAP_ARG_NAME_ENCRYPTED_HEADER);
 
+    let unique_identifier = segment_header.unique_identifier();
+
     let main_header = MainHeader::new(
         MAIN_HEADER_VERSION,
         encryption_header.clone(),
@@ -607,6 +585,7 @@ fn main() {
         chunk_size,
         signature_flag,
         segment_size,
+        unique_identifier,
         0 //length of data
         );
 
