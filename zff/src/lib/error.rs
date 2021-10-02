@@ -12,17 +12,17 @@ use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
 
 /// The main error-type of this crate.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ZffError {
 	details: String,
 	kind: ZffErrorKind,
 }
 
 /// Contains the variants/kinds of errors, which could be find in this crate.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ZffErrorKind {
 	/// contains a std::io::Error.
-	IoError,
+	IoError(io::Error),
 	/// contains a pkcs5::CryptoError.
 	PKCS5CryptoError,
 	/// contains a STD FromUtf8Error.
@@ -51,13 +51,17 @@ pub enum ZffErrorKind {
 	/// Error will be returned, if the given value key is not on position.
 	HeaderDecoderKeyNotOnPosition,
 	/// Error will be returned, if header is encrypted.
-	HeaderDecodeEncryptedMainHeader
+	HeaderDecodeEncryptedMainHeader,
+	/// Error will be returned, if you try to get the data of a chunk number which not exists in this segment.
+	DataDecodeChunkNumberNotInSegment,
+	/// Error will be returned, if you try to create a segment with a segment number < 1;
+	NullOrNegativeSegmentNumber,
 }
 
 impl fmt::Display for ZffErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let err_msg = match self {
-			ZffErrorKind::IoError => "IoError",
+			ZffErrorKind::IoError(_) => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
 			ZffErrorKind::Custom => "Custom",
 			ZffErrorKind::FileExtensionParserError => "FileExtensionParserError",
@@ -72,6 +76,8 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::HeaderDecodeMismatchIdentifier => "HeaderDecodeMismatchIdentifier",
 			ZffErrorKind::HeaderDecoderKeyNotOnPosition => "HeaderDecoderKeyNotOnPosition",
 			ZffErrorKind::HeaderDecodeEncryptedMainHeader => "HeaderDecodeEncryptedMainHeader",
+			ZffErrorKind::DataDecodeChunkNumberNotInSegment => "DataDecodeChunkNumberNotInSegment",
+			ZffErrorKind::NullOrNegativeSegmentNumber => "NullOrNegativeSegmentNumber",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -142,7 +148,7 @@ impl ZffError {
 		}
 	}
 
-	/// Returns the error kind.
+	/// Returns a reference to the kind.
 	/// # Example
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
@@ -161,11 +167,31 @@ impl ZffError {
 	pub fn get_kind(&self) -> &ZffErrorKind {
 		return &self.kind
 	}
+
+	/// returns the error kind and consumes self.
+	/// # Example
+	/// ```
+	/// use zff::{ZffError, ZffErrorKind, Result};
+	/// fn my_func() -> Result<()> {
+	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
+	///		Err(custom_error)
+	/// }
+	/// fn main() {
+	/// 	match my_func() {
+	/// 		Err(x) => {
+	/// 			assert!(matches!(x.unwrap_kind(), ZffErrorKind::Custom));
+	/// 		},
+	/// 		_ => ()
+	/// 	}
+	/// }
+	pub fn unwrap_kind(self) -> ZffErrorKind {
+		return self.kind
+	}
 }
 
 impl From<io::Error> for ZffError {
 	fn from(e: io::Error) -> ZffError {
-		ZffError::new(ZffErrorKind::IoError, e.to_string())
+		ZffError::new(ZffErrorKind::IoError(e), "IoError")
 	}
 }
 
