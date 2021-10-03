@@ -39,17 +39,6 @@ pub struct SegmentHeader {
 }
 
 impl SegmentHeader {
-	/// creates a new empty segment header
-	pub fn new_empty(header_version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
-		Self {
-			header_version: header_version,
-			unique_identifier: unique_identifier,
-			segment_number: segment_number,
-			length_of_segment: 0,
-			footer_offset: 0,
-		}
-	}
-
 	/// returns a new segment header with the given values.
 	pub fn new(header_version: u8, unique_identifier: i64, segment_number: u64, length_of_segment: u64, footer_offset: u64) -> SegmentHeader {
 		Self {
@@ -254,7 +243,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 	{
 		let chunk_offset = match self.chunk_offsets.get(&chunk_number) {
 			Some(offset) => offset,
-			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, ""))
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
 		};
 		self.data.seek(SeekFrom::Start(*chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;

@@ -35,7 +35,7 @@ pub const EXIT_STATUS_SUCCESS: i32 = 0;
 // fuser constants
 pub const TTL: Duration = Duration::from_secs(1); // 1 second
 pub const DEFAULT_BLOCKSIZE: u32 = 512;
-pub const FILESYSTEM_NAME: &str = "ZffFS";
+pub const FILESYSTEM_NAME: &str = "zfffs";
 
 pub const DEFAULT_DIR_INODE: u64 = 1;
 

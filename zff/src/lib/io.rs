@@ -216,10 +216,8 @@ where
 						_ => return Err(e),
 					},
 				};
-				chunk_offsets.push(seek_value + segment_header_length + written_bytes);
 				written_bytes += written_in_chunk;
 				read_bytes += read_in_chunk;
-				chunk_header.next_number();
 			},
 			Some(ref encryption) => {
 				let (written_in_chunk, read_in_chunk) = match write_encrypted_chunk(
@@ -245,12 +243,12 @@ where
 						_ => return Err(e),
 					},
 				};
-				chunk_offsets.push(seek_value + segment_header_length + written_bytes);
 				written_bytes += written_in_chunk;
 				read_bytes += read_in_chunk;
-				chunk_header.next_number();
 			}
 		}
+		chunk_offsets.push(seek_value + segment_header_length + written_bytes);
+		chunk_header.next_number();
 	}
 	segment_header.set_footer_offset(seek_value + segment_header_length + written_bytes);
 	let segment_footer = SegmentFooter::new(DEFAULT_SEGMENT_FOOTER_VERSION, chunk_offsets);
