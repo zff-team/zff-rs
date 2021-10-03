@@ -368,6 +368,7 @@ impl Serialize for MainHeader {
 
         state.serialize_field("signature_flag", &(self.signature_flag != 0))?;
         state.serialize_field("segment_size", &self.segment_size.to_string())?;
+        state.serialize_field("unique identifier", &self.unique_identifier)?;
 
         state.serialize_field("length_of_data", &self.length_of_data.to_string())?;
         state.end()
