@@ -45,6 +45,8 @@ pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &'static str = "The segment 
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &'static str = "Unseekable position (position is negative).";
 
+pub(crate) const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred while trying to rewrite the main header to the output file. The written data length specified is not correctly listed in the header.";
+
 // Default values
 /// the default chunk size as 2^x. This value is 15, so the default chunk size is 2^15 = 32768 bytes.
 pub const DEFAULT_CHUNK_SIZE: u8 = 15;
@@ -56,3 +58,5 @@ pub(crate) const DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY: usize = 21;
 pub(crate) const DEFAULT_SEGMENT_FOOTER_VERSION: u8 = 1;
 pub const DEFAULT_SEGMENT_HEADER_VERSION: u8 = 1;
 pub const DEFAULT_CHUNK_HEADER_VERSION: u8 = 1;
+pub const DEFAULT_HASH_VALUE_HEADER_VERSION: u8 = 1;
+pub const DEFAULT_HASH_HEADER_VERSION: u8 = 1;
