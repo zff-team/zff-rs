@@ -28,12 +28,7 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 use hex::ToHex;
 
 /// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
-/// The encryption header is the only optional header part of the main header and has following layout:
-/// 
-/// |          | Magic bytes    | Header length  | header version | pbe header    | algorithm | encrypted<br>encryption<br>key | encryption key<br>nonce |
-/// |----------|----------------|----------------|---------------|-----------|--------------------------------|-------------------------|
-/// | **size** | 4 bytes        | 8 bytes        | 1 byte         | variable      | 1 byte    | variable                       | 12 byte                 |
-/// | **type** | 0x7A666665     | uint64         | uint8          | header object | uint8     | Bytes                          | Bytes                   |
+/// The encryption header is the only optional header part of the main header.
 #[derive(Debug,Clone)]
 pub struct EncryptionHeader {
 	header_version: u8,
