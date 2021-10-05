@@ -39,6 +39,8 @@ pub enum ZffErrorKind {
 	WrongSignatureKeyLength,
 	/// If the encryption header is missing, but you call a method to encrypt the header or data.
 	MissingEncryptionHeader,
+	/// Error returns, if an encryption operation expect an encryption key but none is given.
+	MissingEncryptionKey,
 	/// This is not an error in the strict sense. If you read a source file and reach the EOF,
 	/// you will get this error kind to handle your next steps.
 	ReadEOF,
@@ -56,6 +58,11 @@ pub enum ZffErrorKind {
 	DataDecodeChunkNumberNotInSegment,
 	/// Error will be returned, if you try to create a segment with a segment number < 1;
 	NullOrNegativeSegmentNumber,
+	/// Error will be returned, if the segment size is too small.
+	SegmentSizeToSmall,
+	/// Error will be returned, if the main header could not be encrypted.
+	MainHeaderEncryptionError
+
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -71,6 +78,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::FromUtf8Error => "FromUtf8Error",
 			ZffErrorKind::WrongSignatureKeyLength => "WrongSignatureKeyLength",
 			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
+			ZffErrorKind::MissingEncryptionKey => "MissingEncryptionKey",
 			ZffErrorKind::ReadEOF => "ReadEOF",
 			ZffErrorKind::HeaderDecodeError => "HeaderDecodeError",
 			ZffErrorKind::HeaderDecodeMismatchIdentifier => "HeaderDecodeMismatchIdentifier",
@@ -78,6 +86,8 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::HeaderDecodeEncryptedMainHeader => "HeaderDecodeEncryptedMainHeader",
 			ZffErrorKind::DataDecodeChunkNumberNotInSegment => "DataDecodeChunkNumberNotInSegment",
 			ZffErrorKind::NullOrNegativeSegmentNumber => "NullOrNegativeSegmentNumber",
+			ZffErrorKind::SegmentSizeToSmall => "SegmentSizeToSmall",
+			ZffErrorKind::MainHeaderEncryptionError => "MainHeaderEncryptionError",
 		};
 	write!(f, "{}", err_msg)
 	}
