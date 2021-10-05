@@ -364,7 +364,7 @@ impl Serialize for MainHeader {
 
         state.serialize_field("description", &self.description_header)?;
         state.serialize_field("hashing", &self.hash_header)?;
-        state.serialize_field("chunk_size", &self.chunk_size)?;
+        state.serialize_field("chunk_size", &(1<<&self.chunk_size))?;
 
         state.serialize_field("signature_flag", &(self.signature_flag != 0))?;
         state.serialize_field("segment_size", &self.segment_size.to_string())?;
