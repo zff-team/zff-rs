@@ -39,6 +39,16 @@ pub struct SegmentHeader {
 }
 
 impl SegmentHeader {
+	/// returns a new empty segment header
+	pub fn new_empty(header_version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
+		Self {
+			header_version: header_version,
+			unique_identifier: unique_identifier,
+			segment_number: segment_number,
+			length_of_segment: 0,
+			footer_offset: 0,
+		}
+	}
 	/// returns a new segment header with the given values.
 	pub fn new(header_version: u8, unique_identifier: i64, segment_number: u64, length_of_segment: u64, footer_offset: u64) -> SegmentHeader {
 		Self {
