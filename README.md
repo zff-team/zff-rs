@@ -29,10 +29,10 @@ This repository contains several tools to work zff images (or acquire them). All
 
 | Name | Type | Description | Crates.io | MRSV |
 |------|:----:|:------------|:---------:|:----:|
-| zff  | library | Library to handle the zff format | coming soon | 1.51 |
-| zffacquire | binary | Tool to acquire disk images in zff format | coming soon | 1.51 |
-| zffmetareader | binary | Tool to get meta information about a zff image | coming soon | 1.51 |
-| zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.51 |
+| zff  | library | Library to handle the zff format | coming soon | 1.55 |
+| zffacquire | binary | Tool to acquire disk images in zff format | coming soon | 1.55 |
+| zffmetareader | binary | Tool to get meta information about a zff image | coming soon | 1.55 |
+| zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.55 |
 
 # Planned features until zff reaches version 1.0
 - testing / unit tests
