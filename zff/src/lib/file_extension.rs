@@ -31,7 +31,7 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 		Err(e) => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, e.to_string())),
 	};
 	next_value += 1;
-	if next_value <= 99 {
+	if next_value <= 9 {
 		return Ok(String::from("z0") + &next_value.to_string())
 	} else {
 		Ok(String::from("z") + &next_value.to_string())
