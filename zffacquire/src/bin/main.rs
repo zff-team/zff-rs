@@ -2,10 +2,8 @@
 use std::{
     time::{SystemTime,UNIX_EPOCH},
     path::{PathBuf},
-    fs::{File, remove_file},
+    fs::{File},
     process::exit,
-    io::{Write, Seek, SeekFrom},
-    collections::HashMap,
 };
 
 // - extern crates
@@ -24,14 +22,12 @@ use zff::{
     CompressionAlgorithm,
     HashType,
     Hash,
-    HeaderEncoder,
     KDFScheme,
     PBEScheme,
-    write_segment,
-    file_extension_next_value,
+    ZffWriter,
     Encryption,
     Signature,
-    FILE_EXTENSION_FIRST_VALUE,
+    ZffErrorKind,
     DEFAULT_CHUNK_SIZE,
 };
 
@@ -352,202 +348,6 @@ fn get_hashes(arguments: &ArgMatches) -> Vec<HashValue> {
     hashvalues
 }
 
-fn write_to_output<O>(
-    input_path: &PathBuf,
-    output_filename: O,
-    mut main_header: MainHeader,
-    compression_header: CompressionHeader,
-    mut segment_header: SegmentHeader,
-    encryption_key: Option<Vec<u8>>,
-    encryption_header: Option<EncryptionHeader>,
-    hash_values: Vec<HashValue>,
-    signature_key: Option<Keypair>,
-    encrypt_header: bool)
-where
-    O: Into<String>,
-{
-    let mut input_file = match File::open(input_path) {
-        Ok(file) => file,
-        Err(e) => {
-            println!("{}{}", ERROR_OPEN_INPUT_FILE, e.to_string());
-            exit(EXIT_STATUS_ERROR);
-        },
-    };
-    let output_filename = output_filename.into();
-    let segment_size = main_header.segment_size();
-
-    let header_size = main_header.get_encoded_size();
-
-    let chunk_size = main_header.chunk_size();
-    let mut chunk_header = ChunkHeader::new(CHUNK_HEADER_VERSION, DEFAULT_CHUNK_STARTVALUE, 0, 0, None);
-
-    if (segment_size as usize) < header_size {
-        println!("{}", ERROR_SEGMENT_SIZE_TOO_SMALL_FOR_MAINHEADER);
-        exit(EXIT_STATUS_ERROR);
-    }
-    let first_segment_size = segment_size as usize - header_size;
-    let mut first_segment_filename = PathBuf::from(&output_filename);
-    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
-    first_segment_filename.set_extension(&file_extension);
-
-    let mut output_file = match File::create(&first_segment_filename) {
-        Ok(file) => file,
-        Err(_) => {
-            println!("{}{}", ERROR_CREATE_OUTPUT_FILE, &first_segment_filename.to_string_lossy());
-            exit(EXIT_STATUS_ERROR);
-        }
-    };
-
-    let encoded_main_header = match &encryption_key {
-        None => main_header.encode_directly(),
-        Some(key) => match main_header.encode_encrypted_header_directly(key) {
-            Ok(data) => data,
-            Err(e) => {
-                println!("{}{}", ERROR_WRITE_ENCRYPTED_MAIN_HEADER, e.to_string());
-                exit(EXIT_STATUS_ERROR);
-            }
-        },
-    };
-
-    match output_file.write(&encoded_main_header) {
-        Ok(_) => (),
-        Err(e) => {
-            println!("{}{}", ERROR_WRITE_MAIN_HEADER, e.to_string());
-            exit(EXIT_STATUS_ERROR);
-        }
-    };
-
-    let encryption = match encryption_key {
-        None => None,
-        Some(ref key) => match encryption_header {
-            None => None,
-            Some(header) => Some((key, header.algorithm().clone()))
-        },
-    };
-
-    let mut hasher_map = HashMap::new();
-    for value in hash_values {
-        let hasher = Hash::new_hasher(value.hash_type());
-        hasher_map.insert(value.hash_type().clone(), hasher);
-    };
-    
-    let (_, mut read_bytes) = match write_segment(
-        &mut input_file,
-        &mut output_file,
-        &mut segment_header,
-        chunk_size,
-        &mut chunk_header,
-        compression_header.algorithm(),
-        compression_header.level(),
-        first_segment_size as usize,
-        &encryption,
-        &mut hasher_map,
-        &signature_key,
-        encoded_main_header.len() as u64) {
-        Ok(val) => val,
-        Err(e) => {
-            println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
-            exit(EXIT_STATUS_ERROR);
-        },
-    };
-
-    loop {
-        let mut segment_header = segment_header.next_header();
-        file_extension = match file_extension_next_value(&file_extension) {
-            Ok(val) => val,
-            Err(e) => {
-                println!("{}{}", ERROR_SET_FILE_EXTENSION, e.to_string());
-                exit(EXIT_STATUS_ERROR);
-            }
-        };
-        let mut segment_filename = PathBuf::from(&output_filename);
-        segment_filename.set_extension(&file_extension);
-        let mut output_file = match File::create(&segment_filename) {
-            Ok(file) => file,
-            Err(_) => {
-                println!("{}{}", ERROR_CREATE_OUTPUT_FILE, &segment_filename.to_string_lossy());
-                exit(EXIT_STATUS_ERROR);
-            }
-        };
-
-        let (written_bytes_in_segment, read_bytes_in_segment) = match write_segment(
-            &mut input_file,
-            &mut output_file,
-            &mut segment_header,
-            chunk_size,
-            &mut chunk_header,
-            compression_header.algorithm(),
-            compression_header.level(),
-            segment_size as usize,
-            &encryption,
-            &mut hasher_map,
-            &signature_key,
-            0) {
-            Ok(val) => val,
-            Err(e) => {
-                println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, e.to_string());
-                exit(EXIT_STATUS_ERROR);
-            },
-        };
-        if written_bytes_in_segment == 0 {
-            let _ = remove_file(segment_filename);
-            break;
-        } else {
-            read_bytes += read_bytes_in_segment;
-        }
-    }
-
-    let mut hash_values = Vec::new();
-    for (hash_type, hasher) in hasher_map {
-        let hash = hasher.finalize();
-        let mut hash_value = HashValue::new_empty(HASH_VALUE_HEADER_VERSION, hash_type);
-        hash_value.set_hash(hash.to_vec());
-        hash_values.push(hash_value);
-    }
-    let hash_header = HashHeader::new(HASH_HEADER_VERSION, hash_values);
-
-    //rewrite main_header with the correct number of bytes of the COMPRESSED data.
-    main_header.set_length_of_data(read_bytes);
-    main_header.set_hash_header(hash_header);
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(now) => main_header.set_acquisition_end(now.as_secs()),
-        Err(_) => ()
-    };
-    match output_file.seek(SeekFrom::Start(0)) {
-        Ok(_) => (),
-        Err(e) => {
-            println!("{}{}", ERROR_REWRITE_MAIN_HEADER, e.to_string());
-            exit(EXIT_STATUS_ERROR);
-        }
-    }
-    let encoded_main_header = match &encryption_key {
-        None => main_header.encode_directly(),
-        Some(key) => if encrypt_header {
-          match main_header.encode_encrypted_header_directly(key) {
-                Ok(data) => if data.len() == encoded_main_header.len() {
-                    data
-                } else {
-                    println!("{}", ERROR_REWRITE_MAIN_HEADER);
-                    exit(EXIT_STATUS_ERROR);
-                },
-                Err(e) => {
-                    println!("{}{}", ERROR_WRITE_ENCRYPTED_MAIN_HEADER, e.to_string());
-                    exit(EXIT_STATUS_ERROR);
-                }
-            }  
-        } else {
-            main_header.encode_directly()
-        }  
-    };
-    match output_file.write(&encoded_main_header) {
-        Ok(_) => (),
-        Err(e) => {
-            println!("{}{}", ERROR_REWRITE_MAIN_HEADER, e.to_string());
-            exit(EXIT_STATUS_ERROR);
-        }
-    };
-}
-
 fn main() {
     let arguments = arguments();
     let compression_header = compression_header(&arguments);
@@ -558,6 +358,13 @@ fn main() {
 
     // Calling .unwrap() is safe here because the arguments are *required*.
     let input_path = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
+    let input_file = match File::open(input_path) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("{}{}", ERROR_OPEN_INPUT_FILE, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
     let output_filename = arguments.value_of(CLAP_ARG_NAME_OUTPUT_FILE).unwrap();
     let (encryption_header, encryption_key) = match encryption_header(&arguments) {
         None => (None, None),
@@ -589,15 +396,24 @@ fn main() {
         0 //length of data
         );
 
-    write_to_output(
-        &input_path,
-        output_filename,
-        main_header,
-        compression_header,
-        segment_header,
-        encryption_key,
-        encryption_header,
-        hash_values,
-        signature_key,
-        encrypt_header);
+    let mut zff_writer = ZffWriter::new(main_header, input_file, output_filename, signature_key, encryption_key, encrypt_header);
+    match zff_writer.generate_files() {
+        Ok(_) => (),
+        Err(e) => match e.get_kind() {
+            ZffErrorKind::IoError(io_error) => {
+                println!("{}{}", ERROR_COPY_FILESTREAM_TO_OUTPUT, io_error.to_string());
+                exit(EXIT_STATUS_ERROR);
+            },
+            ZffErrorKind::MissingEncryptionHeader => {
+                println!("{}{}", ERROR_WRITE_ENCRYPTED_MAIN_HEADER, e.to_string());
+                exit(EXIT_STATUS_ERROR);
+            }
+            _ => {
+                println!("{}{}", ERROR_OTHER, e.to_string());
+                exit(EXIT_STATUS_ERROR)
+            }
+        }
+    };
+
+    exit(EXIT_STATUS_SUCCESS);
 }

@@ -1,19 +1,23 @@
 // - STD
 use std::collections::HashMap;
+use std::time::{UNIX_EPOCH, SystemTime};
 use std::io::{Read,Write,Seek,SeekFrom,Cursor};
+use std::path::PathBuf;
+use std::fs::{File, remove_file};
 
 
 // - internal
 use crate::{
 	Result,
-	header::{MainHeader,SegmentHeader,SegmentFooter,Segment,ChunkHeader},
+	header::{MainHeader,SegmentHeader,SegmentFooter,Segment,ChunkHeader, HashValue, HashHeader},
 	CompressionAlgorithm,
 	HeaderEncoder,
 	ZffError,
 	ZffErrorKind,
 	Encryption,
-	EncryptionAlgorithm,
 	HashType,
+	Hash,
+	file_extension_next_value,
 };
 
 use crate::{
@@ -21,6 +25,13 @@ use crate::{
 	DEFAULT_SEGMENT_FOOTER_VERSION,
 	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
 	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
+	DEFAULT_CHUNK_HEADER_VERSION,
+	DEFAULT_SEGMENT_HEADER_VERSION,
+	FILE_EXTENSION_FIRST_VALUE,
+	DEFAULT_HASH_VALUE_HEADER_VERSION,
+	DEFAULT_HASH_HEADER_VERSION,
+	ERROR_REWRITE_MAIN_HEADER,
+
 };
 
 // - external
@@ -28,11 +39,283 @@ use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair,Signer,SIGNATURE_LENGTH};
 use digest::DynDigest;
 
+pub struct ZffWriter<R: Read> {
+	main_header: MainHeader,
+	input: R,
+	output_filenpath: String,
+	read_bytes: u64,
+	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
+	signature_key: Option<Keypair>,
+	encryption_key: Option<Vec<u8>>,
+	header_encryption: bool,
+	current_chunk_no: u64,
+}
 
+impl<R: Read> ZffWriter<R> {
+	pub fn new<O: Into<String>>(
+		main_header: MainHeader,
+		input: R,
+		output_filenpath: O,
+		signature_key: Option<Keypair>,
+		encryption_key: Option<Vec<u8>>,
+		header_encryption: bool) -> ZffWriter<R> {
+		let mut hasher_map = HashMap::new();
+	    for value in main_header.hash_header().hash_values() {
+	        let hasher = Hash::new_hasher(value.hash_type());
+	        hasher_map.insert(value.hash_type().clone(), hasher);
+	    };
+		Self {
+			main_header: main_header,
+			input: input,
+			output_filenpath: output_filenpath.into(),
+			read_bytes: 0,
+			hasher_map: hasher_map,
+			signature_key: signature_key,
+			encryption_key: encryption_key,
+			header_encryption: header_encryption,
+			current_chunk_no: 1,
+		}
+	}
+
+	//TODO: optimization/code cleanup; //returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>)
+	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; SIGNATURE_LENGTH]>)> {
+		let chunk_size = self.main_header.chunk_size();
+	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
+	    self.read_bytes += read_bytes;
+	    if buf.len() == 0 {
+	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+	    };
+	    for hasher in self.hasher_map.values_mut() {
+	    	hasher.update(&buf);
+	    }
+	    let mut crc32_hasher = CRC32Hasher::new();
+	    crc32_hasher.update(&buf);
+	    let crc32 = crc32_hasher.finalize();
+
+	    let signature = match &self.signature_key {
+	    	None => None,
+	    	Some(keypair) => Some(keypair.sign(&buf).to_bytes()),
+	    };
+
+	    match self.main_header.compression_header().algorithm() {
+	    	CompressionAlgorithm::None => return Ok((buf, crc32, signature)),
+	    	CompressionAlgorithm::Zstd => {
+	    		let compression_level = *self.main_header.compression_header().level() as i32;
+	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
+	    		let (buf, _) = buffer_chunk(&mut stream, chunk_size * *self.main_header.compression_header().level() as usize)?;
+	    		Ok((buf, crc32, signature))
+	    	}
+	    }
+	}
+
+	//TODO: optimization/code cleanup; // returns written_bytes
+	fn write_unencrypted_chunk<W>(&mut self, output: &mut W) -> Result<u64> 
+	where
+		W: Write,
+	{
+		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_CHUNK_HEADER_VERSION, self.current_chunk_no);
+		let (compressed_chunk, crc32, signature) = self.prepare_chunk()?;
+		chunk_header.set_chunk_size(compressed_chunk.len() as u64);
+		chunk_header.set_crc32(crc32);
+		chunk_header.set_signature(signature);
+
+		let mut written_bytes = 0;
+		written_bytes += output.write(&chunk_header.encode_directly())?;
+		written_bytes += output.write(&compressed_chunk)?;
+		Ok(written_bytes as u64)
+	}
+
+	//TODO: optimization/code cleanup ; //returns written_bytes
+	fn write_encrypted_chunk<W>(&mut self, output: &mut W, encryption_key: Vec<u8>) -> Result<u64> 
+	where
+		W: Write,
+	{
+		let main_header = self.main_header.clone();
+		let encryption_algorithm = match main_header.encryption_header() {
+			Some(header) => header.algorithm(),
+			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+		};
+		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_CHUNK_HEADER_VERSION, self.current_chunk_no); 
+		let (compressed_chunk, crc32, signature) = self.prepare_chunk()?;
+		let encrypted_data = Encryption::encrypt_message(
+			encryption_key,
+			&compressed_chunk,
+			chunk_header.chunk_number(),
+			encryption_algorithm)?;
+		chunk_header.set_chunk_size(encrypted_data.len() as u64);
+		chunk_header.set_crc32(crc32);
+		chunk_header.set_signature(signature);
+
+		let mut written_bytes = 0;
+		written_bytes += output.write(&chunk_header.encode_directly())?;
+		written_bytes += output.write(&encrypted_data)?;
+		Ok(written_bytes as u64)
+	}
+
+	/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
+	fn write_segment<W>(
+		&mut self,
+		output: &mut W,
+		segment_no: u64,
+		seek_value: u64 // The seek value is a value of bytes you need to skip (e.g. if this segment contains a main_header, you have to skip the main_header..)
+		) -> Result<u64>  // returns written_bytes
+	where
+		W: Write + Seek,
+	{
+		let mut written_bytes: u64 = 0;
+		let mut segment_header = SegmentHeader::new_empty(
+			DEFAULT_SEGMENT_HEADER_VERSION,
+			self.main_header.unique_identifier(),
+			segment_no);
+		let segment_header_length = segment_header.encode_directly().len() as u64;
+		let chunk_size = self.main_header.chunk_size();
+		let segment_size = self.main_header.segment_size();
+
+		let mut chunk_offsets = Vec::new();
+
+		let _ = output.write(&segment_header.encode_directly())?;
+		loop {
+			if (written_bytes +
+				chunk_size as u64 +
+				DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY as u64 +
+				(chunk_offsets.len()*8) as u64) > segment_size-seek_value as u64 {
+
+				if written_bytes == 0 {
+					return Ok(written_bytes);
+				} else {
+					break;
+				}
+			};
+			chunk_offsets.push(seek_value + segment_header_length + written_bytes);
+			let encryption_key = self.encryption_key.clone();
+			match encryption_key {
+				None => {
+					let written_in_chunk = match self.write_unencrypted_chunk(output) {
+						Ok(data) => data,
+						Err(e) => match e.get_kind() {
+							ZffErrorKind::ReadEOF => {
+								if written_bytes == 0 {
+									return Ok(written_bytes);
+								} else {
+									chunk_offsets.pop();
+									break;
+								}
+							},
+							_ => return Err(e),
+						},
+					};
+					written_bytes += written_in_chunk;
+				},
+				Some(encryption) => {
+					let written_in_chunk = match self.write_encrypted_chunk(output, encryption.to_vec()) {
+						Ok(data) => data,
+						Err(e) => match e.get_kind() {
+							ZffErrorKind::ReadEOF => {
+								if written_bytes == 0 {
+  									return Ok(written_bytes);
+								} else {
+									chunk_offsets.pop();
+									break;
+								}
+							},
+							_ => return Err(e),
+						},
+					};
+					written_bytes += written_in_chunk;
+				}
+			}
+			self.current_chunk_no += 1;
+		}
+		segment_header.set_footer_offset(seek_value + segment_header_length + written_bytes);
+		let segment_footer = SegmentFooter::new(DEFAULT_SEGMENT_FOOTER_VERSION, chunk_offsets);
+		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
+		segment_header.set_length_of_segment(segment_header_length + written_bytes);
+		output.seek(SeekFrom::Start(seek_value))?;
+		written_bytes += output.write(&segment_header.encode_directly())? as u64;
+		return Ok(written_bytes);
+	}
+
+	pub fn generate_files(&mut self) -> Result<()> {
+		let main_header_size = self.main_header.get_encoded_size();
+		if (self.main_header.segment_size() as usize) < main_header_size {
+	        return Err(ZffError::new(ZffErrorKind::SegmentSizeToSmall, ""));
+	    };	    
+	    let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
+	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
+	    first_segment_filename.set_extension(&file_extension);
+	    let mut output_file = File::create(&first_segment_filename)?;
+
+	    let encryption_key = &self.encryption_key.clone();
+
+	    let encoded_main_header = match &encryption_key {
+	        None => self.main_header.encode_directly(),
+	        Some(key) => self.main_header.encode_encrypted_header_directly(key)?,
+	    };
+
+	    output_file.write(&encoded_main_header)?;
+
+	    let mut segment_no = 1;
+
+	    //writes the first segment
+	    let _ = self.write_segment(&mut output_file, segment_no, encoded_main_header.len() as u64)?;
+
+	    loop {
+	    	segment_no += 1;
+	    	file_extension = file_extension_next_value(&file_extension)?;
+	    	let mut segment_filename = PathBuf::from(&self.output_filenpath);
+	    	segment_filename.set_extension(&file_extension);
+	    	let mut output_file = File::create(&segment_filename)?;
+
+	    	let written_bytes_in_segment = self.write_segment(&mut output_file, segment_no, 0)?;
+	    	if written_bytes_in_segment == 0 {
+	            let _ = remove_file(segment_filename);
+	            break;
+	        }
+	    }
+
+		let mut hash_values = Vec::new();
+	    for (hash_type, hasher) in self.hasher_map.clone() {
+	        let hash = hasher.finalize();
+	        let mut hash_value = HashValue::new_empty(DEFAULT_HASH_VALUE_HEADER_VERSION, hash_type);
+	        hash_value.set_hash(hash.to_vec());
+	        hash_values.push(hash_value);
+	    }
+	    let hash_header = HashHeader::new(DEFAULT_HASH_HEADER_VERSION, hash_values);
+
+	    //rewrite main_header with the correct number of bytes of the COMPRESSED data.
+	    self.main_header.set_length_of_data(self.read_bytes);
+	    self.main_header.set_hash_header(hash_header);
+	    match SystemTime::now().duration_since(UNIX_EPOCH) {
+	        Ok(now) => self.main_header.set_acquisition_end(now.as_secs()),
+	        Err(_) => ()
+	    };
+	    output_file.rewind()?;
+	    let encoded_main_header = match &encryption_key {
+	        None => self.main_header.encode_directly(),
+	        Some(key) => if self.header_encryption {
+	          match self.main_header.encode_encrypted_header_directly(key) {
+	                Ok(data) => if data.len() == encoded_main_header.len() {
+	                    data
+	                } else {
+	                    return Err(ZffError::new(ZffErrorKind::MainHeaderEncryptionError, ERROR_REWRITE_MAIN_HEADER))
+	                },
+	                Err(e) => return Err(e)
+	            }  
+	        } else {
+	            self.main_header.encode_directly()
+	        }  
+	    };
+	    output_file.write(&encoded_main_header)?;
+
+	    Ok(())
+	}
+}
+
+// returns the buffer with the read bytes and the number of bytes which was read.
 fn buffer_chunk<R>(
 	input: &mut R,
 	chunk_size: usize,
-	) -> Result<(Vec<u8>, u64)> // returns the buffer with the read bytes and the number of bytes which was read.
+	) -> Result<(Vec<u8>, u64)> 
 where
 	R: Read
 {
@@ -53,210 +336,6 @@ where
         buf[..bytes_read].to_vec()
     };
     return Ok((buf, bytes_read as u64))
-}
-
-//TODO: optimization/code cleanup
-fn prepare_chunk<R, H>(
-	input: &mut R,
-	chunk_size: usize,
-	algorithm: &CompressionAlgorithm,
-	compression_level: &u8,
-	hasher_map: &mut HashMap<HashType, Box<H>>,
-	signature_key: &Option<Keypair>) -> Result<(Vec<u8>, u64, u32, Option<[u8; SIGNATURE_LENGTH]>)> //returns (chunked_buffer_bytes, read_bytes, crc32_sig, Option<ED25519SIG>)
-where
-    R: Read,
-    H: DynDigest + ?Sized
-{
-    let (buf, read_bytes) = buffer_chunk(input, chunk_size)?;
-    if buf.len() == 0 {
-    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
-    };
-    for (_, hasher) in hasher_map {
-    	hasher.update(&buf);
-    }
-    let mut crc32_hasher = CRC32Hasher::new();
-    crc32_hasher.update(&buf);
-    let crc32 = crc32_hasher.finalize();
-
-    let signature = match signature_key {
-    	None => None,
-    	Some(keypair) => Some(keypair.sign(&buf).to_bytes()),
-    };
-
-    match algorithm {
-    	CompressionAlgorithm::None => return Ok((buf, read_bytes, crc32, signature)),
-    	CompressionAlgorithm::Zstd => {
-    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), *compression_level as i32)?;
-    		let (buf, _) = buffer_chunk(&mut stream, chunk_size*4)?;
-    		Ok((buf, read_bytes, crc32, signature))
-    	}
-    }
-}
-
-//TODO: optimization/code cleanup
-fn write_unencrypted_chunk<R, W, H>(
-	input: &mut R,
-	output: &mut W,
-	chunk_size: usize,
-	chunk_header: &mut ChunkHeader,
-	compression_algorithm: &CompressionAlgorithm,
-	compression_level: &u8,
-	hasher_map: &mut HashMap<HashType, Box<H>>,
-	signature_key: &Option<Keypair>) -> Result<(u64, u64)> // returns (written_bytes, read_bytes)
-where
-	R: Read,
-	W: Write,
-	H: DynDigest + ?Sized
-{
-	let (compressed_chunk, read_bytes, crc32, signature) = prepare_chunk(input, chunk_size, compression_algorithm, compression_level, hasher_map, signature_key)?;
-	chunk_header.set_chunk_size(compressed_chunk.len() as u64);
-	chunk_header.set_crc32(crc32);
-	chunk_header.set_signature(signature);
-
-	let mut written_bytes = 0;
-	written_bytes += output.write(&chunk_header.encode_directly())?;
-	written_bytes += output.write(&compressed_chunk)?;
-	Ok((written_bytes as u64, read_bytes))
-}
-
-//TODO: optimization/code cleanup
-fn write_encrypted_chunk<R, W, H>(
-	input: &mut R,
-	output: &mut W,
-	chunk_size: usize,
-	chunk_header: &mut ChunkHeader,
-	compression_algorithm: &CompressionAlgorithm,
-	compression_level: &u8,
-	encryption_key: &Vec<u8>,
-	encryption_algorithm: &EncryptionAlgorithm,
-	hasher_map: &mut HashMap<HashType, Box<H>>,
-	signature_key: &Option<Keypair>) -> Result<(u64, u64)> //returns (written_bytes, read_bytes)
-where
-	R: Read,
-	W: Write,
-	H: DynDigest + ?Sized
-{
-	let (compressed_chunk, read_bytes, crc32, signature) = prepare_chunk(input, chunk_size, compression_algorithm, compression_level, hasher_map, signature_key)?;
-	let encrypted_data = Encryption::encrypt_message(
-		encryption_key,
-		&compressed_chunk,
-		chunk_header.chunk_number(),
-		encryption_algorithm)?;
-	chunk_header.set_chunk_size(encrypted_data.len() as u64);
-	chunk_header.set_crc32(crc32);
-	chunk_header.set_signature(signature);
-
-	let mut written_bytes = 0;
-	written_bytes += output.write(&chunk_header.encode_directly())?;
-	written_bytes += output.write(&encrypted_data)?;
-	Ok((written_bytes as u64, read_bytes))
-}
-
-/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
-pub fn write_segment<R, W, H>(
-	input: &mut R,
-	output: &mut W,
-	segment_header: &mut SegmentHeader,
-	chunk_size: usize,
-	chunk_header: &mut ChunkHeader,
-	compression_algorithm: &CompressionAlgorithm,
-	compression_level: &u8,
-	segment_size: usize,
-	encryption: &Option<(&Vec<u8>, EncryptionAlgorithm)>,
-	hasher_map: &mut HashMap<HashType, Box<H>>,
-	signature_key: &Option<Keypair>,
-	seek_value: u64 // The seek value is a value of bytes you need to skip (e.g. if this segment contains a main_header, you have to skip the main_header..)
-	) -> Result<(u64, u64)>  // returns (written_bytes, read_bytes)
-where
-	R: Read,
-	W: Write + Seek,
-	H: DynDigest + ?Sized
-{
-	let mut written_bytes: u64 = 0;
-	let mut read_bytes: u64 = 0;
-
-	let segment_header_length = segment_header.encode_directly().len() as u64;
-
-	let mut chunk_offsets = Vec::new();
-
-	let _ = output.write(&segment_header.encode_directly())?;
-
-	loop {
-		if (written_bytes +
-			chunk_size as u64 +
-			DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY as u64 +
-			(chunk_offsets.len()*8) as u64) > segment_size as u64 {
-
-			if written_bytes == 0 {
-				return Ok((written_bytes, read_bytes));
-			} else {
-				break;
-			}
-		};
-		match encryption {
-			None => {
-				let (written_in_chunk, read_in_chunk) = match write_unencrypted_chunk(
-					input,
-					output,
-					chunk_size,
-					chunk_header,
-					compression_algorithm,
-					compression_level,
-					hasher_map,
-					signature_key) {
-					Ok(data) => data,
-					Err(e) => match e.get_kind() {
-						ZffErrorKind::ReadEOF => {
-							if written_bytes == 0 {
-								return Ok((written_bytes, read_bytes));
-							} else {
-								break;
-							}
-						},
-						_ => return Err(e),
-					},
-				};
-				written_bytes += written_in_chunk;
-				read_bytes += read_in_chunk;
-			},
-			Some(ref encryption) => {
-				let (written_in_chunk, read_in_chunk) = match write_encrypted_chunk(
-					input,
-					output,
-					chunk_size,
-					chunk_header,
-					compression_algorithm,
-					compression_level,
-					&encryption.0,
-					&encryption.1,
-					hasher_map,
-					signature_key) {
-					Ok(data) => data,
-					Err(e) => match e.get_kind() {
-						ZffErrorKind::ReadEOF => {
-							if written_bytes == 0 {
-								return Ok((written_bytes, read_bytes));
-							} else {
-								break;
-							}
-						},
-						_ => return Err(e),
-					},
-				};
-				written_bytes += written_in_chunk;
-				read_bytes += read_in_chunk;
-			}
-		}
-		chunk_offsets.push(seek_value + segment_header_length + written_bytes);
-		chunk_header.next_number();
-	}
-	segment_header.set_footer_offset(seek_value + segment_header_length + written_bytes);
-	let segment_footer = SegmentFooter::new(DEFAULT_SEGMENT_FOOTER_VERSION, chunk_offsets);
-	written_bytes += output.write(&segment_footer.encode_directly())? as u64;
-	segment_header.set_length_of_segment(segment_header_length + written_bytes);
-	output.seek(SeekFrom::Start(seek_value))?;
-	written_bytes += output.write(&segment_header.encode_directly())? as u64;
-	return Ok((written_bytes, read_bytes));
 }
 
 /// This is a reader struct which implements [std::io::Read] to read data from a zff image.

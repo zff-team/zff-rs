@@ -98,7 +98,6 @@ pub const CLAP_ARG_LONG_SIGN_KEYPAIR: &str = "eddsa-keypair";
 
 // default values
 pub const DEFAULT_COMPRESSION_LEVEL: u8 = 3;
-pub const DEFAULT_CHUNK_STARTVALUE: u64 = 1;
 
 // - header versions
 pub const MAIN_HEADER_VERSION: u8 = 1;
@@ -107,26 +106,20 @@ pub const PBE_HEADER_VERSION: u8 = 1;
 pub const COMPRESSION_HEADER_VERSION: u8 = 1;
 pub const DESCRIPTION_HEADER_VERSION: u8 = 1;
 pub const SEGMENT_HEADER_VERSION: u8 = 1;
-pub const CHUNK_HEADER_VERSION: u8 = 1;
 pub const HASH_HEADER_VERSION: u8 = 1;
 pub const HASH_VALUE_HEADER_VERSION: u8 = 1;
 
 //Error messages
 pub const ERROR_OPEN_INPUT_FILE: &'static str = "Could not open input file: ";
-pub const ERROR_CREATE_OUTPUT_FILE: &'static str = "Could not create output file: ";
-pub const ERROR_WRITE_MAIN_HEADER: &'static str = "Could not write main header to file: ";
+pub const ERROR_OTHER: &'static str = "An error occurred while trying to write data to segments: ";
 pub const ERROR_WRITE_ENCRYPTED_MAIN_HEADER: &'static str = "An error occurred while trying to encode encrypted main header: ";
-pub const ERROR_WRITE_SEGMENT_HEADER: &'static str = "Could not write segment header to file: ";
 pub const ERROR_COPY_FILESTREAM_TO_OUTPUT: &'static str = "An I/O error occurred while trying to copy data from input to output file(s): ";
-pub const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred while trying to rewrite the main header to the output file. The written data length specified is not correctly listed in the header: ";
-pub const ERROR_REWRITE_SEGMENT_HEADER: &'static str = "An error occurred while trying to rewrite a segment header to the output file. The written data length specified is not correctly listed in the header: ";
 pub const ERROR_PARSE_STR_SEGMENT_SIZE: &'static str = "Could not value as valid segment size: ";
-pub const ERROR_SET_FILE_EXTENSION: &'static str = "Could not set file extension for next part of image: ";
 pub const ERROR_ENCRYPT_KEY: &'static str = "Could not encrypt your key with the given password. This is a bug.";
 pub const ERROR_UNKNOWN_ENCRYPTION_ALGORITHM: &'static str = "The given encryption algorithm is unknown/not supported by this application. Please use -h to see all supported algorithms.";
 pub const ERROR_UNKNOWN_PASSWORD_KDF: &'static str = "The given password key derivation function is unknown/not supported by this application. Please use -h to see all supported algorithms.";
 pub const ERROR_GET_HASHTYPES: &'static str = "Unknown hashtype: ";
 pub const ERROR_PARSE_KEY: &'static str = "Could not parse your given base64 formatted secret key / keypair.";
-pub const ERROR_SEGMENT_SIZE_TOO_SMALL_FOR_MAINHEADER: &'static str = "Your selected segment size is too small - for the content of the main header. You should either choose a larger segment size, or specify less metadata.";
 
 pub const EXIT_STATUS_ERROR: i32 = 1;
+pub const EXIT_STATUS_SUCCESS: i32 = 0;
