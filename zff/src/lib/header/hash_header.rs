@@ -35,6 +35,7 @@ impl HashHeader {
 		}
 	}
 
+	/// returns a reference to the underlying [HashValue]s.
 	pub fn hash_values(&self) -> &Vec<HashValue> {
 		&self.hashes
 	}

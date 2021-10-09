@@ -71,6 +71,7 @@ impl MainHeader {
 		}
 	}
 
+	/// returns the header identifier for the encrypted main header.
 	pub fn encrypted_header_identifier() -> u32 {
 		HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER
 	}
@@ -104,7 +105,7 @@ impl MainHeader {
 		return Ok(vec);
 	}
 
-	/// decodes the encrypted main header with the given password
+	/// decodes the encrypted main header with the given password.
 	pub fn decode_encrypted_header_with_password<R, P>(data: &mut R, password: P) -> Result<MainHeader>
 	where
 		R: Read,

@@ -9,8 +9,9 @@ use std::fs::{File, remove_file};
 // - internal
 use crate::{
 	Result,
-	header::{MainHeader,SegmentHeader,Segment,ChunkHeader, HashValue, HashHeader},
+	header::{MainHeader,SegmentHeader,ChunkHeader, HashValue, HashHeader},
 	footer::{SegmentFooter},
+	Segment,
 	CompressionAlgorithm,
 	HeaderCoding,
 	ZffError,

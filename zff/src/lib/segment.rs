@@ -9,7 +9,6 @@ use crate::{
 	HeaderCoding,
 	header::{SegmentHeader, ChunkHeader},
 	footer::{SegmentFooter},
-	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
 	CompressionAlgorithm,
@@ -22,7 +21,9 @@ use slice::IoSlice;
 use zstd;
 use lz4_flex;
 
-//
+/// This structure contains a set of methods to operate with a zff segment.
+/// The struct contains the [SegmentHeader] of the segment and the data. The data could be everything which implements [Read] and [Seek].
+/// This struct contains also an offset hashmap of all chunks, which are be present in this segment - to jump quickly to the needed data offset.
 pub struct Segment<R: Read + Seek> {
 	header: SegmentHeader,
 	data: R,
@@ -30,6 +31,7 @@ pub struct Segment<R: Read + Seek> {
 }
 
 impl<R: 'static +  Read + Seek> Segment<R> {
+	/// creates a new [Segment] by the given values.
 	fn new(header: SegmentHeader, data: R, chunk_offsets: HashMap<u64, u64>) -> Segment<R> {
 		Self {
 			header: header,
@@ -38,6 +40,17 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		}
 	}
 
+	/// creates a new [Segment] from a given object, which have to implement [Read] and [Seek].
+	/// # Example
+	/// ```no_run
+	/// use std::fs::File;
+	/// use zff::Segment;
+	/// 
+	/// fn main() {
+	/// 	let zff_segment = File::open("zff_file.z01").unwrap();
+	/// 	let segment = Segment::new_from_reader(zff_segment).unwrap();
+	/// }
+	/// ```
 	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
 		let stream_position = data.stream_position()?; //uses the current stream position. This is important for the first segment (which contains a main header);
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
@@ -57,6 +70,8 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		Ok(Self::new(segment_header, data, chunk_offsets))
 	}
 
+	/// returns the data of the appropriate chunk.
+	/// You have to set the chunk_number and the used compression algorithm (the last one can be found in the [MainHeader]).
 	pub fn chunk_data<C>(&mut self, chunk_number: u64, compression_algorithm: C) -> Result<Vec<u8>>
 	where
 		C: Borrow<CompressionAlgorithm>,
@@ -89,6 +104,9 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		}
 	}
 
+	/// returns the data of the appropriate encrypted chunk.
+	/// You have to set the chunk_number and the used compression algorithm,
+	/// the decryption key and the encryption algorithm (most parts can be found in the [MainHeader]).
 	pub fn chunk_data_decrypted<C, K, E>(
 		&mut self, 
 		chunk_number: u64, 
@@ -131,14 +149,17 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		}
 	}
 
+	/// returns a reference to the inner [SegmentHeader].
 	pub fn header(&self) -> &SegmentHeader {
 		&self.header
 	}
 
+	/// returns a reference to the chunk offset hashmap.
 	pub fn chunk_offsets(&self) -> &HashMap<u64, u64> {
 		&self.chunk_offsets
 	}
 
+	/// returns a reference to underlying value.
 	pub fn data(&self) -> &R {
 		&self.data
 	}

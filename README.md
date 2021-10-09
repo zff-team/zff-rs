@@ -35,8 +35,6 @@ This repository contains several tools to work with zff images (or acquire them)
 | zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.55 |
 
 # Planned features until zff reaches version 1.0
-- code cleanup
---> Zff-lib refactoring.
 - testing / unit tests
 - documentation (with deny nodoc) 100%
 - parallelism impl of hashing/crc/signing<->writing data
