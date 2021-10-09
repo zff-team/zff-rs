@@ -7,11 +7,9 @@ use ed25519_dalek::{SIGNATURE_LENGTH};
 // - internal
 use crate::{
 	Result,
-	HeaderEncoder,
-	HeaderDecoder,
+	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
-	HeaderObject,
 	HEADER_IDENTIFIER_CHUNK_HEADER,
 	CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE,
 };
@@ -91,7 +89,9 @@ impl ChunkHeader {
 	}
 }
 
-impl HeaderObject for ChunkHeader {
+impl HeaderCoding for ChunkHeader {
+	type Item = ChunkHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_CHUNK_HEADER
 	}
@@ -109,12 +109,6 @@ impl HeaderObject for ChunkHeader {
 		
 		vec
 	}
-}
-
-impl HeaderEncoder for ChunkHeader {}
-
-impl HeaderDecoder for ChunkHeader {
-	type Item = ChunkHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<ChunkHeader> {
 		let data_len = data.len();

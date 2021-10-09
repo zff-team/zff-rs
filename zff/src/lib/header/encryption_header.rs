@@ -5,9 +5,7 @@ use std::io::{Cursor, Read};
 use crate::{
 	Result,
 	EncryptionAlgorithm,
-	HeaderObject,
-	HeaderEncoder,
-	HeaderDecoder,
+	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
 	header::PBEHeader,
@@ -78,20 +76,19 @@ impl EncryptionHeader {
 				KDFParameters::PBKDF2SHA256Parameters(parameters) => {
 					let iterations = parameters.iterations();
 					let salt = parameters.salt();
-
 					match self.pbe_header.encryption_scheme() {
 						PBEScheme::AES128CBC => Encryption::decrypt_pbkdf2sha256_aes128cbc(
 							iterations,
 							salt,
 							self.pbe_header.nonce(),
-							password,
+							&password,
 							&self.encrypted_encryption_key
 							),
 						PBEScheme::AES256CBC => Encryption::decrypt_pbkdf2sha256_aes256cbc(
 							iterations,
 							salt,
 							self.pbe_header.nonce(),
-							password,
+							&password,
 							&self.encrypted_encryption_key
 							),
 					}
@@ -102,7 +99,9 @@ impl EncryptionHeader {
 	}
 }
 
-impl HeaderObject for EncryptionHeader {
+impl HeaderCoding for EncryptionHeader {
+	type Item = EncryptionHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_ENCRYPTION_HEADER
 	}
@@ -116,12 +115,6 @@ impl HeaderObject for EncryptionHeader {
 		vec.append(&mut self.encrypted_header_nonce.encode_directly());
 		vec
 	}
-}
-
-impl HeaderEncoder for EncryptionHeader {}
-
-impl HeaderDecoder for EncryptionHeader {
-	type Item = EncryptionHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<EncryptionHeader> {
 		let mut cursor = Cursor::new(data);
@@ -132,7 +125,7 @@ impl HeaderDecoder for EncryptionHeader {
 			1 => EncryptionAlgorithm::AES256GCMSIV,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
 		};
-		let key_length = u32::decode_directly(&mut cursor)? as usize;
+		let key_length = u64::decode_directly(&mut cursor)? as usize;
 		let mut encryption_key = vec![0u8; key_length];
 		cursor.read_exact(&mut encryption_key)?;
 		let mut nonce = [0; 12];
@@ -151,7 +144,7 @@ impl Serialize for EncryptionHeader {
         state.serialize_field("pbe_header", &self.pbe_header)?;
         state.serialize_field("algorithm", &self.algorithm)?;
         state.serialize_field("encrypted_encryption_key", &self.encrypted_encryption_key.encode_hex::<String>())?;
-        state.serialize_field("encrypted_header_nonce", &self.encrypted_encryption_key.encode_hex::<String>())?;
+        state.serialize_field("encryption_header_nonce", &self.encrypted_header_nonce.encode_hex::<String>())?;
         state.end()
     }
 }

@@ -39,10 +39,10 @@ pub const CLAP_ARG_NAME_COMPRESSION_ALGORITHM: &str = "COMPRESSION_ALGORITHM";
 pub const CLAP_ARG_HELP_COMPRESSION_ALGORITHM: &str = "sets the compression algorithm. Default is zstd.";
 pub const CLAP_ARG_SHORT_COMPRESSION_ALGORITHM: &str = "z";
 pub const CLAP_ARG_LONG_COMPRESSION_ALGORITHM: &str = "compression-algorithm";
-pub const CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_ALGORITHM: [&str; 2] = ["none", "zstd"];
+pub const CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_ALGORITHM: [&str; 3] = ["none", "zstd", "lz4"];
 
 pub const CLAP_ARG_NAME_COMPRESSION_LEVEL: &str = "COMPRESSION_LEVEL";
-pub const CLAP_ARG_HELP_COMPRESSION_LEVEL: &str = "sets the compression level. Default is 3.";
+pub const CLAP_ARG_HELP_COMPRESSION_LEVEL: &str = "sets the compression level. Default is 3. This option doesn't has any effect while using the lz4 compression algorithm.";
 pub const CLAP_ARG_SHORT_COMPRESSION_LEVEL: &str = "l";
 pub const CLAP_ARG_LONG_COMPRESSION_LEVEL: &str = "compression-level";
 pub const CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_LEVEL: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];

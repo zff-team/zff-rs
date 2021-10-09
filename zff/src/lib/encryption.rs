@@ -83,7 +83,8 @@ impl Encryption {
 		plaintext: &[u8]) -> Result<Vec<u8>> {
 		let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.encrypt(password, plaintext)?)
+		let cipher = encryption_scheme.encrypt(password, plaintext)?;
+		Ok(cipher)
 	}
 
 	/// decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
@@ -152,6 +153,30 @@ impl Encryption {
 			EncryptionAlgorithm::AES128GCMSIV => {
 				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
 				return Ok(cipher.encrypt(&nonce, message.as_ref())?);
+			},
+		};
+	}
+
+	/// method to decrypt a message with a key and and the given chunk number. This method should primary used to decrypt
+	/// the given chunk data (if selected, then **before the decompression**).
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_message<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
+		match algorithm.borrow() {
+			EncryptionAlgorithm::AES256GCMSIV => {
+				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
+				return Ok(cipher.decrypt(&nonce, message.as_ref())?);
+			},
+			EncryptionAlgorithm::AES128GCMSIV => {
+				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
+				return Ok(cipher.decrypt(&nonce, message.as_ref())?);
 			},
 		};
 	}

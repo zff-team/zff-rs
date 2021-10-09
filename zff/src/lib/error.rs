@@ -10,6 +10,7 @@ use pkcs5::CryptoError as PKCS5CryptoError;
 use aes_gcm_siv::aead::Error as EncryptionError;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
+use lz4_flex::frame::Error as Lz4Error;
 
 /// The main error-type of this crate.
 #[derive(Debug)]
@@ -37,13 +38,21 @@ pub enum ZffErrorKind {
 	Base64DecodingError,
 	/// If the signature key length is != 64.
 	WrongSignatureKeyLength,
+	/// If an error occures while compressing the input data with the lz4-algorithm.
+	Lz4Error,
 	/// If the encryption header is missing, but you call a method to encrypt the header or data.
 	MissingEncryptionHeader,
 	/// Error returns, if an encryption operation expect an encryption key but none is given.
 	MissingEncryptionKey,
+	/// Error will be returned, if the decryption of the inner encryption key fails.
+	DecryptionOfEncryptionKey,
 	/// This is not an error in the strict sense. If you read a source file and reach the EOF,
 	/// you will get this error kind to handle your next steps.
 	ReadEOF,
+	/// This error will be returned, if the input stream was interrupted. Interrupted operations can typically be retried.
+	InterruptedInputStream,
+	/// This error will be returned, if the output stream was interrupted. Interrupted operations can typically be retried.
+	InterruptedOutputStream,
 	/// Custom errors.
 	Custom,
 	/// Error will be returned, if the data could not be decoded to the given header.
@@ -75,11 +84,15 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::EncryptionError => "EncryptionError",
 			ZffErrorKind::Ed25519Error => "Ed25519Error",
 			ZffErrorKind::Base64DecodingError => "Base64DecodingError",
+			ZffErrorKind::Lz4Error => "Lz4Error",
 			ZffErrorKind::FromUtf8Error => "FromUtf8Error",
 			ZffErrorKind::WrongSignatureKeyLength => "WrongSignatureKeyLength",
 			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
 			ZffErrorKind::MissingEncryptionKey => "MissingEncryptionKey",
+			ZffErrorKind::DecryptionOfEncryptionKey => "DecryptionOfEncryptionKey",
 			ZffErrorKind::ReadEOF => "ReadEOF",
+			ZffErrorKind::InterruptedInputStream => "InterruptedInputStream",
+			ZffErrorKind::InterruptedOutputStream => "InterruptedOutputStream",
 			ZffErrorKind::HeaderDecodeError => "HeaderDecodeError",
 			ZffErrorKind::HeaderDecodeMismatchIdentifier => "HeaderDecodeMismatchIdentifier",
 			ZffErrorKind::HeaderDecoderKeyNotOnPosition => "HeaderDecoderKeyNotOnPosition",
@@ -214,6 +227,12 @@ impl From<PKCS5CryptoError> for ZffError {
 impl From<EncryptionError> for ZffError {
 	fn from(e: EncryptionError) -> ZffError {
 		ZffError::new(ZffErrorKind::EncryptionError, e.to_string())
+	}
+}
+
+impl From<Lz4Error> for ZffError {
+	fn from(e: Lz4Error) -> ZffError {
+		ZffError::new(ZffErrorKind::Lz4Error, e.to_string())
 	}
 }
 

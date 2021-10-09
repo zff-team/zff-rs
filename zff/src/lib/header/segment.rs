@@ -7,15 +7,15 @@ use std::collections::HashMap;
 // - internal
 use crate::{
 	Result,
-	HeaderObject,
-	HeaderEncoder,
-	HeaderDecoder,
+	HeaderCoding,
 	header::{ChunkHeader},
 	ValueEncoder,
 	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
 	CompressionAlgorithm,
+	Encryption,
+	EncryptionAlgorithm,
 	HEADER_IDENTIFIER_SEGMENT_HEADER,
 	HEADER_IDENTIFIER_SEGMENT_FOOTER,
 	CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE,
@@ -26,6 +26,7 @@ use crate::{
 use serde::{Serialize};
 use slice::IoSlice;
 use zstd;
+use lz4_flex;
 
 /// The segment header contains all informations about the specific segment. Each segment has his own segment header.\
 /// This header is **not** a part of the main header.\
@@ -109,7 +110,9 @@ impl SegmentHeader {
 	}
 }
 
-impl HeaderObject for SegmentHeader {
+impl HeaderCoding for SegmentHeader {
+	type Item = SegmentHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_SEGMENT_HEADER
 	}
@@ -124,12 +127,6 @@ impl HeaderObject for SegmentHeader {
 
 		vec
 	}
-}
-
-impl HeaderEncoder for SegmentHeader {}
-
-impl HeaderDecoder for SegmentHeader {
-	type Item = SegmentHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<SegmentHeader> {
 		let mut cursor = Cursor::new(data);
@@ -184,7 +181,9 @@ impl SegmentFooter {
 	}
 }
 
-impl HeaderObject for SegmentFooter {
+impl HeaderCoding for SegmentFooter {
+	type Item = SegmentFooter;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_SEGMENT_FOOTER
 	}
@@ -196,12 +195,6 @@ impl HeaderObject for SegmentFooter {
 
 		vec
 	}
-}
-
-impl HeaderEncoder for SegmentFooter {}
-
-impl HeaderDecoder for SegmentFooter {
-	type Item = SegmentFooter;
 
 	fn decode_content(data: Vec<u8>) -> Result<SegmentFooter> {
 		let mut cursor = Cursor::new(data);
@@ -275,6 +268,58 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 				let mut decoder = zstd::stream::read::Decoder::new(chunk_data)?;
 				decoder.read_to_end(&mut buffer)?;
 				return Ok(buffer);
+			},
+			CompressionAlgorithm::Lz4 => {
+				let mut decompressor = lz4_flex::frame::FrameDecoder::new(chunk_data);
+				decompressor.read_to_end(&mut buffer)?;
+				return Ok(buffer);
+			}
+		}
+	}
+
+	pub fn chunk_data_decrypted<C, K, E>(
+		&mut self, 
+		chunk_number: u64, 
+		compression_algorithm: C, 
+		decryption_key: K, 
+		encryption_algorithm: E) -> Result<Vec<u8>>
+	where
+		C: Borrow<CompressionAlgorithm>,
+		K: AsRef<[u8]>,
+		E: Borrow<EncryptionAlgorithm>,
+	{
+		let chunk_offset = match self.chunk_offsets.get(&chunk_number) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
+		};
+		self.data.seek(SeekFrom::Start(*chunk_offset))?;
+		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
+		let chunk_size = chunk_header.chunk_size();
+		let chunk_header_size = if chunk_header.signature().is_some() {
+			CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE
+		} else {
+			CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE
+		};
+		let bytes_to_skip = chunk_header_size as u64 + *chunk_offset;
+		let mut encrypted_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
+		let mut buffer = Vec::new();
+		encrypted_data.read_to_end(&mut buffer)?;
+		let decrypted_chunk_data = Encryption::decrypt_message(decryption_key, buffer, chunk_number, encryption_algorithm)?;
+		match compression_algorithm.borrow() {
+			CompressionAlgorithm::None => {
+				return Ok(decrypted_chunk_data);
+			}
+			CompressionAlgorithm::Zstd => {
+				let mut decompressed_buffer = Vec::new();
+				let mut decoder = zstd::stream::read::Decoder::new(decrypted_chunk_data.as_slice())?;
+				decoder.read_to_end(&mut decompressed_buffer)?;
+				return Ok(decompressed_buffer);
+			},
+			CompressionAlgorithm::Lz4 => {
+				let mut decompressed_buffer = Vec::new();
+				let mut decompressor = lz4_flex::frame::FrameDecoder::new(decrypted_chunk_data.as_slice());
+				decompressor.read_to_end(&mut decompressed_buffer)?;
+				return Ok(decompressed_buffer);
 			}
 		}
 	}

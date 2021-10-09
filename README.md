@@ -6,9 +6,9 @@ Zff is an alternative to the ewf and aff file formats and not compatible with th
 
 ## Features included in zff (most of them are optional)
 - The disk image can be stored in several split segments.
-- The data can be stored in compressed format (modern [compression algorithms](compression-algorithms) used, like __Zstd__)
-- The stored data can be optionally encrypted with a password. Good procedures according to PKCS#5 are used here (see [KDF schemes](#kdf-flag) and [encryption schemes](#encryption-scheme-flag) for available implementations). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently implemented algorithms are listed in [encryption algorithms](#encryption-algorithms) section.
-- The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](#hash-types) section.
+- The data can be stored in compressed format (modern [compression algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#compression-algorithm-flag) used, like __Zstd__)
+- The stored data can be optionally encrypted with a password. Good procedures according to PKCS#5 are used here (see [KDF schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#kdf-flag) and [encryption schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-scheme-flag) for available implementations). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently implemented algorithms are listed in [encryption algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-algorithms) section.
+- The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](https://github.com/ph0llux/zff/wiki/Zff-layout#hash-types-flag) section.
 - The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm __Ed25519__ is used for this purpose.
 - The stored data is organized in small chunks. 
 Above mentioned compression, encryption and signature methods are applied to each chunk separatly. This makes it possible to access a corresponding part of the data in real time and not to have to decompress or decrypt the complete image first.
@@ -21,11 +21,11 @@ coming soon.
 
 ## Zff layout
 
-See the [wiki pages](https://github.com/ph0llux/zff/wiki) for further information.
+See the [wiki pages](https://github.com/ph0llux/zff/wiki/Zff-layout) for further information.
 
 ## Zff tools and libraries
 
-This repository contains several tools to work zff images (or acquire them). All tools and libraries are written in pure Rust.
+This repository contains several tools to work with zff images (or acquire them). All tools and libraries are written in pure Rust.
 
 | Name | Type | Description | Crates.io | MRSV |
 |------|:----:|:------------|:---------:|:----:|
@@ -35,14 +35,13 @@ This repository contains several tools to work zff images (or acquire them). All
 | zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.55 |
 
 # Planned features until zff reaches version 1.0
+- self.header_size() in HeaderCoding trait.
+- code cleanup
+--> Zff-lib refactoring.
+<<<<<<< HEAD
+>>>>>>> e7b3f90 (Update README.md)
+=======
 - testing / unit tests
 - documentation (with deny nodoc) 100%
-- Keyfile support for encryption
 - parallelism impl of hashing/crc/signing<->writing data
-- impl Error handling @zffacquire if IoError->Interupt.
-	-> Number of retries / sectors used as error granularity
-- LZ4 compression algorithm
-- Migrate HeaderEncoder/HeaderDecoder -> HeaderCoding
-- code cleanup
---> SegmentWriter
---> Zff-lib refactoring.
+>>>>>>> 4946a11 (LZ4 compression support added; HeaderEncoder/HeaderDecoder migrated to HeaderCoding; fixed read errors of encrypted images)

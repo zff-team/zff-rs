@@ -11,7 +11,7 @@ mod lib;
 use lib::constants::*;
 use zff::{
     header::*,
-    HeaderDecoder,
+    HeaderCoding,
     ZffErrorKind,
 };
 

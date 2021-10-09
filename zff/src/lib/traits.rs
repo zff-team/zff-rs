@@ -18,16 +18,13 @@ use crate::{
 // - external
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
-/// The ```HeaderObject``` trait specifies an interface for the common header methods.
-pub trait HeaderObject {
+/// The ```HeaderCoding``` trait specifies an interface for the common header methods and the encoding and decoding methods.
+pub trait HeaderCoding {
 	/// returns the identifier (=Magic bytes) of the header.
 	fn identifier() -> u32;
 	/// encodes the header.
 	fn encode_header(&self) -> Vec<u8>;
-}
 
-/// The ```HeaderObject``` trait specifies an interface for the common encoding methods.
-pub trait HeaderEncoder: HeaderObject {
 	/// encodes a given key.
 	fn encode_key<K: Into<String>>(key: K) -> Vec<u8> {
 		let mut vec = Vec::new();
@@ -56,6 +53,74 @@ pub trait HeaderEncoder: HeaderObject {
 		vec.append(&mut encoded_key);
 		vec.append(&mut self.encode_directly());
 		vec
+	}
+
+	/// the return value for decode_content(), decode_directly(), decode_for_key();
+	type Item;
+
+	/// decodes the length of the header.
+	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
+		match data.read_u64::<LittleEndian>() {
+			Ok(value) => Ok(value),
+			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+		}
+	}
+
+	/// checks if the read identifier is valid for this header.
+	fn check_identifier<R: Read>(data: &mut R) -> bool {
+		let identifier = match data.read_u32::<BigEndian>() {
+			Ok(val) => val,
+			Err(_) => return false,
+		};
+		if identifier == Self::identifier() { 
+			return true;
+		} else {
+			return false;
+		}
+	}
+	
+	/// helper method to check, if the key is on position.
+	fn check_key_on_position<K: Into<String>, R: Read>(data: &mut R, key: K) -> bool {
+		let key_length = match data.read_u8() {
+			Ok(len) => len,
+			Err(_) => return false,
+		};
+		let mut read_key = vec![0u8; key_length as usize];
+		match data.read_exact(&mut read_key) {
+			Ok(_) => (),
+			Err(_) => return false,
+		};
+		let read_key = match String::from_utf8(read_key) {
+			Ok(key) => key,
+			Err(_) => return false,
+		};
+		if read_key == key.into() {
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	/// decodes the content of the header.
+	fn decode_content(data: Vec<u8>) -> Result<Self::Item>;
+	
+	/// decodes the header directly.
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
+		if !Self::check_identifier(data) {
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+		}
+		let header_length = Self::decode_header_length(data)? as usize;
+		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		data.read_exact(&mut header_content)?;
+		return Self::decode_content(header_content);
+	}
+
+	/// decodes the header for the given key.
+	fn decode_for_key<K: Into<String>, R: Read>(data: &mut R, key: K) -> Result<Self::Item> {
+		if !Self::check_key_on_position(data, key) {
+			return Err(ZffError::new(ZffErrorKind::HeaderDecoderKeyNotOnPosition, ERROR_HEADER_DECODER_KEY_POSITION))
+		}
+		Self::decode_directly(data)
 	}
 }
 
@@ -247,7 +312,7 @@ impl ValueEncoder for str {
 
 impl<H> ValueEncoder for Vec<H>
 where
-	H: HeaderEncoder
+	H: HeaderCoding
 {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
@@ -433,7 +498,7 @@ impl ValueDecoder for Vec<u64> {
 
 impl<H> ValueDecoder for Vec<H>
 where
-	H: HeaderDecoder + HeaderDecoder<Item = H>,
+	H: HeaderCoding<Item = H>,
 {
 	type Item = Vec<H>;
 
@@ -445,76 +510,5 @@ where
 			vec.push(content);
 		}
 		Ok(vec)
-	}
-}
-
-/// The ```HeaderDecoder``` trait specifies an interface for the common decoding methods.
-pub trait HeaderDecoder: HeaderObject {
-	/// the return value for decode_content(), decode_directly(), decode_for_key();
-	type Item;
-
-	/// decodes the length of the header.
-	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
-		match data.read_u64::<LittleEndian>() {
-			Ok(value) => Ok(value),
-			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
-		}
-	}
-
-	/// checks if the read identifier is valid for this header.
-	fn check_identifier<R: Read>(data: &mut R) -> bool {
-		let identifier = match data.read_u32::<BigEndian>() {
-			Ok(val) => val,
-			Err(_) => return false,
-		};
-		if identifier == Self::identifier() { 
-			return true;
-		} else {
-			return false;
-		}
-	}
-	
-	/// helper method to check, if the key is on position.
-	fn check_key_on_position<K: Into<String>, R: Read>(data: &mut R, key: K) -> bool {
-		let key_length = match data.read_u8() {
-			Ok(len) => len,
-			Err(_) => return false,
-		};
-		let mut read_key = vec![0u8; key_length as usize];
-		match data.read_exact(&mut read_key) {
-			Ok(_) => (),
-			Err(_) => return false,
-		};
-		let read_key = match String::from_utf8(read_key) {
-			Ok(key) => key,
-			Err(_) => return false,
-		};
-		if read_key == key.into() {
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	/// decodes the content of the header.
-	fn decode_content(data: Vec<u8>) -> Result<Self::Item>;
-	
-	/// decodes the header directly.
-	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
-		if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
-		}
-		let header_length = Self::decode_header_length(data)? as usize;
-		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
-		data.read_exact(&mut header_content)?;
-		return Self::decode_content(header_content);
-	}
-
-	/// decodes the header for the given key.
-	fn decode_for_key<K: Into<String>, R: Read>(data: &mut R, key: K) -> Result<Self::Item> {
-		if !Self::check_key_on_position(data, key) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecoderKeyNotOnPosition, ERROR_HEADER_DECODER_KEY_POSITION))
-		}
-		Self::decode_directly(data)
 	}
 }

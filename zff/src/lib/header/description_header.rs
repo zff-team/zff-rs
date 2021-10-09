@@ -4,9 +4,7 @@ use std::io::Cursor;
 // - internal
 use crate::{
 	Result,
-	HeaderObject,
-	HeaderEncoder,
-	HeaderDecoder,
+	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
 	ZffErrorKind,
@@ -26,14 +24,7 @@ use serde::{Serialize};
 
 /// The description header contains all data,
 /// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
-/// This header is part of the main header and has the following layout:
-/// 
-/// |                | Magic bytes    | Header length | header version | case number<br>\<OPTIONAL\> | evidence number<br>\<OPTIONAL\> | examiner name<br>\<OPTIONAL\> | notes<br>\<OPTIONAL\> | acqusition<br>start timestamp | acquisition<br>end timestamp |
-/// |----------------|----------------|---------------|-----------------------------|---------------------------------|-------------------------------|-----------------------|---------------------------------|----------------|----------------------------|
-/// | **size**       | 4 bytes        | 8 bytes       | 1 byte         | variable                    | variable                        | variable                      | variable              | 8 bytes                         | 8 bytes
-/// | **type**       | 0x7A666664     | uint64        | uint8          | String                      | String                          | String                        | String                | uint64                          | uint64
-/// | **identifier** | -              | -             | -              | "cn"                        | "ev"                            | "ex"                          | "no"                  | "as"                            | "ae"
-///
+/// This header is part of the main header.
 /// The special thing about this header is that the contained values\
 /// - are all optional except for the version.
 /// - have a prefixed identifier, which is encoded with.
@@ -140,7 +131,9 @@ impl DescriptionHeader {
 	}
 }
 
-impl HeaderObject for DescriptionHeader {
+impl HeaderCoding for DescriptionHeader {
+	type Item = DescriptionHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_DESCRIPTION_HEADER
 	}
@@ -164,12 +157,6 @@ impl HeaderObject for DescriptionHeader {
 		vec.append(&mut self.acquisition_end.encode_for_key(ENCODING_KEY_ACQISITION_END));
 		vec
 	}
-}
-
-impl HeaderEncoder for DescriptionHeader {}
-
-impl HeaderDecoder for DescriptionHeader {
-	type Item = DescriptionHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<DescriptionHeader> {
 		let mut cursor = Cursor::new(data);

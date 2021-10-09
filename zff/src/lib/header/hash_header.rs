@@ -4,11 +4,9 @@ use std::io::{Cursor};
 // - internal
 use crate::{
 	Result,
-	HeaderEncoder,
-	HeaderDecoder,
 	ValueEncoder,
 	ValueDecoder,
-	HeaderObject,
+	HeaderCoding,
 	HashType,
 	ZffError,
 	HEADER_IDENTIFIER_HASH_HEADER,
@@ -42,7 +40,9 @@ impl HashHeader {
 	}
 }
 
-impl HeaderObject for HashHeader {
+impl HeaderCoding for HashHeader {
+	type Item = HashHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_HASH_HEADER
 	}
@@ -54,9 +54,7 @@ impl HeaderObject for HashHeader {
 
 		vec
 	}
-}
 
-impl HeaderEncoder for HashHeader {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		let mut encoded_header = self.encode_header();
@@ -75,10 +73,6 @@ impl HeaderEncoder for HashHeader {
 		vec.append(&mut self.encode_directly());
 		vec
 	}
-}
-
-impl HeaderDecoder for HashHeader {
-	type Item = HashHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<HashHeader> {
 		let mut cursor = Cursor::new(data);
@@ -139,7 +133,10 @@ impl HashValue {
 	}
 }
 
-impl HeaderObject for HashValue {
+
+impl HeaderCoding for HashValue {
+	type Item = HashValue;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_HASH_VALUE
 	}
@@ -151,12 +148,6 @@ impl HeaderObject for HashValue {
 
 		vec
 	}
-}
-
-impl HeaderEncoder for HashValue {}
-
-impl HeaderDecoder for HashValue {
-	type Item = HashValue;
 
 	fn decode_content(data: Vec<u8>) -> Result<HashValue> {
 		let mut cursor = Cursor::new(data);

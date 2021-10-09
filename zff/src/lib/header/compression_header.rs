@@ -5,9 +5,7 @@ use std::io::{Cursor};
 use crate::{
 	Result,
 	ZffError,
-	HeaderObject,
-	HeaderEncoder,
-	HeaderDecoder,
+	HeaderCoding,
 	ValueDecoder,
 	CompressionAlgorithm,
 };
@@ -22,11 +20,6 @@ use serde::{Serialize};
 
 /// Header for the data compression parameters.\
 /// This header is part of the main header and has the following layout:
-/// 
-/// | Magic bytes | Header length | header version | algorithm | level  |
-/// |-------------|---------------|----------------|-----------|--------|
-/// | 4 bytes     | 8 bytes       | 1 byte         | 1 byte    | 1 byte |
-/// | 0x7A666663  | uint64        | uint8          | uint8     | uint8  |
 #[derive(Debug,Clone,Serialize)]
 pub struct CompressionHeader {
 	header_version: u8,
@@ -61,7 +54,9 @@ impl CompressionHeader {
 	}
 }
 
-impl HeaderObject for CompressionHeader {
+impl HeaderCoding for CompressionHeader {
+	type Item = CompressionHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_COMPRESSION_HEADER
 	}
@@ -74,12 +69,6 @@ impl HeaderObject for CompressionHeader {
 		
 		vec
 	}
-}
-
-impl HeaderEncoder for CompressionHeader {}
-
-impl HeaderDecoder for CompressionHeader {
-	type Item = CompressionHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<CompressionHeader> {
 		let mut cursor = Cursor::new(data);
@@ -87,19 +76,10 @@ impl HeaderDecoder for CompressionHeader {
 		let algorithm = match u8::decode_directly(&mut cursor) {
 			Ok(0) => CompressionAlgorithm::None,
 			Ok(1) => CompressionAlgorithm::Zstd,
+			Ok(2) => CompressionAlgorithm::Lz4,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM))
 		};
 		let level = u8::decode_directly(&mut cursor)?;
 		Ok(CompressionHeader::new(header_version, algorithm, level))
-	}
-}
-
-impl From<&str> for CompressionAlgorithm {
-	fn from(algorithm: &str) -> CompressionAlgorithm {
-		let algorithm = algorithm.to_lowercase();
-		match algorithm.as_str() {
-			"zstd" => CompressionAlgorithm::Zstd,
-			"none" | _ => CompressionAlgorithm::None,
-		}
 	}
 }

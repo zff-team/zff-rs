@@ -4,9 +4,7 @@ use std::io::{Read,Cursor};
 // - internal
 use crate::{
 	Result,
-	HeaderObject,
-	HeaderEncoder,
-	HeaderDecoder,
+	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
 	KDFScheme,
@@ -81,7 +79,9 @@ impl PBEHeader {
 	}
 }
 
-impl HeaderObject for PBEHeader {
+impl HeaderCoding for PBEHeader {
+	type Item = PBEHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_PBE_HEADER
 	}
@@ -95,12 +95,6 @@ impl HeaderObject for PBEHeader {
 		vec.append(&mut self.pbencryption_nonce.encode_directly());
 		vec
 	}
-}
-
-impl HeaderEncoder for PBEHeader {}
-
-impl HeaderDecoder for PBEHeader {
-	type Item = PBEHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<PBEHeader> {
 		let mut cursor = Cursor::new(data);
@@ -201,7 +195,9 @@ impl PBKDF2SHA256Parameters {
 	}
 }
 
-impl HeaderObject for PBKDF2SHA256Parameters {
+impl HeaderCoding for PBKDF2SHA256Parameters {
+	type Item = PBKDF2SHA256Parameters;
+
 	fn identifier() -> u32 {
 		PBE_KDF_PARAMETERS
 	}
@@ -211,12 +207,6 @@ impl HeaderObject for PBKDF2SHA256Parameters {
 		vec.append(&mut self.salt.encode_directly());
 		vec
 	}
-}
-
-impl HeaderEncoder for PBKDF2SHA256Parameters {}
-
-impl HeaderDecoder for PBKDF2SHA256Parameters {
-	type Item = PBKDF2SHA256Parameters;
 
 	fn decode_content(data: Vec<u8>) -> Result<PBKDF2SHA256Parameters> {
 		let mut cursor = Cursor::new(data);

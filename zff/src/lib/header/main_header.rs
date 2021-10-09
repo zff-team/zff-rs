@@ -4,11 +4,9 @@ use std::io::{Cursor, Read};
 // - internal
 use crate::{
 	Result,
-	HeaderEncoder,
-	HeaderDecoder,
 	ValueEncoder,
 	ValueDecoder,
-	HeaderObject,
+	HeaderCoding,
 	header::{
 		CompressionHeader,
 		DescriptionHeader,
@@ -71,6 +69,10 @@ impl MainHeader {
 			unique_identifier: unique_identifier,
 			length_of_data: length_of_data,
 		}
+	}
+
+	pub fn encrypted_header_identifier() -> u32 {
+		HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER
 	}
 
 	fn encode_encrypted_header<K>(&self, key: K) -> Result<Vec<u8>>
@@ -287,7 +289,9 @@ impl MainHeader {
 	}
 }
 
-impl HeaderObject for MainHeader {
+impl HeaderCoding for MainHeader {
+	type Item = MainHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_MAIN_HEADER
 	}
@@ -311,12 +315,6 @@ impl HeaderObject for MainHeader {
 
 		vec
 	}
-}
-
-impl HeaderEncoder for MainHeader {}
-
-impl HeaderDecoder for MainHeader {
-	type Item = MainHeader;
 
 	fn decode_content(data: Vec<u8>) -> Result<MainHeader> {
 		let mut cursor = Cursor::new(data);

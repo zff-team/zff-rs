@@ -1,7 +1,7 @@
 // - STD
 use std::collections::HashMap;
 use std::time::{UNIX_EPOCH, SystemTime};
-use std::io::{Read,Write,Seek,SeekFrom,Cursor};
+use std::io::{Read,Write,Seek,SeekFrom,Cursor, copy as io_copy};
 use std::path::PathBuf;
 use std::fs::{File, remove_file};
 
@@ -11,12 +11,13 @@ use crate::{
 	Result,
 	header::{MainHeader,SegmentHeader,SegmentFooter,Segment,ChunkHeader, HashValue, HashHeader},
 	CompressionAlgorithm,
-	HeaderEncoder,
+	HeaderCoding,
 	ZffError,
 	ZffErrorKind,
 	Encryption,
 	HashType,
 	Hash,
+	EncryptionAlgorithm,
 	file_extension_next_value,
 };
 
@@ -38,6 +39,9 @@ use crate::{
 use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair,Signer,SIGNATURE_LENGTH};
 use digest::DynDigest;
+use zstd;
+use lz4_flex;
+
 
 pub struct ZffWriter<R: Read> {
 	main_header: MainHeader,
@@ -49,6 +53,8 @@ pub struct ZffWriter<R: Read> {
 	encryption_key: Option<Vec<u8>>,
 	header_encryption: bool,
 	current_chunk_no: u64,
+	current_segment_no: u64,
+	eof_reached: bool,
 }
 
 impl<R: Read> ZffWriter<R> {
@@ -74,6 +80,8 @@ impl<R: Read> ZffWriter<R> {
 			encryption_key: encryption_key,
 			header_encryption: header_encryption,
 			current_chunk_no: 1,
+			current_segment_no: 1,
+			eof_reached: false,
 		}
 	}
 
@@ -104,6 +112,13 @@ impl<R: Read> ZffWriter<R> {
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
 	    		let (buf, _) = buffer_chunk(&mut stream, chunk_size * *self.main_header.compression_header().level() as usize)?;
 	    		Ok((buf, crc32, signature))
+	    	},
+	    	CompressionAlgorithm::Lz4 => {
+	    		let buffer = Vec::new();
+	    		let mut compressor = lz4_flex::frame::FrameEncoder::new(buffer);
+	    		io_copy(&mut buf.as_slice(), &mut compressor)?;
+	    		let compressed_data = compressor.finish()?;
+	    		Ok((compressed_data, crc32, signature))
 	    	}
 	    }
 	}
@@ -152,21 +167,30 @@ impl<R: Read> ZffWriter<R> {
 		Ok(written_bytes as u64)
 	}
 
+
+	// TODO!
+	// continues writing of data after an I/O interrupt of the INPUT stream.
+	// pub fn continue(&mut self) -> Result<()> {
+	//	unimplemented!()
+	//}
+
+	// continues writing of data to a segment after an I/O interrupt of the INPUT stream.
+	//fn continue_segment<W: Write + Seek>(&mut self, _output: &mut W, _seek_value: u64) -> Result<u64> { //returns the written bytes of the SEGMENT
+	//	unimplemented!()
+	//}
+
 	/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
-	fn write_segment<W>(
+	fn write_segment<W: Write + Seek>(
 		&mut self,
 		output: &mut W,
-		segment_no: u64,
 		seek_value: u64 // The seek value is a value of bytes you need to skip (e.g. if this segment contains a main_header, you have to skip the main_header..)
 		) -> Result<u64>  // returns written_bytes
-	where
-		W: Write + Seek,
 	{
 		let mut written_bytes: u64 = 0;
 		let mut segment_header = SegmentHeader::new_empty(
 			DEFAULT_SEGMENT_HEADER_VERSION,
 			self.main_header.unique_identifier(),
-			segment_no);
+			self.current_segment_no);
 		let segment_header_length = segment_header.encode_directly().len() as u64;
 		let chunk_size = self.main_header.chunk_size();
 		let segment_size = self.main_header.segment_size();
@@ -200,6 +224,10 @@ impl<R: Read> ZffWriter<R> {
 									chunk_offsets.pop();
 									break;
 								}
+							},
+							ZffErrorKind::InterruptedInputStream => {
+								chunk_offsets.pop();
+								break;
 							},
 							_ => return Err(e),
 						},
@@ -249,29 +277,33 @@ impl<R: Read> ZffWriter<R> {
 
 	    let encoded_main_header = match &encryption_key {
 	        None => self.main_header.encode_directly(),
-	        Some(key) => self.main_header.encode_encrypted_header_directly(key)?,
+	        Some(key) => if self.header_encryption {
+	          self.main_header.encode_encrypted_header_directly(key)? 
+	        } else {
+	            self.main_header.encode_directly()
+	        } 
 	    };
 
 	    output_file.write(&encoded_main_header)?;
 
-	    let mut segment_no = 1;
-
 	    //writes the first segment
-	    let _ = self.write_segment(&mut output_file, segment_no, encoded_main_header.len() as u64)?;
+	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64)?;
 
 	    loop {
-	    	segment_no += 1;
+	    	self.current_segment_no += 1;
 	    	file_extension = file_extension_next_value(&file_extension)?;
 	    	let mut segment_filename = PathBuf::from(&self.output_filenpath);
 	    	segment_filename.set_extension(&file_extension);
 	    	let mut output_file = File::create(&segment_filename)?;
 
-	    	let written_bytes_in_segment = self.write_segment(&mut output_file, segment_no, 0)?;
+	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0)?;
 	    	if written_bytes_in_segment == 0 {
 	            let _ = remove_file(segment_filename);
 	            break;
 	        }
 	    }
+
+	    self.eof_reached = true;
 
 		let mut hash_values = Vec::new();
 	    for (hash_type, hasher) in self.hasher_map.clone() {
@@ -323,7 +355,13 @@ where
     let mut bytes_read = 0;
 
     while bytes_read < chunk_size {
-        let r = input.read(&mut buf[bytes_read..])?;
+        let r = match input.read(&mut buf[bytes_read..]) {
+        	Ok(r) => r,
+        	Err(e) => match e.kind() {
+        		std::io::ErrorKind::Interrupted => return Err(ZffError::new(ZffErrorKind::InterruptedInputStream, "")),
+        		_ => return Err(ZffError::from(e)),
+        	},
+        };
         if r == 0 {
             break;
         }
@@ -344,6 +382,8 @@ pub struct ZffReader<R: 'static +  Read + Seek> {
 	segments: HashMap<u64, Segment<R>>, //<Segment number, Segment>
 	chunk_map: HashMap<u64, u64>, //<chunk_number, segment_number> for better runtime performance.
 	position: u64,
+	encryption_key: Option<Vec<u8>>,
+	encryption_algorithm: EncryptionAlgorithm,
 }
 
 impl<R: 'static +  Read + Seek> ZffReader<R> {
@@ -369,17 +409,39 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 			segments: segments,
 			chunk_map: chunk_map,
 			position: 0,
+			encryption_key: None,
+			encryption_algorithm: EncryptionAlgorithm::AES256GCMSIV, //is set to an encryption algorithm: this value will never be used without the self.encryption_key value.
 		})
 	}
 
 	pub fn main_header(&self) -> &MainHeader {
 		&self.main_header
 	}
+
+	pub fn decrypt_encryption_key<P: AsRef<[u8]>>(&mut self, password: P) -> Result<()> {
+		match self.main_header.encryption_header() {
+			Some(header) => {
+				let key = header.decrypt_encryption_key(password)?;
+				let algorithm = header.algorithm();
+				self.encryption_key = Some(key);
+				self.encryption_algorithm = algorithm.clone();
+				//test the decryption
+				let mut buffer = [0u8; 1];
+				match self.read(&mut buffer) {
+					Ok(_) => (),
+					Err(_) => return Err(ZffError::new(ZffErrorKind::DecryptionOfEncryptionKey, ""))
+				};
+				self.seek(SeekFrom::Start(0))?;
+			},
+			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+		}
+		Ok(())
+	}
 }
 
 impl<R: Read + Seek> Read for ZffReader<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
- 		let chunk_size = self.main_header.chunk_size(); // size of chunks
+		let chunk_size = self.main_header.chunk_size(); // size of chunks
 		let mut current_chunk = self.position / chunk_size as u64 + 1; // the first chunk to read. The first chunk is 1, so we need to add +1.
 		let inner_chunk_start_position = self.position % chunk_size as u64; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
@@ -391,11 +453,21 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 			},
 			None => return Ok(0),
 		};
-		let chunk_data = match segment.chunk_data(current_chunk, compression_algorithm) {
-			Ok(data) => data,
-			Err(e) => match e.unwrap_kind() {
-				ZffErrorKind::IoError(io_error) => return Err(io_error),
-				error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+
+		let chunk_data = match &self.encryption_key {
+			None => match segment.chunk_data(current_chunk, compression_algorithm) {
+				Ok(data) => data,
+				Err(e) => match e.unwrap_kind() {
+					ZffErrorKind::IoError(io_error) => return Err(io_error),
+					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+				},
+			},
+			Some(key) => match segment.chunk_data_decrypted(current_chunk, compression_algorithm, key, &self.encryption_algorithm) {
+				Ok(data) => data,
+				Err(e) => match e.unwrap_kind() {
+					ZffErrorKind::IoError(io_error) => return Err(io_error),
+					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+				},
 			}
 		};
 		let mut cursor = Cursor::new(chunk_data);
@@ -414,13 +486,22 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				},
 				None => break,
 			};
-			let chunk_data = match segment.chunk_data(current_chunk, compression_algorithm) {
+			let chunk_data = match &self.encryption_key {
+			None => match segment.chunk_data(current_chunk, compression_algorithm) {
 				Ok(data) => data,
 				Err(e) => match e.unwrap_kind() {
 					ZffErrorKind::IoError(io_error) => return Err(io_error),
 					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
-				}
-			};
+				},
+			},
+			Some(key) => match segment.chunk_data_decrypted(current_chunk, compression_algorithm, key, &self.encryption_algorithm) {
+				Ok(data) => data,
+				Err(e) => match e.unwrap_kind() {
+					ZffErrorKind::IoError(io_error) => return Err(io_error),
+					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+				},
+			}
+		};
 			read_bytes += chunk_data.as_slice().read(&mut buffer[read_bytes..])?;
 		}
 		self.position += read_bytes as u64;

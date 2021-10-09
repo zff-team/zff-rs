@@ -13,8 +13,10 @@ mod lib;
 use zff::{
     Result,
     header::*,
-    HeaderDecoder,
+    HeaderCoding,
     ZffReader,
+    ZffError,
+    ZffErrorKind,
 };
 use lib::constants::*;
 
@@ -35,7 +37,28 @@ struct ZffFS<R: 'static +  Read + Seek> {
 impl<R: Read + Seek> ZffFS<R> {
     fn new(mut data: Vec<R>) -> Result<ZffFS<R>> {
         let main_header = MainHeader::decode_directly(&mut data[0])?;
+        if let Some(_) = main_header.encryption_header() {
+            return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ERROR_MISSING_ENCRYPTION_KEY));
+        };
         let zff_reader = ZffReader::new(data, main_header)?;
+        Ok(Self {
+            zff_reader: zff_reader,
+        })
+    }
+
+    fn new_encrypted<P: AsRef<[u8]>>(mut data: Vec<R>, password: P) -> Result<ZffFS<R>> {
+        let main_header = match MainHeader::decode_directly(&mut data[0]) {
+            Ok(header) => header,
+            Err(e) => match e.get_kind() {
+                ZffErrorKind::HeaderDecodeMismatchIdentifier => {
+                    data[0].seek(SeekFrom::Start(0))?;
+                    MainHeader::decode_encrypted_header_with_password(&mut data[0], &password)?
+                },
+                _ => return Err(e),
+            },
+        };
+        let mut zff_reader = ZffReader::new(data, main_header)?;
+        zff_reader.decrypt_encryption_key(password)?;
         Ok(Self {
             zff_reader: zff_reader,
         })
@@ -204,6 +227,11 @@ fn arguments() -> ArgMatches<'static> {
                         .long(CLAP_ARG_LONG_MOUNT_DIR)
                         .required(true)
                         .takes_value(true))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_PASSWORD)
+                        .help(CLAP_ARG_HELP_PASSWORD)
+                        .short(CLAP_ARG_SHORT_PASSWORD)
+                        .long(CLAP_ARG_LONG_PASSWORD)
+                        .takes_value(true))
                     .get_matches();
     matches
 }
@@ -219,11 +247,13 @@ fn main() {
         Some(p) => match read_dir(p) {
             Ok(iter) => iter,
             Err(_) => {
+                //TODO
                 println!("errr");
                 exit(EXIT_STATUS_ERROR);
             }
         },
         None => {
+            //TODO
             println!("could not determine input path!");
             exit(EXIT_STATUS_ERROR);
         }
@@ -253,13 +283,29 @@ fn main() {
         input_files.push(segment_file);
     }
 
-    let zff_fs = match ZffFS::new(input_files) {
-        Ok(fs) => fs,
-        Err(e) => {
-            println!("{}{}", ERROR_CREATE_ZFFFS, e.to_string());
-            exit(EXIT_STATUS_ERROR);
+    let zff_fs = if !arguments.is_present(CLAP_ARG_NAME_PASSWORD) {
+        match ZffFS::new(input_files) {
+            Ok(fs) => fs,
+            Err(e) => {
+                //TODO: check if file is an encrypted zff file and show a appropriate message.
+                println!("{}{}", ERROR_CREATE_ZFFFS, e.to_string());
+                exit(EXIT_STATUS_ERROR);
+            },
+        }
+    } else {
+        //unwrap is safe here, because we have checked value presence earlier.
+        let password = arguments.value_of(CLAP_ARG_NAME_PASSWORD).unwrap();
+        match ZffFS::new_encrypted(input_files, password.trim()) {
+            Ok(fs) => fs,
+            Err(e) => {
+                //TODO: improve error message.
+                println!("{}{}", ERROR_CREATE_ZFFFS, e.to_string());
+                exit(EXIT_STATUS_ERROR);
+            },
         }
     };
+
+        
     let mountoptions = vec![MountOption::RO, MountOption::FSName(FILESYSTEM_NAME.to_string())];
     match fuser::mount2(zff_fs, mountpoint, &mountoptions) {
         Ok(_) => (),

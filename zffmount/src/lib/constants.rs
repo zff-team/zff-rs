@@ -21,6 +21,11 @@ pub const CLAP_ARG_HELP_MOUNT_DIR: &str = "Directory, where the file(s) are be m
 pub const CLAP_ARG_SHORT_MOUNT_DIR: &str = "m";
 pub const CLAP_ARG_LONG_MOUNT_DIR: &str = "mount-dir";
 
+pub const CLAP_ARG_NAME_PASSWORD: &str = "PASSWORD";
+pub const CLAP_ARG_HELP_PASSWORD: &str = "The password to decrypt an encrypted zff file.";
+pub const CLAP_ARG_SHORT_PASSWORD: &str = "p";
+pub const CLAP_ARG_LONG_PASSWORD: &str = "password";
+
 // - errrors
 pub const ERROR_OPEN_INPUT_FILE: &str = "An errror occurred while trying to open the input file: ";
 pub const ERROR_SERIALIZE_METADATA: &str = "Could not serialize the metadata of the main header.";
@@ -28,6 +33,7 @@ pub const ERROR_CREATE_ZFFFS: &str = "Error occurred while trying to create the 
 pub const ERROR_MOUNT_ZFFFS: &str = "Error occurred while trying to mount the file(s): ";
 pub const ERROR_ZFFFS_READ_SEEK: &str = "Could not read data at given offset.";
 pub const ERROR_ZFFFS_READ_READ: &str = "An I/O error has occurred: ";
+pub const ERROR_MISSING_ENCRYPTION_KEY: &str = "Zff file(s) are encrypted: You should enter the password by using the -p argument.";
 
 pub const EXIT_STATUS_ERROR: i32 = 1;
 pub const EXIT_STATUS_SUCCESS: i32 = 0;
@@ -35,7 +41,7 @@ pub const EXIT_STATUS_SUCCESS: i32 = 0;
 // fuser constants
 pub const TTL: Duration = Duration::from_secs(1); // 1 second
 pub const DEFAULT_BLOCKSIZE: u32 = 512;
-pub const FILESYSTEM_NAME: &str = "zfffs";
+pub const FILESYSTEM_NAME: &str = "zff-fs";
 
 pub const DEFAULT_DIR_INODE: u64 = 1;
 
