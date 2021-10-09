@@ -35,7 +35,6 @@ This repository contains several tools to work with zff images (or acquire them)
 | zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.55 |
 
 # Planned features until zff reaches version 1.0
-- self.header_size() in HeaderCoding trait.
 - code cleanup
 --> Zff-lib refactoring.
 - testing / unit tests

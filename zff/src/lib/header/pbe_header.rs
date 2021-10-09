@@ -33,7 +33,7 @@ use hex::ToHex;
 /// All metadata about this PBE can be found in this PBEHeader.\
 #[derive(Debug,Clone)]
 pub struct PBEHeader {
-	header_version: u8,
+	version: u8,
 	kdf_scheme: KDFScheme,
 	encryption_scheme: PBEScheme,
 	kdf_parameters: KDFParameters,
@@ -43,14 +43,14 @@ pub struct PBEHeader {
 impl PBEHeader {
 	/// returns a new pbe header with the given values.
 	pub fn new(
-		header_version: u8,
+		version: u8,
 		kdf_scheme: KDFScheme,
 		encryption_scheme: PBEScheme,
 		kdf_parameters: KDFParameters,
 		pbencryption_nonce: [u8; 16],
 		) -> PBEHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			kdf_scheme: kdf_scheme,
 			encryption_scheme: encryption_scheme,
 			kdf_parameters: kdf_parameters,
@@ -85,10 +85,15 @@ impl HeaderCoding for PBEHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_PBE_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.push(self.header_version);
+		vec.push(self.version);
 		vec.push(self.kdf_scheme.clone() as u8);
 		vec.push(self.encryption_scheme.clone() as u8);
 		vec.append(&mut self.kdf_parameters.encode_directly());
@@ -122,7 +127,7 @@ impl SerializeTrait for PBEHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("PBEHeader", 10)?;
-        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("header_version", &self.version)?;
         state.serialize_field("kdf_scheme", &self.kdf_scheme)?;
         state.serialize_field("encryption_scheme", &self.encryption_scheme)?;
         match &self.kdf_parameters {
@@ -201,6 +206,11 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 	fn identifier() -> u32 {
 		PBE_KDF_PARAMETERS
 	}
+
+	fn version(&self) -> u8 {
+		0
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.append(&mut self.iterations.encode_directly());

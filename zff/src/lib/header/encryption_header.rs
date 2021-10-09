@@ -26,10 +26,14 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 use hex::ToHex;
 
 /// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
-/// The encryption header is the only optional header part of the main header.
+/// The encryption header is the only optional header part of the main header
+/// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
+/// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password based encryption method,
+/// described by the containing [PBEHeader].
+/// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
 #[derive(Debug,Clone)]
 pub struct EncryptionHeader {
-	header_version: u8,
+	version: u8,
 	pbe_header: PBEHeader,
 	algorithm: EncryptionAlgorithm,
 	encrypted_encryption_key: Vec<u8>,
@@ -39,14 +43,14 @@ pub struct EncryptionHeader {
 impl EncryptionHeader {
 	/// creates a new encryption header by the given values.
 	pub fn new(
-		header_version: u8,
+		version: u8,
 		pbe_header: PBEHeader,
 		algorithm: EncryptionAlgorithm,
 		encrypted_encryption_key: Vec<u8>, //encrypted with set password
 		encrypted_header_nonce: [u8; 12], //used for header encryption
 		) -> EncryptionHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			pbe_header: pbe_header,
 			algorithm: algorithm,
 			encrypted_encryption_key: encrypted_encryption_key,
@@ -54,7 +58,7 @@ impl EncryptionHeader {
 		}
 	}
 
-	/// returns the used encryption algorithm.
+	/// returns the used encryption algorithm as a reference.
 	pub fn algorithm(&self) -> &EncryptionAlgorithm {
 		&self.algorithm
 	}
@@ -64,12 +68,12 @@ impl EncryptionHeader {
 		&self.pbe_header
 	}
 
-	/// returns the nonce, used for header encryption
+	/// returns the nonce, used for header encryption. Note: this nonce is only used for the optionally header encryption.
 	pub fn nonce(&self) -> &[u8; 12] {
 		&self.encrypted_header_nonce
 	}
 
-	/// tries to decrypt the encryption key
+	/// tries to decrypt the encryption key.
 	pub fn decrypt_encryption_key<P: AsRef<[u8]>>(&self, password: P) -> Result<Vec<u8>> {
 		match self.pbe_header.kdf_scheme() {
 			KDFScheme::PBKDF2SHA256 => match self.pbe_header.kdf_parameters() {
@@ -105,10 +109,15 @@ impl HeaderCoding for EncryptionHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_ENCRYPTION_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.push(self.header_version);
+		vec.push(self.version);
 		vec.append(&mut self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
 		vec.append(&mut self.encrypted_encryption_key.encode_directly());
@@ -140,7 +149,7 @@ impl Serialize for EncryptionHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("EncryptionHeader", 10)?;
-        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("header_version", &self.version)?;
         state.serialize_field("pbe_header", &self.pbe_header)?;
         state.serialize_field("algorithm", &self.algorithm)?;
         state.serialize_field("encrypted_encryption_key", &self.encrypted_encryption_key.encode_hex::<String>())?;

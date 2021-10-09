@@ -19,27 +19,22 @@ use crate::{
 use serde::{Serialize};
 
 /// Header for the data compression parameters.\
-/// This header is part of the main header and has the following layout:
+/// This header is part of the main header.
 #[derive(Debug,Clone,Serialize)]
 pub struct CompressionHeader {
-	header_version: u8,
+	version: u8,
 	algorithm: CompressionAlgorithm,
 	level: u8
 }
 
 impl CompressionHeader {
 	/// returns a new compression header with the given values.
-	pub fn new(header_version: u8,compression_algo: CompressionAlgorithm, level: u8) -> CompressionHeader {
+	pub fn new(version: u8,compression_algo: CompressionAlgorithm, level: u8) -> CompressionHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			algorithm: compression_algo,
 			level: level,
 		}
-	}
-
-	/// returns the version of the header.
-	pub fn header_version(&self) -> &u8 {
-		&self.header_version
 	}
 
 	/// Returns the compression algorithm. The appropriate algorithms/values
@@ -60,10 +55,15 @@ impl HeaderCoding for CompressionHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_COMPRESSION_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.push(self.header_version);
+		vec.push(self.version);
 		vec.push(self.algorithm.clone() as u8);
 		vec.push(self.level);
 		
@@ -72,7 +72,7 @@ impl HeaderCoding for CompressionHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<CompressionHeader> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
 		let algorithm = match u8::decode_directly(&mut cursor) {
 			Ok(0) => CompressionAlgorithm::None,
 			Ok(1) => CompressionAlgorithm::Zstd,
@@ -80,6 +80,6 @@ impl HeaderCoding for CompressionHeader {
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM))
 		};
 		let level = u8::decode_directly(&mut cursor)?;
-		Ok(CompressionHeader::new(header_version, algorithm, level))
+		Ok(CompressionHeader::new(version, algorithm, level))
 	}
 }

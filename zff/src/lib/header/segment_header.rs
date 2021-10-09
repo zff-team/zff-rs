@@ -9,6 +9,7 @@ use crate::{
 	Result,
 	HeaderCoding,
 	header::{ChunkHeader},
+	footer::{SegmentFooter},
 	ValueEncoder,
 	ValueDecoder,
 	ZffError,
@@ -17,9 +18,6 @@ use crate::{
 	Encryption,
 	EncryptionAlgorithm,
 	HEADER_IDENTIFIER_SEGMENT_HEADER,
-	HEADER_IDENTIFIER_SEGMENT_FOOTER,
-	CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE,
-	CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE,
 };
 
 // - external
@@ -32,7 +30,7 @@ use lz4_flex;
 /// This header is **not** a part of the main header.\
 #[derive(Debug,Clone,Eq,Serialize)]
 pub struct SegmentHeader {
-	header_version: u8,
+	version: u8,
 	unique_identifier: i64,
 	segment_number: u64,
 	length_of_segment: u64,
@@ -41,9 +39,9 @@ pub struct SegmentHeader {
 
 impl SegmentHeader {
 	/// returns a new empty segment header
-	pub fn new_empty(header_version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
+	pub fn new_empty(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			unique_identifier: unique_identifier,
 			segment_number: segment_number,
 			length_of_segment: 0,
@@ -51,19 +49,14 @@ impl SegmentHeader {
 		}
 	}
 	/// returns a new segment header with the given values.
-	pub fn new(header_version: u8, unique_identifier: i64, segment_number: u64, length_of_segment: u64, footer_offset: u64) -> SegmentHeader {
+	pub fn new(version: u8, unique_identifier: i64, segment_number: u64, length_of_segment: u64, footer_offset: u64) -> SegmentHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			unique_identifier: unique_identifier,
 			segment_number: segment_number,
 			length_of_segment: length_of_segment,
 			footer_offset: footer_offset,
 		}
-	}
-
-	/// returns the version of the segment header.
-	pub fn header_version(&self) -> u8 {
-		self.header_version
 	}
 
 	/// returns the unique identifier of image (each segment should have the same identifier).
@@ -91,7 +84,7 @@ impl SegmentHeader {
 	/// if you clone a segment header from the previous one or something like that.
 	pub fn next_header(&self) -> SegmentHeader {
 		SegmentHeader {
-			header_version: self.header_version,
+			version: self.version,
 			unique_identifier: self.unique_identifier,
 			segment_number: self.segment_number+1,
 			length_of_segment: 0,
@@ -116,10 +109,15 @@ impl HeaderCoding for SegmentHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_SEGMENT_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.append(&mut self.header_version.encode_directly());
+		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());
 		vec.append(&mut self.segment_number.encode_directly());
 		vec.append(&mut self.length_of_segment.encode_directly());
@@ -131,12 +129,12 @@ impl HeaderCoding for SegmentHeader {
 	fn decode_content(data: Vec<u8>) -> Result<SegmentHeader> {
 		let mut cursor = Cursor::new(data);
 
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
 		let unique_identifier = i64::decode_directly(&mut cursor)?;
 		let segment_number = u64::decode_directly(&mut cursor)?;
 		let length = u64::decode_directly(&mut cursor)?;
 		let footer_offset = u64::decode_directly(&mut cursor)?;
-		Ok(SegmentHeader::new(header_version, unique_identifier, segment_number, length, footer_offset))
+		Ok(SegmentHeader::new(version, unique_identifier, segment_number, length, footer_offset))
 	}
 }
 
@@ -144,65 +142,6 @@ impl PartialEq for SegmentHeader {
     fn eq(&self, other: &Self) -> bool {
         self.segment_number == other.segment_number
     }
-}
-
-/// The SegmentFooter is a footer which is be written at the end of the segment.
-/// This footer contains the offsets to the chunks.
-pub struct SegmentFooter {
-	version: u8,
-	chunk_offsets: Vec<u64>
-}
-
-impl SegmentFooter {
-	/// creates a new empty SegmentFooter.
-	pub fn new_empty(version: u8) -> SegmentFooter {
-		Self {
-			version: version,
-			chunk_offsets: Vec::new()
-		}
-	}
-
-	/// creates a new SegmentFooter with given offsets.
-	pub fn new(version: u8, chunk_offsets: Vec<u64>) -> SegmentFooter {
-		Self {
-			version: version,
-			chunk_offsets: chunk_offsets,
-		}
-	}
-
-	/// adds an offset to the SegmentFooter.
-	pub fn add_offset(&mut self, offset: u64) {
-		self.chunk_offsets.push(offset)
-	}
-
-	/// returns the saved offsets
-	pub fn chunk_offsets(&self) -> &Vec<u64> {
-		&self.chunk_offsets
-	}
-}
-
-impl HeaderCoding for SegmentFooter {
-	type Item = SegmentFooter;
-
-	fn identifier() -> u32 {
-		HEADER_IDENTIFIER_SEGMENT_FOOTER
-	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-
-		vec.append(&mut self.version.encode_directly());
-		vec.append(&mut self.chunk_offsets.encode_directly());
-
-		vec
-	}
-
-	fn decode_content(data: Vec<u8>) -> Result<SegmentFooter> {
-		let mut cursor = Cursor::new(data);
-
-		let footer_version = u8::decode_directly(&mut cursor)?;
-		let chunk_offsets = Vec::<u64>::decode_directly(&mut cursor)?;
-		Ok(SegmentFooter::new(footer_version, chunk_offsets))
-	}
 }
 
 /// Segment object
@@ -251,12 +190,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		self.data.seek(SeekFrom::Start(*chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
 		let chunk_size = chunk_header.chunk_size();
-		let chunk_header_size = if chunk_header.signature().is_some() {
-			CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE
-		} else {
-			CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE
-		};
-		let bytes_to_skip = chunk_header_size as u64 + *chunk_offset;
+		let bytes_to_skip = chunk_header.header_size() as u64 + *chunk_offset;
 		let mut chunk_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
 		let mut buffer = Vec::new();
 		match compression_algorithm.borrow() {
@@ -295,12 +229,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		self.data.seek(SeekFrom::Start(*chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
 		let chunk_size = chunk_header.chunk_size();
-		let chunk_header_size = if chunk_header.signature().is_some() {
-			CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE
-		} else {
-			CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE
-		};
-		let bytes_to_skip = chunk_header_size as u64 + *chunk_offset;
+		let bytes_to_skip = chunk_header.header_size() as u64 + *chunk_offset;
 		let mut encrypted_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
 		let mut buffer = Vec::new();
 		encrypted_data.read_to_end(&mut buffer)?;

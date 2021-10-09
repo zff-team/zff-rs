@@ -22,15 +22,15 @@ use hex::ToHex;
 /// This header is part of the main header and contains 0 or more hash values of the dumped data.\
 #[derive(Debug,Clone)]
 pub struct HashHeader {
-	header_version: u8,
+	version: u8,
 	hashes: Vec<HashValue>,
 }
 
 impl HashHeader {
 	/// creates a new HashHeader by given values/hashes.
-	pub fn new(header_version: u8, hashes: Vec<HashValue>) -> HashHeader {
+	pub fn new(version: u8, hashes: Vec<HashValue>) -> HashHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			hashes: hashes,
 		}
 	}
@@ -46,10 +46,15 @@ impl HeaderCoding for HashHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_HASH_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.push(self.header_version);
+		vec.push(self.version);
 		vec.append(&mut self.hashes.encode_directly());
 
 		vec
@@ -88,7 +93,7 @@ impl Serialize for HashHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("HashHeader", 3)?;
-        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("header_version", &self.version)?;
         state.serialize_field("hash_value", &self.hashes)?;
         state.end()
     }
@@ -98,16 +103,16 @@ impl Serialize for HashHeader {
 /// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
 #[derive(Debug,Clone)]
 pub struct HashValue {
-	structure_version: u8,
+	version: u8,
 	hash_type: HashType,
 	hash: Vec<u8>,
 }
 
 impl HashValue {
 	/// creates a new [HashValue](struct.HashValue.html) for the given parameters.
-	pub fn new(structure_version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
+	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
 		Self {
-			structure_version: structure_version,
+			version: version,
 			hash_type: hash_type,
 			hash: hash
 		}
@@ -116,7 +121,7 @@ impl HashValue {
 	pub fn new_empty(structure_version: u8, hash_type: HashType) -> HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
-			structure_version: structure_version,
+			version: structure_version,
 			hash_type: hash_type,
 			hash: vec!(0u8; hash_default_len/8),
 		}
@@ -140,9 +145,14 @@ impl HeaderCoding for HashValue {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_HASH_VALUE
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.push(self.structure_version);
+		vec.push(self.version);
 		vec.push(self.hash_type.clone() as u8);
 		vec.append(&mut self.hash.encode_directly());
 
@@ -170,7 +180,7 @@ impl Serialize for HashValue {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("HashValue", 3)?;
-        state.serialize_field("structure_version", &self.structure_version)?;
+        state.serialize_field("structure_version", &self.version)?;
         state.serialize_field("hash_type", &self.hash_type)?;
         state.serialize_field("hash", &self.hash.encode_hex::<String>())?;
         state.end()

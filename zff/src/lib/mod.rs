@@ -16,8 +16,10 @@ mod file_extension;
 mod io;
 mod hashing;
 mod signatures;
+mod segment;
 /// all zff header.
 pub mod header;
+pub mod footer;
 
 // - re-exports
 pub use error::*;
@@ -29,6 +31,7 @@ pub use file_extension::*;
 pub use io::*;
 pub use hashing::*;
 pub use signatures::*;
+pub use segment::*;
 
 // - types
 /// Result for std::result::Result<T, ZffError>.

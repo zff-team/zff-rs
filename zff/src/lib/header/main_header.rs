@@ -32,7 +32,7 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 /// This header contains a lot of other headers (e.g. compression header, description header, ...) and start information.
 #[derive(Debug,Clone)]
 pub struct MainHeader {
-	header_version: u8,
+	version: u8,
 	encryption_header: Option<EncryptionHeader>,
 	compression_header: CompressionHeader,
 	description_header: DescriptionHeader,
@@ -47,7 +47,7 @@ pub struct MainHeader {
 impl MainHeader {
 	/// returns a new main header with the given values.
 	pub fn new(
-		header_version: u8,
+		version: u8,
 		encryption_header: Option<EncryptionHeader>,
 		compression_header: CompressionHeader,
 		description_header: DescriptionHeader,
@@ -58,7 +58,7 @@ impl MainHeader {
 		unique_identifier: i64,
 		length_of_data: u64) -> MainHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			encryption_header: encryption_header,
 			compression_header: compression_header,
 			description_header: description_header,
@@ -80,7 +80,7 @@ impl MainHeader {
 		K: AsRef<[u8]>
 	{
 		let mut vec = Vec::new();
-		vec.push(self.header_version);
+		vec.push(self.version);
 		let encryption_header = match &self.encryption_header {
 			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 			Some(header) => {
@@ -223,11 +223,6 @@ impl MainHeader {
 		self.hash_header = hash_header;
 	}
 
-	/// returns the header version.
-	pub fn header_version(&self) -> u8 {
-		self.header_version
-	}
-
 	/// returns the chunk_size.
 	pub fn chunk_size(&self) -> usize {
 		1<<self.chunk_size
@@ -295,10 +290,15 @@ impl HeaderCoding for MainHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_MAIN_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.push(self.header_version);
+		vec.push(self.version);
 		match &self.encryption_header {
 			None => {
 				let encryption_flag: u8 = 0;
@@ -318,7 +318,7 @@ impl HeaderCoding for MainHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<MainHeader> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
 		//encryption flag:
 		let mut encryption_header = None;
 		let encryption_flag = u8::decode_directly(&mut cursor)?;
@@ -336,7 +336,7 @@ impl HeaderCoding for MainHeader {
 			unique_identifier,
 			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
-			header_version,
+			version,
 			encryption_header,
 			compression_header,
 			description_header,
@@ -356,7 +356,7 @@ impl Serialize for MainHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("MainHeader", 10)?;
-        state.serialize_field("header_version", &self.header_version)?;
+        state.serialize_field("header_version", &self.version)?;
         state.serialize_field("encryption", &self.encryption_header)?;
         state.serialize_field("compression", &self.compression_header)?;
 

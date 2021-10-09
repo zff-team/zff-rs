@@ -11,14 +11,13 @@ use crate::{
 	ValueEncoder,
 	ValueDecoder,
 	HEADER_IDENTIFIER_CHUNK_HEADER,
-	CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE,
 };
 
 /// Header for chunk data.\
-/// Each chunk has his own chunk header. After the header, the chunked data follows.
+/// Each data chunk has his own chunk header. After the header, the chunked data follows.
 #[derive(Debug,Clone)]
 pub struct ChunkHeader {
-	header_version: u8,
+	version: u8,
 	chunk_number: u64,
 	chunk_size: u64,
 	crc32: u32,
@@ -26,10 +25,10 @@ pub struct ChunkHeader {
 }
 
 impl ChunkHeader {
-	/// creates a new empty header
-	pub fn new_empty(header_version: u8, chunk_number: u64) -> ChunkHeader {
+	/// creates a new empty chunk header with a given chunk number. All other values are set to ```0``` or ```None```.
+	pub fn new_empty(version: u8, chunk_number: u64) -> ChunkHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			chunk_number: chunk_number,
 			chunk_size: 0,
 			crc32: 0,
@@ -38,9 +37,9 @@ impl ChunkHeader {
 	}
 
 	/// creates a new header from the given data.
-	pub fn new(header_version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
+	pub fn new(version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
 		Self {
-			header_version: header_version,
+			version: version,
 			chunk_number: chunk_number,
 			chunk_size: chunk_size,
 			crc32: crc32,
@@ -54,7 +53,7 @@ impl ChunkHeader {
 		self.chunk_size = size
 	}
 
-	/// returns the size of the appropriate chunk
+	/// returns chunk size, excluding the header size.
 	pub fn chunk_size(&self) -> &u64 {
 		&self.chunk_size
 	}
@@ -70,12 +69,6 @@ impl ChunkHeader {
 	/// Note: The Ed25519 signature per chunk is **optional**, so you have to set the signature as an ```Option<[u8; 64]>```.
 	pub fn set_signature(&mut self, signature: Option<[u8; SIGNATURE_LENGTH]>) {
 		self.ed25519_signature = signature
-	}
-
-	/// sets the chunk number to the next number. This can be useful, for example,
-	/// if you clone a chunk header from the previous one or something like that.
-	pub fn next_number(&mut self) {
-		self.chunk_number += 1;
 	}
 
 	/// returns the chunk number of the chunk (header).
@@ -95,10 +88,15 @@ impl HeaderCoding for ChunkHeader {
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_CHUNK_HEADER
 	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.push(self.header_version);
+		vec.push(self.version);
 		vec.append(&mut self.chunk_number.encode_directly());
 		vec.append(&mut self.chunk_size.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
@@ -111,19 +109,18 @@ impl HeaderCoding for ChunkHeader {
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<ChunkHeader> {
-		let data_len = data.len();
-		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let mut cursor = Cursor::new(&data);
+		let version = u8::decode_directly(&mut cursor)?;
 		let chunk_number = u64::decode_directly(&mut cursor)?;
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let crc32 = u32::decode_directly(&mut cursor)?;
 		let mut ed25519_signature = None;
-		if data_len > (CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE) {
+		if cursor.position() < (data.len() as u64 - 1) {
 			let mut buffer = [0; SIGNATURE_LENGTH];
 			cursor.read_exact(&mut buffer)?;
 			ed25519_signature = Some(buffer);
 		}
 
-		Ok(ChunkHeader::new(header_version, chunk_number, chunk_size, crc32, ed25519_signature))
+		Ok(ChunkHeader::new(version, chunk_number, chunk_size, crc32, ed25519_signature))
 	}
 }

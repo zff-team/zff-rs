@@ -20,10 +20,21 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 /// The ```HeaderCoding``` trait specifies an interface for the common header methods and the encoding and decoding methods.
 pub trait HeaderCoding {
+	/// the return value for decode_content(), decode_directly(), decode_for_key();
+	type Item;
+
 	/// returns the identifier (=Magic bytes) of the header.
 	fn identifier() -> u32;
 	/// encodes the header.
 	fn encode_header(&self) -> Vec<u8>;
+
+	/// returns the size of the encoded header (in bytes)
+	fn header_size(&self) -> usize {
+		self.encode_directly().len()
+	}
+
+	/// returns the version of the header.
+	fn version(&self) -> u8;
 
 	/// encodes a given key.
 	fn encode_key<K: Into<String>>(key: K) -> Vec<u8> {
@@ -54,9 +65,6 @@ pub trait HeaderCoding {
 		vec.append(&mut self.encode_directly());
 		vec
 	}
-
-	/// the return value for decode_content(), decode_directly(), decode_for_key();
-	type Item;
 
 	/// decodes the length of the header.
 	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {

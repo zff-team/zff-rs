@@ -52,11 +52,16 @@ pub(crate) const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred wh
 pub const DEFAULT_CHUNK_SIZE: u8 = 15;
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
-pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITHOUT_SIGNATURE: usize = 33;
-pub(crate) const CHUNK_HEADER_CONTENT_LEN_WITH_SIGNATURE: usize = 97;
 pub(crate) const DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY: usize = 21;
 pub(crate) const DEFAULT_SEGMENT_FOOTER_VERSION: u8 = 1;
+
+// default header versions.
+
+/// current header version for the [SegmentHeader].
 pub const DEFAULT_SEGMENT_HEADER_VERSION: u8 = 1;
+/// current header version for the [ChunkHeader].
 pub const DEFAULT_CHUNK_HEADER_VERSION: u8 = 1;
+/// current header version for the [HashValue] structure.
 pub const DEFAULT_HASH_VALUE_HEADER_VERSION: u8 = 1;
+/// current header version for the [HashHeader].
 pub const DEFAULT_HASH_HEADER_VERSION: u8 = 1;
