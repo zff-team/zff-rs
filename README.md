@@ -1,8 +1,8 @@
 # Zff
 
-Zff (Z forensic file format) is a completly new designed file format to store and handle the contents and structure of an partial or entire disk image or physical memory data.
+Zff (Z forensic file format) is a completly new designed file format to store and handle the contents and structure of a partial or entire disk image or physical memory.
 The focus of zff is on speed, security and modularity in concert with forensic requirements.
-Zff is an alternative to the ewf and aff file formats and not compatible with them.
+Zff is an alternative to the ewf and aff file formats and is not compatible with them.
 
 ## Features included in zff (most of them are optional)
 - The disk image can be stored in several split segments.
@@ -11,7 +11,7 @@ Zff is an alternative to the ewf and aff file formats and not compatible with th
 - The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](https://github.com/ph0llux/zff/wiki/Zff-layout#hash-types-flag) section.
 - The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm __Ed25519__ is used for this purpose.
 - The stored data is organized in small chunks. 
-Above mentioned compression, encryption and signature methods are applied to each chunk separatly. This makes it possible to access a corresponding part of the data in real time and not to have to decompress or decrypt the complete image first.
+Above mentioned compression, encryption and signature methods are applied to each chunk separately. This makes it possible to access a corresponding part of the data in real time without the need to decompress or decrypt the complete image first.
 Authenticity verification can also be applied to individual chunks and does not have to be applied to the entire image.
 - Modular design that promises high maintainability and scalability.
 
@@ -37,4 +37,4 @@ This repository contains several tools to work with zff images (or acquire them)
 # Planned features until zff reaches version 1.0
 - testing / unit tests
 - documentation (with deny nodoc) 100%
-- parallelism impl of hashing/crc/signing<->writing data
+- parallelism implementation of hashing/crc/signing<->writing data
