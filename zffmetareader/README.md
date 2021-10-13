@@ -9,6 +9,3 @@ Or you can install the tool directly from crates.io:
 ```bash
 $ cargo install zffmetareader
 ```
-
-# Planned features until zffmetareader reaches version 1.0
-- handling encrypted header information
