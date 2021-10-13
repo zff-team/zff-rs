@@ -27,6 +27,7 @@ use crate::{
 
 // - external
 use serde::ser::{Serialize, Serializer, SerializeStruct};
+use byteorder::{ReadBytesExt, BigEndian};
 
 /// The main header is the first Header, which can be found at the beginning of the first segment.\
 /// This header contains a lot of other headers (e.g. compression header, description header, ...) and start information.
@@ -95,14 +96,25 @@ impl MainHeader {
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
 
-		let mut encrypted_data = Encryption::encrypt_header(
+		let encrypted_data = Encryption::encrypt_header(
 			key, data_to_encrypt,
 			encryption_header.nonce(),
 			encryption_header.algorithm()
 			)?;
-
-		vec.append(&mut encrypted_data);
+		vec.append(&mut encrypted_data.encode_directly());
 		return Ok(vec);
+	}
+
+	fn check_encrypted_identifier<R: Read>(data: &mut R) -> bool {
+		let identifier = match data.read_u32::<BigEndian>() {
+			Ok(val) => val,
+			Err(_) => return false,
+		};
+		if identifier == Self::encrypted_header_identifier() { 
+			return true;
+		} else {
+			return false;
+		}
 	}
 
 	/// decodes the encrypted main header with the given password.
@@ -111,11 +123,12 @@ impl MainHeader {
 		R: Read,
 		P: AsRef<[u8]>,
 	{
-		if !Self::check_identifier(data) {
+		if !Self::check_encrypted_identifier(data) {
 			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		};
 		let header_length = Self::decode_header_length(data)? as usize;
-		let header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let encryption_flag = u8::decode_directly(&mut cursor)?;
@@ -123,11 +136,11 @@ impl MainHeader {
 			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedMainHeader, ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED));
 		}
 		let encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
-		let encryted_data = Vec::<u8>::decode_directly(&mut cursor)?;		
+		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let encryption_key = encryption_header.decrypt_encryption_key(password)?;
 		let nonce = encryption_header.nonce();
 		let algorithm = encryption_header.algorithm();
-		let decrypted_data = Encryption::decrypt_header(encryption_key, encryted_data, nonce, algorithm)?;
+		let decrypted_data = Encryption::decrypt_header(encryption_key, encrypted_data, nonce, algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (compression_header,
 			description_header,
@@ -367,7 +380,7 @@ impl Serialize for MainHeader {
 
         state.serialize_field("signature_flag", &(self.signature_flag != 0))?;
         state.serialize_field("segment_size", &self.segment_size.to_string())?;
-        state.serialize_field("unique identifier", &self.unique_identifier)?;
+        state.serialize_field("unique_identifier", &self.unique_identifier)?;
 
         state.serialize_field("length_of_data", &self.length_of_data.to_string())?;
         state.end()
