@@ -37,3 +37,4 @@ This repository contains several tools to work with zff images (or acquire them)
 - testing / unit tests
 - documentation (with deny nodoc) 100%
 - parallel implementation of hashing/crc/signing<->writing data
+- tool to verify the ed25519 signature
