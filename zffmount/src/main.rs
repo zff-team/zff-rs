@@ -244,17 +244,27 @@ fn main() {
     let mut input_file_paths = Vec::new();
 
     let input_path = match PathBuf::from(&input_filename).parent() {
-        Some(p) => match read_dir(p) {
-            Ok(iter) => iter,
-            Err(_) => {
-                //TODO
-                println!("errr");
-                exit(EXIT_STATUS_ERROR);
+        Some(p) => {
+            if p.to_string_lossy() == "" {
+                match read_dir(PWD) {
+                    Ok(iter) => iter,
+                    Err(e) => {
+                        println!("{}{}", ERROR_UNREADABLE_INPUT_DIR, e.to_string());
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                }
+            } else {
+                match read_dir(p) {
+                    Ok(iter) => iter,
+                    Err(e) => {
+                        println!("{}{}", ERROR_UNREADABLE_INPUT_DIR, e.to_string());
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                }
             }
-        },
+        }
         None => {
-            //TODO
-            println!("could not determine input path!");
+            println!("{}", ERROR_UNDETERMINABLE_INPUT_DIR);
             exit(EXIT_STATUS_ERROR);
         }
     };
@@ -287,7 +297,6 @@ fn main() {
         match ZffFS::new(input_files) {
             Ok(fs) => fs,
             Err(e) => {
-                //TODO: check if file is an encrypted zff file and show a appropriate message.
                 println!("{}{}", ERROR_CREATE_ZFFFS, e.to_string());
                 exit(EXIT_STATUS_ERROR);
             },

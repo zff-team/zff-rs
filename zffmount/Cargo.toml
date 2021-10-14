@@ -11,6 +11,7 @@ fuser = "0.9.1"
 libc = "0.2.102"
 zff = { path = "../zff" }
 nix = "0.19"
+walkdir = "2.3.2"
 #serializing crates
 serde = "1.0"
 toml = "0.5.8"
