@@ -22,7 +22,7 @@ use zstd;
 use lz4_flex;
 
 /// This structure contains a set of methods to operate with a zff segment.
-/// The struct contains the [SegmentHeader] of the segment and the data. The data could be everything which implements [Read] and [Seek].
+/// The struct contains the [SegmentHeader](crate::header::SegmentHeader) of the segment and the data. The data could be everything which implements [Read] and [Seek].
 /// This struct contains also an offset hashmap of all chunks, which are be present in this segment - to jump quickly to the needed data offset.
 pub struct Segment<R: Read + Seek> {
 	header: SegmentHeader,
@@ -71,7 +71,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 	}
 
 	/// returns the data of the appropriate chunk.
-	/// You have to set the chunk_number and the used compression algorithm (the last one can be found in the [MainHeader]).
+	/// You have to set the chunk_number and the used compression algorithm (the last one can be found in the [MainHeader](crate::header::MainHeader)).
 	pub fn chunk_data<C>(&mut self, chunk_number: u64, compression_algorithm: C) -> Result<Vec<u8>>
 	where
 		C: Borrow<CompressionAlgorithm>,
@@ -106,7 +106,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 
 	/// returns the data of the appropriate encrypted chunk.
 	/// You have to set the chunk_number and the used compression algorithm,
-	/// the decryption key and the encryption algorithm (most parts can be found in the [MainHeader]).
+	/// the decryption key and the encryption algorithm (most parts can be found in the [MainHeader](crate::header::MainHeader)).
 	pub fn chunk_data_decrypted<C, K, E>(
 		&mut self, 
 		chunk_number: u64, 
@@ -149,7 +149,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		}
 	}
 
-	/// returns a reference to the inner [SegmentHeader].
+	/// returns a reference to the inner [SegmentHeader](crate::header::SegmentHeader).
 	pub fn header(&self) -> &SegmentHeader {
 		&self.header
 	}

@@ -28,11 +28,11 @@ use crate::{
 	DEFAULT_SEGMENT_FOOTER_VERSION,
 	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
 	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
-	DEFAULT_CHUNK_HEADER_VERSION,
-	DEFAULT_SEGMENT_HEADER_VERSION,
+	DEFAULT_HEADER_VERSION_CHUNK_HEADER,
+	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 	FILE_EXTENSION_FIRST_VALUE,
-	DEFAULT_HASH_VALUE_HEADER_VERSION,
-	DEFAULT_HASH_HEADER_VERSION,
+	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
+	DEFAULT_HEADER_VERSION_HASH_HEADER,
 	ERROR_REWRITE_MAIN_HEADER,
 
 };
@@ -44,7 +44,7 @@ use digest::DynDigest;
 use zstd;
 use lz4_flex;
 
-
+/// The [ZffWriter] can be use to easily create a (segmented) zff image.
 pub struct ZffWriter<R: Read> {
 	main_header: MainHeader,
 	input: R,
@@ -60,6 +60,7 @@ pub struct ZffWriter<R: Read> {
 }
 
 impl<R: Read> ZffWriter<R> {
+	/// creates a new [ZffWriter] with the given paramters.
 	pub fn new<O: Into<String>>(
 		main_header: MainHeader,
 		input: R,
@@ -87,7 +88,87 @@ impl<R: Read> ZffWriter<R> {
 		}
 	}
 
-	//TODO: optimization/code cleanup; //returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>)
+	///writes the data to the appropriate files. The output files will be generated automatically by this method.
+	pub fn generate_files(&mut self) -> Result<()> {
+		let main_header_size = self.main_header.get_encoded_size();
+		if (self.main_header.segment_size() as usize) < main_header_size {
+	        return Err(ZffError::new(ZffErrorKind::SegmentSizeToSmall, ""));
+	    };	    
+	    let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
+	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
+	    first_segment_filename.set_extension(&file_extension);
+	    let mut output_file = File::create(&first_segment_filename)?;
+
+	    let encryption_key = &self.encryption_key.clone();
+
+	    let encoded_main_header = match &encryption_key {
+	        None => self.main_header.encode_directly(),
+	        Some(key) => if self.header_encryption {
+	          self.main_header.encode_encrypted_header_directly(key)? 
+	        } else {
+	            self.main_header.encode_directly()
+	        } 
+	    };
+
+	    output_file.write(&encoded_main_header)?;
+
+	    //writes the first segment
+	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64)?;
+
+	    loop {
+	    	self.current_segment_no += 1;
+	    	file_extension = file_extension_next_value(&file_extension)?;
+	    	let mut segment_filename = PathBuf::from(&self.output_filenpath);
+	    	segment_filename.set_extension(&file_extension);
+	    	let mut output_file = File::create(&segment_filename)?;
+
+	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0)?;
+	    	if written_bytes_in_segment == 0 {
+	            let _ = remove_file(segment_filename);
+	            break;
+	        }
+	    }
+
+	    self.eof_reached = true;
+
+		let mut hash_values = Vec::new();
+	    for (hash_type, hasher) in self.hasher_map.clone() {
+	        let hash = hasher.finalize();
+	        let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
+	        hash_value.set_hash(hash.to_vec());
+	        hash_values.push(hash_value);
+	    }
+	    let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
+
+	    //rewrite main_header with the correct number of bytes of the COMPRESSED data.
+	    self.main_header.set_length_of_data(self.read_bytes);
+	    self.main_header.set_hash_header(hash_header);
+	    match SystemTime::now().duration_since(UNIX_EPOCH) {
+	        Ok(now) => self.main_header.set_acquisition_end(now.as_secs()),
+	        Err(_) => ()
+	    };
+	    output_file.rewind()?;
+	    let encoded_main_header = match &encryption_key {
+	        None => self.main_header.encode_directly(),
+	        Some(key) => if self.header_encryption {
+	          match self.main_header.encode_encrypted_header_directly(key) {
+	                Ok(data) => if data.len() == encoded_main_header.len() {
+	                    data
+	                } else {
+	                    return Err(ZffError::new(ZffErrorKind::MainHeaderEncryptionError, ERROR_REWRITE_MAIN_HEADER))
+	                },
+	                Err(e) => return Err(e)
+	            }  
+	        } else {
+	            self.main_header.encode_directly()
+	        }  
+	    };
+	    output_file.write(&encoded_main_header)?;
+
+	    Ok(())
+	}
+
+	//returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>)
 	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; SIGNATURE_LENGTH]>)> {
 		let chunk_size = self.main_header.chunk_size();
 	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
@@ -125,12 +206,12 @@ impl<R: Read> ZffWriter<R> {
 	    }
 	}
 
-	//TODO: optimization/code cleanup; // returns written_bytes
+	// returns written_bytes
 	fn write_unencrypted_chunk<W>(&mut self, output: &mut W) -> Result<u64> 
 	where
 		W: Write,
 	{
-		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_CHUNK_HEADER_VERSION, self.current_chunk_no);
+		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_no);
 		let (compressed_chunk, crc32, signature) = self.prepare_chunk()?;
 		chunk_header.set_chunk_size(compressed_chunk.len() as u64);
 		chunk_header.set_crc32(crc32);
@@ -142,7 +223,7 @@ impl<R: Read> ZffWriter<R> {
 		Ok(written_bytes as u64)
 	}
 
-	//TODO: optimization/code cleanup ; //returns written_bytes
+	// returns written_bytes
 	fn write_encrypted_chunk<W>(&mut self, output: &mut W, encryption_key: Vec<u8>) -> Result<u64> 
 	where
 		W: Write,
@@ -152,7 +233,7 @@ impl<R: Read> ZffWriter<R> {
 			Some(header) => header.algorithm(),
 			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 		};
-		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_CHUNK_HEADER_VERSION, self.current_chunk_no); 
+		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_no); 
 		let (compressed_chunk, crc32, signature) = self.prepare_chunk()?;
 		let encrypted_data = Encryption::encrypt_message(
 			encryption_key,
@@ -190,7 +271,7 @@ impl<R: Read> ZffWriter<R> {
 	{
 		let mut written_bytes: u64 = 0;
 		let mut segment_header = SegmentHeader::new_empty(
-			DEFAULT_SEGMENT_HEADER_VERSION,
+			DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 			self.main_header.unique_identifier(),
 			self.current_segment_no);
 		let segment_header_length = segment_header.encode_directly().len() as u64;
@@ -263,85 +344,6 @@ impl<R: Read> ZffWriter<R> {
 		output.seek(SeekFrom::Start(seek_value))?;
 		written_bytes += output.write(&segment_header.encode_directly())? as u64;
 		return Ok(written_bytes);
-	}
-
-	pub fn generate_files(&mut self) -> Result<()> {
-		let main_header_size = self.main_header.get_encoded_size();
-		if (self.main_header.segment_size() as usize) < main_header_size {
-	        return Err(ZffError::new(ZffErrorKind::SegmentSizeToSmall, ""));
-	    };	    
-	    let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
-	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
-	    first_segment_filename.set_extension(&file_extension);
-	    let mut output_file = File::create(&first_segment_filename)?;
-
-	    let encryption_key = &self.encryption_key.clone();
-
-	    let encoded_main_header = match &encryption_key {
-	        None => self.main_header.encode_directly(),
-	        Some(key) => if self.header_encryption {
-	          self.main_header.encode_encrypted_header_directly(key)? 
-	        } else {
-	            self.main_header.encode_directly()
-	        } 
-	    };
-
-	    output_file.write(&encoded_main_header)?;
-
-	    //writes the first segment
-	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64)?;
-
-	    loop {
-	    	self.current_segment_no += 1;
-	    	file_extension = file_extension_next_value(&file_extension)?;
-	    	let mut segment_filename = PathBuf::from(&self.output_filenpath);
-	    	segment_filename.set_extension(&file_extension);
-	    	let mut output_file = File::create(&segment_filename)?;
-
-	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0)?;
-	    	if written_bytes_in_segment == 0 {
-	            let _ = remove_file(segment_filename);
-	            break;
-	        }
-	    }
-
-	    self.eof_reached = true;
-
-		let mut hash_values = Vec::new();
-	    for (hash_type, hasher) in self.hasher_map.clone() {
-	        let hash = hasher.finalize();
-	        let mut hash_value = HashValue::new_empty(DEFAULT_HASH_VALUE_HEADER_VERSION, hash_type);
-	        hash_value.set_hash(hash.to_vec());
-	        hash_values.push(hash_value);
-	    }
-	    let hash_header = HashHeader::new(DEFAULT_HASH_HEADER_VERSION, hash_values);
-
-	    //rewrite main_header with the correct number of bytes of the COMPRESSED data.
-	    self.main_header.set_length_of_data(self.read_bytes);
-	    self.main_header.set_hash_header(hash_header);
-	    match SystemTime::now().duration_since(UNIX_EPOCH) {
-	        Ok(now) => self.main_header.set_acquisition_end(now.as_secs()),
-	        Err(_) => ()
-	    };
-	    output_file.rewind()?;
-	    let encoded_main_header = match &encryption_key {
-	        None => self.main_header.encode_directly(),
-	        Some(key) => if self.header_encryption {
-	          match self.main_header.encode_encrypted_header_directly(key) {
-	                Ok(data) => if data.len() == encoded_main_header.len() {
-	                    data
-	                } else {
-	                    return Err(ZffError::new(ZffErrorKind::MainHeaderEncryptionError, ERROR_REWRITE_MAIN_HEADER))
-	                },
-	                Err(e) => return Err(e)
-	            }  
-	        } else {
-	            self.main_header.encode_directly()
-	        }  
-	    };
-	    output_file.write(&encoded_main_header)?;
-
-	    Ok(())
 	}
 }
 
@@ -416,10 +418,15 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 		})
 	}
 
+	/// returns a reference to the underlying [MainHeader](crate::header::MainHeader);
 	pub fn main_header(&self) -> &MainHeader {
 		&self.main_header
 	}
 
+	/// tries to decrypt the encryption key.
+	/// # Errors
+	/// Returns a [ZffError] of kind [ZffErrorKind::DecryptionOfEncryptionKey](crate::ZffErrorKind), if the decryption of the encryption key has failed (in most cases: wrong password was used).
+	/// Returns a [ZffError] of kind [ZffErrorKind::MissingEncryptionHeader](crate::ZffErrorKind), if no encryption header is present in the underlying [MainHeader](crate::header::MainHeader).
 	pub fn decrypt_encryption_key<P: AsRef<[u8]>>(&mut self, password: P) -> Result<()> {
 		match self.main_header.encryption_header() {
 			Some(header) => {
