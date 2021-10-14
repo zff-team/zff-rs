@@ -7,8 +7,6 @@ use ed25519_dalek::{
 	Signer,
 	Verifier,
 	KEYPAIR_LENGTH,
-	SIGNATURE_LENGTH,
-	PUBLIC_KEY_LENGTH,
 	SECRET_KEY_LENGTH,
 };
 use rand::rngs::OsRng;
@@ -18,7 +16,12 @@ use crate::{
 	Result,
 	ZffError,
 	ZffErrorKind,
+	ED25519_DALEK_SIGNATURE_LEN,
+	ED25519_DALEK_PUBKEY_LEN,
 };
+
+// - external
+use base64;
 
 /// structure contains serveral methods to handle signing of chunked data.
 pub struct Signature;
@@ -49,14 +52,13 @@ impl Signature {
 	}
 
 	/// sign the data with the given keypair bytes.
-	pub fn sign(keypair_bytes: [u8; KEYPAIR_LENGTH], message: &[u8]) -> Result<[u8; SIGNATURE_LENGTH]> {
-		let keypair = Keypair::from_bytes(&keypair_bytes)?;
+	pub fn sign(keypair: &Keypair, message: &[u8]) -> [u8; ED25519_DALEK_SIGNATURE_LEN] {
 		let signature = keypair.sign(&message);
-		Ok(signature.to_bytes())
+		signature.to_bytes()
 	}
 
 	/// verify the data with the given public key bytes.
-	pub fn verify(publickey: [u8; PUBLIC_KEY_LENGTH], message: &[u8], signature: [u8; SIGNATURE_LENGTH]) -> Result<bool> {
+	pub fn verify(publickey: [u8; ED25519_DALEK_PUBKEY_LEN], message: &[u8], signature: [u8; ED25519_DALEK_SIGNATURE_LEN]) -> Result<bool> {
 		let pub_key = PublicKey::from_bytes(&publickey)?;
 		let signature = Ed25519Signature::new(signature);
 		match pub_key.verify(message, &signature) {

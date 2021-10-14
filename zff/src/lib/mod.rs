@@ -38,7 +38,7 @@
 //! 
 //! fn build_description_header() -> DescriptionHeader {
 //! 	let examiner = "ph0llux";
-//! 	let start_date = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+//! 	let start_date = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 //! 	
 //! 	let mut description_header = DescriptionHeader::new_empty(DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER);
 //! 	description_header.set_examiner_name(examiner);
@@ -52,16 +52,17 @@
 //! ```
 //! use zff::header::*;
 //! use zff::{
+//!		HashType,
 //! 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 //! 	DEFAULT_HEADER_VERSION_HASH_HEADER
 //! };
 //! 
 //! fn build_hash_header() -> HashHeader {
 //! 	let mut hash_values = Vec::new();
-//! 	hash_values.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::Blake2b512));
-//! 	hash_values.push(HashValue::new_empty(HASH_VALUE_HEADER_VERSION, HashType::SHA256));
+//! 	hash_values.push(HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, HashType::Blake2b512));
+//! 	hash_values.push(HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, HashType::SHA256));
 //! 	
-//! 	let hash_header = HashHeader::new(HASH_HEADER_VERSION, hash_values);
+//! 	let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
 //! 	hash_header
 //! }
 //! ```
@@ -69,7 +70,7 @@
 //! With the previous built [CompressionHeader](crate::header::CompressionHeader),
 //! [DescriptionHeader](crate::header::DescriptionHeader) and [HashHeader](crate::header::HashHeader), and some
 //! additional information we will now generate a [MainHeader](crate::header::MainHeader).
-//! ```
+//! ```no_run
 //! use zff::header::*;
 //! use zff::{
 //! 	DEFAULT_HEADER_VERSION_MAIN_HEADER,
@@ -89,6 +90,7 @@
 //! 
 //! 	let main_header = MainHeader::new(
 //! 									version,
+//!										None, //we won't set an encryption header yet.
 //! 									ch,
 //! 									dh,
 //! 									hh,
@@ -102,7 +104,7 @@
 //! ```
 //! ##### building the ZffWriter and write data to files
 //! In the last step, we will create a [ZffWriter](crate::ZffWriter) and dump the input data to the output file(s):
-//! ```
+//! ```no_run
 //! use std::fs::File;
 //! use zff::{Result, ZffWriter};
 //! 
@@ -113,14 +115,14 @@
 //! 	//this is some special: you will only give the name-scheme of the output file(s). In this example, the name-scheme is
 //! 	// '/tmp/zff_output_file', so the segments of the image will be generated and the appropriate
 //! 	// file extension will be added automatically; in this example to '/tmp/zff_output_file.z01'.
-//! 	let output_filename_scheme = "/tmp/zff_output_file".
+//! 	let output_filename_scheme = "/tmp/zff_output_file";
 //! 
 //! 	// We pass the following information to the ZffWriter: The MainHeader, the input file, the output filename scheme,
 //! 	// None for "No signature key", None for "No encryption key" and false for "No, we won't want to encrypt the header".
 //! 	let zff_writer = ZffWriter::new(main_header, input_file, output_filename_scheme, None, None, false);
 //! 	
 //! 	//create/write the image file(s)
-//! 	zff_writer.generate_files()?
+//! 	zff_writer.generate_files()
 //! }
 //! ```
 

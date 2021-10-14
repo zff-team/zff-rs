@@ -1,3 +1,5 @@
+use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
+
 // identifier: magic bytes
 pub(crate) const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666d;
 pub(crate) const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7a666645;
@@ -54,6 +56,11 @@ pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
 pub(crate) const DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY: usize = 21;
 pub(crate) const DEFAULT_SEGMENT_FOOTER_VERSION: u8 = 1;
+
+/// the default key length of a public signature key
+pub const ED25519_DALEK_PUBKEY_LEN: usize = PUBLIC_KEY_LENGTH;
+/// the default length of an ed25519 signature
+pub const ED25519_DALEK_SIGNATURE_LEN: usize = SIGNATURE_LENGTH;
 
 // default header versions.
 /// current header version for the [MainHeader](crate::header::MainHeader).

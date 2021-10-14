@@ -14,6 +14,8 @@ use crate::{
 	CompressionAlgorithm,
 	Encryption,
 	EncryptionAlgorithm,
+	Signature,
+	ED25519_DALEK_PUBKEY_LEN
 };
 
 // - external
@@ -147,6 +149,54 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 				return Ok(decompressed_buffer);
 			}
 		}
+	}
+
+	/// verifies the ed25519 signature of a specific chunk
+	/// returns true if the signature matches the data and false, if the data are corrupt.
+	pub fn verify_chunk<C>(&mut self, chunk_number: u64, compression_algorithm: C, publickey: [u8; ED25519_DALEK_PUBKEY_LEN]) -> Result<bool>
+	where
+		C: Borrow<CompressionAlgorithm>,
+	{
+		let chunk_data = self.chunk_data(chunk_number, compression_algorithm)?;
+		let chunk_offset = match self.chunk_offsets.get(&chunk_number) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
+		};
+		self.data.seek(SeekFrom::Start(*chunk_offset))?;
+		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
+		let signature = match chunk_header.signature() {
+			Some(sig) => sig,
+			None => return Err(ZffError::new(ZffErrorKind::NoSignatureFoundAtChunk, "")),
+		};
+		Signature::verify(publickey, &chunk_data, *signature)
+	}
+
+	/// verifies the ed25519 signature of a specific encrypted chunk
+	/// returns true if the signature matches the data and false, if the data are corrupt.
+	pub fn verify_chunk_decrypted<C, E, K>(
+		&mut self,
+		chunk_number: u64,
+		compression_algorithm: C,
+		decryption_key: K, 
+		encryption_algorithm: E,
+		publickey: [u8; ED25519_DALEK_PUBKEY_LEN]) -> Result<bool>
+	where
+		C: Borrow<CompressionAlgorithm>,
+		K: AsRef<[u8]>,
+		E: Borrow<EncryptionAlgorithm>,
+	{
+		let chunk_data = self.chunk_data_decrypted(chunk_number, compression_algorithm, decryption_key, encryption_algorithm)?;
+		let chunk_offset = match self.chunk_offsets.get(&chunk_number) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
+		};
+		self.data.seek(SeekFrom::Start(*chunk_offset))?;
+		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
+		let signature = match chunk_header.signature() {
+			Some(sig) => sig,
+			None => return Err(ZffError::new(ZffErrorKind::NoSignatureFoundAtChunk, "")),
+		};
+		Signature::verify(publickey, &chunk_data, *signature)
 	}
 
 	/// returns a reference to the inner [SegmentHeader](crate::header::SegmentHeader).

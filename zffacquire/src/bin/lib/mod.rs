@@ -1,5 +1,2 @@
 // - modules
-mod constants;
-
-// - re-exports
-pub use constants::*;
+pub mod constants;

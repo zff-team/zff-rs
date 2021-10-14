@@ -20,6 +20,7 @@ use crate::{
 	HashType,
 	Hash,
 	EncryptionAlgorithm,
+	Signature,
 	file_extension_next_value,
 };
 
@@ -34,12 +35,14 @@ use crate::{
 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_HEADER,
 	ERROR_REWRITE_MAIN_HEADER,
+	ED25519_DALEK_PUBKEY_LEN,
+	ED25519_DALEK_SIGNATURE_LEN,
 
 };
 
 // - external
 use crc32fast::Hasher as CRC32Hasher;
-use ed25519_dalek::{Keypair,Signer,SIGNATURE_LENGTH};
+use ed25519_dalek::{Keypair};
 use digest::DynDigest;
 use zstd;
 use lz4_flex;
@@ -86,6 +89,11 @@ impl<R: Read> ZffWriter<R> {
 			current_segment_no: 1,
 			eof_reached: false,
 		}
+	}
+
+	/// returns a reference to the underlying Keypair
+	pub fn signature_key(&self) -> &Option<Keypair> {
+		&self.signature_key
 	}
 
 	///writes the data to the appropriate files. The output files will be generated automatically by this method.
@@ -169,7 +177,7 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	//returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>)
-	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; SIGNATURE_LENGTH]>)> {
+	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; ED25519_DALEK_SIGNATURE_LEN]>)> {
 		let chunk_size = self.main_header.chunk_size();
 	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
 	    self.read_bytes += read_bytes;
@@ -185,8 +193,10 @@ impl<R: Read> ZffWriter<R> {
 
 	    let signature = match &self.signature_key {
 	    	None => None,
-	    	Some(keypair) => Some(keypair.sign(&buf).to_bytes()),
+	    	Some(keypair) => Some(Signature::sign(keypair, &buf)),
 	    };
+
+
 
 	    match self.main_header.compression_header().algorithm() {
 	    	CompressionAlgorithm::None => return Ok((buf, crc32, signature)),
@@ -345,6 +355,11 @@ impl<R: Read> ZffWriter<R> {
 		written_bytes += output.write(&segment_header.encode_directly())? as u64;
 		return Ok(written_bytes);
 	}
+
+	/// returns a reference to the underlying [MainHeader](crate::header::MainHeader)
+	pub fn main_header(&self) -> &MainHeader {
+		&self.main_header
+	}
 }
 
 // returns the buffer with the read bytes and the number of bytes which was read.
@@ -445,6 +460,47 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 		}
 		Ok(())
+	}
+
+	/// verifies the authenticity of a specific chunk number
+	/// returns true if the signature matches the data and false, if the data are corrupt.
+	/// # Error
+	/// This method fails, if the given chunk number is not present in the zff image
+	/// with [ZffErrorKind::InvalidChunkNumber](crate::ZffErrorKind).
+	/// This method fails, if the segment to the given chunk number is missing with
+	/// [ZffErrorKind::MissingSegment](crate::ZffErrorKind).
+	pub fn verify_chunk(&mut self, chunk_no: u64, publickey: [u8; ED25519_DALEK_PUBKEY_LEN]) -> Result<bool> {
+		let segment = match self.chunk_map.get(&chunk_no) {
+			Some(segment_no) => match self.segments.get_mut(segment_no) {
+				Some(segment) => segment,
+				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			},
+			None => return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, "")),
+		};
+		let compression_algorithm = self.main_header.compression_header().algorithm();
+		match &self.encryption_key {
+			None => segment.verify_chunk(chunk_no, compression_algorithm, publickey),
+			Some(key) => segment.verify_chunk_decrypted(chunk_no, compression_algorithm, key, &self.encryption_algorithm, publickey),
+		}
+		
+	}
+
+	/// verifies all chunks and returns a Vec of chunk number, which are corrupt.
+	/// # Error
+	/// The method fails, if the image is corrupt (e.g. segments are missing) - unless ```ignore_missing_segments = true```.
+	pub fn verify_all(&mut self, publickey: [u8; ED25519_DALEK_PUBKEY_LEN], ignore_missing_segments: bool) -> Result<Vec<u64>> {
+		let mut corrupt_chunks = Vec::new();
+		for (chunk_number, _) in &self.chunk_map.clone() {
+			match self.verify_chunk(*chunk_number, publickey) {
+				Ok(true) => (),
+				Ok(false) => corrupt_chunks.push(chunk_number.clone()),
+				Err(e) => match e.get_kind() {
+					ZffErrorKind::MissingSegment => if ignore_missing_segments { () } else { return Err(e) },
+					_ => return Err(e),
+				},
+			}
+		}
+		Ok(corrupt_chunks)
 	}
 }
 

@@ -15,5 +15,7 @@ bench = true
 clap = "2.33"
 rand = "0.7.3"
 zff = { path = "../zff" }
+toml = "0.5.8"
+base64 = "0.13.0"
 #signing
 ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }

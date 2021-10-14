@@ -70,7 +70,13 @@ pub enum ZffErrorKind {
 	/// Error will be returned, if the segment size is too small.
 	SegmentSizeToSmall,
 	/// Error will be returned, if the main header could not be encrypted.
-	MainHeaderEncryptionError
+	MainHeaderEncryptionError,
+	/// Error will be returned, if the chunk number is not present in zff image.
+	InvalidChunkNumber,
+	/// Error will be returned, if the selected chunk hasn't have an ed25519 signature.
+	NoSignatureFoundAtChunk,
+	/// Error will be returned, if the appropriate segment is missing in the zff image.
+	MissingSegment,
 
 }
 
@@ -101,6 +107,9 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::NullOrNegativeSegmentNumber => "NullOrNegativeSegmentNumber",
 			ZffErrorKind::SegmentSizeToSmall => "SegmentSizeToSmall",
 			ZffErrorKind::MainHeaderEncryptionError => "MainHeaderEncryptionError",
+			ZffErrorKind::InvalidChunkNumber => "InvalidChunkNumber",
+			ZffErrorKind::NoSignatureFoundAtChunk => "NoSignatureFoundAtChunk",
+			ZffErrorKind::MissingSegment => "MissingSegment",
 		};
 	write!(f, "{}", err_msg)
 	}

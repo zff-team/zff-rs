@@ -20,7 +20,8 @@ use crate::{
 };
 
 // - external
-use serde::{Serialize};
+use serde::ser::{Serialize, Serializer, SerializeStruct};
+use chrono::{Utc, TimeZone};
 
 /// The description header contains all data,
 /// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
@@ -34,13 +35,13 @@ use serde::{Serialize};
 /// 
 /// fn main() {
 /// 	let header_version = 1;
-/// 	let description_header = DescriptionHeader::new(1);
+/// 	let mut description_header = DescriptionHeader::new_empty(1);
 /// 
 /// 	description_header.set_examiner_name("ph0llux");
 /// 	assert_eq!(Some("ph0llux"), description_header.examiner_name());
 /// }
 /// ```
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub struct DescriptionHeader {
 	version: u8,
 	case_number: Option<String>,
@@ -214,4 +215,21 @@ impl HeaderCoding for DescriptionHeader {
 
 		Ok(description_header)
 	}
+}
+
+impl Serialize for DescriptionHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("DescriptionHeader", 10)?;
+        state.serialize_field("header_version", &self.version)?;
+        state.serialize_field("case_number", &self.case_number)?;
+        state.serialize_field("evidence_number", &self.evidence_number)?;
+        state.serialize_field("examiner_name", &self.examiner_name)?;
+        state.serialize_field("notes", &self.notes)?;
+        state.serialize_field("acquisition_begin", &Utc.timestamp(self.acquisition_start as i64, 0).to_string())?;
+        state.serialize_field("acquisition_end", &Utc.timestamp(self.acquisition_end as i64, 0).to_string())?;
+        state.end()
+    }
 }

@@ -14,8 +14,7 @@ bench = true
 [dependencies]
 clap = "2.33"
 zff = { path = "../zff" }
-#signing
-ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }
+base64 = "0.13.0"
 
 #serializing crates
 serde = "1.0"

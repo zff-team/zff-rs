@@ -15,7 +15,7 @@ extern crate zff;
 mod lib;
 
 // - internal
-use crate::lib::*;
+use crate::lib::constants::*;
 use zff::{
     header::*,
     EncryptionAlgorithm,
@@ -39,6 +39,8 @@ use clap::{
 };
 use rand::{Rng};
 use ed25519_dalek::Keypair;
+use toml;
+use base64;
 
 fn arguments() -> ArgMatches<'static> {
     let matches = App::new(PROGRAM_NAME)
@@ -414,6 +416,21 @@ fn main() {
             }
         }
     };
+
+    match toml::Value::try_from(&zff_writer.main_header()) {
+        Ok(value) => {
+            println!("{}", value);
+            match zff_writer.signature_key() {
+                Some(key) => {
+                    println!("{}\n{}", PUBLIC_KEY_DESC, base64::encode(key.public.as_bytes()));
+                },
+                None => (),
+            }
+        },
+        Err(_) => {
+            println!("{}", ERROR_PRINT_MAINHEADER);
+        },
+    }
 
     exit(EXIT_STATUS_SUCCESS);
 }

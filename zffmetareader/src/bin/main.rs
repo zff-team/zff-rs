@@ -1,8 +1,8 @@
 // - STD
-use std::fs::File;
-use std::path::PathBuf;
+use std::fs::{File,read_dir};
+use std::path::{PathBuf, Path};
 use std::process::exit;
-use std::io::{Seek,Read};
+use std::io::{self, Seek,Read, BufRead};
 
 // - modules
 mod lib;
@@ -10,15 +10,20 @@ mod lib;
 // - internal
 use lib::constants::*;
 use zff::{
+    Result,
     header::*,
     HeaderCoding,
+    ZffReader,
+    ZffError,
     ZffErrorKind,
+    ED25519_DALEK_PUBKEY_LEN,
 };
 
 // - external
 use clap::{Arg, App, ArgMatches};
 use toml;
 use serde_json;
+use base64;
 
 // parsing incoming arguments.
 fn arguments() -> ArgMatches<'static> {
@@ -43,6 +48,16 @@ fn arguments() -> ArgMatches<'static> {
                         .help(CLAP_ARG_HELP_PASSWORD)
                         .short(CLAP_ARG_SHORT_PASSWORD)
                         .long(CLAP_ARG_LONG_PASSWORD)
+                        .takes_value(true))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_VERIFY)
+                        .help(CLAP_ARG_HELP_VERIFY)
+                        .short(CLAP_ARG_SHORT_VERIFY)
+                        .long(CLAP_ARG_LONG_VERIFY)
+                        .requires(CLAP_ARG_NAME_PUBKEYFILE))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_PUBKEYFILE)
+                        .help(CLAP_ARG_HELP_PUBKEYFILE)
+                        .short(CLAP_ARG_SHORT_PUBKEYFILE)
+                        .long(CLAP_ARG_LONG_PUBKEYFILE)
                         .takes_value(true))
                     .get_matches();
     matches
@@ -208,6 +223,184 @@ fn decode_main_header_encrypted<R: Read>(input_file: &mut R, arguments: &ArgMatc
     }
 }
 
+fn create_zff_reader<R: Read + Seek, P: AsRef<[u8]>>(mut data: Vec<R>, password: Option<P>) -> Result<ZffReader<R>> {
+    if let Some(password) = password {
+        let main_header = match MainHeader::decode_directly(&mut data[0]) {
+            Ok(header) => header,
+            Err(e) => match e.get_kind() {
+                ZffErrorKind::HeaderDecodeMismatchIdentifier => {
+                    data[0].rewind()?;
+                    MainHeader::decode_encrypted_header_with_password(&mut data[0], &password)?
+                },
+                _ => return Err(e),
+            },
+        };
+        let mut zff_reader = ZffReader::new(data, main_header)?;
+        zff_reader.decrypt_encryption_key(password)?;
+        return Ok(zff_reader);
+    } else {
+        let main_header = MainHeader::decode_directly(&mut data[0])?;
+        if let Some(_) = main_header.encryption_header() {
+            return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ERROR_MISSING_ENCRYPTION_KEY));
+        };
+        let zff_reader = ZffReader::new(data, main_header)?;
+        Ok(zff_reader)
+    }
+}
+
+fn verify_image(arguments: &ArgMatches, header_signature: &HeaderSignature) {
+    // Calling .unwrap() is safe here because the arguments are *required*.
+    let mut input_file_paths = Vec::new();
+    let input_filename = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
+    let input_path = match PathBuf::from(&input_filename).parent() {
+        Some(p) => {
+            if p.to_string_lossy() == "" {
+                match read_dir(PWD) {
+                    Ok(iter) => iter,
+                    Err(e) => {
+                        println!("{}{}", ERROR_UNREADABLE_INPUT_DIR, e.to_string());
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                }
+            } else {
+                match read_dir(p) {
+                    Ok(iter) => iter,
+                    Err(e) => {
+                        println!("{}{}", ERROR_UNREADABLE_INPUT_DIR, e.to_string());
+                        exit(EXIT_STATUS_ERROR);
+                    }
+                }
+            }
+        }
+        None => {
+            println!("{}", ERROR_UNDETERMINABLE_INPUT_DIR);
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    for filename in input_path {
+        match filename {
+            Ok(n) if n.path().is_file() => {
+                if n.path().file_stem() == input_filename.file_stem() {
+                    input_file_paths.push(n.path());
+                }
+            }
+            _ => ()
+        }
+    }
+
+    input_file_paths.sort();
+    let mut input_files = Vec::new();
+    for path in input_file_paths {
+        let segment_file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_) => {
+                println!("{}{}", ERROR_OPEN_INPUT_FILE, path.to_string_lossy());
+                exit(EXIT_STATUS_ERROR);
+            }
+        };
+        input_files.push(segment_file);
+    }
+
+    let mut public_key = [0; ED25519_DALEK_PUBKEY_LEN];
+    // Calling .unwrap() is safe here because the arguments are *required*.
+    let path = &arguments.value_of(CLAP_ARG_NAME_PUBKEYFILE).unwrap();
+    let mut file_content = match read_lines(&path) {
+        Ok(content) => content,
+        Err(_) => {
+            println!("{}{}", ERROR_OPEN_FILE_PUBKEY, &path);
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    let base64_encoded_pubkey = match file_content.next() {
+        Some(Ok(line)) => line,
+        _ => {
+            println!("{}{}", ERROR_DECODE_BASE64_PUBKEY, ERROR_EMPTY_FILE);
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    let decoded_key = match base64::decode(base64_encoded_pubkey.trim()) {
+        Ok(key) => key,
+        Err(e) => {
+            println!("{}{}", ERROR_DECODE_BASE64_PUBKEY, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    match decoded_key.as_slice().read_exact(&mut public_key) {
+        Ok(_) => (),
+        Err(e) => {
+            println!("{}{}", ERROR_READ_PUBKEY, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    };    
+
+    let mut zff_reader = match header_signature {
+        HeaderSignature::EncryptedMainHeader => {
+            let password = match arguments.value_of(CLAP_ARG_NAME_PASSWORD) {
+                Some(pw) => pw,
+                None => {
+                    println!("{}", ERROR_NO_PASSWORD);
+                    exit(EXIT_STATUS_ERROR);
+                }
+            };
+
+            let mut zff_reader = match create_zff_reader(input_files, Some(password)) {
+                Ok(reader) => reader,
+                Err(e) => {
+                    println!("{}{}", ERROR_START_VERIFICATION_PROCESS, e.to_string());
+                    exit(EXIT_STATUS_ERROR);
+                },
+            };
+
+            match zff_reader.decrypt_encryption_key(password.trim()) {
+                Ok(_) => (),
+                Err(_) => {
+                    println!("{}{}", ERROR_PARSE_ENCRYPTED_MAIN_HEADER, ERROR_WRONG_PASSWORD);
+                    exit(EXIT_STATUS_ERROR);
+                }
+            };
+
+            zff_reader
+        },
+        _ => {
+            match create_zff_reader(input_files, None::<String>) {
+                Ok(reader) => reader,
+                Err(e) => {
+                    println!("{}{}", ERROR_START_VERIFICATION_PROCESS, e.to_string());
+                    exit(EXIT_STATUS_ERROR);
+                },
+            }
+        },
+    };
+
+    match zff_reader.verify_all(public_key, false) {
+        Ok(vec) => {
+            if vec.len() == 0 {
+                println!("{}", VERIFIER_RESULT_SUCCESS);
+                exit(EXIT_STATUS_SUCCESS);
+            } else {
+                println!("{}", VERIFIER_RESULT_CORRUPTION_FOUND);
+                for chunk_no in vec {
+                    println!("{}", chunk_no);
+                }
+                exit(EXIT_STATUS_SUCCESS);
+            }
+        },
+        Err(e) => {
+            println!("{}{}", VERIFIER_RESULT_ERROR, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    }
+}
+
+// The output is wrapped in a Result to allow matching on errors
+// Returns an Iterator to the Reader of the lines of the file.
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where P: AsRef<Path>, {
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+            
+
 fn main() {
     let arguments = arguments();
 
@@ -237,14 +430,32 @@ fn main() {
         }
     };
 
-    if u32::from_be_bytes(header_signature) == MainHeader::identifier() {
-        decode_main_header_unencrypted(&mut input_file, &arguments)
+    let header_signature = if u32::from_be_bytes(header_signature) == MainHeader::identifier() {
+        HeaderSignature::MainHeader
     } else if u32::from_be_bytes(header_signature) == SegmentHeader::identifier() {
-        decode_segment_header(&mut input_file, &arguments)
+        HeaderSignature::SegmentHeader
     } else if u32::from_be_bytes(header_signature) == MainHeader::encrypted_header_identifier() {
-        decode_main_header_encrypted(&mut input_file, &arguments)
+        HeaderSignature::EncryptedMainHeader
     } else {
         println!("{}", ERROR_UNKNOWN_HEADER);
         exit(EXIT_STATUS_ERROR);
-    }    
+    };
+
+    if arguments.is_present(CLAP_ARG_NAME_VERIFY) {
+        verify_image(&arguments, &header_signature)
+    }
+
+    match header_signature {
+        HeaderSignature::MainHeader => decode_main_header_unencrypted(&mut input_file, &arguments),
+        HeaderSignature::SegmentHeader => decode_segment_header(&mut input_file, &arguments),
+        HeaderSignature::EncryptedMainHeader => decode_main_header_encrypted(&mut input_file, &arguments)
+    }
+
+       
+}
+
+enum HeaderSignature {
+    MainHeader,
+    SegmentHeader,
+    EncryptedMainHeader,
 }
