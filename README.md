@@ -32,6 +32,3 @@ This repository contains several tools to work with zff images (or acquire them)
 | zffacquire | binary | Tool to acquire disk images in zff format | coming soon | 1.55 |
 | zffmetareader | binary | Tool to get meta information about a zff image | coming soon | 1.55 |
 | zffmount | binary | Tool to mount a zff image with FUSE (similar to xmount) | coming soon | 1.55 |
-
-# Planned features until zff reaches version 1.0
-- testing / unit tests
