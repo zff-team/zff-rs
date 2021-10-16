@@ -385,6 +385,8 @@ fn main() {
 
     let unique_identifier = segment_header.unique_identifier();
 
+    let number_of_segments = 0;
+
     let main_header = MainHeader::new(
         MAIN_HEADER_VERSION,
         encryption_header.clone(),
@@ -394,6 +396,7 @@ fn main() {
         chunk_size,
         signature_flag,
         segment_size,
+        number_of_segments, //number of segments
         unique_identifier,
         0 //length of data
         );
