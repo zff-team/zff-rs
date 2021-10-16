@@ -146,7 +146,13 @@ pub trait ValueEncoder {
 	/// encodes the value directly (= without key).
 	fn encode_directly(&self) -> Vec<u8>;
 	/// encodes a key to the value.
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8>;
+	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
+		let mut vec = Vec::new();
+		let mut encoded_key = Self::encode_key(key);
+		vec.append(&mut encoded_key);
+		vec.append(&mut self.encode_directly());
+		vec
+	}
 }
 
 impl ValueEncoder for bool {
@@ -159,27 +165,12 @@ impl ValueEncoder for bool {
 		};
 		vec
 	}
-
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for u8 {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.push(*self);
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
@@ -190,26 +181,12 @@ impl ValueEncoder for u16 {
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
 	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for u32 {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
@@ -220,26 +197,12 @@ impl ValueEncoder for u64 {
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
 	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for i64 {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
@@ -250,26 +213,12 @@ impl ValueEncoder for [u8; 12] {
 		vec.append(&mut self.to_vec());
 		vec
 	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for [u8; 16] {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_vec());
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
@@ -280,26 +229,12 @@ impl ValueEncoder for [u8; 32] {
 		vec.append(&mut self.to_vec());
 		vec
 	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for [u8; 64] {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_vec());
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
@@ -312,13 +247,6 @@ impl ValueEncoder for String {
 		vec.append(&mut self.as_bytes().to_vec());
 		vec
 	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for str {
@@ -327,13 +255,6 @@ impl ValueEncoder for str {
 		let string_length = self.len() as u64;
 		vec.append(&mut string_length.to_le_bytes().to_vec());
 		vec.append(&mut self.as_bytes().to_vec());
-		vec
-	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
@@ -350,14 +271,6 @@ where
 		}
 		vec
 	}
-
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for Vec<u8> {
@@ -369,14 +282,6 @@ impl ValueEncoder for Vec<u8> {
 		}
 		vec
 	}
-
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 }
 
 impl ValueEncoder for Vec<u64> {
@@ -386,14 +291,6 @@ impl ValueEncoder for Vec<u64> {
 		for value in self {
 			vec.append(&mut value.encode_directly());
 		}
-		vec
-	}
-
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
 		vec
 	}
 }
