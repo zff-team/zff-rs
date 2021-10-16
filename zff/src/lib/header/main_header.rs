@@ -41,6 +41,7 @@ pub struct MainHeader {
 	chunk_size: u8,
 	signature_flag: u8,
 	segment_size: u64,
+	number_of_segments: u64,
 	unique_identifier: i64,
 	length_of_data: u64,
 }
@@ -56,6 +57,7 @@ impl MainHeader {
 		chunk_size: u8,
 		signature_flag: u8,
 		segment_size: u64,
+		number_of_segments: u64,
 		unique_identifier: i64,
 		length_of_data: u64) -> MainHeader {
 		Self {
@@ -67,6 +69,7 @@ impl MainHeader {
 			chunk_size: chunk_size,
 			signature_flag: signature_flag,
 			segment_size: segment_size,
+			number_of_segments: number_of_segments,
 			unique_identifier: unique_identifier,
 			length_of_data: length_of_data,
 		}
@@ -148,6 +151,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			number_of_segments,
 			unique_identifier,
 			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
@@ -159,6 +163,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			number_of_segments,
 			unique_identifier,
 			length_of_data);
 		Ok(main_header)
@@ -191,6 +196,7 @@ impl MainHeader {
 		vec.push(self.chunk_size);
 		vec.push(self.signature_flag);
 		vec.append(&mut self.segment_size.encode_directly());
+		vec.append(&mut self.number_of_segments.encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
 
@@ -204,6 +210,7 @@ impl MainHeader {
 		u8, // chunk size
 		u8, // signature flag
 		u64, // segment size
+		u64, // number of segments
 		i64, // unique identifier
 		u64, // length of data
 		)>{
@@ -213,6 +220,7 @@ impl MainHeader {
 		let chunk_size = u8::decode_directly(inner_content)?;
 		let signature_flag = u8::decode_directly(inner_content)?;
 		let segment_size = u64::decode_directly(inner_content)?;
+		let number_of_segments = u64::decode_directly(inner_content)?;
 		let unique_identifier = i64::decode_directly(inner_content)?;
 		let length_of_data = u64::decode_directly(inner_content)?;
 		let inner_content = (
@@ -222,6 +230,7 @@ impl MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			number_of_segments,
 			unique_identifier,
 			length_of_data);
 		Ok(inner_content)
@@ -296,6 +305,16 @@ impl MainHeader {
 	pub fn unique_identifier(&self) -> i64 {
 		self.unique_identifier
 	}
+
+	/// sets the number of segments
+	pub fn set_number_of_segments(&mut self, value: u64) {
+		self.number_of_segments = value
+	}
+
+	/// returns the number of segments
+	pub fn number_of_segments(&self) -> u64 {
+		self.number_of_segments
+	}
 }
 
 impl HeaderCoding for MainHeader {
@@ -347,6 +366,7 @@ impl HeaderCoding for MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			number_of_segments,
 			unique_identifier,
 			length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		let main_header = Self::new(
@@ -358,6 +378,7 @@ impl HeaderCoding for MainHeader {
 			chunk_size,
 			signature_flag,
 			segment_size,
+			number_of_segments,
 			unique_identifier,
 			length_of_data);
 		Ok(main_header)

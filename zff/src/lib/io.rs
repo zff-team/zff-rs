@@ -37,7 +37,7 @@ use crate::{
 	ERROR_REWRITE_MAIN_HEADER,
 	ED25519_DALEK_PUBKEY_LEN,
 	ED25519_DALEK_SIGNATURE_LEN,
-
+	ERROR_MISSING_SEGMENT
 };
 
 // - external
@@ -98,6 +98,7 @@ impl<R: Read> ZffWriter<R> {
 
 	///writes the data to the appropriate files. The output files will be generated automatically by this method.
 	pub fn generate_files(&mut self) -> Result<()> {
+		let mut number_of_segments = 0;
 		let main_header_size = self.main_header.get_encoded_size();
 		if (self.main_header.segment_size() as usize) < main_header_size {
 	        return Err(ZffError::new(ZffErrorKind::SegmentSizeToSmall, ""));
@@ -122,6 +123,7 @@ impl<R: Read> ZffWriter<R> {
 
 	    //writes the first segment
 	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64)?;
+	    number_of_segments += 1;
 
 	    loop {
 	    	self.current_segment_no += 1;
@@ -135,7 +137,10 @@ impl<R: Read> ZffWriter<R> {
 	            let _ = remove_file(segment_filename);
 	            break;
 	        }
+	        number_of_segments += 1;
 	    }
+
+	    self.main_header.set_number_of_segments(number_of_segments);
 
 	    self.eof_reached = true;
 
@@ -423,6 +428,9 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 
 			segments.insert(segment_number, segment);
 		}
+		if segments.len() as u64 != main_header.number_of_segments() {
+			return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT))
+		};
 		Ok(Self {
 			main_header: main_header,
 			segments: segments,
@@ -473,7 +481,7 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 		let segment = match self.chunk_map.get(&chunk_no) {
 			Some(segment_no) => match self.segments.get_mut(segment_no) {
 				Some(segment) => segment,
-				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT)),
 			},
 			None => return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, "")),
 		};
@@ -489,6 +497,9 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 	/// # Error
 	/// The method fails, if the image is corrupt (e.g. segments are missing) - unless ```ignore_missing_segments = true```.
 	pub fn verify_all(&mut self, publickey: [u8; ED25519_DALEK_PUBKEY_LEN], ignore_missing_segments: bool) -> Result<Vec<u64>> {
+		if self.segments.len() as u64 != self.main_header.number_of_segments() {
+			return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT))
+		};
 		let mut corrupt_chunks = Vec::new();
 		for (chunk_number, _) in &self.chunk_map.clone() {
 			match self.verify_chunk(*chunk_number, publickey) {
