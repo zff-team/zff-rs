@@ -22,8 +22,8 @@ The following benchmarks were all run on my notebook, which has the following sp
 - Lenovo Thinkbook 14S Yoga ITL
 - Intel(R) 11th Gen i5-1135G7 @ AVG: 2.40GHz (MAX: 4.2 GHz)
 - 16GB DDR4-3200 RAM
-- internal WDC PC SN530 512GB NVMe
-The installed operating system was Gentoo Linux.
+- internal WDC PC SN530 512GB NVMe\
+The installed operating system was Gentoo Linux.\
 Input and output storage device was the internal NVMe.
 
 The following benchmark was created for a \~20GB prebuilt image, which was generated using the script under benchmarks/example01.sh.
