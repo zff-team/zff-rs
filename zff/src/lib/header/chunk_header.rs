@@ -21,6 +21,7 @@ pub struct ChunkHeader {
 	chunk_number: u64,
 	chunk_size: u64,
 	crc32: u32,
+	error_flag: bool,
 	ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,
 }
 
@@ -32,17 +33,19 @@ impl ChunkHeader {
 			chunk_number: chunk_number,
 			chunk_size: 0,
 			crc32: 0,
+			error_flag: false,
 			ed25519_signature: None,
 		}
 	}
 
 	/// creates a new header from the given data.
-	pub fn new(version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
+	pub fn new(version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, error_flag: bool, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
 		Self {
 			version: version,
 			chunk_number: chunk_number,
 			chunk_size: chunk_size,
 			crc32: crc32,
+			error_flag: error_flag,
 			ed25519_signature: ed25519_signature
 		}
 	}
@@ -100,6 +103,7 @@ impl HeaderCoding for ChunkHeader {
 		vec.append(&mut self.chunk_number.encode_directly());
 		vec.append(&mut self.chunk_size.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
+		vec.append(&mut self.error_flag.encode_directly());
 		match self.ed25519_signature {
 			None => (),
 			Some(signature) => vec.append(&mut signature.encode_directly()),
@@ -114,6 +118,7 @@ impl HeaderCoding for ChunkHeader {
 		let chunk_number = u64::decode_directly(&mut cursor)?;
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let crc32 = u32::decode_directly(&mut cursor)?;
+		let error_flag = bool::decode_directly(&mut cursor)?;
 		let mut ed25519_signature = None;
 		if cursor.position() < (data.len() as u64 - 1) {
 			let mut buffer = [0; SIGNATURE_LENGTH];
@@ -121,6 +126,6 @@ impl HeaderCoding for ChunkHeader {
 			ed25519_signature = Some(buffer);
 		}
 
-		Ok(ChunkHeader::new(version, chunk_number, chunk_size, crc32, ed25519_signature))
+		Ok(ChunkHeader::new(version, chunk_number, chunk_size, crc32, error_flag, ed25519_signature))
 	}
 }

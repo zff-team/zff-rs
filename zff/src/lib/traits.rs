@@ -149,6 +149,26 @@ pub trait ValueEncoder {
 	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8>;
 }
 
+impl ValueEncoder for bool {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		if *self {
+			vec.push(0 as u8);
+		} else {
+			vec.push(1 as u8);
+		};
+		vec
+	}
+
+	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
+		let mut vec = Vec::new();
+		let mut encoded_key = Self::encode_key(key);
+		vec.append(&mut encoded_key);
+		vec.append(&mut self.encode_directly());
+		vec
+	}
+}
+
 impl ValueEncoder for u8 {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
@@ -414,6 +434,19 @@ pub trait ValueDecoder {
 			return Err(ZffError::new(ZffErrorKind::HeaderDecoderKeyNotOnPosition, ERROR_HEADER_DECODER_KEY_POSITION))
 		}
 		Self::decode_directly(data)
+	}
+}
+
+impl ValueDecoder for bool {
+	type Item = bool;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<bool> {
+		let data = data.read_u8()?;
+		if data != 0 {
+			return Ok(true);
+		} else {
+			return Ok(false)
+		}
 	}
 }
 
