@@ -29,7 +29,7 @@ pub(crate) const CLAP_ARG_LONG_PASSWORD: &str = "password";
 // - errors
 pub(crate) const ERROR_OPEN_INPUT_FILE: &str = "An error occurred while trying to open the input file: ";
 pub(crate) const ERROR_SERIALIZE_METADATA: &str = "Could not serialize the metadata of the main header.";
-pub(crate) const ERROR_CREATE_ZFFFS: &str = "Error occurred while trying to create the Zffs-FS: ";
+pub(crate) const ERROR_CREATE_ZFFFS: &str = "Error occurred while trying to create the Zff-fs: ";
 pub(crate) const ERROR_MOUNT_ZFFFS: &str = "Error occurred while trying to mount the file(s): ";
 pub(crate) const ERROR_ZFFFS_READ_SEEK: &str = "Could not read data at given offset.";
 pub(crate) const ERROR_ZFFFS_READ_READ: &str = "An I/O error has occurred: ";
