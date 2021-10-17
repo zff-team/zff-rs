@@ -123,7 +123,7 @@ impl Encryption {
 	/// # Example
 	///	```
 	/// use zff::*;
-	/// use phollaits::ToHex;
+	/// use hex::ToHex;
 	///
 	/// fn main() -> Result<()> {
 	///		let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
@@ -132,7 +132,7 @@ impl Encryption {
 	/// 
 	///		let ciphertext = Encryption::encrypt_message(key, message, chunk_no, EncryptionAlgorithm::AES256GCMSIV)?;
 	/// 
-	///		assert_eq!(ciphertext.hexify(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
+	///		assert_eq!(ciphertext.encode_hex::<String>(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
 	///		Ok(())
 	/// }
 	///	```

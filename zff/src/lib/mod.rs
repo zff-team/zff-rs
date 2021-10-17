@@ -23,7 +23,8 @@
 //! fn build_compression_header() -> CompressionHeader {
 //!		let algorithm = CompressionAlgorithm::Zstd;
 //! 	let compression_level = 3;
-//! 	let compression_header = CompressionHeader::new(DEFAULT_HEADER_VERSION_COMPRESSION_HEADER, algorithm, compression_level);
+//!		let compression_threshold = 1.05;
+//! 	let compression_header = CompressionHeader::new(DEFAULT_HEADER_VERSION_COMPRESSION_HEADER, algorithm, compression_level, compression_threshold);
 //! 	compression_header
 //! }
 //! ```
@@ -70,7 +71,7 @@
 //! With the previous built [CompressionHeader](crate::header::CompressionHeader),
 //! [DescriptionHeader](crate::header::DescriptionHeader) and [HashHeader](crate::header::HashHeader), and some
 //! additional information we will now generate a [MainHeader](crate::header::MainHeader).
-//! ```no_run
+//! ```compile_fail
 //! use zff::header::*;
 //! use zff::{
 //! 	DEFAULT_HEADER_VERSION_MAIN_HEADER,
@@ -85,6 +86,7 @@
 //! 	let chunk_size = DEFAULT_CHUNK_SIZE;
 //! 	let sig_flag = 0; // we trust everything in this world and won't sign the image file. ;)
 //! 	let seg_size = u64::MAX; // we won't split the image into segments.
+//!		let no_of_segments = 0;
 //!		let unique_identifier = 1;
 //! 	let len_of_data = 0; //initial value, will be overwritten automatically by ZffWriter
 //! 
@@ -97,6 +99,7 @@
 //! 									chunk_size,
 //! 									sig_flag,
 //! 									seg_size,
+//!										no_of_segments,
 //! 									unique_identifier,
 //! 									len_of_data);
 //! 	main_header
@@ -104,7 +107,7 @@
 //! ```
 //! ##### building the ZffWriter and write data to files
 //! In the last step, we will create a [ZffWriter](crate::ZffWriter) and dump the input data to the output file(s):
-//! ```no_run
+//! ```compile_fail
 //! use std::fs::File;
 //! use zff::{Result, ZffWriter};
 //! 
