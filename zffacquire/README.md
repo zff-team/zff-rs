@@ -1,3 +1,7 @@
+# zffacquire
+
+```zffacquire``` is a command line utility for acquiring images into the forensic format Zff.
+
 # Installation
 
 First, you need to [install rust and cargo](https://rustup.rs/) to build or install ```zffacquire```.
@@ -10,6 +14,11 @@ Or you can install the tool directly from crates.io:
 $ cargo install zffacquire
 ```
 
-# Planned features until zffacquire reaches version 1.0
-- Keyfile support for encryption
-- impl Error handling @zffacquire if IoError->Interupt.
+# Usage
+
+To create an image with the default parameters, the following command is just enough:
+```bash
+zffacquire -i /dev/sda -o /media/usb-hdd/your_zff_image
+```
+
+The complete feature set of ```zffacquire``` can be shown using ```zffacquire -h```.

@@ -4,6 +4,13 @@ authors = ["ph0llux <ph0llux@pm.me>"]
 version = "0.9.0"
 edition = "2018"
 license = "MIT OR Apache-2.0"
+description = "A command line utility for acquiring images into the forensic format Zff."
+readme = "README.md"
+homepage = "https://github.com/ph0llux/zff"
+repository = "https://github.com/ph0llux/zff"
+keywords = ["forensics", "security", "acquisition", "file-format", "file"]
+categories = [ "Encoding", "Command line utilities"]
+publish = true
 
 [[bin]]
 name = "zffacquire"
@@ -14,7 +21,7 @@ bench = true
 [dependencies]
 clap = "2.33"
 rand = "0.7.3"
-zff = { path = "../zff" }
+zff = "0.9"
 toml = "0.5.8"
 base64 = "0.13.0"
 #signing
