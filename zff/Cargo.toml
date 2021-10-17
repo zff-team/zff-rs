@@ -1,12 +1,16 @@
 [package]
 name = "zff"
-version = "0.5.0"
+version = "0.9.0"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
-description = "This crate is a library to interact with zff, the new file format for forensic images."
+description = "This crate is a library to interact with zff, a new file format for forensic images."
+readme = "../README.md"
+homepage = "https://github.com/ph0llux/zff"
 repository = "https://github.com/ph0llux/zff"
-publish = false
+keywords = ["forensics", "security", "acquisition", "file-format", "file"]
+categories = [ "Encoding"]
+publish = true
 
 [lib]
 name = "zff"
@@ -14,7 +18,6 @@ path = "src/lib/mod.rs"
 test = true
 bench = true
 doc = true
-doctest = false
 edition = "2018"
 crate-type = ["lib"]
 
@@ -40,6 +43,3 @@ sha3 = "0.9.1"
 crc32fast = "1.2.1"
 #signing
 ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }
-
-[dev-dependencies]
-phollaits = "0.3.3"
