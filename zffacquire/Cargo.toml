@@ -21,7 +21,7 @@ bench = true
 [dependencies]
 clap = "2.33"
 rand = "0.7.3"
-zff = "0.9"
+zff = { path = "../zff", version = "0.9" }
 toml = "0.5.8"
 base64 = "0.13.0"
 #signing

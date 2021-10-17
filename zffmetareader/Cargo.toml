@@ -19,7 +19,7 @@ bench = true
 
 [dependencies]
 clap = "2.33"
-zff = "0.9"
+zff = { path = "../zff", version = "0.9" }
 base64 = "0.13.0"
 
 #serializing crates

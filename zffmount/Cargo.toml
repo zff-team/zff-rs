@@ -15,7 +15,7 @@ publish = true
 clap = "2.33"
 fuser = "0.9.1"
 libc = "0.2.102"
-zff = "0.9"
+zff = { path = "../zff", version = "0.9" }
 nix = "0.19"
 walkdir = "2.3.2"
 #serializing crates
