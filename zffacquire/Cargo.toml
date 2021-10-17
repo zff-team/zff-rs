@@ -9,7 +9,7 @@ readme = "README.md"
 homepage = "https://github.com/ph0llux/zff"
 repository = "https://github.com/ph0llux/zff"
 keywords = ["forensics", "security", "acquisition", "file-format", "file"]
-categories = [ "Encoding", "Command line utilities"]
+categories = ["Command line utilities"]
 publish = true
 
 [[bin]]
