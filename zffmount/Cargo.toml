@@ -1,7 +1,13 @@
 [package]
 name = "zffmount"
-version = "0.1.0"
+version = "0.9.0"
 edition = "2018"
+description = "A command line utility to mount a zff image using FUSE."
+homepage = "https://github.com/ph0llux/zff"
+repository = "https://github.com/ph0llux/zff"
+keywords = ["forensics", "security", "acquisition", "file-format", "file"]
+categories = [ "Encoding", "Command line utilities"]
+publish = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,7 +15,7 @@ edition = "2018"
 clap = "2.33"
 fuser = "0.9.1"
 libc = "0.2.102"
-zff = { path = "../zff" }
+zff = "0.9"
 nix = "0.19"
 walkdir = "2.3.2"
 #serializing crates

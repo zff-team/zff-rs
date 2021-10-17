@@ -307,7 +307,6 @@ fn main() {
         match ZffFS::new_encrypted(input_files, password.trim()) {
             Ok(fs) => fs,
             Err(e) => {
-                //TODO: improve error message.
                 println!("{}{}", ERROR_CREATE_ZFFFS, e.to_string());
                 exit(EXIT_STATUS_ERROR);
             },

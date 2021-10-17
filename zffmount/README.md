@@ -1,3 +1,7 @@
+# zffmount
+
+```zffmount``` is a command line utility to mount a zff image using FUSE.
+
 # Installation
 
 First, you need to [install rust and cargo](https://rustup.rs/) to build or install ```zffmount```.
@@ -10,6 +14,7 @@ Or you can install the tool directly from crates.io:
 $ cargo install zffmount
 ```
 
+# Usage
 
-# Planned features until zffmount reaches version 1.0
-- capability to handle keyfiles for zff image decryption
+Use ```zffmount -i <YOUR_ZFF_IMAGE.z01> -m /mnt/your_mountpoint``` to mount the image to /mnt/your_mountpoint.
+The acquired data that underlies the image is represented as a dd file. This is an on-the-fly conversion.
