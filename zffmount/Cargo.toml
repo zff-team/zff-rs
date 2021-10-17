@@ -2,6 +2,7 @@
 name = "zffmount"
 version = "0.9.0"
 edition = "2018"
+license = "MIT OR Apache-2.0"
 description = "A command line utility to mount a zff image using FUSE."
 homepage = "https://github.com/ph0llux/zff"
 repository = "https://github.com/ph0llux/zff"
