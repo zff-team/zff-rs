@@ -207,6 +207,14 @@ impl ValueEncoder for i64 {
 	}
 }
 
+impl ValueEncoder for f32 {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut self.to_le_bytes().to_vec());
+		vec
+	}
+}
+
 impl ValueEncoder for [u8; 12] {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
@@ -384,6 +392,14 @@ impl ValueDecoder for i64 {
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<i64> {
 		Ok(data.read_i64::<LittleEndian>()?)
+	}
+}
+
+impl ValueDecoder for f32 {
+	type Item = f32;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<f32> {
+		Ok(data.read_f32::<LittleEndian>()?)
 	}
 }
 

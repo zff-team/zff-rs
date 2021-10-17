@@ -47,6 +47,11 @@ pub(crate) const CLAP_ARG_SHORT_COMPRESSION_LEVEL: &str = "l";
 pub(crate) const CLAP_ARG_LONG_COMPRESSION_LEVEL: &str = "compression-level";
 pub(crate) const CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_LEVEL: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
+pub(crate) const CLAP_ARG_NAME_COMPRESSION_THRESHOLD: &str = "COMPRESSION_THRESHOLD";
+pub(crate) const CLAP_ARG_HELP_COMPRESSION_THRESHOLD: &str = "The compression ratio threshold. Default is 1.05.";
+pub(crate) const CLAP_ARG_SHORT_COMPRESSION_THRESHOLD: &str = "T";
+pub(crate) const CLAP_ARG_LONG_COMPRESSION_THRESHOLD: &str = "compression-threshold";
+
 pub(crate) const CLAP_ARG_NAME_SEGMENT_SIZE: &str = "SEGMENT_SIZE";
 pub(crate) const CLAP_ARG_HELP_SEGMENT_SIZE: &str = "The segment size of the output-file(s). Default is 0 (=the output image will never be splitted into segments).";
 pub(crate) const CLAP_ARG_SHORT_SEGMENT_SIZE: &str = "s";

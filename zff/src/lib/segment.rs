@@ -88,6 +88,10 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		let bytes_to_skip = chunk_header.header_size() as u64 + *chunk_offset;
 		let mut chunk_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
 		let mut buffer = Vec::new();
+		if !chunk_header.compression_flag() {
+			chunk_data.read_to_end(&mut buffer)?;
+			return Ok(buffer);
+		};
 		match compression_algorithm.borrow() {
 			CompressionAlgorithm::None => {
 				chunk_data.read_to_end(&mut buffer)?;
@@ -132,6 +136,9 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		let mut buffer = Vec::new();
 		encrypted_data.read_to_end(&mut buffer)?;
 		let decrypted_chunk_data = Encryption::decrypt_message(decryption_key, buffer, chunk_number, encryption_algorithm)?;
+		if !chunk_header.compression_flag() {
+			return Ok(decrypted_chunk_data);
+		};
 		match compression_algorithm.borrow() {
 			CompressionAlgorithm::None => {
 				return Ok(decrypted_chunk_data);

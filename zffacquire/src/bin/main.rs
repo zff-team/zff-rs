@@ -29,6 +29,7 @@ use zff::{
     Signature,
     ZffErrorKind,
     DEFAULT_CHUNK_SIZE,
+    DEFAULT_COMPRESSION_RATIO_THRESHOLD,
 };
 
 // - external
@@ -70,6 +71,11 @@ fn arguments() -> ArgMatches<'static> {
                         .short(CLAP_ARG_SHORT_COMPRESSION_LEVEL)
                         .long(CLAP_ARG_LONG_COMPRESSION_LEVEL)
                         .possible_values(&CLAP_ARG_POSSIBLE_VALUES_COMPRESSION_LEVEL)
+                        .takes_value(true))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_COMPRESSION_THRESHOLD)
+                        .help(CLAP_ARG_HELP_COMPRESSION_THRESHOLD)
+                        .short(CLAP_ARG_SHORT_COMPRESSION_THRESHOLD)
+                        .long(CLAP_ARG_LONG_COMPRESSION_THRESHOLD)
                         .takes_value(true))
                     .arg(Arg::with_name(CLAP_ARG_NAME_SEGMENT_SIZE)
                         .help(CLAP_ARG_HELP_SEGMENT_SIZE)
@@ -173,7 +179,11 @@ fn compression_header(arguments: &ArgMatches) -> CompressionHeader {
         None => DEFAULT_COMPRESSION_LEVEL,
         Some(level) => level.parse().unwrap_or(DEFAULT_COMPRESSION_LEVEL),
     };
-    CompressionHeader::new(COMPRESSION_HEADER_VERSION, compression_algorithm, compression_level)
+    let compression_threshold = match arguments.value_of(CLAP_ARG_NAME_COMPRESSION_THRESHOLD) {
+        None => DEFAULT_COMPRESSION_RATIO_THRESHOLD,
+        Some(level) => level.parse().unwrap_or(DEFAULT_COMPRESSION_RATIO_THRESHOLD)
+    };
+    CompressionHeader::new(COMPRESSION_HEADER_VERSION, compression_algorithm, compression_level, compression_threshold)
 }
 
 fn description_header(arguments: &ArgMatches) -> DescriptionHeader {

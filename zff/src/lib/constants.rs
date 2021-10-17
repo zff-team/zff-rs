@@ -57,6 +57,8 @@ pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
 pub(crate) const DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY: usize = 21;
 pub(crate) const DEFAULT_SEGMENT_FOOTER_VERSION: u8 = 1;
+/// The default compression ratio threshold
+pub const DEFAULT_COMPRESSION_RATIO_THRESHOLD: f32 = 1.05;
 
 /// the default key length of a public signature key
 pub const ED25519_DALEK_PUBKEY_LEN: usize = PUBLIC_KEY_LENGTH;
@@ -78,3 +80,10 @@ pub const DEFAULT_HEADER_VERSION_CHUNK_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 1;
 /// current header version for the [HashHeader](crate::header::HashHeader).
 pub const DEFAULT_HEADER_VERSION_HASH_HEADER: u8 = 1;
+
+
+
+
+// chunk header flags
+pub(crate) const ERROR_FLAG_VALUE: u8 = 1<<0;
+pub(crate) const COMPRESSION_FLAG_VALUE: u8 = 1<<1;
