@@ -29,16 +29,18 @@ Input and output storage device was the internal NVMe.
 The following benchmark was created for a \~20GB prebuilt image, which was generated using the script under benchmarks/example01.sh.
 ![Acquisition time](https://github.com/ph0llux/zff/blob/master/benchmark/acquisition_time.png?raw=true)
 \
-¹Using Guymager 0.8.12, with MD5 hash calculation, without "HashVerifyDest".\
-²using ```zffacquire -i raw/example01.dd -o zff_lz4 -z lz4```\
-³using ```zffacquire -i raw/example01.dd -o zff -S```\
-⁴using ```zffacquire -i raw/example01.dd -o zff -p 123```\
-⁵using ```zffacquire -i raw/example01.dd -o zff```\
-⁶using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.\
+¹Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".\
+²Using Guymager 0.8.12, with enabled Aff support and Aff compression level 1 in guymager.cfg, with MD5 hash calculation, without "HashVerifyDest".\
+³using ```zffacquire -i raw/example01.dd -o zff_lz4 -z lz4```\
+⁴using ```zffacquire -i raw/example01.dd -o zff -S```\
+⁵using ```zffacquire -i raw/example01.dd -o zff -p 123```\
+⁶using ```zffacquire -i raw/example01.dd -o zff```\
+⁷using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```\
+⁸using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.\
 
 As you can see, there are hardly any differences worth mentioning between the dump using Guymager and zffacquire. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).\
 \
-The two fastest images (The Guymager-e01-image, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 4) were used as the basis for the read speed benchmark.
+The two fastest images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
 For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.
 The dd commands were applied 10 times and then an average value was calculated over the determined values.
 ![Read speed](https://github.com/ph0llux/zff/blob/master/benchmark/read_speed_dd.png?raw=true)\
@@ -48,6 +50,21 @@ zffmount -i zff.z01 -m /tmp/zffmount
 dd if=/tmp/zffmount/zff_image.dd of=/dev/null bs=1M
 ```
 ²The following commands were used:
+```bash
+affuse aff_image.aff /tmp/affmount
+dd if=/tmp/affmount/aff_example01.aff.raw of=/dev/null bs=1M
+```
+³The following commands were used:
+```bash
+xmount --in aff aff_image.aff /tmp/affmount
+dd if=/tmp/affmount/aff_image.dd of=/dev/null bs=1M
+```
+⁴The following commands were used:
+```bash
+xmount --in ewf ewfacquired.Ex01 /tmp/ewfmount
+dd if=/tmp/ewfmount/ewfacquired.dd of=/dev/null bs=1M
+```
+⁵The following commands were used:
 ```bash
 xmount --in ewf guymager.e01 /tmp/ewfmount
 dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
