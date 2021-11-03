@@ -33,6 +33,7 @@ use zff::{
 };
 
 // - external
+use async_std;
 use clap::{
     Arg,
     App,
@@ -360,7 +361,8 @@ fn get_hashes(arguments: &ArgMatches) -> Vec<HashValue> {
     hashvalues
 }
 
-fn main() {
+#[async_std::main]
+async fn main() {
     let arguments = arguments();
     let compression_header = compression_header(&arguments);
     let description_header = description_header(&arguments);
@@ -412,7 +414,7 @@ fn main() {
         );
 
     let mut zff_writer = ZffWriter::new(main_header, input_file, output_filename, signature_key, encryption_key, encrypt_header);
-    match zff_writer.generate_files() {
+    match zff_writer.generate_files().await {
         Ok(_) => (),
         Err(e) => match e.get_kind() {
             ZffErrorKind::IoError(io_error) => {

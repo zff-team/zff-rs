@@ -97,7 +97,7 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	///writes the data to the appropriate files. The output files will be generated automatically by this method.
-	pub fn generate_files(&mut self) -> Result<()> {
+	pub async fn generate_files(&mut self) -> Result<()> {
 		let mut number_of_segments = 0;
 		let main_header_size = self.main_header.get_encoded_size();
 		if (self.main_header.segment_size() as usize) < main_header_size {
@@ -122,7 +122,7 @@ impl<R: Read> ZffWriter<R> {
 	    output_file.write(&encoded_main_header)?;
 
 	    //writes the first segment
-	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64)?;
+	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64).await?;
 	    number_of_segments += 1;
 
 	    loop {
@@ -132,7 +132,7 @@ impl<R: Read> ZffWriter<R> {
 	    	segment_filename.set_extension(&file_extension);
 	    	let mut output_file = File::create(&segment_filename)?;
 
-	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0)?;
+	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0).await?;
 	    	if written_bytes_in_segment == 0 {
 	            let _ = remove_file(segment_filename);
 	            break;
@@ -181,40 +181,42 @@ impl<R: Read> ZffWriter<R> {
 	    Ok(())
 	}
 
-	//returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>, CompressionFlag for ChunkHeader)
-	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; ED25519_DALEK_SIGNATURE_LEN]>, bool)> {
+	async fn update_hasher(&mut self, buffer: &Vec<u8>) {
+		for hasher in self.hasher_map.values_mut() {
+			hasher.update(buffer);
+		}
+	}
+
+	async fn get_crc32(buffer: &Vec<u8>) -> u32 {
+		let mut crc32_hasher = CRC32Hasher::new();
+		crc32_hasher.update(buffer);
+		let crc32 = crc32_hasher.finalize();
+		crc32
+	}
+
+	async fn calculate_signature(&self, buffer: &Vec<u8>) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
+		match &self.signature_key {
+			None => None,
+			Some(keypair) => Some(Signature::sign(keypair, buffer)),
+		}
+	}
+
+	async fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
+		let mut compression_flag = false;
 		let chunk_size = self.main_header.chunk_size();
 		let compression_threshold = self.main_header.compression_header().threshold();
-	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
-	    self.read_bytes += read_bytes;
-	    if buf.len() == 0 {
-	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
-	    };
-	    for hasher in self.hasher_map.values_mut() {
-	    	hasher.update(&buf);
-	    }
-	    let mut crc32_hasher = CRC32Hasher::new();
-	    crc32_hasher.update(&buf);
-	    let crc32 = crc32_hasher.finalize();
 
-	    let signature = match &self.signature_key {
-	    	None => None,
-	    	Some(keypair) => Some(Signature::sign(keypair, &buf)),
-	    };
-
-	    let mut compression_flag = false;
-
-	    match self.main_header.compression_header().algorithm() {
-	    	CompressionAlgorithm::None => return Ok((buf, crc32, signature, compression_flag)),
+		match self.main_header.compression_header().algorithm() {
+	    	CompressionAlgorithm::None => return Ok((buf, compression_flag)),
 	    	CompressionAlgorithm::Zstd => {
 	    		let compression_level = *self.main_header.compression_header().level() as i32;
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
 	    		let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *self.main_header.compression_header().level() as usize)?;
 	    		if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
-	    			Ok((buf, crc32, signature, compression_flag))
+	    			Ok((buf, compression_flag))
 	    		} else {
 	    			compression_flag = true;
-	    			Ok((compressed_data, crc32, signature, compression_flag))
+	    			Ok((compressed_data, compression_flag))
 	    		}
 	    	},
 	    	CompressionAlgorithm::Lz4 => {
@@ -223,22 +225,38 @@ impl<R: Read> ZffWriter<R> {
 	    		io_copy(&mut buf.as_slice(), &mut compressor)?;
 	    		let compressed_data = compressor.finish()?;
 	    		if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
-	    			Ok((buf, crc32, signature, compression_flag))
+	    			Ok((buf, compression_flag))
 	    		} else {
 	    			compression_flag = true;
-	    			Ok((compressed_data, crc32, signature, compression_flag))
+	    			Ok((compressed_data, compression_flag))
 	    		}
 	    	}
 	    }
 	}
 
+	//returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>, CompressionFlag for ChunkHeader)
+	async fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; ED25519_DALEK_SIGNATURE_LEN]>, bool)> {
+		let chunk_size = self.main_header.chunk_size();
+	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
+	    self.read_bytes += read_bytes;
+	    if buf.len() == 0 {
+	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+	    };
+	    self.update_hasher(&buf).await;
+	    let crc32 = Self::get_crc32(&buf).await;
+	    let signature = self.calculate_signature(&buf).await;
+
+	    let (chunked_data, compression_flag) = self.compress_buffer(buf).await?;
+	    return Ok((chunked_data, crc32, signature, compression_flag));
+	}
+
 	// returns written_bytes
-	fn write_unencrypted_chunk<W>(&mut self, output: &mut W) -> Result<u64> 
+	async fn write_unencrypted_chunk<W>(&mut self, output: &mut W) -> Result<u64> 
 	where
 		W: Write,
 	{
 		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_no);
-		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk()?;
+		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk().await?;
 		chunk_header.set_chunk_size(compressed_chunk.len() as u64);
 		chunk_header.set_crc32(crc32);
 		chunk_header.set_signature(signature);
@@ -253,7 +271,7 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	// returns written_bytes
-	fn write_encrypted_chunk<W>(&mut self, output: &mut W, encryption_key: Vec<u8>) -> Result<u64> 
+	async fn write_encrypted_chunk<W>(&mut self, output: &mut W, encryption_key: Vec<u8>) -> Result<u64> 
 	where
 		W: Write,
 	{
@@ -263,7 +281,7 @@ impl<R: Read> ZffWriter<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 		};
 		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_no); 
-		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk()?;
+		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk().await?;
 		let encrypted_data = Encryption::encrypt_message(
 			encryption_key,
 			&compressed_chunk,
@@ -295,7 +313,7 @@ impl<R: Read> ZffWriter<R> {
 	//}
 
 	/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
-	fn write_segment<W: Write + Seek>(
+	async fn write_segment<W: Write + Seek>(
 		&mut self,
 		output: &mut W,
 		seek_value: u64 // The seek value is a value of bytes you need to skip (e.g. if this segment contains a main_header, you have to skip the main_header..)
@@ -329,7 +347,7 @@ impl<R: Read> ZffWriter<R> {
 			let encryption_key = self.encryption_key.clone();
 			match encryption_key {
 				None => {
-					let written_in_chunk = match self.write_unencrypted_chunk(output) {
+					let written_in_chunk = match self.write_unencrypted_chunk(output).await {
 						Ok(data) => data,
 						Err(e) => match e.get_kind() {
 							ZffErrorKind::ReadEOF => {
@@ -350,7 +368,7 @@ impl<R: Read> ZffWriter<R> {
 					written_bytes += written_in_chunk;
 				},
 				Some(encryption) => {
-					let written_in_chunk = match self.write_encrypted_chunk(output, encryption.to_vec()) {
+					let written_in_chunk = match self.write_encrypted_chunk(output, encryption.to_vec()).await {
 						Ok(data) => data,
 						Err(e) => match e.get_kind() {
 							ZffErrorKind::ReadEOF => {

@@ -20,6 +20,7 @@ test = true
 bench = true
 
 [dependencies]
+async-std = { version = "1.10.0", features = ["attributes"] }
 clap = "2.33"
 rand = "0.7.3"
 zff = { path = "../zff", version = "0.9" }
