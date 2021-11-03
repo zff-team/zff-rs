@@ -1,13 +1,14 @@
 [package]
 name = "zffmount"
 version = "0.9.0"
-edition = "2018"
+edition = "2021"
+rust-version = "1.56.1"
 license = "MIT OR Apache-2.0"
 description = "A command line utility to mount a zff image using FUSE."
 homepage = "https://github.com/ph0llux/zff"
 repository = "https://github.com/ph0llux/zff"
 keywords = ["forensics", "security", "acquisition", "file-format", "file"]
-categories = ["Command line utilities"]
+categories = ["command-line-utilities"]
 publish = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
