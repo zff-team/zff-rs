@@ -79,10 +79,10 @@ This repository contains several tools to work with zff images (or acquire them)
 
 | Name | Type | Description | Crates.io | MRSV |
 |------|:----:|:------------|:---------:|:----:|
-| [zff](https://github.com/ph0llux/zff/tree/master/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.55 |
-| [zffacquire](https://github.com/ph0llux/zff/tree/master/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.55 |
-| [zffmetareader](https://github.com/ph0llux/zff/tree/master/zffmetareader) | binary | Tool to get meta information about a zff image | [![crates.io][zffmetareader-crates-io-image]][zffmetareader-crates-io-link] | 1.55 |
-| [zffmount](https://github.com/ph0llux/zff/tree/master/zffmount) | binary | Tool to mount a zff image with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.55 |
+| [zff](https://github.com/ph0llux/zff/tree/master/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.56.1 |
+| [zffacquire](https://github.com/ph0llux/zff/tree/master/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.56.1 |
+| [zffmetareader](https://github.com/ph0llux/zff/tree/master/zffmetareader) | binary | Tool to get meta information about a zff image | [![crates.io][zffmetareader-crates-io-image]][zffmetareader-crates-io-link] | 1.56.1 |
+| [zffmount](https://github.com/ph0llux/zff/tree/master/zffmount) | binary | Tool to mount a zff image with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.56.1 |
 
 [//]: # (badges)
 
