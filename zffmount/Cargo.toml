@@ -17,7 +17,7 @@ clap = "2.33"
 fuser = "0.9.1"
 libc = "0.2.102"
 zff = { path = "../zff", version = "0.9" }
-nix = "0.19"
+nix = "0.23"
 walkdir = "2.3.2"
 #serializing crates
 serde = "1.0"
