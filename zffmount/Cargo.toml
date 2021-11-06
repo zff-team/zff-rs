@@ -1,6 +1,6 @@
 [package]
 name = "zffmount"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.56.1"
 license = "MIT OR Apache-2.0"
@@ -15,9 +15,11 @@ publish = true
 
 [dependencies]
 clap = "2.33"
+ctrlc = "3.2.1"
+crossbeam-channel = "0.5.1"
 fuser = "0.9.1"
 libc = "0.2.102"
-zff = { path = "../zff", version = "0.9" }
+zff = { path = "../zff", version = "0.10" }
 nix = "0.23"
 walkdir = "2.3.2"
 #serializing crates

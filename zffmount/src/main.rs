@@ -29,6 +29,8 @@ use fuser::{
 use libc::ENOENT;
 use toml;
 use nix::unistd::{Uid, Gid};
+use ctrlc;
+use crossbeam_channel::{bounded, Receiver, select};
 
 struct ZffFS<R: 'static +  Read + Seek> {
     zff_reader: ZffReader<R>,
@@ -236,6 +238,15 @@ fn arguments() -> ArgMatches<'static> {
     matches
 }
 
+fn ctrl_channel() -> std::result::Result<Receiver<()>, ctrlc::Error> {
+    let (sender, receiver) = bounded(100);
+    ctrlc::set_handler(move || {
+        let _ = sender.send(());
+    })?;
+
+    Ok(receiver)
+}
+
 fn main() {
     let arguments = arguments();
 
@@ -315,13 +326,41 @@ fn main() {
 
         
     let mountoptions = vec![MountOption::RO, MountOption::FSName(FILESYSTEM_NAME.to_string())];
-    match fuser::mount2(zff_fs, mountpoint, &mountoptions) {
-        Ok(_) => (),
+    let session = match fuser::Session::new(zff_fs, &mountpoint, &mountoptions) {
+        Ok(session) => session,
         Err(e) => {
             println!("{}{}", ERROR_MOUNT_ZFFFS, e.to_string());
             exit(EXIT_STATUS_ERROR);
         }
     };
+    
+    let bg_session = match session.spawn() {
+        Ok(bgs) => bgs,
+        Err(e) => {
+            println!("{}{}", ERROR_MOUNT_ZFFFS, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    let ctrl_c_events = match ctrl_channel() {
+        Ok(events) => events,
+        Err(e) => {
+            println!("{}{}", ERROR_MOUNT_ZFFFS, e.to_string());
+            exit(EXIT_STATUS_ERROR);
+        }
+    };
+    loop {
+        println!("{}{}{}{}",
+            MOUNT_SUCCESSFUL,
+            &mountpoint.to_string_lossy(),
+            UNMOUNT_HINT,
+            &mountpoint.to_string_lossy());
+        select! {
+            recv(ctrl_c_events) -> _ => {
+                bg_session.join();
+                println!("{}", UNMOUNT_SUCCESSFUL);
+                break;
+            }
+        }
+    }
     exit(EXIT_STATUS_SUCCESS);
 }
-

@@ -40,6 +40,10 @@ pub(crate) const ERROR_UNDETERMINABLE_INPUT_DIR: &str = "could not determine inp
 pub(crate) const EXIT_STATUS_ERROR: i32 = 1;
 pub(crate) const EXIT_STATUS_SUCCESS: i32 = 0;
 
+pub(crate) const MOUNT_SUCCESSFUL: &str = "The image file(s) was/were mounted successfully to ";
+pub(crate) const UNMOUNT_HINT: &str = "\nYou can unmount the file(s) by pressing CTRL+C - or unmount manually by typing umount";
+pub(crate) const UNMOUNT_SUCCESSFUL: &str = "\nUnmount successful. Have a nice day.";
+
 // fuser constants
 pub(crate) const TTL: Duration = Duration::from_secs(1); // 1 second
 pub(crate) const DEFAULT_BLOCKSIZE: u32 = 512;
