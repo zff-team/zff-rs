@@ -35,6 +35,11 @@ pub(crate) const CLAP_ARG_HELP_PUBKEYFILE: &str = "The path to the file which co
 pub(crate) const CLAP_ARG_SHORT_PUBKEYFILE: &str = "k";
 pub(crate) const CLAP_ARG_LONG_PUBKEYFILE: &str = "publickey-file";
 
+pub(crate) const CLAP_ARG_NAME_INTEGRITY_CHECK: &str = "INTEGRITY_CHECK";
+pub(crate) const CLAP_ARG_HELP_INTEGRITY_CHECK: &str = "Checks the integrity of the imaged data by calculating/comparing the used hash values.";
+pub(crate) const CLAP_ARG_SHORT_INTEGRITY_CHECK: &str = "c";
+pub(crate) const CLAP_ARG_LONG_INTEGRITY_CHECK: &str = "integrity-check";
+
 // Error messages
 pub(crate) const ERROR_OPEN_INPUT_FILE: &str = "An error occurred while trying to open the input file.";
 pub(crate) const ERROR_UNREADABLE_INPUT_DIR: &str = "Could not read the directory of the given zff file: ";
@@ -48,8 +53,12 @@ pub(crate) const ERROR_UNKNOWN_HEADER: &str = "Could not read header of this fil
 pub(crate) const ERROR_FILE_READ: &str = "An error occurred while trying to read the input file.";
 pub(crate) const ERROR_MISSING_ENCRYPTION_KEY: &str = "Zff file(s) are encrypted: You should enter the password by using the -p argument.";
 pub(crate) const ERROR_DECODE_BASE64_PUBKEY: &str = "An error occurred while trying to decode the public key: ";
-pub(crate) const ERROR_START_VERIFICATION_PROCESS: &str = "An error occurred while trying to start the verification process: ";
+pub(crate) const ERROR_START_ANALYSIS: &str = "An error occurred while trying to start the analysing process: ";
 pub(crate) const ERROR_EMPTY_FILE: &str = "File is empty!";
+pub(crate) const ERROR_HASHING_DATA: &str = "An error occurred while trying to hash the data: ";
+pub(crate) const CORRECT_HASH: &str = ": Verified. Hash value is correct.";
+pub(crate) const INCORRECT_HASH: &str = ": false. Hash value does not match with the calculated hash value.";
+pub(crate) const HASHING_THREAD_PANIC: &str = "One of the hashing threads paniced. Exit now.";
 
 pub(crate) const ERROR_PARSE_MAIN_HEADER: &str = "An error occurred while trying to parse the main header: ";
 pub(crate) const ERROR_PARSE_ENCRYPTED_MAIN_HEADER: &str = "An error occurred while trying to parse the (encrypted) main header: ";

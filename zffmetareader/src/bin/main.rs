@@ -3,6 +3,7 @@ use std::fs::{File,read_dir};
 use std::path::{PathBuf, Path};
 use std::process::exit;
 use std::io::{self, Seek,Read, BufRead};
+use std::{thread};
 
 // - modules
 mod lib;
@@ -16,6 +17,7 @@ use zff::{
     ZffReader,
     ZffError,
     ZffErrorKind,
+    Hash,
     ED25519_DALEK_PUBKEY_LEN,
 };
 
@@ -59,6 +61,10 @@ fn arguments() -> ArgMatches<'static> {
                         .short(CLAP_ARG_SHORT_PUBKEYFILE)
                         .long(CLAP_ARG_LONG_PUBKEYFILE)
                         .takes_value(true))
+                    .arg(Arg::with_name(CLAP_ARG_NAME_INTEGRITY_CHECK)
+                        .help(CLAP_ARG_HELP_INTEGRITY_CHECK)
+                        .short(CLAP_ARG_SHORT_INTEGRITY_CHECK)
+                        .long(CLAP_ARG_LONG_INTEGRITY_CHECK))
                     .get_matches();
     matches
 }
@@ -248,7 +254,7 @@ fn create_zff_reader<R: Read + Seek, P: AsRef<[u8]>>(mut data: Vec<R>, password:
     }
 }
 
-fn verify_image(arguments: &ArgMatches, header_signature: &HeaderSignature) {
+fn get_input_files(arguments: &ArgMatches) -> Vec<File> {
     // Calling .unwrap() is safe here because the arguments are *required*.
     let mut input_file_paths = Vec::new();
     let input_filename = PathBuf::from(arguments.value_of(CLAP_ARG_NAME_INPUT_FILE).unwrap());
@@ -301,6 +307,105 @@ fn verify_image(arguments: &ArgMatches, header_signature: &HeaderSignature) {
         input_files.push(segment_file);
     }
 
+    input_files
+}
+
+fn get_zff_reader(arguments: &ArgMatches, header_signature: &HeaderSignature, input_files: Vec<File>) -> ZffReader<File>{
+    let zff_reader = match header_signature {
+        HeaderSignature::EncryptedMainHeader => {
+            let password = match arguments.value_of(CLAP_ARG_NAME_PASSWORD) {
+                Some(pw) => pw,
+                None => {
+                    println!("{}", ERROR_NO_PASSWORD);
+                    exit(EXIT_STATUS_ERROR);
+                }
+            };
+
+            let mut zff_reader = match create_zff_reader(input_files, Some(password)) {
+                Ok(reader) => reader,
+                Err(e) => {
+                    println!("{}{}", ERROR_START_ANALYSIS, e.to_string());
+                    exit(EXIT_STATUS_ERROR);
+                },
+            };
+
+            match zff_reader.decrypt_encryption_key(password.trim()) {
+                Ok(_) => (),
+                Err(_) => {
+                    println!("{}{}", ERROR_PARSE_ENCRYPTED_MAIN_HEADER, ERROR_WRONG_PASSWORD);
+                    exit(EXIT_STATUS_ERROR);
+                }
+            };
+
+            zff_reader
+        },
+        _ => {
+            match create_zff_reader(input_files, None::<String>) {
+                Ok(reader) => reader,
+                Err(e) => {
+                    println!("{}{}", ERROR_START_ANALYSIS, e.to_string());
+                    exit(EXIT_STATUS_ERROR);
+                },
+            }
+        },
+    };
+    zff_reader
+}
+
+fn check_integrity(arguments: &ArgMatches, header_signature: &HeaderSignature) {
+    let input_files = get_input_files(arguments);
+    let zff_reader = get_zff_reader(arguments, header_signature, input_files);
+
+    let hash_values = zff_reader.main_header().hash_header().hash_values();
+    let mut handles = Vec::new();
+    for value in hash_values {
+        let value = value.clone();
+        let input_files = get_input_files(arguments);
+        let zff_reader = get_zff_reader(arguments, header_signature, input_files);
+        handles.push(thread::spawn(move || {
+            check_integrity_for_hash_value(value, zff_reader);
+        }));
+    }
+    for handle in handles {
+        match handle.join() {
+            Ok(_) => (),
+            Err(_) => {
+                println!("{}", HASHING_THREAD_PANIC);
+                exit(EXIT_STATUS_ERROR);
+            }
+        };
+    }
+    exit(EXIT_STATUS_SUCCESS);
+}
+
+fn check_integrity_for_hash_value(value: HashValue, mut zff_reader: ZffReader<File>) {
+    let chunk_size = zff_reader.main_header().chunk_size();
+    let mut hasher = Hash::new_hasher(value.hash_type());
+    let mut buffer = vec![0u8; chunk_size];
+        loop {
+            let count = match zff_reader.read(&mut buffer){
+                Ok(x) => x,
+                Err(e) => {
+                    println!("{}{}", ERROR_HASHING_DATA, e.to_string());
+                    exit(EXIT_STATUS_ERROR);
+                },
+            };
+            if count == 0 {
+                break;
+            }
+            hasher.update(&buffer[..count]);
+        }
+        let hash = hasher.finalize();
+    if value.hash() == &hash.to_vec() {
+        println!("{}{}", value.hash_type().to_string(), CORRECT_HASH)
+    } else {
+        println!("{}{}", value.hash_type().to_string(), INCORRECT_HASH)
+    }
+}
+
+fn verify_image(arguments: &ArgMatches, header_signature: &HeaderSignature) {
+    let input_files = get_input_files(arguments);
+
     let mut public_key = [0; ED25519_DALEK_PUBKEY_LEN];
     // Calling .unwrap() is safe here because the arguments are *required*.
     let path = &arguments.value_of(CLAP_ARG_NAME_PUBKEYFILE).unwrap();
@@ -333,44 +438,7 @@ fn verify_image(arguments: &ArgMatches, header_signature: &HeaderSignature) {
         }
     };    
 
-    let mut zff_reader = match header_signature {
-        HeaderSignature::EncryptedMainHeader => {
-            let password = match arguments.value_of(CLAP_ARG_NAME_PASSWORD) {
-                Some(pw) => pw,
-                None => {
-                    println!("{}", ERROR_NO_PASSWORD);
-                    exit(EXIT_STATUS_ERROR);
-                }
-            };
-
-            let mut zff_reader = match create_zff_reader(input_files, Some(password)) {
-                Ok(reader) => reader,
-                Err(e) => {
-                    println!("{}{}", ERROR_START_VERIFICATION_PROCESS, e.to_string());
-                    exit(EXIT_STATUS_ERROR);
-                },
-            };
-
-            match zff_reader.decrypt_encryption_key(password.trim()) {
-                Ok(_) => (),
-                Err(_) => {
-                    println!("{}{}", ERROR_PARSE_ENCRYPTED_MAIN_HEADER, ERROR_WRONG_PASSWORD);
-                    exit(EXIT_STATUS_ERROR);
-                }
-            };
-
-            zff_reader
-        },
-        _ => {
-            match create_zff_reader(input_files, None::<String>) {
-                Ok(reader) => reader,
-                Err(e) => {
-                    println!("{}{}", ERROR_START_VERIFICATION_PROCESS, e.to_string());
-                    exit(EXIT_STATUS_ERROR);
-                },
-            }
-        },
-    };
+    let mut zff_reader = get_zff_reader(arguments, header_signature, input_files);
 
     match zff_reader.verify_all(public_key, false) {
         Ok(vec) => {
@@ -443,6 +511,9 @@ fn main() {
 
     if arguments.is_present(CLAP_ARG_NAME_VERIFY) {
         verify_image(&arguments, &header_signature)
+    }
+    if arguments.is_present(CLAP_ARG_NAME_INTEGRITY_CHECK) {
+        check_integrity(&arguments, &header_signature)
     }
 
     match header_signature {
