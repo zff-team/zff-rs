@@ -137,6 +137,11 @@ impl HashValue {
 	pub fn set_hash(&mut self, hash: Vec<u8>) {
 		self.hash = hash
 	}
+
+	/// returns the underlying hash value
+	pub fn hash(&self) -> &Vec<u8> {
+		&self.hash
+	}
 }
 
 
