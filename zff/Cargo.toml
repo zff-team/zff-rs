@@ -1,6 +1,6 @@
 [package]
 name = "zff"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2021"
 rust-version = "1.56.1"
