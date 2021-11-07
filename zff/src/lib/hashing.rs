@@ -1,3 +1,6 @@
+// - STD
+use std::fmt;
+
 // - external
 use blake2::{Blake2b, Digest};
 use sha2::{Sha256, Sha512};
@@ -29,6 +32,18 @@ impl HashType {
 			HashType::SHA512 => 512,
 			HashType::SHA3_256 => 256,
 		}
+	}
+}
+
+impl fmt::Display for HashType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let msg = match self {
+			HashType::Blake2b512 => "Blake2b512",
+			HashType::SHA256 => "SHA256",
+			HashType::SHA512 => "SHA512",
+			HashType::SHA3_256 => "Sha3_256",
+		};
+		write!(f, "{}", msg)
 	}
 }
 
