@@ -5,6 +5,17 @@
 # Installation
 
 First, you need to [install rust and cargo](https://rustup.rs/) to build or install ```zffmount```.
+
+After that you still need some additional packages, which you can install as follows (depends on the distribution):
+###### Debian/Ubuntu
+```bash
+$ sudo apt-get install gcc pkg-config fuse3 libfuse-dev
+```
+###### Fedora
+```bash
+$ sudo dnf install gcc pkg-config fuse3 fuse-devel
+```
+
 Then you can easily build this tool yourself by using cargo:
 ```bash
 [/home/ph0llux/projects/zffmount] $ cargo build --release

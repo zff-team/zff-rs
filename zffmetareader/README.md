@@ -3,8 +3,19 @@
 ```zffmetareader``` is a command line utility to read the metadata of a zff image.
 
 # Installation
-
+## Prerequisites
 First, you need to [install rust and cargo](https://rustup.rs/) to build or install ```zffmetareader```.
+
+After that you still need the gcc, which you can install as follows (depends on the distribution):
+###### Debian/Ubuntu
+```bash
+$ sudo apt-get install gcc
+```
+###### Fedora
+```bash
+$ sudo dnf install gcc
+```
+
 Then you can easily build this tool yourself by using cargo:
 ```bash
 [/home/ph0llux/projects/zffmetareader] $ cargo build --release
