@@ -4,3 +4,6 @@
 [submodule "zffacquire"]
 	path = zffacquire
 	url = https://github.com/ph0llux/zffacquire
+[submodule "zffmount"]
+	path = zffmount
+	url = https://github.com/ph0llux/zffmount
