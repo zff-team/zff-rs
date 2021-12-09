@@ -1,3 +1,6 @@
 [submodule "zffmetareader"]
 	path = zffmetareader
 	url = https://github.com/ph0llux/zffmetareader
+[submodule "zffacquire"]
+	path = zffacquire
+	url = https://github.com/ph0llux/zffacquire
