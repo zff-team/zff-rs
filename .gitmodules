@@ -1,0 +1,3 @@
+[submodule "zffmetareader"]
+	path = zffmetareader
+	url = https://github.com/ph0llux/zffmetareader
