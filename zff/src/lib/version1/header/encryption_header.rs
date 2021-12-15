@@ -2,7 +2,7 @@
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	EncryptionAlgorithm,
 	HeaderCoding,
@@ -16,7 +16,7 @@ use crate::{
 	Encryption,
 };
 
-use crate::{
+use crate::version1::{
 	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
 	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
 };

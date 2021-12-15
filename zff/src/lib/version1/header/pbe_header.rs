@@ -2,7 +2,7 @@
 use std::io::{Read,Cursor};
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,
@@ -13,7 +13,7 @@ use crate::{
 	ZffErrorKind,
 };
 
-use crate::{
+use crate::version1::{
 	HEADER_IDENTIFIER_PBE_HEADER,
 	PBE_KDF_PARAMETERS,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF,

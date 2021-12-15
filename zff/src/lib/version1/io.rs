@@ -7,7 +7,7 @@ use std::fs::{File, remove_file};
 
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	header::{MainHeader,SegmentHeader,ChunkHeader, HashValue, HashHeader},
 	footer::{SegmentFooter},
@@ -24,7 +24,7 @@ use crate::{
 	file_extension_next_value,
 };
 
-use crate::{
+use crate::version1::{
 	DEFAULT_LENGTH_SEGMENT_FOOTER_EMPTY,
 	DEFAULT_SEGMENT_FOOTER_VERSION,
 	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,

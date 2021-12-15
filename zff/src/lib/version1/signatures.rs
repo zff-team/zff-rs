@@ -12,7 +12,7 @@ use ed25519_dalek::{
 use rand::rngs::OsRng;
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	ZffError,
 	ZffErrorKind,

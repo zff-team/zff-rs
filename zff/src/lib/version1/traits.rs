@@ -2,12 +2,12 @@
 use std::io::{Read};
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	ZffError,
 	ZffErrorKind,
 };
-use crate::{
+use crate::version1::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	ERROR_HEADER_DECODER_HEADER_LENGTH,

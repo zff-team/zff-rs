@@ -2,7 +2,7 @@
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	ValueEncoder,
 	ValueDecoder,

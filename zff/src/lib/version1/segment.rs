@@ -4,7 +4,7 @@ use std::io::{Read,Seek,SeekFrom};
 use std::collections::HashMap;
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	HeaderCoding,
 	header::{SegmentHeader, ChunkHeader},

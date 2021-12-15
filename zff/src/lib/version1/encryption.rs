@@ -2,7 +2,7 @@
 use std::borrow::Borrow;
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 };
 

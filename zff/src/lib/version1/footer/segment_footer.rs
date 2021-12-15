@@ -2,7 +2,7 @@
 use std::io::{Cursor};
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,
@@ -10,7 +10,7 @@ use crate::{
 
 };
 
-use crate::{
+use crate::version1::{
 	HEADER_IDENTIFIER_SEGMENT_FOOTER,
 };
 

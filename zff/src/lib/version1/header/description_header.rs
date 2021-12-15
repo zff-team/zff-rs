@@ -2,14 +2,14 @@
 use std::io::Cursor;
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
 	ZffErrorKind,
 };
-use crate::{
+use crate::version1::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
 	ENCODING_KEY_CASE_NUMBER,
 	ENCODING_KEY_EVIDENCE_NUMBER,

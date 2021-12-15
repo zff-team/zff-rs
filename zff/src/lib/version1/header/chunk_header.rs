@@ -5,7 +5,7 @@ use std::io::{Cursor,Read};
 use ed25519_dalek::{SIGNATURE_LENGTH};
 
 // - internal
-use crate::{
+use crate::version1::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,
