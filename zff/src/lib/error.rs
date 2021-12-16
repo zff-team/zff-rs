@@ -77,6 +77,8 @@ pub enum ZffErrorKind {
 	NoSignatureFoundAtChunk,
 	/// Error will be returned, if the appropriate segment is missing in the zff image.
 	MissingSegment,
+	/// Error will be returned, if no object type exists for the given value
+	UnknownObjectTypeValue,
 
 }
 
@@ -110,6 +112,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::InvalidChunkNumber => "InvalidChunkNumber",
 			ZffErrorKind::NoSignatureFoundAtChunk => "NoSignatureFoundAtChunk",
 			ZffErrorKind::MissingSegment => "MissingSegment",
+			ZffErrorKind::UnknownObjectTypeValue => "UnknownObjectTypeValue",
 		};
 	write!(f, "{}", err_msg)
 	}

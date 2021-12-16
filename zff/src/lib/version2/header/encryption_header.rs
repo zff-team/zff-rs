@@ -1,0 +1,162 @@
+// - STD
+use std::io::{Cursor, Read};
+
+// - internal
+use crate::{
+	Result,
+	EncryptionAlgorithm,
+	HeaderCoding,
+	ValueEncoder,
+	ValueDecoder,
+	ZffError,
+	KDFScheme,
+	PBEScheme,
+	Encryption,
+};
+
+use crate::{
+	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
+	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
+};
+
+use crate::version2::header::{
+	PBEHeader,
+	KDFParameters,
+};
+
+// - external
+use serde::ser::{Serialize, Serializer, SerializeStruct};
+use hex::ToHex;
+
+/// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
+/// The encryption header is the only optional header part of the main header
+/// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
+/// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password based encryption method,
+/// described by the containing [PBEHeader].
+/// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
+#[derive(Debug,Clone)]
+pub struct EncryptionHeader {
+	version: u8,
+	pbe_header: PBEHeader,
+	algorithm: EncryptionAlgorithm,
+	encrypted_encryption_key: Vec<u8>,
+	encrypted_header_nonce: [u8; 12],
+}
+
+impl EncryptionHeader {
+	/// creates a new encryption header by the given values.
+	pub fn new(
+		version: u8,
+		pbe_header: PBEHeader,
+		algorithm: EncryptionAlgorithm,
+		encrypted_encryption_key: Vec<u8>, //encrypted with set password
+		encrypted_header_nonce: [u8; 12], //used for header encryption
+		) -> EncryptionHeader {
+		Self {
+			version: version,
+			pbe_header: pbe_header,
+			algorithm: algorithm,
+			encrypted_encryption_key: encrypted_encryption_key,
+			encrypted_header_nonce: encrypted_header_nonce
+		}
+	}
+
+	/// returns the used encryption algorithm as a reference.
+	pub fn algorithm(&self) -> &EncryptionAlgorithm {
+		&self.algorithm
+	}
+
+	/// returns a reference to the inner PBE header.
+	pub fn pbe_header(&self) -> &PBEHeader {
+		&self.pbe_header
+	}
+
+	/// returns the nonce, used for header encryption. Note: this nonce is only used for the optionally header encryption.
+	pub fn nonce(&self) -> &[u8; 12] {
+		&self.encrypted_header_nonce
+	}
+
+	/// tries to decrypt the encryption key.
+	pub fn decrypt_encryption_key<P: AsRef<[u8]>>(&self, password: P) -> Result<Vec<u8>> {
+		match self.pbe_header.kdf_scheme() {
+			KDFScheme::PBKDF2SHA256 => match self.pbe_header.kdf_parameters() {
+				KDFParameters::PBKDF2SHA256Parameters(parameters) => {
+					let iterations = parameters.iterations();
+					let salt = parameters.salt();
+					match self.pbe_header.encryption_scheme() {
+						PBEScheme::AES128CBC => Encryption::decrypt_pbkdf2sha256_aes128cbc(
+							iterations,
+							salt,
+							self.pbe_header.nonce(),
+							&password,
+							&self.encrypted_encryption_key
+							),
+						PBEScheme::AES256CBC => Encryption::decrypt_pbkdf2sha256_aes256cbc(
+							iterations,
+							salt,
+							self.pbe_header.nonce(),
+							&password,
+							&self.encrypted_encryption_key
+							),
+					}
+				}
+				
+			}
+		}
+	}
+}
+
+impl HeaderCoding for EncryptionHeader {
+	type Item = EncryptionHeader;
+
+	fn identifier() -> u32 {
+		HEADER_IDENTIFIER_ENCRYPTION_HEADER
+	}
+
+	fn version(&self) -> u8 {
+		self.version
+	}
+
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+
+		vec.push(self.version);
+		vec.append(&mut self.pbe_header.encode_directly());
+		vec.push(self.algorithm.clone() as u8);
+		vec.append(&mut self.encrypted_encryption_key.encode_directly());
+		vec.append(&mut self.encrypted_header_nonce.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<EncryptionHeader> {
+		let mut cursor = Cursor::new(data);
+		let header_version = u8::decode_directly(&mut cursor)?;
+		let pbe_header = PBEHeader::decode_directly(&mut cursor)?;
+		let encryption_algorithm = match u8::decode_directly(&mut cursor)? {
+			0 => EncryptionAlgorithm::AES128GCMSIV,
+			1 => EncryptionAlgorithm::AES256GCMSIV,
+			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
+		};
+		let key_length = u64::decode_directly(&mut cursor)? as usize;
+		let mut encryption_key = vec![0u8; key_length];
+		cursor.read_exact(&mut encryption_key)?;
+		let mut nonce = [0; 12];
+		cursor.read_exact(&mut nonce)?;
+		Ok(EncryptionHeader::new(header_version, pbe_header, encryption_algorithm, encryption_key, nonce))
+	}
+}
+
+impl Serialize for EncryptionHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("EncryptionHeader", 10)?;
+        state.serialize_field("header_version", &self.version)?;
+        state.serialize_field("pbe_header", &self.pbe_header)?;
+        state.serialize_field("algorithm", &self.algorithm)?;
+        state.serialize_field("encrypted_encryption_key", &self.encrypted_encryption_key.encode_hex::<String>())?;
+        state.serialize_field("encryption_header_nonce", &self.encrypted_header_nonce.encode_hex::<String>())?;
+        state.end()
+    }
+}

@@ -12,7 +12,7 @@ use ed25519_dalek::{
 use rand::rngs::OsRng;
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	ZffError,
 	ZffErrorKind,
@@ -60,7 +60,7 @@ impl Signature {
 	/// verify the data with the given public key bytes.
 	pub fn verify(publickey: [u8; ED25519_DALEK_PUBKEY_LEN], message: &[u8], signature: [u8; ED25519_DALEK_SIGNATURE_LEN]) -> Result<bool> {
 		let pub_key = PublicKey::from_bytes(&publickey)?;
-		let signature = Ed25519Signature::new(signature);
+		let signature = Ed25519Signature::from_bytes(&signature)?;
 		match pub_key.verify(message, &signature) {
 			Ok(_) => return Ok(true),
 			Err(_) => return Ok(false),

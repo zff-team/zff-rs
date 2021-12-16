@@ -131,29 +131,30 @@
 
 // - modules
 mod constants;
-mod traits;
-mod compression;
-mod encryption;
 mod file_extension;
 mod io;
-mod hashing;
-mod signatures;
 mod segment;
 pub mod header;
 pub mod footer;
 
 // - re-exports
 pub use constants::*;
-pub use traits::*;
-pub use compression::*;
-pub use encryption::*;
 pub use file_extension::*;
 pub use io::*;
-pub use hashing::*;
-pub use signatures::*;
 pub use segment::*;
 pub use super::{
 	Result,
 	ZffError,
 	ZffErrorKind,
+	HeaderCoding,
+	ValueDecoder,
+	ValueEncoder,
+	Hash,
+	HashType,
+	CompressionAlgorithm,
+	EncryptionAlgorithm,
+	Encryption,
+	PBEScheme,
+	KDFScheme,
+	Signature,
 };

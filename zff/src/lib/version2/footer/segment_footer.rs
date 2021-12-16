@@ -10,7 +10,7 @@ use crate::version1::{
 
 };
 
-use crate::version1::{
+use crate::{
 	FOOTER_IDENTIFIER_SEGMENT_FOOTER,
 };
 
@@ -19,7 +19,11 @@ use crate::version1::{
 /// The offset table is internally managed as a ```Vec<u64>```.
 pub struct SegmentFooter {
 	version: u8,
-	chunk_offsets: Vec<u64>
+	length_of_segment: u64,
+	chunk_offsets: Vec<u64>,
+	/// The offset where the footer starts.
+	footer_offset: u64,
+
 }
 
 impl SegmentFooter {
@@ -27,16 +31,31 @@ impl SegmentFooter {
 	pub fn new_empty(version: u8) -> SegmentFooter {
 		Self {
 			version: version,
-			chunk_offsets: Vec::new()
+			length_of_segment: 0,
+			chunk_offsets: Vec::new(),
+			footer_offset: 0,
 		}
 	}
 
 	/// creates a new SegmentFooter with a given "offset table" (represented as ```Vec<u64>```.
-	pub fn new(version: u8, chunk_offsets: Vec<u64>) -> SegmentFooter {
+	pub fn new(version: u8, length_of_segment: u64, chunk_offsets: Vec<u64>, footer_offset: u64) -> SegmentFooter {
 		Self {
 			version: version,
+			length_of_segment: length_of_segment,
 			chunk_offsets: chunk_offsets,
+			footer_offset: footer_offset,
 		}
+	}
+
+	/// returns the length of the segment in bytes.
+	pub fn length_of_segment(&self) -> u64 {
+		self.length_of_segment
+	}
+
+	/// overwrites the length value in the footer with the given value. This can be useful, if you create an 'empty'
+	/// footer (with length=0) and want to set the length value after reading the data from source to buffer.
+	pub fn set_length_of_segment(&mut self, value: u64) {
+		self.length_of_segment = value
 	}
 
 	/// adds an offset to the offset table of the SegmentFooter.
@@ -65,8 +84,9 @@ impl HeaderCoding for SegmentFooter {
 		let mut vec = Vec::new();
 
 		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut self.length_of_segment.encode_directly());
 		vec.append(&mut self.chunk_offsets.encode_directly());
-
+		vec.append(&mut self.footer_offset.encode_directly());
 		vec
 	}
 
@@ -74,7 +94,9 @@ impl HeaderCoding for SegmentFooter {
 		let mut cursor = Cursor::new(data);
 
 		let footer_version = u8::decode_directly(&mut cursor)?;
+		let length_of_segment = u64::decode_directly(&mut cursor)?;
 		let chunk_offsets = Vec::<u64>::decode_directly(&mut cursor)?;
-		Ok(SegmentFooter::new(footer_version, chunk_offsets))
+		let footer_offset = u64::decode_directly(&mut cursor)?;
+		Ok(SegmentFooter::new(footer_version, length_of_segment, chunk_offsets, footer_offset))
 	}
 }
