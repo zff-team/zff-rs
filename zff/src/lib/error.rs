@@ -79,6 +79,8 @@ pub enum ZffErrorKind {
 	MissingSegment,
 	/// Error will be returned, if no object type exists for the given value
 	UnknownObjectTypeValue,
+	/// Error will be returned, if you try to call a method, which is not available for this EntryType.
+	NotAvailableForEntryType,
 
 }
 
@@ -113,6 +115,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::NoSignatureFoundAtChunk => "NoSignatureFoundAtChunk",
 			ZffErrorKind::MissingSegment => "MissingSegment",
 			ZffErrorKind::UnknownObjectTypeValue => "UnknownObjectTypeValue",
+			ZffErrorKind::NotAvailableForEntryType => "NotAvailableForEntryType",
 		};
 	write!(f, "{}", err_msg)
 	}
