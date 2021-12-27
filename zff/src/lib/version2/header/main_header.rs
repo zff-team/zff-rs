@@ -49,7 +49,7 @@ impl MainHeader {
 		version: u8,
 		encryption_header: Option<EncryptionHeader>,
 		compression_header: CompressionHeader,
-		chunk_size: u8,
+		chunk_size: u8, // the target chunk size
 		signature_flag: u8,
 		segment_size: u64,
 		unique_identifier: i64,
