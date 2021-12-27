@@ -22,6 +22,7 @@ use crate::version1::{
 	EncryptionAlgorithm,
 	Signature,
 	file_extension_next_value,
+	buffer_chunk,
 };
 
 use crate::version1::{
@@ -400,39 +401,6 @@ impl<R: Read> ZffWriter<R> {
 	pub fn main_header(&self) -> &MainHeader {
 		&self.main_header
 	}
-}
-
-// returns the buffer with the read bytes and the number of bytes which was read.
-fn buffer_chunk<R>(
-	input: &mut R,
-	chunk_size: usize,
-	) -> Result<(Vec<u8>, u64)> 
-where
-	R: Read
-{
-	let mut buf = vec![0u8; chunk_size];
-    let mut bytes_read = 0;
-
-    while bytes_read < chunk_size {
-        let r = match input.read(&mut buf[bytes_read..]) {
-        	Ok(r) => r,
-        	Err(e) => match e.kind() {
-        		std::io::ErrorKind::Interrupted => return Err(ZffError::new(ZffErrorKind::InterruptedInputStream, "")),
-        		_ => return Err(ZffError::from(e)),
-        	},
-        };
-        if r == 0 {
-            break;
-        }
-        bytes_read += r;
-    }
-
-    let buf = if bytes_read == chunk_size {
-        buf
-    } else {
-        buf[..bytes_read].to_vec()
-    };
-    return Ok((buf, bytes_read as u64))
 }
 
 /// This is a reader struct which implements [std::io::Read] to read data from a zff image.
