@@ -79,3 +79,6 @@ pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 1;
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
 /// current header version for the [HashHeader](crate::header::HashHeader).
 pub const DEFAULT_HEADER_VERSION_HASH_HEADER: u8 = 1;
+/// current header version for the [SegmentHeader](crate::header::SegmentHeader).
+pub const DEFAULT_HEADER_VERSION_SEGMENT_HEADER: u8 = 2;
+pub(crate) const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
