@@ -59,13 +59,18 @@ impl SegmentFooter {
 	}
 
 	/// adds an offset to the offset table of the SegmentFooter.
-	pub fn add_offset(&mut self, offset: u64) {
+	pub fn add_chunk_offset(&mut self, offset: u64) {
 		self.chunk_offsets.push(offset)
 	}
 
 	/// returns a reference of the offset table
 	pub fn chunk_offsets(&self) -> &Vec<u64> {
 		&self.chunk_offsets
+	}
+
+	/// sets the offset of this footer
+	pub fn set_footer_offset(&mut self, offset: u64) {
+		self.footer_offset = offset;
 	}
 }
 
