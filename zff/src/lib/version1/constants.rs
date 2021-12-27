@@ -1,4 +1,3 @@
-
 pub(crate) use crate::constants::*;
 
 //ZFF File extension
@@ -19,9 +18,3 @@ pub const DEFAULT_HEADER_VERSION_COMPRESSION_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 1;
 /// current header version for the [SegmentHeader](crate::header::SegmentHeader).
 pub const DEFAULT_HEADER_VERSION_SEGMENT_HEADER: u8 = 1;
-/// current header version for the [ChunkHeader](crate::header::ChunkHeader).
-pub const DEFAULT_HEADER_VERSION_CHUNK_HEADER: u8 = 1;
-/// current header version for the [HashValue](crate::header::HashValue) structure.
-pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 1;
-/// current header version for the [HashHeader](crate::header::HashHeader).
-pub const DEFAULT_HEADER_VERSION_HASH_HEADER: u8 = 1;

@@ -68,3 +68,14 @@ pub const DEFAULT_COMPRESSION_RATIO_THRESHOLD: f32 = 1.05;
 pub const ED25519_DALEK_PUBKEY_LEN: usize = PUBLIC_KEY_LENGTH;
 /// the default length of an ed25519 signature
 pub const ED25519_DALEK_SIGNATURE_LEN: usize = SIGNATURE_LENGTH;
+
+
+// default versions
+/// current header version for the [ChunkHeader](crate::header::ChunkHeader).
+pub const DEFAULT_HEADER_VERSION_CHUNK_HEADER: u8 = 1;
+/// current header version for the [HashValue](crate::header::HashValue) structure.
+pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 1;
+/// current footer version of [ObjectFooterPhysical](crate::version2::footer::ObjectFooterPhysical)
+pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
+/// current header version for the [HashHeader](crate::header::HashHeader).
+pub const DEFAULT_HEADER_VERSION_HASH_HEADER: u8 = 1;
