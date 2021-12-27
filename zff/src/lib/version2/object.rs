@@ -33,14 +33,15 @@ use digest::DynDigest;
 use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
 
-pub struct PhysicalObjectEncoder<D: Read> {
+pub struct PhysicalObjectEncoder<R: Read> {
 	encoded_header: Vec<u8>,
 	encoded_header_remaining_bytes: usize,
-	underlying_data: D,
+	underlying_data: R,
 	read_bytes_underlying_data: u64,
 	current_chunked_data: Option<Vec<u8>>,
 	current_chunked_data_remaining_bytes: usize,
 	current_chunk_number: u64,
+	initial_chunk_number: u64,
 	encoded_footer: Vec<u8>,
 	encoded_footer_remaining_bytes: usize,
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
@@ -49,14 +50,15 @@ pub struct PhysicalObjectEncoder<D: Read> {
 	main_header: MainHeader,
 }
 
-impl<D: Read> PhysicalObjectEncoder<D> {
+impl<R: Read> PhysicalObjectEncoder<R> {
 	pub fn new(
 		obj_header: ObjectHeader,
-		reader: D,
+		reader: R,
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
-		main_header: MainHeader) -> PhysicalObjectEncoder<D> {
+		main_header: MainHeader,
+		current_chunk_number: u64) -> PhysicalObjectEncoder<R> {
 		
 		let encoded_header = obj_header.encode_directly();
 		let mut hasher_map = HashMap::new();
@@ -71,7 +73,8 @@ impl<D: Read> PhysicalObjectEncoder<D> {
 			read_bytes_underlying_data: 0,
 			current_chunked_data: None,
 			current_chunked_data_remaining_bytes: 0,
-			current_chunk_number: 1,
+			current_chunk_number: current_chunk_number,
+			initial_chunk_number: current_chunk_number,
 			encoded_footer: Vec::new(),
 			encoded_footer_remaining_bytes: 0,
 			hasher_map: hasher_map,
@@ -196,8 +199,21 @@ impl<D: Read> PhysicalObjectEncoder<D> {
 	        hash_values.push(hash_value);
 	    }
 	    let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
-		let footer = ObjectFooterPhysical::new(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL, hash_header);
+		let footer = ObjectFooterPhysical::new(
+			DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
+			self.read_bytes_underlying_data as u64,
+			self.initial_chunk_number,
+			self.current_chunk_number - self.initial_chunk_number,
+			hash_header);
 		footer.encode_directly()
+	}
+
+	pub fn main_header(&self) -> &MainHeader {
+		&self.main_header
+	}
+
+	pub fn encryption_key(&self) -> Option<Vec<u8>> {
+		self.encryption_key.clone()
 	}
 }
 
