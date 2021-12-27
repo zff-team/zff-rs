@@ -131,7 +131,6 @@
 
 // - modules
 mod constants;
-mod file_extension;
 mod io;
 mod segment;
 pub mod header;
@@ -139,10 +138,9 @@ pub mod footer;
 
 // - re-exports
 pub use constants::*;
-pub use file_extension::*;
 pub use io::*;
 pub use segment::*;
-pub use super::{
+pub(crate) use super::{
 	Result,
 	ZffError,
 	ZffErrorKind,
@@ -157,4 +155,6 @@ pub use super::{
 	PBEScheme,
 	KDFScheme,
 	Signature,
+	file_extension_next_value,
+	buffer_chunk,
 };
