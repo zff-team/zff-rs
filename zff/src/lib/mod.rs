@@ -8,6 +8,8 @@ mod encryption;
 mod traits;
 mod error;
 mod signatures;
+mod file_extension;
+mod io;
 
 // - re-exports
 pub use hashing::*;
@@ -16,6 +18,8 @@ pub use encryption::*;
 pub use error::*;
 pub use signatures::*;
 pub use traits::*;
+pub use file_extension::*;
+use io::*;
 use constants::*;
 
 // - types
