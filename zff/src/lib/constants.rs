@@ -69,6 +69,11 @@ pub const ED25519_DALEK_PUBKEY_LEN: usize = PUBLIC_KEY_LENGTH;
 /// the default length of an ed25519 signature
 pub const ED25519_DALEK_SIGNATURE_LEN: usize = SIGNATURE_LENGTH;
 
+//ZFF File extension
+/// the start value for file extensions. a file-extension always starts with a 'z', followed by the segment number (e.g. "z01", "z02", ..., "z99", "z100", ...).
+pub const FILE_EXTENSION_START: char = 'z';
+/// the file extension for the first segment (which contains the main header also).
+pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
 
 // default versions
 /// current header version for the [ChunkHeader](crate::header::ChunkHeader).
@@ -82,3 +87,4 @@ pub const DEFAULT_HEADER_VERSION_HASH_HEADER: u8 = 1;
 /// current header version for the [SegmentHeader](crate::header::SegmentHeader).
 pub const DEFAULT_HEADER_VERSION_SEGMENT_HEADER: u8 = 2;
 pub(crate) const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
+pub(crate) const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 1;
