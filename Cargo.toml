@@ -1,11 +1,48 @@
-[workspace]
+[package]
+name = "zff"
+version = "0.10.1"
+authors = ["ph0llux <ph0llux@pm.me"]
+edition = "2021"
+rust-version = "1.56.1"
+license = "MIT OR Apache-2.0"
+description = "This crate is a library to interact with zff, a new file format for forensic images."
+readme = "../README.md"
+homepage = "https://github.com/ph0llux/zff"
+repository = "https://github.com/ph0llux/zff"
+keywords = ["forensics", "security", "acquisition", "file-format", "file"]
+publish = true
 
-members = [
-"zff",
-"zffacquire",
-"zffmetareader",
-"zffmount",
-]
+[lib]
+name = "zff"
+path = "src/lib/mod.rs"
+test = true
+bench = true
+doc = true
+edition = "2021"
+crate-type = ["lib"]
+
+[dependencies]
+byteorder = "1.4.3"
+rand = "0.7.3"
+base64 = "0.13.0"
+serde = { version = "1.0", features = ["derive"] }
+hex = "0.4.3"
+slice = "0.0.4"
+time = { version = "0.3.4", features = [ "formatting" ] }
+#encryption
+pkcs5 = { version = "0.3.0", features = [ "pbes2", "alloc" ] }
+aes-gcm-siv = "0.10.3"
+#compression
+zstd = "0.9.0"
+lz4_flex = "0.9.0"
+#Hashing
+digest = { version = "0.9.0", features = [ "alloc" ] }
+blake2 = "0.9.2"
+sha2 = "0.9.6"
+sha3 = "0.9.1"
+crc32fast = "1.2.1"
+#signing
+ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }
 
 [profile.release]
 lto = true				# enables link time optimization
