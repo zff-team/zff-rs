@@ -42,15 +42,17 @@ pub struct FileHeader {
 	version: u8,
 	file_number: u64,
 	file_type: FileType,
+	filename: String,
 	length_of_data: u64,
 }
 
 impl FileHeader {
-	pub fn new(version: u8, file_number: u64, file_type: FileType, length_of_data: u64) -> FileHeader {
+	pub fn new<F: Into<String>>(version: u8, file_number: u64, file_type: FileType, filename: F, length_of_data: u64) -> FileHeader {
 		Self {
 			version: version,
 			file_number: file_number,
 			file_type: file_type,
+			filename: filename.into(),
 			length_of_data: length_of_data,
 		}
 	}
@@ -59,6 +61,9 @@ impl FileHeader {
 	}
 	pub fn file_type(&self) -> FileType {
 		self.file_type.clone()
+	}
+	pub fn filename(&self) -> &str {
+		&self.filename
 	}
 	pub fn length_of_data(&self) -> u64 {
 		self.length_of_data
@@ -81,6 +86,7 @@ impl HeaderCoding for FileHeader {
 		vec.push(self.version);
 		vec.append(&mut self.file_number.encode_directly());
 		vec.push(self.file_type.clone() as u8);
+		vec.append(&mut self.filename().encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
 		vec
 	}
@@ -95,8 +101,9 @@ impl HeaderCoding for FileHeader {
 			3 => FileType::Symlink,
 			val @ _ => return Err(ZffError::new(ZffErrorKind::UnknownObjectTypeValue, val.to_string()))
 		};
+		let filename = String::decode_directly(&mut cursor)?;
 		let length_of_data = u64::decode_directly(&mut cursor)?;
 		
-		Ok(FileHeader::new(header_version, file_number, file_type, length_of_data))
+		Ok(FileHeader::new(header_version, file_number, file_type, filename, length_of_data))
 	}
 }
