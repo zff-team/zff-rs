@@ -40,6 +40,7 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	encoded_header_remaining_bytes: usize,
 	underlying_data: R,
 	read_bytes_underlying_data: u64,
+	/// data of current chunk (only used in Read implementation)
 	current_chunked_data: Option<Vec<u8>>,
 	current_chunked_data_remaining_bytes: usize,
 	current_chunk_number: u64,
