@@ -1,6 +1,7 @@
 // - STD
-use std::io::{Read, Seek, copy as io_copy};
-use std::fs::{File as FsFile};
+use std::io::{Read, Seek, SeekFrom, copy as io_copy, Cursor};
+use std::path::PathBuf;
+use std::fs::{File as FsFile, canonicalize};
 use std::collections::{HashMap};
 
 // - internal
@@ -12,6 +13,7 @@ use crate::{
 	Result,
 	buffer_chunk,
 	HeaderCoding,
+	ValueEncoder,
 	HashType,
 	Hash,
 	Signature,
@@ -51,7 +53,16 @@ pub struct FileEncoder {
 	initial_chunk_number: u64,
 	/// The current chunk number
 	current_chunk_number: u64,
+	/// The number of bytes, which were read from the underlying file.
 	read_bytes_underlying_data: u64,
+	/// Path were the symlink links to. Note: This should be None, if this is not a symlink.
+	symlink_real_path: Option<PathBuf>,
+	/// The encoded footer, only used in Read implementation
+	encoded_footer: Vec<u8>,
+	encoded_footer_remaining_bytes: usize,
+	/// data of current chunk (only used in Read implementation)
+	current_chunked_data: Option<Vec<u8>>,
+	current_chunked_data_remaining_bytes: usize,
 }
 
 impl FileEncoder {
@@ -62,7 +73,8 @@ impl FileEncoder {
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
-		current_chunk_number: u64) -> FileEncoder {
+		current_chunk_number: u64,
+		symlink_real_path: Option<PathBuf>) -> FileEncoder {
 		let encoded_header = file_header.encode_directly();
 		let mut hasher_map = HashMap::new();
 	    for h_type in hash_types {
@@ -81,6 +93,11 @@ impl FileEncoder {
 			initial_chunk_number: current_chunk_number,
 			current_chunk_number: current_chunk_number,
 			read_bytes_underlying_data: 0,
+			symlink_real_path: symlink_real_path,
+			current_chunked_data: None,
+			current_chunked_data_remaining_bytes: 0,
+			encoded_footer: Vec::new(),
+			encoded_footer_remaining_bytes: 0,
 		}
 	}
 
@@ -147,7 +164,16 @@ impl FileEncoder {
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
 		match self.file_type {
 			FileType::Directory => return Err(ZffError::new(ZffErrorKind::NotAvailableForFileType, "Directory")),
-			FileType::Symlink => unimplemented!(),
+			FileType::Symlink => {
+				match &self.symlink_real_path {
+					//TODO: Test if this is possible to decode (empty String?!)
+					None => return Ok(String::from("").encode_directly()),
+					Some(link_path) => {
+						let symlink_real = canonicalize(link_path)?;
+						return Ok(symlink_real.to_string_lossy().encode_directly());
+					}
+				}
+			},
 			FileType::File => ()
 		}
 		let mut chunk = Vec::new();
@@ -210,5 +236,71 @@ impl FileEncoder {
 			self.read_bytes_underlying_data as u64,
 			);
 		footer.encode_directly()
+	}
+}
+
+/// this implement Read for [FileEncoder]. This implementation should only used for a single zff segment file.
+impl Read for FileEncoder {
+	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+		let mut read_bytes = 0;
+		//read encoded header, if there are remaining bytes to read.
+        match self.encoded_header_remaining_bytes {
+            remaining_bytes @ 1.. => {
+                let mut inner_read_bytes = 0;
+                let mut inner_cursor = Cursor::new(&self.encoded_header);
+                inner_cursor.seek(SeekFrom::End(remaining_bytes as i64 * -1))?;
+                inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+                self.encoded_header_remaining_bytes -= inner_read_bytes;
+                read_bytes += inner_read_bytes;
+            },
+            _ => (),
+        }
+        loop {
+        	if read_bytes == buf.len() {
+        		self.encoded_footer = self.get_encoded_footer();
+        		self.encoded_footer_remaining_bytes = self.encoded_footer.len();
+				break;
+			};
+        	match &self.current_chunked_data {
+        		Some(data) => {
+        			let mut inner_read_bytes = 0;
+        			let mut inner_cursor = Cursor::new(&data);
+        			inner_cursor.seek(SeekFrom::End(self.current_chunked_data_remaining_bytes as i64 * -1))?;
+        			inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+        			self.current_chunked_data_remaining_bytes -= inner_read_bytes;
+        			if self.current_chunked_data_remaining_bytes < 1 {
+        				self.current_chunked_data = None;
+        			}
+        			read_bytes += inner_read_bytes;
+        		},
+        		None => {
+        			match self.get_next_chunk() {
+        				Ok(chunk) => {
+        					self.current_chunked_data_remaining_bytes = chunk.len();
+        					self.current_chunked_data = Some(chunk);
+        				},
+        				Err(e) => match e.unwrap_kind() {
+        					ZffErrorKind::ReadEOF => break,
+        					ZffErrorKind::NotAvailableForFileType => break,
+        					ZffErrorKind::IoError(ioe) => return Err(ioe),
+        					e @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        				}
+        			}
+        		}
+        	}
+        }
+        //read encoded footer, if there are remaining bytes to read.
+        match self.encoded_footer_remaining_bytes {
+            remaining_bytes @ 1.. => {
+                let mut inner_read_bytes = 0;
+                let mut inner_cursor = Cursor::new(&self.encoded_footer);
+                inner_cursor.seek(SeekFrom::End(remaining_bytes as i64 * -1))?;
+                inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+                self.encoded_footer_remaining_bytes -= inner_read_bytes;
+                read_bytes += inner_read_bytes;
+            },
+            _ => (),
+        }
+        Ok(read_bytes)
 	}
 }
