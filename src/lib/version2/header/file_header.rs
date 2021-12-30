@@ -44,16 +44,33 @@ pub struct FileHeader {
 	file_type: FileType,
 	filename: String,
 	parent_file_number: u64,
+	atime: u64,
+	mtime: u64,
+	ctime: u64,
+	btime: u64,
 }
 
 impl FileHeader {
-	pub fn new<F: Into<String>>(version: u8, file_number: u64, file_type: FileType, filename: F, parent_file_number: u64) -> FileHeader {
+	pub fn new<F: Into<String>>(
+		version: u8,
+		file_number: u64,
+		file_type: FileType,
+		filename: F,
+		parent_file_number: u64,
+		atime: u64,
+		mtime: u64,
+		ctime: u64,
+		btime: u64) -> FileHeader {
 		Self {
 			version: version,
 			file_number: file_number,
 			file_type: file_type,
 			filename: filename.into(),
 			parent_file_number: parent_file_number,
+			atime: atime,
+			mtime: mtime,
+			ctime: ctime,
+			btime: btime,
 		}
 	}
 	pub fn file_number(&self) -> u64 {
@@ -85,6 +102,10 @@ impl HeaderCoding for FileHeader {
 		vec.push(self.file_type.clone() as u8);
 		vec.append(&mut self.filename().encode_directly());
 		vec.append(&mut self.parent_file_number.encode_directly());
+		vec.append(&mut self.atime.encode_directly());
+		vec.append(&mut self.mtime.encode_directly());
+		vec.append(&mut self.ctime.encode_directly());
+		vec.append(&mut self.btime.encode_directly());
 		vec
 	}
 
@@ -100,7 +121,11 @@ impl HeaderCoding for FileHeader {
 		};
 		let filename = String::decode_directly(&mut cursor)?;
 		let parent_file_number = u64::decode_directly(&mut cursor)?;
+		let atime = u64::decode_directly(&mut cursor)?;
+		let mtime = u64::decode_directly(&mut cursor)?;
+		let ctime = u64::decode_directly(&mut cursor)?;
+		let btime = u64::decode_directly(&mut cursor)?;
 		
-		Ok(FileHeader::new(header_version, file_number, file_type, filename, parent_file_number))
+		Ok(FileHeader::new(header_version, file_number, file_type, filename, parent_file_number, atime, mtime, ctime, btime))
 	}
 }
