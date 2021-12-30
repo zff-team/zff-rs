@@ -17,16 +17,20 @@ use crate::version2::header::{
 pub struct FileFooter {
 	version: u8,
 	hash_header: HashHeader,
-	number_of_chunks: u64
+	first_chunk_number: u64,
+	number_of_chunks: u64,
+	length_of_data: u64,
 }
 
 impl FileFooter {
 	/// creates a new HashHeader by given values/hashes.
-	pub fn new(version: u8, hash_header: HashHeader, number_of_chunks: u64) -> FileFooter {
+	pub fn new(version: u8, hash_header: HashHeader, first_chunk_number: u64, number_of_chunks: u64, length_of_data: u64) -> FileFooter {
 		Self {
 			version: version,
 			hash_header: hash_header,
+			first_chunk_number: first_chunk_number,
 			number_of_chunks: number_of_chunks,
+			length_of_data: length_of_data,
 		}
 	}
 }
@@ -43,14 +47,18 @@ impl HeaderCoding for FileFooter {
 		let mut vec = Vec::new();
 		vec.push(self.version);
 		vec.append(&mut self.hash_header.encode_directly());
+		vec.append(&mut self.first_chunk_number.encode_directly());
 		vec.append(&mut self.number_of_chunks.encode_directly());
+		vec.append(&mut self.length_of_data.encode_directly());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<FileFooter> {
 		let mut cursor = Cursor::new(data);
 		let footer_version = u8::decode_directly(&mut cursor)?;
 		let hash_header = HashHeader::decode_directly(&mut cursor)?;
+		let first_chunk_number = u64::decode_directly(&mut cursor)?;
 		let number_of_chunks = u64::decode_directly(&mut cursor)?;
-		Ok(FileFooter::new(footer_version, hash_header, number_of_chunks))
+		let length_of_data = u64::decode_directly(&mut cursor)?;
+		Ok(FileFooter::new(footer_version, hash_header, first_chunk_number, number_of_chunks, length_of_data))
 	}
 }

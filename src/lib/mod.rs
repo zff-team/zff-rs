@@ -21,6 +21,9 @@ pub use traits::*;
 pub use file_extension::*;
 use io::*;
 use constants::*;
+//
+pub use version2::*;
+pub use version2::io::*;
 
 // - types
 /// Result for std::result::Result<T, ZffError>.
