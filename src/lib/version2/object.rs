@@ -34,7 +34,9 @@ use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
 
 pub struct PhysicalObjectEncoder<R: Read> {
+	///An encoded [ObjectHeader].
 	encoded_header: Vec<u8>,
+	/// remaining bytes of the encoded header to read. This is only (internally) used, if you will use the [Read] implementation of [PhysicalObjectEncoder].
 	encoded_header_remaining_bytes: usize,
 	underlying_data: R,
 	read_bytes_underlying_data: u64,

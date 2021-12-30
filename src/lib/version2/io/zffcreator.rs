@@ -25,6 +25,7 @@ use crate::version2::{
 // - external
 use ed25519_dalek::{Keypair};
 
+/// TODO: Docs
 pub struct ZffCreatorPhysical<R: Read> {
 	object_encoder: PhysicalObjectEncoder<R>,
 	output_filenpath: String,
