@@ -25,7 +25,7 @@ use crate::{
 };
 
 use crate::version2::{
-	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader},
+	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader, SignatureFlag},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 };
 
@@ -200,6 +200,13 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        let hash = hasher.finalize();
 	        let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
 	        hash_value.set_hash(hash.to_vec());
+	        if self.main_header.has_hash_signatures() {
+	        	let signature = self.calculate_signature(&hash.to_vec());
+	        	match signature {
+	        		Some(sig) => hash_value.set_ed25519_signature(sig),
+	        		None => ()
+	        	};
+	        };
 	        hash_values.push(hash_value);
 	    }
 	    let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);

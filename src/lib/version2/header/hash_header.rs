@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Cursor};
+use std::io::{Cursor, Read};
 
 // - internal
 use crate::{
@@ -17,6 +17,7 @@ use crate::{
 // - external
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use hex::ToHex;
+use ed25519_dalek::{SIGNATURE_LENGTH};
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of the main header and contains 0 or more hash values of the dumped data.\
@@ -107,15 +108,17 @@ pub struct HashValue {
 	version: u8,
 	hash_type: HashType,
 	hash: Vec<u8>,
+	ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,
 }
 
 impl HashValue {
 	/// creates a new [HashValue](struct.HashValue.html) for the given parameters.
-	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
+	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,) -> HashValue{
 		Self {
 			version: version,
 			hash_type: hash_type,
-			hash: hash
+			hash: hash,
+			ed25519_signature: ed25519_signature,
 		}
 	}
 	/// creates a new, empty [HashValue](struct.HashValue.html) for a given hashtype.
@@ -125,6 +128,7 @@ impl HashValue {
 			version: structure_version,
 			hash_type: hash_type,
 			hash: vec!(0u8; hash_default_len/8),
+			ed25519_signature: None
 		}
 	}
 
@@ -141,6 +145,16 @@ impl HashValue {
 	/// returns the underlying hash value
 	pub fn hash(&self) -> &Vec<u8> {
 		&self.hash
+	}
+
+	/// sets the appropriate ed25519 signature
+	pub fn set_ed25519_signature(&mut self, signature: [u8; SIGNATURE_LENGTH]) {
+		self.ed25519_signature = Some(signature)
+	}
+
+	/// returns the appropriate signature
+	pub fn ed25519_signature(&self) -> Option<[u8; SIGNATURE_LENGTH]> {
+		self.ed25519_signature.clone()
 	}
 }
 
@@ -161,12 +175,15 @@ impl HeaderCoding for HashValue {
 		vec.push(self.version);
 		vec.push(self.hash_type.clone() as u8);
 		vec.append(&mut self.hash.encode_directly());
-
+		match self.ed25519_signature {
+			None => (),
+			Some(signature) => vec.append(&mut signature.encode_directly()),
+		};
 		vec
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<HashValue> {
-		let mut cursor = Cursor::new(data);
+		let mut cursor = Cursor::new(&data);
 		let structure_version = u8::decode_directly(&mut cursor)?;
 		let hash_type = match u8::decode_directly(&mut cursor)? {
 			0 => HashType::Blake2b512,
@@ -175,8 +192,16 @@ impl HeaderCoding for HashValue {
 			3 => HashType::SHA3_256,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE)),
 		};
-	 let hash = Vec::<u8>::decode_directly(&mut cursor)?;
-		Ok(HashValue::new(structure_version, hash_type, hash))
+	 	let hash = Vec::<u8>::decode_directly(&mut cursor)?;
+	 	
+	 	let mut ed25519_signature = None;
+		if cursor.position() < (data.len() as u64 - 1) {
+			let mut buffer = [0; SIGNATURE_LENGTH];
+			cursor.read_exact(&mut buffer)?;
+			ed25519_signature = Some(buffer);
+		}
+
+		Ok(HashValue::new(structure_version, hash_type, hash, ed25519_signature))
 	}
 }
 
