@@ -37,7 +37,7 @@ pub struct MainHeader {
 	encryption_header: Option<EncryptionHeader>,
 	compression_header: CompressionHeader,
 	chunk_size: u8,
-	signature_flag: u8,
+	signature_flag: SignatureFlag,
 	segment_size: u64,
 	unique_identifier: i64,
 	description_notes: Option<String>,
@@ -50,7 +50,7 @@ impl MainHeader {
 		encryption_header: Option<EncryptionHeader>,
 		compression_header: CompressionHeader,
 		chunk_size: u8, // the target chunk size
-		signature_flag: u8,
+		signature_flag: SignatureFlag,
 		segment_size: u64,
 		unique_identifier: i64,
 		description_notes: Option<String>) -> MainHeader {
@@ -177,7 +177,7 @@ impl MainHeader {
 		
 		vec.append(&mut self.compression_header.encode_directly());
 		vec.push(self.chunk_size);
-		vec.push(self.signature_flag);
+		vec.push(self.signature_flag.clone() as u8);
 		vec.append(&mut self.segment_size.encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());
 		if let Some(description_notes) = &self.description_notes {
@@ -189,14 +189,19 @@ impl MainHeader {
 	fn decode_inner_content<R: Read>(inner_content: &mut R) -> Result<(
 		CompressionHeader,
 		u8, // chunk size
-		u8, // signature flag
+		SignatureFlag, // signature flag
 		u64, // segment size
 		i64, // unique identifier
 		Option<String>, //Description notes
 		)>{
 		let compression_header = CompressionHeader::decode_directly(inner_content)?;
 		let chunk_size = u8::decode_directly(inner_content)?;
-		let signature_flag = u8::decode_directly(inner_content)?;
+		let signature_flag = match u8::decode_directly(inner_content)? {
+			0 => SignatureFlag::NoSignatures,
+			1 => SignatureFlag::HashValueSignatureOnly,
+			2 => SignatureFlag::PerChunkSignatures,
+			value @ _ => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("signature_flag value: {}", value.to_string()))),
+		};
 		let segment_size = u64::decode_directly(inner_content)?;
 		let unique_identifier = i64::decode_directly(inner_content)?;
 		let description_notes = match String::decode_for_key(inner_content, ENCODING_KEY_DESCRIPTION_NOTES) {
@@ -242,8 +247,19 @@ impl MainHeader {
 	}
 
 	/// returns, if the chunks has a ed25519 signature or not.
-	pub fn has_signature(&self) -> bool {
-		self.signature_flag != 0
+	pub fn has_per_chunk_signature(&self) -> bool {
+		match &self.signature_flag {
+			SignatureFlag::PerChunkSignatures => return true,
+			_ => return false,
+		}
+	}
+
+	/// returns, if the hash values has a ed25519 signature or not.
+	pub fn has_hash_signatures(&self) -> bool {
+		match &self.signature_flag {
+			SignatureFlag::NoSignatures => return false,
+			_ => return true
+		}
 	}
 
 	/// returns a reference to the inner compression header
@@ -330,16 +346,28 @@ impl Serialize for MainHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("MainHeader", 10)?;
+        let signature_flag = match &self.signature_flag {
+        	SignatureFlag::NoSignatures => "no signatures",
+        	SignatureFlag::HashValueSignatureOnly => "hash value signatures only",
+        	SignatureFlag::PerChunkSignatures => "per chunk signatures",
+        };
         state.serialize_field("header_version", &self.version)?;
         state.serialize_field("encryption", &self.encryption_header)?;
         state.serialize_field("compression", &self.compression_header)?;
 
         state.serialize_field("chunk_size", &(1<<&self.chunk_size))?;
 
-        state.serialize_field("signature_flag", &(self.signature_flag != 0))?;
+        state.serialize_field("signature_flag", &(signature_flag))?;
         state.serialize_field("segment_size", &self.segment_size.to_string())?;
         state.serialize_field("unique_identifier", &self.unique_identifier)?;
 
         state.end()
     }
+}
+
+#[derive(Debug,Clone)]
+pub enum SignatureFlag {
+	NoSignatures = 0,
+	HashValueSignatureOnly = 1,
+	PerChunkSignatures = 2,
 }

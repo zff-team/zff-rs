@@ -1,5 +1,6 @@
 // - STD
 use std::io::{Read, Cursor, Seek, SeekFrom, copy as io_copy};
+use std::fs::{File};
 
 // - STD
 use std::collections::HashMap;
@@ -285,8 +286,19 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 	}
 }
 
-#[derive(Debug,Clone)]
 pub struct LogicalObjectEncoder {
-	header: ObjectHeader,
-	footer: ObjectFooterLogical,
+	obj_header: ObjectHeader,
+	files: Vec<File>
+}
+
+impl LogicalObjectEncoder {
+	pub fn new(
+		obj_header: ObjectHeader,
+		files: Vec<File>
+		) -> LogicalObjectEncoder {
+		Self {
+			obj_header: obj_header,
+			files: files,
+		}
+	}
 }

@@ -75,6 +75,8 @@ pub enum ZffErrorKind {
 	InvalidChunkNumber,
 	/// Error will be returned, if the selected chunk hasn't have an ed25519 signature.
 	NoSignatureFoundAtChunk,
+	/// Error will be returned, if there is an invalid flag value.
+	InvalidFlagValue,
 	/// Error will be returned, if the appropriate segment is missing in the zff image.
 	MissingSegment,
 	/// Error will be returned, if no object type exists for the given value
@@ -112,6 +114,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::MainHeaderEncryptionError => "MainHeaderEncryptionError",
 			ZffErrorKind::InvalidChunkNumber => "InvalidChunkNumber",
 			ZffErrorKind::NoSignatureFoundAtChunk => "NoSignatureFoundAtChunk",
+			ZffErrorKind::InvalidFlagValue => "InvalidFlagValue",
 			ZffErrorKind::MissingSegment => "MissingSegment",
 			ZffErrorKind::UnknownObjectTypeValue => "UnknownObjectTypeValue",
 			ZffErrorKind::NotAvailableForFileType => "NotAvailableForFileType",
