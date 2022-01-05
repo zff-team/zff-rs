@@ -1,7 +1,7 @@
 // - STD
 use std::io::{Read, Seek, SeekFrom, copy as io_copy, Cursor};
 use std::path::PathBuf;
-use std::fs::{File as FsFile, canonicalize};
+use std::fs::{File, canonicalize};
 use std::collections::{HashMap};
 
 // - internal
@@ -39,7 +39,7 @@ pub struct FileEncoder {
 	/// remaining bytes of the encoded header to read. This is only (internally) used, if you will use the [Read] implementation of [FileEncoder].
 	encoded_header_remaining_bytes: usize,
 	/// The underlying [File](std::fs::File) object to read from.
-	underlying_file: FsFile,
+	underlying_file: File,
 	/// optinal signature key, to sign the data with the given keypair
 	signature_key: Option<Keypair>,
 	/// optinal encryption key, to encrypt the data with the given key
@@ -68,7 +68,7 @@ pub struct FileEncoder {
 impl FileEncoder {
 	pub fn new(
 		file_header: FileHeader,
-		file: FsFile,
+		file: File,
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
