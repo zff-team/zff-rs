@@ -1,5 +1,6 @@
 // - STD
 use std::io::{Read};
+use std::collections::HashMap;
 
 // - internal
 use crate::version1::{
@@ -304,6 +305,22 @@ impl ValueEncoder for Vec<u64> {
 	}
 }
 
+impl<K, V> ValueEncoder for HashMap<K, V>
+where
+	K: ValueEncoder,
+	V: ValueEncoder
+{
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, value) in self.iter() {
+			vec.append(&mut key.encode_directly());
+			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+}
+
 /// decoder methods for values (and primitive types). This is an extension trait.
 pub trait ValueDecoder {
 	/// the return value for decode_directly() and decode_for_key();
@@ -465,5 +482,25 @@ where
 			vec.push(content);
 		}
 		Ok(vec)
+	}
+}
+
+impl<K, V> ValueDecoder for HashMap<K, V>
+where
+	K: ValueDecoder<Item = K> + std::cmp::Eq + std::hash::Hash,
+	V: ValueDecoder<Item = V>
+{
+
+	type Item = HashMap<K, V>;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<HashMap<K, V>> {
+		let length = u64::decode_directly(data)? as usize;
+		let mut hash_map = HashMap::with_capacity(length);
+		for _ in 0..length {
+			let key = K::decode_directly(data)?;
+			let value = V::decode_directly(data)?;
+			hash_map.insert(key, value);
+		}
+		Ok(hash_map)
 	}
 }
