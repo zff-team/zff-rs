@@ -2,7 +2,7 @@
 use std::io::{Read, Cursor, Seek, SeekFrom, copy as io_copy};
 use std::fs::{File};
 use std::path::{PathBuf};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap};
 
 // - internal
 use crate::{
@@ -300,7 +300,7 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 pub struct LogicalObjectEncoder {
 	encoded_header: Vec<u8>,
 	//encoded_header_remaining_bytes: usize,
-	files: VecDeque<(File, FileHeader)>,
+	files: Vec<(File, FileHeader)>,
 	current_file_encoder: Option<FileEncoder>,
 	current_file_header_read: bool,
 	current_file_number: u64,
@@ -320,7 +320,7 @@ impl LogicalObjectEncoder {
 	}
 	pub fn new(
 		obj_header: ObjectHeader,
-		files: VecDeque<(File, FileHeader)>,
+		files: Vec<(File, FileHeader)>,
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
 		signature_key_bytes: Option<Vec<u8>>,
@@ -331,7 +331,7 @@ impl LogicalObjectEncoder {
 		let encoded_header = obj_header.encode_directly();
 
 		let mut files = files;
-		let (current_file, current_file_header) = match files.pop_front() {
+		let (current_file, current_file_header) = match files.pop() {
 			Some((file, header)) => (file, header),
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, ""))
 		};
@@ -403,7 +403,7 @@ impl LogicalObjectEncoder {
 				let file_footer = file_encoder.get_encoded_footer();
 				self.object_footer.add_file_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_fileoffset(self.current_file_number, current_offset);
-				let (current_file, current_file_header) = match self.files.pop_front() {
+				let (current_file, current_file_header) = match self.files.pop() {
 					Some((file, header)) => (file, header),
 					None => {
 						self.current_file_encoder = None;

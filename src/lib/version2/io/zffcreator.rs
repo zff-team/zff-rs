@@ -1,7 +1,10 @@
 // - STD
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::path::{PathBuf};
-use std::fs::{File, remove_file};
+use std::fs::{File, OpenOptions, remove_file, read_link, read_dir};
+use std::collections::{HashMap, VecDeque};
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::MetadataExt;
 
 // - internal
 use crate::{
@@ -15,15 +18,17 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
 	DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
 	FILE_EXTENSION_FIRST_VALUE,
+	DEFAULT_HEADER_VERSION_FILE_HEADER,
 };
 use crate::version2::{
-	object::{PhysicalObjectEncoder},
-	header::{ObjectHeader, MainHeader, SegmentHeader},
+	object::{PhysicalObjectEncoder, LogicalObjectEncoder},
+	header::{ObjectHeader, MainHeader, SegmentHeader, FileType, FileHeader},
 	footer::{SegmentFooter, MainFooter},
 };
 
 // - external
 use ed25519_dalek::{Keypair};
+use time::{OffsetDateTime};
 
 /// TODO: Docs
 pub struct ZffCreatorPhysical<R: Read> {
@@ -105,7 +110,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    }
 
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, main_footer_start_offset);
-	    let mut output_file = File::create(&self.last_accepted_segment_filepath)?;
+	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
 	    output_file.write(&main_footer.encode_directly())?;
 
@@ -188,5 +193,308 @@ impl<R: Read> ZffCreatorPhysical<R> {
 		segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
 		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
+	}
+}
+
+
+/// TODO: Docs
+pub struct ZffCreatorLogical {
+	object_encoder: LogicalObjectEncoder,
+	output_filenpath: String,
+	current_segment_no: u64,
+	written_object_header: bool,
+	header_encryption: bool,
+	last_accepted_segment_filepath: PathBuf,
+}
+
+impl ZffCreatorLogical {
+	pub fn new<O: Into<String>>(
+		object_header: ObjectHeader,
+		input_files: Vec<PathBuf>,
+		hash_types: Vec<HashType>,
+		encryption_key: Option<Vec<u8>>,
+		signature_key: Option<Keypair>,
+		main_header: MainHeader,
+		header_encryption: bool,
+		output_filenpath: O,
+		unaccessable_files: Vec<PathBuf>,) -> Result<ZffCreatorLogical> {
+		let initial_chunk_number = 1;
+		let mut current_file_number = 1;
+		let mut parent_file_number = 0;
+
+		let mut unaccessable_files = Vec::new();
+		let mut directories_to_traversal = VecDeque::new(); //<directory_path, parent_file_number>
+		let mut files = Vec::new();
+		let mut symlink_real_paths = HashMap::new();
+
+		for path in input_files {
+			let file = match File::open(&path) {
+				Ok(f) => f,
+				Err(_) => {
+					unaccessable_files.push(path.to_string_lossy().to_string());
+					continue;
+				},
+			};
+
+			let metadata = file.metadata()?;
+			if metadata.file_type().is_dir() {
+				directories_to_traversal.push_back((path, parent_file_number)); // parent_file_number of root directory is always 0.
+			} else if metadata.file_type().is_file() {
+				let filetype = FileType::File;
+				let filename = path.to_string_lossy();
+				let atime = match metadata.accessed() {
+					Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				let mtime = match metadata.modified() {
+					Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				#[cfg(target_family = "windows")]
+				let ctime = match metadata.modified() {
+					Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				#[cfg(target_family = "unix")]
+				let ctime = metadata.ctime() as u64;
+
+				let btime = match metadata.created() {
+					Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				let file_header = FileHeader::new(
+					DEFAULT_HEADER_VERSION_FILE_HEADER,
+					current_file_number,
+					filetype,
+					filename,
+					parent_file_number,
+					atime,
+					mtime,
+					ctime,
+					btime);
+				current_file_number += 1;
+				files.push((file, file_header));
+			} else if metadata.file_type().is_symlink() {
+				let filetype = FileType::Symlink;
+				let filename = path.to_string_lossy();
+				let atime = match metadata.accessed() {
+					Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				let mtime = match metadata.modified() {
+					Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				#[cfg(target_family = "windows")]
+				let ctime = match metadata.modified() {
+					Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				#[cfg(target_family = "unix")]
+				let ctime = metadata.ctime() as u64;
+
+				let btime = match metadata.created() {
+					Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
+					Err(_) => 0
+				};
+				let file_header = FileHeader::new(
+					DEFAULT_HEADER_VERSION_FILE_HEADER,
+					current_file_number,
+					filetype,
+					filename,
+					parent_file_number,
+					atime,
+					mtime,
+					ctime,
+					btime);
+				match read_link(path) {
+					Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
+					Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::new()),
+				};
+				current_file_number += 1;
+				files.push((file, file_header));
+			}
+		}
+
+		loop {
+			let mut inner_dir_elements = VecDeque::new();
+			let (current_dir, dir_parent_file_number) = match directories_to_traversal.pop_front() {
+				Some((current_dir, dir_parent_file_number)) => (current_dir, dir_parent_file_number),
+				None => break,
+			};
+			
+			let element_iterator = match read_dir(&current_dir) {
+				Ok(iterator) => iterator,
+				Err(_) => {
+					unaccessable_files.push(current_dir.to_string_lossy().to_string());
+					continue;
+				}
+			};
+
+			let file = match File::open(&current_dir) {
+				Ok(f) => f,
+				Err(_) => {
+					unaccessable_files.push(current_dir.to_string_lossy().to_string());
+					continue;
+				},
+			};
+
+			parent_file_number = current_file_number;
+
+			let metadata = file.metadata()?;
+			let filetype = FileType::Directory;
+			let filename = current_dir.to_string_lossy();
+			let atime = match metadata.accessed() {
+				Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
+				Err(_) => 0
+			};
+			let mtime = match metadata.modified() {
+				Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
+				Err(_) => 0
+			};
+			#[cfg(target_family = "windows")]
+			let ctime = match metadata.modified() {
+				Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
+				Err(_) => 0
+			};
+			#[cfg(target_family = "unix")]
+			let ctime = metadata.ctime() as u64;
+
+			let btime = match metadata.created() {
+				Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
+				Err(_) => 0
+			};
+			let file_header = FileHeader::new(
+				DEFAULT_HEADER_VERSION_FILE_HEADER,
+				current_file_number,
+				filetype,
+				filename,
+				dir_parent_file_number,
+				atime,
+				mtime,
+				ctime,
+				btime);
+			current_file_number += 1;
+			files.push((file, file_header));
+
+			for inner_element in element_iterator {
+				let inner_element = match inner_element {
+					Ok(element) => element,
+					Err(e) => {
+						unaccessable_files.push(e.to_string());
+						continue;
+					}
+				};
+				let file = match File::open(&inner_element.path()) {
+					Ok(f) => f,
+					Err(_) => {
+						unaccessable_files.push(inner_element.path().to_string_lossy().to_string());
+						continue;
+					},
+				};
+				let metadata = file.metadata()?;
+				if metadata.file_type().is_dir() {
+					inner_dir_elements.push_back((inner_element.path(), parent_file_number));
+				} else if metadata.file_type().is_file() {
+					let filetype = FileType::File;
+					let path = inner_element.path().clone();
+					let filename = path.to_string_lossy();
+					let atime = match metadata.accessed() {
+						Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					let mtime = match metadata.modified() {
+						Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					#[cfg(target_family = "windows")]
+					let ctime = match metadata.modified() {
+						Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					#[cfg(target_family = "unix")]
+					let ctime = metadata.ctime() as u64;
+
+					let btime = match metadata.created() {
+						Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					let file_header = FileHeader::new(
+						DEFAULT_HEADER_VERSION_FILE_HEADER,
+						current_file_number,
+						filetype,
+						filename,
+						parent_file_number,
+						atime,
+						mtime,
+						ctime,
+						btime);
+					current_file_number += 1;
+					files.push((file, file_header));
+				} else if metadata.file_type().is_symlink() {
+					let filetype = FileType::Symlink;
+					let path = inner_element.path().clone();
+					let filename = path.to_string_lossy();
+					let atime = match metadata.accessed() {
+						Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					let mtime = match metadata.modified() {
+						Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					#[cfg(target_family = "windows")]
+					let ctime = match metadata.modified() {
+						Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					#[cfg(target_family = "unix")]
+					let ctime = metadata.ctime() as u64;
+
+					let btime = match metadata.created() {
+						Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
+						Err(_) => 0
+					};
+					let file_header = FileHeader::new(
+						DEFAULT_HEADER_VERSION_FILE_HEADER,
+						current_file_number,
+						filetype,
+						filename,
+						parent_file_number,
+						atime,
+						mtime,
+						ctime,
+						btime);
+					match read_link(inner_element.path()) {
+						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
+						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
+					};
+					current_file_number += 1;
+					files.push((file, file_header));
+				}
+				directories_to_traversal.append(&mut inner_dir_elements);
+			}
+		}
+		let signature_key_bytes = match signature_key {
+			Some(keypair) => Some(keypair.to_bytes().to_vec()),
+			None => None
+		};
+		let logical_object_encoder = LogicalObjectEncoder::new(
+			object_header,
+			files,
+			hash_types,
+			encryption_key,
+			signature_key_bytes,
+			main_header,
+			symlink_real_paths,
+			initial_chunk_number)?; // 1 is always the initial chunk number.
+		Ok(Self {
+			object_encoder: logical_object_encoder,
+			output_filenpath: output_filenpath.into(),
+			current_segment_no: 1, // 1 is always the initial segment no.
+			written_object_header: false,
+			header_encryption: header_encryption,
+			last_accepted_segment_filepath: PathBuf::new(),
+		})
 	}
 }

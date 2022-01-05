@@ -92,6 +92,7 @@ pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_HASH_VALUE: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
+pub(crate) const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
 
 /// current footer version of [ObjectFooterPhysical](crate::version2::footer::ObjectFooterPhysical)
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
