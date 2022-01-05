@@ -83,6 +83,10 @@ pub enum ZffErrorKind {
 	UnknownObjectTypeValue,
 	/// Error will be returned, if you try to call a method, which is not available for this [FileType].
 	NotAvailableForFileType,
+	/// Error will be returned, if the underlying file type is not a File, a Directory or a Symlink.
+	UnimplementedFileType,
+	/// Error will be returned, if no files left in vector.
+	NoFilesLeft,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -118,6 +122,9 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::MissingSegment => "MissingSegment",
 			ZffErrorKind::UnknownObjectTypeValue => "UnknownObjectTypeValue",
 			ZffErrorKind::NotAvailableForFileType => "NotAvailableForFileType",
+			ZffErrorKind::UnimplementedFileType => "UnimplementedFileType",
+			ZffErrorKind::NoFilesLeft => "NoFilesLeft",
+
 		};
 	write!(f, "{}", err_msg)
 	}

@@ -95,6 +95,7 @@ pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
 
 /// current footer version of [ObjectFooterPhysical](crate::version2::footer::ObjectFooterPhysical)
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
+pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 1;
 pub(crate) const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
 pub(crate) const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 1;
 pub(crate) const DEFAULT_FOOTER_VERSION_FILE_FOOTER: u8 = 1;

@@ -1,9 +1,8 @@
 // - STD
 use std::io::{Read, Cursor, Seek, SeekFrom, copy as io_copy};
 use std::fs::{File};
-
-// - STD
-use std::collections::HashMap;
+use std::path::{PathBuf};
+use std::collections::{HashMap, VecDeque};
 
 // - internal
 use crate::{
@@ -22,17 +21,20 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_HEADER,
+	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL,
 };
 
 use crate::version2::{
-	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader, SignatureFlag},
+	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader, FileHeader},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
+	FileEncoder, 
 };
 
 // - external
 use digest::DynDigest;
 use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
+
 
 pub struct PhysicalObjectEncoder<R: Read> {
 	///An encoded [ObjectHeader].
@@ -87,6 +89,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			main_header: main_header,
 		}
 	}
+
+
 
 	fn update_hasher(&mut self, buffer: &Vec<u8>) {
 		for hasher in self.hasher_map.values_mut() {
@@ -294,18 +298,133 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 }
 
 pub struct LogicalObjectEncoder {
-	obj_header: ObjectHeader,
-	files: Vec<File>
+	encoded_header: Vec<u8>,
+	//encoded_header_remaining_bytes: usize,
+	files: VecDeque<(File, FileHeader)>,
+	current_file_encoder: Option<FileEncoder>,
+	current_file_header_read: bool,
+	current_file_number: u64,
+	hash_types: Vec<HashType>,
+	encryption_key: Option<Vec<u8>>,
+	signature_key_bytes: Option<Vec<u8>>,
+	main_header: MainHeader,
+	current_chunk_number: u64,
+	symlink_real_paths: HashMap<u64, PathBuf>,
+	object_footer: ObjectFooterLogical,
 }
 
 impl LogicalObjectEncoder {
+
+	pub fn get_encoded_footer(&self) -> Vec<u8> {
+		self.object_footer.encode_directly()
+	}
 	pub fn new(
 		obj_header: ObjectHeader,
-		files: Vec<File>
-		) -> LogicalObjectEncoder {
-		Self {
-			obj_header: obj_header,
+		files: VecDeque<(File, FileHeader)>,
+		hash_types: Vec<HashType>,
+		encryption_key: Option<Vec<u8>>,
+		signature_key_bytes: Option<Vec<u8>>,
+		main_header: MainHeader,
+		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
+		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
+
+		let encoded_header = obj_header.encode_directly();
+
+		let mut files = files;
+		let (current_file, current_file_header) = match files.pop_front() {
+			Some((file, header)) => (file, header),
+			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, ""))
+		};
+		let current_file_number = current_file_header.file_number();
+		let symlink_real_path = match symlink_real_paths.get(&current_file_number) {
+			Some(p) => Some(p.clone()),
+			None => None
+		};
+		let signature_key = match &signature_key_bytes {
+	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
+	    	None => None
+	    };
+		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), current_chunk_number, symlink_real_path));
+		
+		Ok(Self {
+			//encoded_header_remaining_bytes: encoded_header.len(),
+			encoded_header: encoded_header,
 			files: files,
-		}
+			current_file_encoder: file_encoder,
+			current_file_header_read: false,
+			current_file_number: current_file_number,
+			hash_types: hash_types,
+			encryption_key: encryption_key,
+			signature_key_bytes: signature_key_bytes,
+			main_header: main_header,
+			current_chunk_number: current_chunk_number,
+			symlink_real_paths: symlink_real_paths,
+			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL)
+		})
 	}
+
+	pub fn signature_key(&self) -> Option<Keypair> {
+		let signature_key = match &self.signature_key_bytes {
+	    	Some(bytes) => Keypair::from_bytes(&bytes).ok(),
+	    	None => None
+	    };
+	    signature_key
+	}
+
+	// returns the encoded header
+	pub fn get_encoded_header(&mut self) -> Vec<u8> {
+		self.encoded_header.clone()
+	}
+
+	//returns the next encoded data - an encoded file header, an encoded file chunk or an encoded file footer.
+	// This method will increment the self.current_chunk_number automatically.
+	pub fn get_next_data(&mut self, current_offset: u64, current_segment_no: u64) -> Result<Vec<u8>> {
+		match self.current_file_encoder {
+			Some(ref mut file_encoder) => {
+				// return file header
+				if !self.current_file_header_read {
+					self.current_file_header_read = true;
+					return Ok(file_encoder.get_encoded_header());
+				}
+
+				// return next chunk
+				match file_encoder.get_next_chunk() {
+					Ok(data) => {
+						self.current_chunk_number += 1;
+						return Ok(data);
+					},
+					Err(e) => match e.get_kind() {
+						ZffErrorKind::ReadEOF => (),
+						_ => return Err(e)
+					}
+				};
+
+				//return file footer, set next file_encoder
+				let file_footer = file_encoder.get_encoded_footer();
+				self.object_footer.add_file_segment_number(self.current_file_number, current_segment_no);
+				self.object_footer.add_fileoffset(self.current_file_number, current_offset);
+				let (current_file, current_file_header) = match self.files.pop_front() {
+					Some((file, header)) => (file, header),
+					None => {
+						self.current_file_encoder = None;
+						return Ok(file_footer)
+					},
+				};
+				self.current_file_number = current_file_header.file_number();
+				let symlink_real_path = match self.symlink_real_paths.get(&self.current_file_number) {
+					Some(p) => Some(p.clone()),
+					None => None
+				};
+				let signature_key = match &self.signature_key_bytes {
+			    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
+			    	None => None
+			    };
+				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.current_chunk_number, symlink_real_path));
+				return Ok(file_footer);
+			},
+			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "")),
+		}	
+	}
+
+
 }

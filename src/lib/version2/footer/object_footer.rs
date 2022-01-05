@@ -1,5 +1,6 @@
 // - STD
 use std::io::Cursor;
+use std::collections::HashMap;
 
 // - internal
 use crate::{
@@ -66,24 +67,35 @@ impl HeaderCoding for ObjectFooterPhysical {
 #[derive(Debug,Clone)]
 pub struct ObjectFooterLogical {
 	version: u8,
-	file_footer_offsets: Vec<u64>,
+	file_footer_segment_numbers: HashMap<u64, u64>,
+	file_footer_offsets: HashMap<u64, u64>,
 }
 
 impl ObjectFooterLogical {
 	pub fn new_empty(version: u8) -> ObjectFooterLogical {
 		Self {
 			version: version,
-			file_footer_offsets: Vec::new()
+			file_footer_segment_numbers: HashMap::new(),
+			file_footer_offsets: HashMap::new()
 		}
 	}
-	pub fn new(version: u8, file_footer_offsets: Vec<u64>) -> ObjectFooterLogical {
+	pub fn new(version: u8, file_footer_segment_numbers: HashMap<u64, u64>, file_footer_offsets: HashMap<u64, u64>) -> ObjectFooterLogical {
 		Self {
 			version: version,
+			file_footer_segment_numbers: file_footer_segment_numbers,
 			file_footer_offsets: file_footer_offsets,
 		}
 	}
 
-	pub fn file_footer_offsets(&self) -> &Vec<u64> {
+	pub fn add_file_segment_number(&mut self, filenumber: u64, file_segment_number: u64) {
+		self.file_footer_segment_numbers.insert(filenumber, file_segment_number);
+	}
+
+	pub fn add_fileoffset(&mut self, filenumber: u64, fileoffset: u64) {
+		self.file_footer_offsets.insert(filenumber, fileoffset);
+	}
+
+	pub fn file_footer_offsets(&self) -> &HashMap<u64, u64> {
 		&self.file_footer_offsets
 	}
 }
@@ -100,14 +112,16 @@ impl HeaderCoding for ObjectFooterLogical {
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.push(self.version);
+		vec.append(&mut self.file_footer_segment_numbers.encode_directly());
 		vec.append(&mut self.file_footer_offsets.encode_directly());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<ObjectFooterLogical> {
 		let mut cursor = Cursor::new(data);
 		let footer_version = u8::decode_directly(&mut cursor)?;
-		let file_footer_offsets = Vec::<u64>::decode_directly(&mut cursor)?;
-		Ok(ObjectFooterLogical::new(footer_version, file_footer_offsets))
+		let file_footer_segment_numbers = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let file_footer_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
+		Ok(ObjectFooterLogical::new(footer_version, file_footer_segment_numbers, file_footer_offsets))
 	}
 
 }
