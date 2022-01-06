@@ -426,5 +426,12 @@ impl LogicalObjectEncoder {
 		}	
 	}
 
+	pub fn main_header(&self) -> &MainHeader {
+		&self.main_header
+	}
+
+	pub fn encryption_key(&self) -> Option<Vec<u8>> {
+		self.encryption_key.clone()
+	}
 
 }
