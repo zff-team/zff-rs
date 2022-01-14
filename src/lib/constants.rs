@@ -89,7 +89,7 @@ pub const DEFAULT_HEADER_VERSION_SEGMENT_HEADER: u8 = 2;
 /// current header version for the [CompressionHeader](crate::header::CompressionHeader).
 pub const DEFAULT_HEADER_VERSION_COMPRESSION_HEADER: u8 = 1;
 /// current header version for the [DescriptionHeader](crate::header::DescriptionHeader).
-pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 2;
 pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_HASH_VALUE: u8 = 1;
