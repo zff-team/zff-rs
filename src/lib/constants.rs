@@ -61,8 +61,10 @@ pub(crate) const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred wh
 pub const DEFAULT_CHUNK_SIZE: u8 = 15;
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
+pub const INITIAL_OBJECT_NUMBER: u64 = 1;
+
 /// The default compression ratio threshold
-pub const DEFAULT_COMPRESSION_RATIO_THRESHOLD: f32 = 1.05;
+pub const DEFAULT_COMPRESSION_RATIO_THRESHOLD: &str = "1.05";
 
 /// the default key length of a public signature key
 pub const ED25519_DALEK_PUBKEY_LEN: usize = PUBLIC_KEY_LENGTH;
@@ -93,6 +95,7 @@ pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_HASH_VALUE: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
 pub(crate) const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 1;
 
 /// current footer version of [ObjectFooterPhysical](crate::version2::footer::ObjectFooterPhysical)
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
