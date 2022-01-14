@@ -11,7 +11,7 @@ use crate::{
 	CompressionAlgorithm,
 };
 
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_COMPRESSION_HEADER,
 	ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM,
 };
