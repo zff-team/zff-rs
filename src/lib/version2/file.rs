@@ -3,6 +3,7 @@ use std::io::{Read, Seek, SeekFrom, copy as io_copy, Cursor};
 use std::path::PathBuf;
 use std::fs::{File, canonicalize};
 use std::collections::{HashMap};
+use std::time::{SystemTime};
 
 // - internal
 use crate::version2::{
@@ -32,6 +33,7 @@ use crate::{
 use digest::DynDigest;
 use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
+use time::{OffsetDateTime};
 
 pub struct FileEncoder {
 	/// An encoded [FileHeader].
@@ -63,6 +65,8 @@ pub struct FileEncoder {
 	/// data of current chunk (only used in Read implementation)
 	current_chunked_data: Option<Vec<u8>>,
 	current_chunked_data_remaining_bytes: usize,
+	acquisition_start: u64,
+	acquisition_end: u64,
 }
 
 impl FileEncoder {
@@ -98,6 +102,8 @@ impl FileEncoder {
 			current_chunked_data_remaining_bytes: 0,
 			encoded_footer: Vec::new(),
 			encoded_footer_remaining_bytes: 0,
+			acquisition_start: 0,
+			acquisition_end: 0,
 		}
 	}
 
@@ -157,6 +163,7 @@ impl FileEncoder {
 
 	// returns the encoded header
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
+		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		self.encoded_header.clone()
 	}
 
@@ -220,6 +227,7 @@ impl FileEncoder {
 	}
 
 	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
+		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
 		for (hash_type, hasher) in self.hasher_map.clone() {
 			let hash = hasher.finalize();
@@ -230,6 +238,8 @@ impl FileEncoder {
 		let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
 		let footer = FileFooter::new(
 			DEFAULT_FOOTER_VERSION_FILE_FOOTER,
+			self.acquisition_start,
+			self.acquisition_end,
 			hash_header,
 			self.initial_chunk_number,
 			self.current_chunk_number - self.initial_chunk_number,

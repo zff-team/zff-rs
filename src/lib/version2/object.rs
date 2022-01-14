@@ -3,6 +3,7 @@ use std::io::{Read, Cursor, Seek, SeekFrom, copy as io_copy};
 use std::fs::{File};
 use std::path::{PathBuf};
 use std::collections::{HashMap};
+use std::time::{SystemTime};
 
 // - internal
 use crate::{
@@ -34,8 +35,10 @@ use crate::version2::{
 use digest::DynDigest;
 use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
+use time::{OffsetDateTime};
 
 
+//TODO: Documentation; Acquisition-start will be set by calling self.get_encoded_header(), acq-end by calling self.get_encoded_footer().
 pub struct PhysicalObjectEncoder<R: Read> {
 	///An encoded [ObjectHeader].
 	encoded_header: Vec<u8>,
@@ -54,6 +57,8 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	encryption_key: Option<Vec<u8>>,
 	signature_key: Option<Keypair>,
 	main_header: MainHeader,
+	acquisition_start: u64,
+	acquisition_end: u64,
 }
 
 impl<R: Read> PhysicalObjectEncoder<R> {
@@ -87,6 +92,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			encryption_key: encryption_key,
 			signature_key: signature_key,
 			main_header: main_header,
+			acquisition_start: 0,
+			acquisition_end: 0,
 		}
 	}
 
@@ -148,6 +155,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 	// returns the encoded header
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
+		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		self.encoded_header.clone()
 	}
 
@@ -199,6 +207,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 	// generates a appropriate footer
 	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
+		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
 	    for (hash_type, hasher) in self.hasher_map.clone() {
 	        let hash = hasher.finalize();
@@ -216,6 +225,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
 		let footer = ObjectFooterPhysical::new(
 			DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
+			self.acquisition_start,
+			self.acquisition_end,
 			self.read_bytes_underlying_data as u64,
 			self.initial_chunk_number,
 			self.current_chunk_number - self.initial_chunk_number,

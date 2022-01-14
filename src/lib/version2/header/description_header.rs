@@ -9,19 +9,17 @@ use crate::version1::{
 	ValueDecoder,
 	ZffErrorKind,
 };
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
 	ENCODING_KEY_CASE_NUMBER,
 	ENCODING_KEY_EVIDENCE_NUMBER,
 	ENCODING_KEY_EXAMINER_NAME,
 	ENCODING_KEY_NOTES,
-	ENCODING_KEY_ACQISITION_START,
-	ENCODING_KEY_ACQISITION_END,
 };
 
 // - external
 use serde::ser::{Serialize, Serializer, SerializeStruct};
-use time::{OffsetDateTime, format_description};
+
 
 /// The description header contains all data,
 /// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
@@ -48,8 +46,6 @@ pub struct DescriptionHeader {
 	evidence_number: Option<String>,
 	examiner_name: Option<String>,
 	notes: Option<String>,
-	acquisition_start: u64,
-	acquisition_end: u64,
 }
 
 impl DescriptionHeader {
@@ -62,8 +58,6 @@ impl DescriptionHeader {
 			evidence_number: None,
 			examiner_name: None,
 			notes: None,
-			acquisition_start: 0,
-			acquisition_end: 0,
 		}
 	}
 
@@ -85,16 +79,6 @@ impl DescriptionHeader {
 	/// sets some notes as ```String```.
 	pub fn set_notes<V: Into<String>>(&mut self, value: V) {
 		self.notes = Some(value.into())
-	}
-
-	/// sets the acquisition start, as u64 unix timestamp.
-	pub fn set_acquisition_start(&mut self, value: u64) {
-		self.acquisition_start = value
-	}
-
-	/// sets the acquisition end, as u64 unix timestamp.
-	pub fn set_acquisition_end(&mut self, value: u64) {
-		self.acquisition_end = value
 	}
 
 	/// returns the case number, if available.
@@ -128,16 +112,6 @@ impl DescriptionHeader {
 			None => None
 		}
 	}
-
-	/// returns the acquisition start as u64 unix timestamp - initialized with zero.
-	pub fn acquisition_start(&self) -> u64 {
-		self.acquisition_start.clone()
-	}
-
-	/// returns the acquisition end as u64 unix timestamp - initialized with zero.
-	pub fn acquisition_end(&self) -> u64 {
-		self.acquisition_end.clone()
-	}
 }
 
 impl HeaderCoding for DescriptionHeader {
@@ -167,8 +141,6 @@ impl HeaderCoding for DescriptionHeader {
 		if let Some(notes) = self.notes() {
 			vec.append(&mut notes.encode_for_key(ENCODING_KEY_NOTES));
 		};
-		vec.append(&mut self.acquisition_start.encode_for_key(ENCODING_KEY_ACQISITION_START));
-		vec.append(&mut self.acquisition_end.encode_for_key(ENCODING_KEY_ACQISITION_END));
 		vec
 	}
 
@@ -210,8 +182,6 @@ impl HeaderCoding for DescriptionHeader {
 				_ => return Err(e)
 			},
 		}
-		description_header.set_acquisition_start(u64::decode_for_key(&mut cursor, ENCODING_KEY_ACQISITION_START)?);
-		description_header.set_acquisition_end(u64::decode_for_key(&mut cursor, ENCODING_KEY_ACQISITION_END)?);
 
 		Ok(description_header)
 	}
@@ -228,37 +198,6 @@ impl Serialize for DescriptionHeader {
         state.serialize_field("evidence_number", &self.evidence_number)?;
         state.serialize_field("examiner_name", &self.examiner_name)?;
         state.serialize_field("notes", &self.notes)?;
-
-        // This code looks like crap.
-        // But it works. Maybe it would be a solution to use chained
-        // if-let statements (https://github.com/rust-lang/rust/issues/53667) - once they are stable? 
-    	if let Ok(format) = format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC",) {
-    		if let Ok(dt_start) = OffsetDateTime::from_unix_timestamp(self.acquisition_start as i64) {
-    			if let Ok(dt_end) = OffsetDateTime::from_unix_timestamp(self.acquisition_end as i64) {
-    				if let Ok(formatted_dt_start) = dt_start.format(&format) {
-    					if let Ok(formatted_dt_end) = dt_end.format(&format) {
-    						state.serialize_field("acquisition_begin", &formatted_dt_start.to_string())?;
-							state.serialize_field("acquisition_end", &formatted_dt_end.to_string())?;
-    					} else {
-    						state.serialize_field("acquisition_begin", &self.acquisition_start)?;
-							state.serialize_field("acquisition_end", &self.acquisition_end)?;
-    					}
-    				} else {
-    					state.serialize_field("acquisition_begin", &self.acquisition_start)?;
-						state.serialize_field("acquisition_end", &self.acquisition_end)?;
-    				}
-    			} else {
-    				state.serialize_field("acquisition_begin", &self.acquisition_start)?;
-					state.serialize_field("acquisition_end", &self.acquisition_end)?;
-    			}
-    		} else {
-    			state.serialize_field("acquisition_begin", &self.acquisition_start)?;
-				state.serialize_field("acquisition_end", &self.acquisition_end)?;
-    		}
-    	} else {
-    		state.serialize_field("acquisition_begin", &self.acquisition_start)?;
-			state.serialize_field("acquisition_end", &self.acquisition_end)?;
-    	}
         state.end()
     }
 }
