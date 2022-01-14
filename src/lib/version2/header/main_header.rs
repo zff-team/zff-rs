@@ -228,7 +228,10 @@ impl MainHeader {
 
 	/// returns the segment size
 	pub fn segment_size(&self) -> u64 {
-		self.segment_size.clone()
+		match &self.segment_size {
+			0 => u64::MAX,
+			_ => self.segment_size
+		}
 	}
 
 	/// returns the len() of the ```Vec<u8>``` (encoded main header).
