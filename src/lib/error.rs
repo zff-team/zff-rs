@@ -238,7 +238,8 @@ impl ZffError {
 
 impl From<io::Error> for ZffError {
 	fn from(e: io::Error) -> ZffError {
-		ZffError::new(ZffErrorKind::IoError(e), "IoError")
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::IoError(e), err_msg)
 	}
 }
 
