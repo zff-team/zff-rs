@@ -76,7 +76,6 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    first_segment_filename.set_extension(&file_extension);
 	    self.last_accepted_segment_filepath = first_segment_filename.clone();
 	    let mut output_file = File::create(&first_segment_filename)?;
-
 		let encoded_main_header = match &encryption_key {
 	        None => self.object_encoder.main_header().encode_directly(),
 	        Some(key) => if self.header_encryption {
@@ -95,7 +94,6 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    	file_extension = file_extension_next_value(&file_extension)?;
 	    	let mut segment_filename = PathBuf::from(&self.output_filenpath);
 	    	segment_filename.set_extension(&file_extension);
-	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    	let mut output_file = File::create(&segment_filename)?;
 	    	main_footer_start_offset = match self.write_next_segment(&mut output_file, 0) {
 	    		Ok(written_bytes) => written_bytes,
@@ -106,9 +104,9 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    			},
 	    			_ => return Err(e),
 	    		},
-	    	}
+	    	};
+	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    }
-
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
@@ -195,7 +193,6 @@ impl<R: Read> ZffCreatorPhysical<R> {
 		Ok(written_bytes)
 	}
 }
-
 
 /// TODO: Docs
 pub struct ZffCreatorLogical {
@@ -526,7 +523,6 @@ impl ZffCreatorLogical {
 	    	file_extension = file_extension_next_value(&file_extension)?;
 	    	let mut segment_filename = PathBuf::from(&self.output_filenpath);
 	    	segment_filename.set_extension(&file_extension);
-	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    	let mut output_file = File::create(&segment_filename)?;
 	    	main_footer_start_offset = match self.write_next_segment(&mut output_file, 0) {
 	    		Ok(written_bytes) => written_bytes,
@@ -537,7 +533,8 @@ impl ZffCreatorLogical {
 	    			},
 	    			_ => return Err(e),
 	    		},
-	    	}
+	    	};
+	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    }
 
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, main_footer_start_offset);
