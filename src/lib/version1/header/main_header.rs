@@ -136,7 +136,7 @@ impl MainHeader {
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let encryption_flag = u8::decode_directly(&mut cursor)?;
 		if encryption_flag != 2 {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedMainHeader, ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED));
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED));
 		}
 		let encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
@@ -358,7 +358,7 @@ impl HeaderCoding for MainHeader {
 		if encryption_flag == 1 {
 			encryption_header = Some(EncryptionHeader::decode_directly(&mut cursor)?);
 		} else if encryption_flag > 1 {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedMainHeader, ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED))
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED))
 		}
 		let (compression_header,
 			description_header,

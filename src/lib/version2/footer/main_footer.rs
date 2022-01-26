@@ -7,7 +7,9 @@ use crate::{
 	HeaderCoding,
 	ValueDecoder,
 	ValueEncoder,
+	ZffErrorKind,
 	FOOTER_IDENTIFIER_MAIN_FOOTER,
+	ENCODING_KEY_DESCRIPTION_NOTES,
 };
 
 /// The main footer is the last thing, which is written at the end of the last segment.\
@@ -17,16 +19,18 @@ pub struct MainFooter {
 	version: u8,
 	number_of_segments: u64,
 	number_of_objects: u64,
+	description_notes: Option<String>,
 	/// offset in the current segment, where the footer starts.
 	footer_offset: u64,
 }
 
 impl MainFooter {
-	pub fn new(version: u8, number_of_segments: u64, number_of_objects: u64, footer_offset: u64) -> MainFooter {
+	pub fn new(version: u8, number_of_segments: u64, number_of_objects: u64, description_notes: Option<String>, footer_offset: u64) -> MainFooter {
 		Self {
 			version: version,
 			number_of_segments: number_of_segments,
 			number_of_objects: number_of_objects,
+			description_notes: description_notes,
 			footer_offset: footer_offset,
 		}
 	}
@@ -62,7 +66,9 @@ impl HeaderCoding for MainFooter {
 		vec.append(&mut self.number_of_segments.encode_directly());
 		vec.append(&mut self.number_of_objects.encode_directly());
 		vec.append(&mut self.footer_offset.encode_directly());
-
+		if let Some(description_notes) = &self.description_notes {
+			vec.append(&mut description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
+		};
 		vec
 	}
 
@@ -72,9 +78,18 @@ impl HeaderCoding for MainFooter {
 		let footer_version = u8::decode_directly(&mut cursor)?;
 		let number_of_segments = u64::decode_directly(&mut cursor)?;
 		let number_of_objects = u64::decode_directly(&mut cursor)?;
+		let position = cursor.position();
+		let description_notes = match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
+			Ok(value) => Some(value),
+			Err(e) => match e.get_kind() {
+				ZffErrorKind::HeaderDecoderKeyNotOnPosition => {
+					cursor.set_position(position);
+					None
+				},
+				_ => return Err(e)
+			},
+		};
 		let footer_offset = u64::decode_directly(&mut cursor)?;
-		Ok(MainFooter::new(footer_version, number_of_segments, number_of_objects, footer_offset))
+		Ok(MainFooter::new(footer_version, number_of_segments, number_of_objects, description_notes, footer_offset))
 	}
 }
-
-//TODO ENCRYPTED MainFooter encoder/decoder?

@@ -67,3 +67,11 @@ impl Signature {
 		}
 	}
 }
+
+
+#[derive(Debug,Clone)]
+pub enum SignatureFlag {
+	NoSignatures = 0,
+	HashValueSignatureOnly = 1,
+	PerChunkSignatures = 2,
+}

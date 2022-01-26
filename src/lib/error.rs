@@ -62,7 +62,7 @@ pub enum ZffErrorKind {
 	/// Error will be returned, if the given value key is not on position.
 	HeaderDecoderKeyNotOnPosition,
 	/// Error will be returned, if header is encrypted.
-	HeaderDecodeEncryptedMainHeader,
+	HeaderDecodeEncryptedHeader,
 	/// Error will be returned, if you try to get the data of a chunk number which not exists in this segment.
 	DataDecodeChunkNumberNotInSegment,
 	/// Error will be returned, if you try to create a segment with a segment number < 1;
@@ -111,7 +111,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::HeaderDecodeError => "HeaderDecodeError",
 			ZffErrorKind::HeaderDecodeMismatchIdentifier => "HeaderDecodeMismatchIdentifier",
 			ZffErrorKind::HeaderDecoderKeyNotOnPosition => "HeaderDecoderKeyNotOnPosition",
-			ZffErrorKind::HeaderDecodeEncryptedMainHeader => "HeaderDecodeEncryptedMainHeader",
+			ZffErrorKind::HeaderDecodeEncryptedHeader => "HeaderDecodeEncryptedHeader",
 			ZffErrorKind::DataDecodeChunkNumberNotInSegment => "DataDecodeChunkNumberNotInSegment",
 			ZffErrorKind::NullOrNegativeSegmentNumber => "NullOrNegativeSegmentNumber",
 			ZffErrorKind::SegmentSizeToSmall => "SegmentSizeToSmall",

@@ -26,7 +26,7 @@ use crate::{
 };
 
 use crate::version2::{
-	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader, FileHeader},
+	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader, FileHeader, CompressionHeader, EncryptionHeader},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 	FileEncoder, 
 };
@@ -57,6 +57,9 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	encryption_key: Option<Vec<u8>>,
 	signature_key: Option<Keypair>,
 	main_header: MainHeader,
+	compression_header: CompressionHeader,
+	encryption_header: Option<EncryptionHeader>,
+	has_hash_signatures: bool,
 	acquisition_start: u64,
 	acquisition_end: u64,
 }
@@ -69,15 +72,24 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
-		current_chunk_number: u64) -> PhysicalObjectEncoder<R> {
+		current_chunk_number: u64,
+		header_encryption: bool) -> Result<PhysicalObjectEncoder<R>> {
 		
-		let encoded_header = obj_header.encode_directly();
+		let encoded_header = if header_encryption {
+			if let Some(ref encryption_key) = encryption_key {
+				obj_header.encode_encrypted_header_directly(encryption_key)?
+			} else {
+				return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ""));
+			}
+		} else {
+			obj_header.encode_directly()
+		};
 		let mut hasher_map = HashMap::new();
 	    for h_type in hash_types {
 	        let hasher = Hash::new_hasher(&h_type);
 	        hasher_map.insert(h_type.clone(), hasher);
 	    };
-		Self {
+		Ok(Self {
 			encoded_header_remaining_bytes: encoded_header.len(),
 			encoded_header: encoded_header,
 			underlying_data: reader,
@@ -92,9 +104,12 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			encryption_key: encryption_key,
 			signature_key: signature_key,
 			main_header: main_header,
+			compression_header: obj_header.compression_header(),
+			encryption_header: obj_header.encryption_header(),
+			has_hash_signatures: obj_header.has_hash_signatures(),
 			acquisition_start: 0,
 			acquisition_end: 0,
-		}
+		})
 	}
 
 
@@ -123,14 +138,14 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
 		let mut compression_flag = false;
 		let chunk_size = self.main_header.chunk_size();
-		let compression_threshold = self.main_header.compression_header().threshold();
+		let compression_threshold = self.compression_header.threshold();
 
-		match self.main_header.compression_header().algorithm() {
+		match self.compression_header.algorithm() {
 	    	CompressionAlgorithm::None => return Ok((buf, compression_flag)),
 	    	CompressionAlgorithm::Zstd => {
-	    		let compression_level = *self.main_header.compression_header().level() as i32;
+	    		let compression_level = *self.compression_header.level() as i32;
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
-	    		let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *self.main_header.compression_header().level() as usize)?;
+	    		let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *self.compression_header.level() as usize)?;
 	    		if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
 	    			Ok((buf, compression_flag))
 	    		} else {
@@ -188,7 +203,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		chunk.append(&mut chunk_header.encode_directly());
 		match &self.encryption_key {
 			Some(encryption_key) => {
-				let encryption_algorithm = match self.main_header.encryption_header() {
+				let encryption_algorithm = match &self.encryption_header {
 					Some(header) => header.algorithm(),
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
@@ -213,7 +228,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        let hash = hasher.finalize();
 	        let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
 	        hash_value.set_hash(hash.to_vec());
-	        if self.main_header.has_hash_signatures() {
+	        if self.has_hash_signatures {
 	        	let signature = self.calculate_signature(&hash.to_vec());
 	        	match signature {
 	        		Some(sig) => hash_value.set_ed25519_signature(sig),
@@ -319,9 +334,12 @@ pub struct LogicalObjectEncoder {
 	encryption_key: Option<Vec<u8>>,
 	signature_key_bytes: Option<Vec<u8>>,
 	main_header: MainHeader,
+	compression_header: CompressionHeader,
+	encryption_header: Option<EncryptionHeader>,
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
 	object_footer: ObjectFooterLogical,
+	header_encryption: bool,
 }
 
 impl LogicalObjectEncoder {
@@ -337,9 +355,18 @@ impl LogicalObjectEncoder {
 		signature_key_bytes: Option<Vec<u8>>,
 		main_header: MainHeader,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
-		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
+		current_chunk_number: u64,
+		header_encryption: bool) -> Result<LogicalObjectEncoder> {		
 
-		let encoded_header = obj_header.encode_directly();
+		let encoded_header = if header_encryption {
+			if let Some(ref encryption_key) = encryption_key {
+				obj_header.encode_encrypted_header_directly(encryption_key)?
+			} else {
+				return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ""));
+			}
+		} else {
+			obj_header.encode_directly()
+		};
 
 		let mut files = files;
 		let (current_file, current_file_header) = match files.pop() {
@@ -355,7 +382,7 @@ impl LogicalObjectEncoder {
 	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 	    	None => None
 	    };
-		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), current_chunk_number, symlink_real_path));
+		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), obj_header.encryption_header(), current_chunk_number, symlink_real_path, header_encryption)?);
 		
 		Ok(Self {
 			//encoded_header_remaining_bytes: encoded_header.len(),
@@ -368,9 +395,12 @@ impl LogicalObjectEncoder {
 			encryption_key: encryption_key,
 			signature_key_bytes: signature_key_bytes,
 			main_header: main_header,
+			compression_header: obj_header.compression_header(),
+			encryption_header: obj_header.encryption_header(),
 			current_chunk_number: current_chunk_number,
 			symlink_real_paths: symlink_real_paths,
-			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL)
+			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL),
+			header_encryption: header_encryption,
 		})
 	}
 
@@ -430,7 +460,7 @@ impl LogicalObjectEncoder {
 			    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 			    	None => None
 			    };
-				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.current_chunk_number, symlink_real_path));
+				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption)?);
 				return Ok(file_footer);
 			},
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "")),

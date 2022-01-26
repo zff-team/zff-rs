@@ -7,7 +7,7 @@ use std::time::{SystemTime};
 
 // - internal
 use crate::version2::{
-	header::{FileHeader, FileType, MainHeader, ChunkHeader, HashValue, HashHeader},
+	header::{FileHeader, FileType, MainHeader, ChunkHeader, HashValue, HashHeader, CompressionHeader, EncryptionHeader},
 	footer::{FileFooter},
 };
 use crate::{
@@ -49,6 +49,8 @@ pub struct FileEncoder {
 	/// HashMap for the Hasher objects to calculate the cryptographically hash values for this file. 
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
 	main_header: MainHeader,
+	compression_header: CompressionHeader,
+	encryption_header: Option<EncryptionHeader>,
 	/// The Type of this file
 	file_type: FileType,
 	/// The first chunk number for this file.
@@ -77,15 +79,30 @@ impl FileEncoder {
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
+		compression_header: CompressionHeader,
+		encryption_header: Option<EncryptionHeader>,
 		current_chunk_number: u64,
-		symlink_real_path: Option<PathBuf>) -> FileEncoder {
-		let encoded_header = file_header.encode_directly();
+		symlink_real_path: Option<PathBuf>,
+		header_encryption: bool) -> Result<FileEncoder> {
+		
+		let encoded_header = if header_encryption {
+			if let Some(ref encryption_key) = encryption_key {
+				match encryption_header {
+					Some(ref header) => file_header.encode_encrypted_header_directly(encryption_key, header.clone())?,
+					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+				}
+			} else {
+				return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ""));
+			}
+		} else {
+			file_header.encode_directly()
+		};
 		let mut hasher_map = HashMap::new();
 	    for h_type in hash_types {
 	        let hasher = Hash::new_hasher(&h_type);
 	        hasher_map.insert(h_type.clone(), hasher);
 	    };
-		Self {
+		Ok(Self {
 			encoded_header_remaining_bytes: encoded_header.len(),
 			encoded_header: encoded_header,
 			underlying_file: file,
@@ -93,6 +110,8 @@ impl FileEncoder {
 			encryption_key: encryption_key,
 			signature_key: signature_key,
 			main_header: main_header,
+			compression_header: compression_header,
+			encryption_header: encryption_header,
 			file_type: file_header.file_type(),
 			initial_chunk_number: current_chunk_number,
 			current_chunk_number: current_chunk_number,
@@ -104,7 +123,7 @@ impl FileEncoder {
 			encoded_footer_remaining_bytes: 0,
 			acquisition_start: 0,
 			acquisition_end: 0,
-		}
+		})
 	}
 
 	fn update_hasher(&mut self, buffer: &Vec<u8>) {
@@ -131,14 +150,14 @@ impl FileEncoder {
 	fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
 		let mut compression_flag = false;
 		let chunk_size = self.main_header.chunk_size();
-		let compression_threshold = self.main_header.compression_header().threshold();
+		let compression_threshold = self.compression_header.threshold();
 
-		match self.main_header.compression_header().algorithm() {
+		match self.compression_header.algorithm() {
 	    	CompressionAlgorithm::None => return Ok((buf, compression_flag)),
 	    	CompressionAlgorithm::Zstd => {
-	    		let compression_level = *self.main_header.compression_header().level() as i32;
+	    		let compression_level = *self.compression_header.level() as i32;
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
-	    		let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *self.main_header.compression_header().level() as usize)?;
+	    		let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *self.compression_header.level() as usize)?;
 	    		if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
 	    			Ok((buf, compression_flag))
 	    		} else {
@@ -209,7 +228,7 @@ impl FileEncoder {
 		chunk.append(&mut chunk_header.encode_directly());
 		match &self.encryption_key {
 			Some(encryption_key) => {
-				let encryption_algorithm = match self.main_header.encryption_header() {
+				let encryption_algorithm = match &self.encryption_header {
 					Some(header) => header.algorithm(),
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};

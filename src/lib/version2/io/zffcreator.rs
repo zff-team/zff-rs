@@ -36,8 +36,8 @@ pub struct ZffCreatorPhysical<R: Read> {
 	output_filenpath: String,
 	current_segment_no: u64,
 	written_object_header: bool,
-	header_encryption: bool,
 	last_accepted_segment_filepath: PathBuf,
+	description_notes: Option<String>,
 }
 
 impl<R: Read> ZffCreatorPhysical<R> {
@@ -49,9 +49,10 @@ impl<R: Read> ZffCreatorPhysical<R> {
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
 		header_encryption: bool,
-		output_filenpath: O) -> ZffCreatorPhysical<R> {
+		description_notes: Option<String>,
+		output_filenpath: O) -> Result<ZffCreatorPhysical<R>> {
 		let initial_chunk_number = 1;
-		Self {
+		Ok(Self {
 			object_encoder: PhysicalObjectEncoder::new(
 				object_header,
 				input_data,
@@ -59,31 +60,23 @@ impl<R: Read> ZffCreatorPhysical<R> {
 				encryption_key,
 				signature_key,
 				main_header,
-				initial_chunk_number), // the first chunk number for the first object should always be 1.
+				initial_chunk_number,
+				header_encryption)?, // the first chunk number for the first object should always be 1.
 			output_filenpath: output_filenpath.into(),
 			current_segment_no: 1, // initial segment number should always be 1.
 			written_object_header: false,
-			header_encryption: header_encryption,
 			last_accepted_segment_filepath: PathBuf::new(),
-		}
+			description_notes: description_notes,
+		})
 	}
 
 	pub fn generate_files(&mut self) -> Result<()> {
-		let encryption_key = &self.object_encoder.encryption_key().clone();
-
 		let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
 	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
 	    first_segment_filename.set_extension(&file_extension);
 	    self.last_accepted_segment_filepath = first_segment_filename.clone();
 	    let mut output_file = File::create(&first_segment_filename)?;
-		let encoded_main_header = match &encryption_key {
-	        None => self.object_encoder.main_header().encode_directly(),
-	        Some(key) => if self.header_encryption {
-	          self.object_encoder.main_header().encode_encrypted_header_directly(key)? 
-	        } else {
-	            self.object_encoder.main_header().encode_directly()
-	        } 
-	    };
+		let encoded_main_header = self.object_encoder.main_header().encode_directly();
 
 	    output_file.write(&encoded_main_header)?;
 	    let mut main_footer_start_offset = self.write_next_segment(&mut output_file, encoded_main_header.len() as u64)? +
@@ -107,7 +100,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    	};
 	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    }
-	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, main_footer_start_offset);
+	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
 	    output_file.write(&main_footer.encode_directly())?;
@@ -200,9 +193,9 @@ pub struct ZffCreatorLogical {
 	output_filenpath: String,
 	current_segment_no: u64,
 	written_object_header: bool,
-	header_encryption: bool,
 	last_accepted_segment_filepath: PathBuf,
 	unaccessable_files: Vec<String>,
+	description_notes: Option<String>,
 }
 
 impl ZffCreatorLogical {
@@ -214,7 +207,8 @@ impl ZffCreatorLogical {
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
 		header_encryption: bool,
-		output_filenpath: O) -> Result<ZffCreatorLogical> {
+		output_filenpath: O,
+		description_notes: Option<String>,) -> Result<ZffCreatorLogical> {
 		let initial_chunk_number = 1;
 		let mut current_file_number = 1;
 		let mut parent_file_number = 0;
@@ -484,20 +478,20 @@ impl ZffCreatorLogical {
 			signature_key_bytes,
 			main_header,
 			symlink_real_paths,
-			initial_chunk_number)?; // 1 is always the initial chunk number.
+			initial_chunk_number,
+			header_encryption)?; // 1 is always the initial chunk number.
 		Ok(Self {
 			object_encoder: logical_object_encoder,
 			output_filenpath: output_filenpath.into(),
 			current_segment_no: 1, // 1 is always the initial segment no.
 			written_object_header: false,
-			header_encryption: header_encryption,
 			last_accepted_segment_filepath: PathBuf::new(),
-			unaccessable_files: unaccessable_files
+			unaccessable_files: unaccessable_files,
+			description_notes: description_notes,
 		})
 	}
 
 	pub fn generate_files(&mut self) -> Result<()> {
-		let encryption_key = &self.object_encoder.encryption_key().clone();
 
 		let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
 	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
@@ -505,14 +499,7 @@ impl ZffCreatorLogical {
 	    self.last_accepted_segment_filepath = first_segment_filename.clone();
 	    let mut output_file = File::create(&first_segment_filename)?;
 
-		let encoded_main_header = match &encryption_key {
-	        None => self.object_encoder.main_header().encode_directly(),
-	        Some(key) => if self.header_encryption {
-	          self.object_encoder.main_header().encode_encrypted_header_directly(key)? 
-	        } else {
-	            self.object_encoder.main_header().encode_directly()
-	        } 
-	    };
+		let encoded_main_header = self.object_encoder.main_header().encode_directly();
 
 	    output_file.write(&encoded_main_header)?;
 	    let mut main_footer_start_offset = self.write_next_segment(&mut output_file, encoded_main_header.len() as u64)? +
@@ -537,7 +524,7 @@ impl ZffCreatorLogical {
 	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    }
 
-	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, main_footer_start_offset);
+	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
 	    output_file.write(&main_footer.encode_directly())?;
