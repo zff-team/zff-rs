@@ -11,7 +11,7 @@ Cargo.lock
 
 
 # Added by cargo
-
 /target
 
+#for testing purposes only.
 /zff/src/bin
