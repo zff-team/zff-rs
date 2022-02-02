@@ -19,6 +19,11 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
 	FILE_EXTENSION_FIRST_VALUE,
 	DEFAULT_HEADER_VERSION_FILE_HEADER,
+	METADATA_EXT_KEY_DEVID,
+	METADATA_EXT_KEY_INODE,
+	METADATA_EXT_KEY_MODE,
+	METADATA_EXT_KEY_UID,
+	METADATA_EXT_KEY_GID,
 };
 use crate::version2::{
 	object::{PhysicalObjectEncoder, LogicalObjectEncoder},
@@ -253,6 +258,7 @@ impl ZffCreatorLogical {
 					Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
 					Err(_) => 0
 				};
+				let metadata_ext = get_metadata_ext(&file)?;
 				let file_header = FileHeader::new(
 					DEFAULT_HEADER_VERSION_FILE_HEADER,
 					current_file_number,
@@ -262,7 +268,8 @@ impl ZffCreatorLogical {
 					atime,
 					mtime,
 					ctime,
-					btime);
+					btime,
+					metadata_ext);
 				current_file_number += 1;
 				files.push((file, file_header));
 			} else if metadata.file_type().is_symlink() {
@@ -288,6 +295,7 @@ impl ZffCreatorLogical {
 					Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
 					Err(_) => 0
 				};
+				let metadata_ext = get_metadata_ext(&file)?;
 				let file_header = FileHeader::new(
 					DEFAULT_HEADER_VERSION_FILE_HEADER,
 					current_file_number,
@@ -297,7 +305,8 @@ impl ZffCreatorLogical {
 					atime,
 					mtime,
 					ctime,
-					btime);
+					btime,
+					metadata_ext);
 				match read_link(path) {
 					Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
 					Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::new()),
@@ -355,6 +364,7 @@ impl ZffCreatorLogical {
 				Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
 				Err(_) => 0
 			};
+			let metadata_ext = get_metadata_ext(&file)?;
 			let file_header = FileHeader::new(
 				DEFAULT_HEADER_VERSION_FILE_HEADER,
 				current_file_number,
@@ -364,7 +374,8 @@ impl ZffCreatorLogical {
 				atime,
 				mtime,
 				ctime,
-				btime);
+				btime,
+				metadata_ext);
 			current_file_number += 1;
 			files.push((file, file_header));
 
@@ -410,6 +421,7 @@ impl ZffCreatorLogical {
 						Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
 						Err(_) => 0
 					};
+					let metadata_ext = get_metadata_ext(&file)?;
 					let file_header = FileHeader::new(
 						DEFAULT_HEADER_VERSION_FILE_HEADER,
 						current_file_number,
@@ -419,7 +431,8 @@ impl ZffCreatorLogical {
 						atime,
 						mtime,
 						ctime,
-						btime);
+						btime,
+						metadata_ext);
 					current_file_number += 1;
 					files.push((file, file_header));
 				} else if metadata.file_type().is_symlink() {
@@ -446,6 +459,7 @@ impl ZffCreatorLogical {
 						Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
 						Err(_) => 0
 					};
+					let metadata_ext = get_metadata_ext(&file)?;
 					let file_header = FileHeader::new(
 						DEFAULT_HEADER_VERSION_FILE_HEADER,
 						current_file_number,
@@ -455,7 +469,8 @@ impl ZffCreatorLogical {
 						atime,
 						mtime,
 						ctime,
-						btime);
+						btime,
+						metadata_ext);
 					match read_link(inner_element.path()) {
 						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
@@ -617,4 +632,25 @@ impl ZffCreatorLogical {
 		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
 	}
+}
+
+//TODO: target_os = "windows"
+//TODO: target_os = "macos"
+#[cfg(target_os = "linux")]
+fn get_metadata_ext(file: &File) -> Result<HashMap<String, String>> {
+	let metadata = file.metadata()?;
+	let mut metadata_ext = HashMap::new();
+
+	//dev-id
+	metadata_ext.insert(METADATA_EXT_KEY_DEVID.into(), metadata.dev().to_string());
+	// inode
+	metadata_ext.insert(METADATA_EXT_KEY_INODE.into(), metadata.ino().to_string());
+	// mode
+	metadata_ext.insert(METADATA_EXT_KEY_MODE.into(), metadata.mode().to_string());
+	// uid
+	metadata_ext.insert(METADATA_EXT_KEY_UID.into(), metadata.uid().to_string());
+	// gid
+	metadata_ext.insert(METADATA_EXT_KEY_GID.into(), metadata.gid().to_string());
+
+	Ok(metadata_ext)
 }

@@ -1,5 +1,6 @@
 // - STD
 use std::io::{Cursor, Read};
+use std::collections::HashMap;
 use std::fmt;
 
 // - internal
@@ -59,6 +60,7 @@ pub struct FileHeader {
 	mtime: u64,
 	ctime: u64,
 	btime: u64,
+	metadata_ext: HashMap<String, String>,
 }
 
 impl FileHeader {
@@ -71,7 +73,8 @@ impl FileHeader {
 		atime: u64,
 		mtime: u64,
 		ctime: u64,
-		btime: u64) -> FileHeader {
+		btime: u64,
+		metadata_ext: HashMap<String, String>) -> FileHeader {
 		Self {
 			version: version,
 			file_number: file_number,
@@ -82,6 +85,7 @@ impl FileHeader {
 			mtime: mtime,
 			ctime: ctime,
 			btime: btime,
+			metadata_ext: metadata_ext
 		}
 	}
 	pub fn file_number(&self) -> u64 {
@@ -143,6 +147,7 @@ impl FileHeader {
 		vec.append(&mut self.mtime.encode_directly());
 		vec.append(&mut self.ctime.encode_directly());
 		vec.append(&mut self.btime.encode_directly());
+		vec.append(&mut self.metadata_ext.encode_directly());
 		vec
 	}
 
@@ -173,7 +178,8 @@ impl FileHeader {
 			atime,
 			mtime,
 			ctime,
-			btime) = Self::decode_inner_content(&mut cursor)?;
+			btime,
+			metadata_ext) = Self::decode_inner_content(&mut cursor)?;
 		let file_header = Self::new(
 			header_version,
 			file_number,
@@ -183,7 +189,8 @@ impl FileHeader {
 			atime,
 			mtime,
 			ctime,
-			btime);
+			btime,
+			metadata_ext);
 		Ok(file_header)
 	}
 
@@ -195,6 +202,7 @@ impl FileHeader {
 		u64, //mtime
 		u64, //ctime,
 		u64, //btime,
+		HashMap<String, String>,
 		)> {
 		let file_type = match u8::decode_directly(inner_content)? {
 			1 => FileType::File,
@@ -208,7 +216,7 @@ impl FileHeader {
 		let mtime = u64::decode_directly(inner_content)?;
 		let ctime = u64::decode_directly(inner_content)?;
 		let btime = u64::decode_directly(inner_content)?;
-		
+		let metadata_ext = HashMap::<String, String>::decode_directly(inner_content)?;
 
 		let inner_content = (
 			file_type,
@@ -217,7 +225,8 @@ impl FileHeader {
 			atime,
 			mtime,
 			ctime,
-			btime);
+			btime,
+			metadata_ext);
 		Ok(inner_content)
 	}
 }
@@ -238,7 +247,6 @@ impl HeaderCoding for FileHeader {
 		vec.push(self.version);
 		vec.append(&mut self.file_number.encode_directly());
 		vec.append(&mut self.encode_content());
-
 		vec
 		
 	}
@@ -247,7 +255,7 @@ impl HeaderCoding for FileHeader {
 		let mut cursor = Cursor::new(data);
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
-		let (file_type, filename, parent_file_number, atime, mtime, ctime, btime) = Self::decode_inner_content(&mut cursor)?;
-		Ok(FileHeader::new(header_version, file_number, file_type, filename, parent_file_number, atime, mtime, ctime, btime))
+		let (file_type, filename, parent_file_number, atime, mtime, ctime, btime, metadata_ext) = Self::decode_inner_content(&mut cursor)?;
+		Ok(FileHeader::new(header_version, file_number, file_type, filename, parent_file_number, atime, mtime, ctime, btime, metadata_ext))
 	}
 }

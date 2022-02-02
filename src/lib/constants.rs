@@ -107,3 +107,11 @@ pub(crate) const DEFAULT_FOOTER_VERSION_FILE_FOOTER: u8 = 1;
 pub const HEADER_SIGNATURE_LENGTH: usize = 4;
 pub const HEADER_LENGTH_LENGTH: usize = 8;
 pub const HEADER_VERSION_LENGTH: usize = 1;
+
+
+// file metadata extended values
+pub(crate) const METADATA_EXT_KEY_DEVID: &'static str = "devid";
+pub(crate) const METADATA_EXT_KEY_INODE: &'static str = "inode";
+pub(crate) const METADATA_EXT_KEY_MODE: &'static str = "mode";
+pub(crate) const METADATA_EXT_KEY_UID: &'static str = "uid";
+pub(crate) const METADATA_EXT_KEY_GID: &'static str = "gid";
