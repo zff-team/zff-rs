@@ -144,17 +144,18 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    };
 
 		//write segment header
-		written_bytes += output.write(&segment_header.encode_directly())? as u64;	
+		written_bytes += output.write(&segment_header.encode_directly())? as u64;
+
+		//prepare segment footer
+		let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);	
 		
 		//write the object header
 		if !self.written_object_header {
 			self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
+			segment_footer.add_object_header_offset(self.object_encoder.obj_number(), written_bytes);
 			written_bytes += output.write(&self.object_encoder.get_encoded_header())? as u64;
 			self.written_object_header = true;
 		};
-
-		//prepare segment footer
-		let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
 
 		// read chunks and write them into the Writer.
 		loop {
@@ -179,6 +180,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 						} else {
 							//write the appropriate object footer and break the loop
 							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
+							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), written_bytes);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
 							break;
 						}
@@ -591,17 +593,18 @@ impl ZffCreatorLogical {
 	    };
 
 		//write segment header
-		written_bytes += output.write(&segment_header.encode_directly())? as u64;	
+		written_bytes += output.write(&segment_header.encode_directly())? as u64;
+
+		//prepare segment footer
+		let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);	
 		
 		//write the object header
 		if !self.written_object_header {
 			self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
+			segment_footer.add_object_header_offset(self.object_encoder.obj_number(), written_bytes);
 			written_bytes += output.write(&self.object_encoder.get_encoded_header())? as u64;
 			self.written_object_header = true;
 		};
-
-		//prepare segment footer
-		let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
 
 		// read chunks and write them into the Writer.
 		loop {
@@ -626,6 +629,7 @@ impl ZffCreatorLogical {
 						} else {
 							//write the appropriate object footer and break the loop
 							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
+							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), written_bytes);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
 							break;
 						}
