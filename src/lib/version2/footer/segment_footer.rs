@@ -1,4 +1,5 @@
 // - STD
+use std::collections::HashMap;
 use std::io::{Cursor};
 
 // - internal
@@ -20,7 +21,7 @@ use crate::{
 pub struct SegmentFooter {
 	version: u8,
 	length_of_segment: u64,
-	chunk_offsets: Vec<u64>,
+	chunk_offsets: HashMap<u64, u64>, //<chunk number, offset>
 	/// The offset where the footer starts.
 	footer_offset: u64,
 
@@ -32,13 +33,13 @@ impl SegmentFooter {
 		Self {
 			version: version,
 			length_of_segment: 0,
-			chunk_offsets: Vec::new(),
+			chunk_offsets: HashMap::new(),
 			footer_offset: 0,
 		}
 	}
 
-	/// creates a new SegmentFooter with a given "offset table" (represented as ```Vec<u64>```.
-	pub fn new(version: u8, length_of_segment: u64, chunk_offsets: Vec<u64>, footer_offset: u64) -> SegmentFooter {
+	/// creates a new SegmentFooter with a given "offset table" (represented as ```HashMap<u64, u64>```).
+	pub fn new(version: u8, length_of_segment: u64, chunk_offsets: HashMap<u64, u64>, footer_offset: u64) -> SegmentFooter {
 		Self {
 			version: version,
 			length_of_segment: length_of_segment,
@@ -59,12 +60,12 @@ impl SegmentFooter {
 	}
 
 	/// adds an offset to the offset table of the SegmentFooter.
-	pub fn add_chunk_offset(&mut self, offset: u64) {
-		self.chunk_offsets.push(offset)
+	pub fn add_chunk_offset(&mut self, chunk_number: u64, offset: u64) {
+		self.chunk_offsets.insert(chunk_number, offset);
 	}
 
 	/// returns a reference of the offset table
-	pub fn chunk_offsets(&self) -> &Vec<u64> {
+	pub fn chunk_offsets(&self) -> &HashMap<u64, u64> {
 		&self.chunk_offsets
 	}
 
@@ -100,7 +101,7 @@ impl HeaderCoding for SegmentFooter {
 
 		let footer_version = u8::decode_directly(&mut cursor)?;
 		let length_of_segment = u64::decode_directly(&mut cursor)?;
-		let chunk_offsets = Vec::<u64>::decode_directly(&mut cursor)?;
+		let chunk_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let footer_offset = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentFooter::new(footer_version, length_of_segment, chunk_offsets, footer_offset))
 	}
