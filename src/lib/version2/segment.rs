@@ -30,8 +30,6 @@ impl<R: Read + Seek> Segment<R> {
 	}
 
 	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
-		let start_position = data.stream_position()?; //uses the current stream position. This is important for the first segment (which contains a main header);
-
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
 
 		data.seek(SeekFrom::End(-8))?;
@@ -47,8 +45,6 @@ impl<R: Read + Seek> Segment<R> {
 				SegmentFooter::decode_directly(&mut data)?
 			},
 		};
-
-		data.seek(SeekFrom::Start(start_position))?;
 
 		Ok(Self::new(segment_header, data, segment_footer))
 	}
