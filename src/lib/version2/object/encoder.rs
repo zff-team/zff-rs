@@ -40,6 +40,8 @@ use time::{OffsetDateTime};
 
 //TODO: Documentation; Acquisition-start will be set by calling self.get_encoded_header(), acq-end by calling self.get_encoded_footer().
 pub struct PhysicalObjectEncoder<R: Read> {
+	/// The number of this object
+	obj_number: u64,
 	///An encoded [ObjectHeader].
 	encoded_header: Vec<u8>,
 	/// remaining bytes of the encoded header to read. This is only (internally) used, if you will use the [Read] implementation of [PhysicalObjectEncoder].
@@ -90,6 +92,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        hasher_map.insert(h_type.clone(), hasher);
 	    };
 		Ok(Self {
+			obj_number: obj_header.object_number(),
 			encoded_header_remaining_bytes: encoded_header.len(),
 			encoded_header: encoded_header,
 			underlying_data: reader,
@@ -164,6 +167,10 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    		}
 	    	}
 	    }
+	}
+
+	pub fn obj_number(&self) -> u64 {
+		self.obj_number
 	}
 
 	pub fn current_chunk_number(&self) -> u64 {
@@ -326,6 +333,8 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 }
 
 pub struct LogicalObjectEncoder {
+	/// The number of this object
+	obj_number: u64,
 	encoded_header: Vec<u8>,
 	//encoded_header_remaining_bytes: usize,
 	files: Vec<(File, FileHeader)>,
@@ -387,6 +396,7 @@ impl LogicalObjectEncoder {
 		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), obj_header.encryption_header(), current_chunk_number, symlink_real_path, header_encryption)?);
 		
 		Ok(Self {
+			obj_number: obj_header.object_number(),
 			//encoded_header_remaining_bytes: encoded_header.len(),
 			encoded_header: encoded_header,
 			files: files,
@@ -404,6 +414,10 @@ impl LogicalObjectEncoder {
 			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL),
 			header_encryption: header_encryption,
 		})
+	}
+
+	pub fn obj_number(&self) -> u64 {
+		self.obj_number
 	}
 
 	pub fn current_chunk_number(&self) -> u64 {

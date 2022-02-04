@@ -43,6 +43,8 @@ pub struct ZffCreatorPhysical<R: Read> {
 	written_object_header: bool,
 	last_accepted_segment_filepath: PathBuf,
 	description_notes: Option<String>,
+	object_header_segment_numbers: HashMap<u64, u64>,
+	object_footer_segment_numbers: HashMap<u64, u64>,
 }
 
 impl<R: Read> ZffCreatorPhysical<R> {
@@ -72,6 +74,8 @@ impl<R: Read> ZffCreatorPhysical<R> {
 			written_object_header: false,
 			last_accepted_segment_filepath: PathBuf::new(),
 			description_notes: description_notes,
+			object_header_segment_numbers: HashMap::new(),
+			object_footer_segment_numbers: HashMap::new(),
 		})
 	}
 
@@ -105,7 +109,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    	};
 	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    }
-	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, self.description_notes.clone(), main_footer_start_offset);
+	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
 	    output_file.write(&main_footer.encode_directly())?;
@@ -144,6 +148,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 		
 		//write the object header
 		if !self.written_object_header {
+			self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
 			written_bytes += output.write(&self.object_encoder.get_encoded_header())? as u64;
 			self.written_object_header = true;
 		};
@@ -164,6 +169,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 				}
 			};
 			let chunk_offset = seek_value + written_bytes;
+			let current_chunk_number = self.object_encoder.current_chunk_number();
 			let chunk = match self.object_encoder.get_next_chunk() {
 				Ok(data) => data,
 				Err(e) => match e.get_kind() {
@@ -171,6 +177,9 @@ impl<R: Read> ZffCreatorPhysical<R> {
 						if written_bytes == segment_header.encode_directly().len() as u64 {
 							return Err(e);
 						} else {
+							//write the appropriate object footer and break the loop
+							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
+							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
 							break;
 						}
 					},
@@ -181,7 +190,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 				},
 			};
 			written_bytes += output.write(&chunk)? as u64;
-			segment_footer.add_chunk_offset(chunk_offset);
+			segment_footer.add_chunk_offset(current_chunk_number, chunk_offset);
 		}
 
 		// finish the segment footer and write the encoded footer into the Writer.
@@ -201,6 +210,8 @@ pub struct ZffCreatorLogical {
 	last_accepted_segment_filepath: PathBuf,
 	unaccessable_files: Vec<String>,
 	description_notes: Option<String>,
+	object_header_segment_numbers: HashMap<u64, u64>,
+	object_footer_segment_numbers: HashMap<u64, u64>,
 }
 
 impl ZffCreatorLogical {
@@ -503,6 +514,8 @@ impl ZffCreatorLogical {
 			last_accepted_segment_filepath: PathBuf::new(),
 			unaccessable_files: unaccessable_files,
 			description_notes: description_notes,
+			object_header_segment_numbers: HashMap::new(),
+			object_footer_segment_numbers: HashMap::new(),
 		})
 	}
 
@@ -539,7 +552,7 @@ impl ZffCreatorLogical {
 	    	self.last_accepted_segment_filepath = segment_filename.clone();
 	    }
 
-	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, 1, self.description_notes.clone(), main_footer_start_offset);
+	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
 	    output_file.write(&main_footer.encode_directly())?;
@@ -582,6 +595,7 @@ impl ZffCreatorLogical {
 		
 		//write the object header
 		if !self.written_object_header {
+			self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
 			written_bytes += output.write(&self.object_encoder.get_encoded_header())? as u64;
 			self.written_object_header = true;
 		};
@@ -602,6 +616,7 @@ impl ZffCreatorLogical {
 				}
 			};
 			let current_offset = seek_value + written_bytes;
+			let current_chunk_number = self.object_encoder.current_chunk_number();
 			let data = match self.object_encoder.get_next_data(current_offset, self.current_segment_no) {
 				Ok(data) => data,
 				Err(e) => match e.get_kind() {
@@ -609,6 +624,9 @@ impl ZffCreatorLogical {
 						if written_bytes == segment_header.encode_directly().len() as u64 {
 							return Err(e);
 						} else {
+							//write the appropriate object footer and break the loop
+							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
+							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
 							break;
 						}
 					},
@@ -622,7 +640,7 @@ impl ZffCreatorLogical {
 
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) {
-				segment_footer.add_chunk_offset(current_offset);
+				segment_footer.add_chunk_offset(current_chunk_number, current_offset);
 			};
 		}
 
