@@ -49,6 +49,8 @@ pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER: &'static str = "The r
 pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED: &'static str = "The main header is encrypted.";
 pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED: &'static str = "The main header is not encrypted.";
 pub(crate) const ERROR_MISSING_SEGMENT: &'static str = "A segment is missing.";
+pub(crate) const ERROR_MISSING_SEGMENT_MAIN_HEADER: &'static str = "A segment with a valid zff main header is missing.";
+pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &'static str = "A segment with a valid zff main footer is missing.";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &'static str = "The segment of the chunk was not found.";
 
