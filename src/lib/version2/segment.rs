@@ -9,14 +9,17 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	Chunk,
-	header::{SegmentHeader},
-	footer::{SegmentFooter},
+	header::{SegmentHeader, ObjectHeader},
+	footer::{SegmentFooter, ObjectFooter},
+	ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT,
+	ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT,
 };
 
 pub struct Segment<R: Read + Seek> {
 	header: SegmentHeader,
 	data: R,
-	footer: SegmentFooter
+	footer: SegmentFooter,
+	raw_reader_position: u64,
 }
 
 impl<R: Read + Seek> Segment<R> {
@@ -26,6 +29,7 @@ impl<R: Read + Seek> Segment<R> {
 			header: header,
 			data: data,
 			footer: footer,
+			raw_reader_position: 0,
 		}
 	}
 
@@ -67,5 +71,44 @@ impl<R: Read + Seek> Segment<R> {
 		self.data.seek(SeekFrom::Start(*chunk_offset))?;
 
 		Chunk::new_from_reader(&mut self.data)
+	}
+
+	pub fn read_object_header(&mut self, object_number: u64) -> Result<ObjectHeader> {
+		let offset = match self.footer.object_header_offsets().get(&object_number) {
+				Some(value) => value,
+				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
+		};
+		self.data.seek(SeekFrom::Start(*offset))?;
+		let object_header = ObjectHeader::decode_directly(&mut self.data)?;
+		Ok(object_header)
+	}
+
+	pub fn read_object_footer(&mut self, object_number: u64) -> Result<ObjectFooter> {
+		let offset = match self.footer.object_footer_offsets().get(&object_number) {
+			Some(value) => value,
+			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
+		};
+		self.data.seek(SeekFrom::Start(*offset))?;
+		ObjectFooter::decode_directly(&mut self.data)
+	}
+}
+
+impl<R: Read+Seek> Read for Segment<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+		self.data.seek(SeekFrom::Start(self.raw_reader_position))?;
+		let read_bytes = match self.data.read(buffer) {
+			Ok(read_bytes) => read_bytes,
+			Err(e) => return Err(e)
+		};
+		self.raw_reader_position += read_bytes as u64;
+		Ok(read_bytes)
+	}
+}
+
+impl<R: Read + Seek> Seek for Segment<R> {
+	fn seek(&mut self, seeker: SeekFrom) -> std::result::Result<u64, std::io::Error> {
+		let position = self.data.seek(seeker)?;
+		self.raw_reader_position = self.data.stream_position()?;
+		Ok(position)
 	}
 }
