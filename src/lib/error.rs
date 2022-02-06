@@ -69,6 +69,14 @@ pub enum ZffErrorKind {
 	NullOrNegativeSegmentNumber,
 	/// Error will be returned, if the segment size is too small.
 	SegmentSizeToSmall,
+	/// Error will be returned, if an object footer is present in segments, but no appropriate object header
+	MissingObjectHeaderForPresentObjectFooter,
+	/// Error will be returned, if the object number looked for does not exist.
+	MissingObjectNumber,
+	/// Error will be returned, if the file number looked for does not exist.
+	MissingFileNumber,
+	/// Error will be returned, if the object number mismatches the given object type.
+	MismatchObjectType,
 	/// Error will be returned, if the main header could not be encrypted.
 	MainHeaderEncryptionError,
 	/// Error will be returned, if the chunk number is not present in zff image.
@@ -79,6 +87,8 @@ pub enum ZffErrorKind {
 	InvalidFlagValue,
 	/// Error will be returned, if the appropriate segment is missing in the zff image.
 	MissingSegment,
+	/// Error will be returned, if the appropriate segment is malformed (e.g. the object header is missing)
+	MalformedSegment,
 	/// Error will be returned, if no object type exists for the given value
 	UnknownObjectTypeValue,
 	/// Error will be returned, if you try to call a method, which is not available for this [FileType].
@@ -115,16 +125,20 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::DataDecodeChunkNumberNotInSegment => "DataDecodeChunkNumberNotInSegment",
 			ZffErrorKind::NullOrNegativeSegmentNumber => "NullOrNegativeSegmentNumber",
 			ZffErrorKind::SegmentSizeToSmall => "SegmentSizeToSmall",
+			ZffErrorKind::MissingObjectHeaderForPresentObjectFooter => "MissingObjectHeaderForPresentObjectFooter",
+			ZffErrorKind::MissingObjectNumber => "MissingObjectNumber",
+			ZffErrorKind::MissingFileNumber => "MissingFileNumber",
+			ZffErrorKind::MismatchObjectType => "MismatchObjectType",
 			ZffErrorKind::MainHeaderEncryptionError => "MainHeaderEncryptionError",
 			ZffErrorKind::InvalidChunkNumber => "InvalidChunkNumber",
 			ZffErrorKind::NoSignatureFoundAtChunk => "NoSignatureFoundAtChunk",
 			ZffErrorKind::InvalidFlagValue => "InvalidFlagValue",
 			ZffErrorKind::MissingSegment => "MissingSegment",
+			ZffErrorKind::MalformedSegment => "MalformedSegment",
 			ZffErrorKind::UnknownObjectTypeValue => "UnknownObjectTypeValue",
 			ZffErrorKind::NotAvailableForFileType => "NotAvailableForFileType",
 			ZffErrorKind::UnimplementedFileType => "UnimplementedFileType",
 			ZffErrorKind::NoFilesLeft => "NoFilesLeft",
-
 		};
 	write!(f, "{}", err_msg)
 	}

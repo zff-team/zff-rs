@@ -51,10 +51,15 @@ pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED: &'static str = 
 pub(crate) const ERROR_MISSING_SEGMENT: &'static str = "A segment is missing.";
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_HEADER: &'static str = "A segment with a valid zff main header is missing.";
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &'static str = "A segment with a valid zff main footer is missing.";
+pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &'static str = "Missing object header in segment with following object number: ";
+pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &'static str = "Missing object footer in segment with following object number: ";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &'static str = "The segment of the chunk was not found.";
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &'static str = "Unseekable position (position is negative).";
+
+pub(crate) const ERROR_IO_ZFFREADER_MISSING_OBJECT: &'static str = "Missing object for active object number in zffreader. This is an application bug.";
+pub(crate) const ERROR_IO_ZFFREADER_MISSING_FILE: &'static str = "Missing file for active file number in zffreader. This is an application bug.";
 
 pub(crate) const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred while trying to rewrite the main header to the output file. The written data length specified is not correctly listed in the header.";
 
