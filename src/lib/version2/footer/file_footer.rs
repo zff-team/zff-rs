@@ -37,6 +37,10 @@ impl FileFooter {
 			length_of_data: length_of_data,
 		}
 	}
+
+	pub fn length_of_data(&self) -> u64 {
+		self.length_of_data
+	}
 }
 
 impl HeaderCoding for FileFooter {
