@@ -445,6 +445,8 @@ impl LogicalObjectEncoder {
 				// return file header
 				if !self.current_file_header_read {
 					self.current_file_header_read = true;
+					self.object_footer.add_file_header_segment_number(self.current_file_number, current_segment_no);
+					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
 					return Ok(file_encoder.get_encoded_header());
 				}
 
@@ -462,8 +464,8 @@ impl LogicalObjectEncoder {
 
 				//return file footer, set next file_encoder
 				let file_footer = file_encoder.get_encoded_footer();
-				self.object_footer.add_file_segment_number(self.current_file_number, current_segment_no);
-				self.object_footer.add_fileoffset(self.current_file_number, current_offset);
+				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
+				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
 				let (current_file, current_file_header) = match self.files.pop() {
 					Some((file, header)) => (file, header),
 					None => {
