@@ -27,7 +27,6 @@ rand = "0.7.3"
 base64 = "0.13.0"
 serde = { version = "1.0", features = ["derive"] }
 hex = "0.4.3"
-slice = "0.0.4"
 time = { version = "0.3.4", features = [ "formatting" ] }
 #encryption
 pkcs5 = { version = "0.3.0", features = [ "pbes2", "alloc" ] }

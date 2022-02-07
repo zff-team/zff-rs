@@ -19,7 +19,6 @@ use crate::version1::{
 };
 
 // - external
-use slice::IoSlice;
 use zstd;
 use lz4_flex;
 
@@ -85,25 +84,25 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		self.data.seek(SeekFrom::Start(*chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
 		let chunk_size = chunk_header.chunk_size();
-		let bytes_to_skip = chunk_header.header_size() as u64 + *chunk_offset;
-		let mut chunk_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
+
+		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + *chunk_offset))?;
+		let mut chunk_data = Vec::with_capacity(*chunk_size as usize);
+		self.data.read(&mut chunk_data)?;
 		let mut buffer = Vec::new();
 		if !chunk_header.compression_flag() {
-			chunk_data.read_to_end(&mut buffer)?;
-			return Ok(buffer);
+			return Ok(chunk_data);
 		};
 		match compression_algorithm.borrow() {
 			CompressionAlgorithm::None => {
-				chunk_data.read_to_end(&mut buffer)?;
-				return Ok(buffer);
+				return Ok(chunk_data);
 			}
 			CompressionAlgorithm::Zstd => {
-				let mut decoder = zstd::stream::read::Decoder::new(chunk_data)?;
+				let mut decoder = zstd::stream::read::Decoder::new(chunk_data.as_slice())?;
 				decoder.read_to_end(&mut buffer)?;
 				return Ok(buffer);
 			},
 			CompressionAlgorithm::Lz4 => {
-				let mut decompressor = lz4_flex::frame::FrameDecoder::new(chunk_data);
+				let mut decompressor = lz4_flex::frame::FrameDecoder::new(chunk_data.as_slice());
 				decompressor.read_to_end(&mut buffer)?;
 				return Ok(buffer);
 			}
@@ -131,11 +130,12 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		self.data.seek(SeekFrom::Start(*chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
 		let chunk_size = chunk_header.chunk_size();
-		let bytes_to_skip = chunk_header.header_size() as u64 + *chunk_offset;
-		let mut encrypted_data = IoSlice::new(self.data.by_ref(), bytes_to_skip, *chunk_size)?;
-		let mut buffer = Vec::new();
-		encrypted_data.read_to_end(&mut buffer)?;
-		let decrypted_chunk_data = Encryption::decrypt_message(decryption_key, buffer, chunk_number, encryption_algorithm)?;
+		
+		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + *chunk_offset))?;
+		let mut encrypted_data = Vec::with_capacity(*chunk_size as usize);
+		self.data.read(&mut encrypted_data)?;
+		let decrypted_chunk_data = Encryption::decrypt_message(decryption_key, encrypted_data, chunk_number, encryption_algorithm)?;
+
 		if !chunk_header.compression_flag() {
 			return Ok(decrypted_chunk_data);
 		};
