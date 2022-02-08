@@ -1,6 +1,6 @@
 // - STD
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Cursor};
 
 // - internal
 use crate::{
@@ -21,9 +21,10 @@ use crate::{
 use crate::{
 	ERROR_MISSING_SEGMENT_MAIN_HEADER,
 	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
-	ERROR_IO_ZFFREADER_MISSING_OBJECT,
+	ERROR_ZFFREADER_MISSING_OBJECT,
 	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
-	ERROR_IO_ZFFREADER_MISSING_FILE,
+	ERROR_ZFFREADER_MISSING_FILE,
+	ERROR_ZFFREADER_SEGMENT_NOT_FOUND
 };
 
 pub struct ZffReader<R: Read + Seek> {
@@ -31,17 +32,19 @@ pub struct ZffReader<R: Read + Seek> {
 	main_footer: MainFooter,
 	objects: HashMap<u64, Object>, //<object number, ObjectInformation.
 	segments: HashMap<u64, Segment<R>>, //<segment number, Segment-object>, a HashMap is used here instead of a Vec for perfomance reasons.
+	chunk_map: HashMap<u64, u64>, //<chunk_number, segment_number> for better runtime performance.
 	active_object: u64, // the object number of the active object
 }
 
 impl<R: Read + Seek> ZffReader<R> {
 	// TODO: encrypted segments?
-	pub fn new(raw_segments: Vec<R>) -> Result<ZffReader<R>> {
+	// encryption_passwords: <object number, decryption password>
+	pub fn new(raw_segments: Vec<R>, encryption_passwords: HashMap<u64, Vec<u8>>) -> Result<ZffReader<R>> {
 		let mut main_header = None;
 		let mut main_footer = None;
 		let mut segments = HashMap::new();
+		let mut chunk_map = HashMap::new();
 		for mut raw_segment in raw_segments {
-			
 			if let None = main_footer {
 				raw_segment.seek(SeekFrom::End(-8))?;
 				let footer_offset = u64::decode_directly(&mut raw_segment)?;
@@ -67,6 +70,11 @@ impl<R: Read + Seek> ZffReader<R> {
 			};
 
 			let segment = Segment::new_from_reader(raw_segment)?;
+
+			for chunk_number in segment.footer().chunk_offsets().keys() {
+				chunk_map.insert(*chunk_number, segment.header().segment_number());
+			}
+
 			segments.insert(segment.header().segment_number(), segment);
 		}
 
@@ -85,8 +93,13 @@ impl<R: Read + Seek> ZffReader<R> {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
 			};
-			let header = segment.read_object_header(*object_number)?;
-			object_header.insert(object_number, header);
+			if let Some(encryption_password) = encryption_passwords.get(object_number) {
+				let header = segment.read_encrypted_object_header(*object_number, encryption_password)?;
+				object_header.insert(object_number, header);
+			} else {
+				let header = segment.read_object_header(*object_number)?;
+				object_header.insert(object_number, header);
+			}
 		}
 		let mut object_footer = HashMap::new();
 		for (object_number, segment_number) in main_footer.object_footer() {
@@ -101,51 +114,62 @@ impl<R: Read + Seek> ZffReader<R> {
 		let mut objects = HashMap::new();
 		for (object_number, footer) in object_footer {
 			match object_header.get(object_number) {
-				Some(header) => match footer {
-					ObjectFooter::Physical(footer) => { objects.insert(*object_number, Object::Physical(PhysicalObjectInformation::new(header.clone(), footer))); },
-					ObjectFooter::Logical(footer) => {
-						let mut logical_object = LogicalObjectInformation::new(header.clone(), footer);
-						let mut file_footers = HashMap::new();
-						let mut file_headers = HashMap::new();
-						for (file_number, segment_number) in logical_object.footer().file_footer_segment_numbers().clone() {
-							let segment = match segments.get_mut(&segment_number) {
-								Some(value) => value,
-								None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
-							};
-							let file_footer_offset = match logical_object.footer().file_footer_offsets().get(&file_number) {
-								Some(offset) => offset,
-								None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, file_number.to_string())),
-							};
-							segment.seek(SeekFrom::Start(*file_footer_offset))?;
-							let file_footer = FileFooter::decode_directly(segment)?;
-							file_footers.insert(file_number, file_footer);
-						};
-
-						for (file_number, segment_number) in logical_object.footer().file_header_segment_numbers().clone() {
-							let segment = match segments.get_mut(&segment_number) {
-								Some(value) => value,
-								None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
-							};
-							let file_header_offset = match logical_object.footer().file_header_offsets().get(&file_number) {
-								Some(offset) => offset,
-								None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, file_number.to_string())),
-							};
-							segment.seek(SeekFrom::Start(*file_header_offset))?;
-							let file_header = FileHeader::decode_directly(segment)?;
-							file_headers.insert(file_number, file_header);
-							
-						};
-
-						for (file_number, footer) in file_footers {
-							match file_headers.get(&file_number) {
-								Some(header) => logical_object.add_file(file_number, File::new(header.clone(), footer)),
-								None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, file_number.to_string())),
+				Some(header) => {
+					let encryption_key = match encryption_passwords.get(object_number) {
+						None => None,
+						Some(pw) => {
+							match header.encryption_header() {
+								Some(encryption_header) => Some(encryption_header.decrypt_encryption_key(pw)?),
+								None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, object_number.to_string())),
 							}
-						};
+						},
+					};
+					match footer {
+						ObjectFooter::Physical(footer) => { objects.insert(*object_number, Object::Physical(PhysicalObjectInformation::new(header.clone(), footer, encryption_key))); },
+						ObjectFooter::Logical(footer) => {
+							let mut logical_object = LogicalObjectInformation::new(header.clone(), footer, encryption_key);
+							let mut file_footers = HashMap::new();
+							let mut file_headers = HashMap::new();
+							for (file_number, segment_number) in logical_object.footer().file_footer_segment_numbers().clone() {
+								let segment = match segments.get_mut(&segment_number) {
+									Some(value) => value,
+									None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
+								};
+								let file_footer_offset = match logical_object.footer().file_footer_offsets().get(&file_number) {
+									Some(offset) => offset,
+									None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, file_number.to_string())),
+								};
+								segment.seek(SeekFrom::Start(*file_footer_offset))?;
+								let file_footer = FileFooter::decode_directly(segment)?;
+								file_footers.insert(file_number, file_footer);
+							};
 
-						let object = Object::Logical(logical_object);
-						objects.insert(*object_number, object);
-					},
+							for (file_number, segment_number) in logical_object.footer().file_header_segment_numbers().clone() {
+								let segment = match segments.get_mut(&segment_number) {
+									Some(value) => value,
+									None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
+								};
+								let file_header_offset = match logical_object.footer().file_header_offsets().get(&file_number) {
+									Some(offset) => offset,
+									None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, file_number.to_string())),
+								};
+								segment.seek(SeekFrom::Start(*file_header_offset))?;
+								let file_header = FileHeader::decode_directly(segment)?;
+								file_headers.insert(file_number, file_header);
+								
+							};
+
+							for (file_number, footer) in file_footers {
+								match file_headers.get(&file_number) {
+									Some(header) => logical_object.add_file(file_number, File::new(header.clone(), footer)),
+									None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, file_number.to_string())),
+								}
+							};
+
+							let object = Object::Logical(logical_object);
+							objects.insert(*object_number, object);
+						},
+					}
 				},
 				None => return Err(ZffError::new(ZffErrorKind::MissingObjectHeaderForPresentObjectFooter, object_number.to_string())),
 			};
@@ -155,6 +179,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			main_header: main_header,
 			main_footer: main_footer,
 			objects: objects,
+			chunk_map: chunk_map,
 			segments: segments,
 			active_object: 1,
 		})
@@ -196,13 +221,78 @@ impl<R: Read + Seek> ZffReader<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, &self.active_object.to_string())),
 		}
 	}
+
+	pub fn description_notes(&self) -> Option<&str> {
+		self.main_footer.description_notes()
+	}
 }
+
+impl<R: Read + Seek> Read for ZffReader<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+		let object = match self.objects.get_mut(&self.active_object) {
+			Some(object) => object,
+			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
+		};
+
+		let chunk_size = self.main_header.chunk_size();
+		let first_chunk_number = {
+			match object {
+				Object::Physical(object) => object.footer().first_chunk_number(),
+				Object::Logical(object) => match object.get_active_file() {
+					Ok(file) => file.footer().first_chunk_number(),
+					Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_FILE}{}", object.active_file_number())))
+				}
+			}
+		};
+		let last_chunk_number = {
+			match object {
+				Object::Physical(object) => first_chunk_number + object.footer().number_of_chunks() - 1,
+				Object::Logical(object) => match object.get_active_file() {
+					Ok(file) => first_chunk_number + file.footer().number_of_chunks() - 1,
+					Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_FILE}{}", object.active_file_number())))
+				}
+			}
+		};
+		let mut current_chunk_number = ((first_chunk_number * chunk_size as u64))+object.position() / chunk_size as u64;
+		let mut inner_position = (object.position() % chunk_size as u64) as usize; // the inner chunk position
+		let mut read_bytes = 0; // number of bytes which are written to buffer
+
+		loop {
+			if read_bytes == buffer.len() || current_chunk_number >= last_chunk_number {
+				break;
+			}
+			let segment = match self.chunk_map.get(&current_chunk_number) {
+				Some(segment_no) => match self.segments.get_mut(segment_no) {
+					Some(segment) => segment,
+					None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+				},
+				None => break,
+			};
+			let chunk_data = match segment.chunk_data(current_chunk_number, object) {
+				Ok(data) => data,
+				Err(e) => match e.unwrap_kind() {
+					ZffErrorKind::IoError(io_error) => return Err(io_error),
+					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+				},
+			};
+			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
+			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+			inner_position = 0;
+			current_chunk_number += 1;
+			object.set_position(read_bytes as u64);
+		}
+
+		object.set_position(read_bytes as u64);
+		Ok(read_bytes)
+	}
+}
+
 
 impl<R: Read + Seek> Seek for ZffReader<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		let object = match self.objects.get_mut(&self.active_object) {
 			Some(object) => object,
-			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_ZFFREADER_MISSING_OBJECT))
+			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 		};
 		match seek_from {
 			SeekFrom::Start(value) => {
@@ -226,7 +316,7 @@ impl<R: Read + Seek> Seek for ZffReader<R> {
 						Object::Logical(object) => {
 							match object.get_active_file() {
 								Ok(file) => file.length_of_data(),
-								Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_ZFFREADER_MISSING_FILE))
+								Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_FILE}{}", object.active_file_number())))
 							}
 						},
 					}
