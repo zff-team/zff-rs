@@ -72,6 +72,16 @@ impl ChunkHeader {
 		self.crc32 = crc32
 	}
 
+	/// returns the crc32 value.
+	pub fn crc32(&self) -> u32 {
+		self.crc32
+	}
+
+	/// returns if an error flag is set for this chunk.
+	pub fn error_flag(&self) -> bool {
+		self.error_flag
+	}
+
 	/// sets the compression_flag
 	pub fn set_compression_flag(&mut self) {
 		self.compression_flag = true;
