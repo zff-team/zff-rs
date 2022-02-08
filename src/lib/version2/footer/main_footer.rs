@@ -53,6 +53,10 @@ impl MainFooter {
 	pub fn footer_offset(&self) -> u64 {
 		self.footer_offset
 	}
+
+	pub fn description_notes(&self) -> Option<&str> {
+		Some(&self.description_notes.as_ref()?)
+	}
 }
 
 impl HeaderCoding for MainFooter {

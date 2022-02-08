@@ -38,6 +38,26 @@ impl FileFooter {
 		}
 	}
 
+	pub fn acquisition_start(&self) -> u64 {
+		self.acquisition_start
+	}
+
+	pub fn acquisition_end(&self) -> u64 {
+		self.acquisition_end
+	}
+
+	pub fn hash_header(&self) -> &HashHeader {
+		&self.hash_header
+	}
+
+	pub fn first_chunk_number(&self) -> u64 {
+		self.first_chunk_number
+	}
+
+	pub fn number_of_chunks(&self) -> u64 {
+		self.number_of_chunks
+	}
+
 	pub fn length_of_data(&self) -> u64 {
 		self.length_of_data
 	}

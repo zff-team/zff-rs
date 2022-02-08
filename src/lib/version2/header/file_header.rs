@@ -97,6 +97,24 @@ impl FileHeader {
 	pub fn filename(&self) -> &str {
 		&self.filename
 	}
+	pub fn parent_file_number(&self) -> u64 {
+		self.parent_file_number
+	}
+	pub fn atime(&self) -> u64 {
+		self.atime
+	}
+	pub fn mtime(&self) -> u64 {
+		self.mtime
+	}
+	pub fn ctime(&self) -> u64 {
+		self.ctime
+	}
+	pub fn btime(&self) -> u64 {
+		self.btime
+	}
+	pub fn metadata_ext(&self) -> &HashMap<String, String> {
+		&self.metadata_ext
+	}
 
 	/// encodes the file header to a ```Vec<u8>```. The encryption flag will be set to 2.
 	/// # Error

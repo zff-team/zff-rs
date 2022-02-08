@@ -72,8 +72,8 @@ impl ObjectHeader {
 		self.object_type.clone()
 	}
 
-	pub fn encryption_header(&self) -> Option<EncryptionHeader> {
-		self.encryption_header.clone()
+	pub fn encryption_header(&self) -> Option<&EncryptionHeader> {
+		self.encryption_header.as_ref()
 	}
 
 	pub fn compression_header(&self) -> CompressionHeader {
