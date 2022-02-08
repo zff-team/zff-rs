@@ -1,7 +1,7 @@
 // - STD
 use std::io::{Read, Seek, SeekFrom, copy as io_copy, Cursor};
 use std::path::PathBuf;
-use std::fs::{File, canonicalize};
+use std::fs::{File};
 use std::collections::{HashMap};
 use std::time::{SystemTime};
 
@@ -195,8 +195,41 @@ impl FileEncoder {
 					//TODO: Test if this is possible to decode (empty String?!)
 					None => return Ok(String::from("").encode_directly()),
 					Some(link_path) => {
-						let symlink_real = canonicalize(link_path)?;
-						return Ok(symlink_real.to_string_lossy().encode_directly());
+						// let symlink_real = canonicalize(link_path)?; //TODO: Remove if not needed
+						let mut chunk = Vec::new();
+
+						let (mut encoded_link_path, compression_flag) = self.compress_buffer(link_path.to_string_lossy().encode_directly())?; //TODO: check if path is too long (size > chunk_size)
+
+						let crc32 = Self::calculate_crc32(&encoded_link_path);
+						let signature = self.calculate_signature(&encoded_link_path);
+
+						let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);
+						
+						chunk_header.set_chunk_size(encoded_link_path.len() as u64); 
+						chunk_header.set_crc32(crc32);
+						chunk_header.set_signature(signature);
+						if compression_flag {
+							chunk_header.set_compression_flag()
+						}
+
+						chunk.append(&mut chunk_header.encode_directly());
+						match &self.encryption_key {
+							Some(encryption_key) => {
+								let encryption_algorithm = match &self.encryption_header {
+									Some(header) => header.algorithm(),
+									None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+								};
+								let mut encrypted_data = Encryption::encrypt_message(
+									encryption_key,
+									&encoded_link_path,
+									chunk_header.chunk_number(),
+									encryption_algorithm)?;
+								chunk.append(&mut encrypted_data);
+							},
+							None => chunk.append(&mut encoded_link_path)
+						}
+						self.current_chunk_number += 1;
+						return Ok(chunk);
 					}
 				}
 			},
