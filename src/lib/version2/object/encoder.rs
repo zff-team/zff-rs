@@ -108,7 +108,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			signature_key: signature_key,
 			main_header: main_header,
 			compression_header: obj_header.compression_header(),
-			encryption_header: obj_header.encryption_header(),
+			encryption_header: obj_header.encryption_header().map(ToOwned::to_owned),
 			has_hash_signatures: obj_header.has_hash_signatures(),
 			acquisition_start: 0,
 			acquisition_end: 0,
@@ -393,7 +393,8 @@ impl LogicalObjectEncoder {
 	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 	    	None => None
 	    };
-		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), obj_header.encryption_header(), current_chunk_number, symlink_real_path, header_encryption)?);
+	    let encryption_header = obj_header.encryption_header().map(ToOwned::to_owned);
+		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption)?);
 		
 		Ok(Self {
 			obj_number: obj_header.object_number(),
@@ -408,7 +409,7 @@ impl LogicalObjectEncoder {
 			signature_key_bytes: signature_key_bytes,
 			main_header: main_header,
 			compression_header: obj_header.compression_header(),
-			encryption_header: obj_header.encryption_header(),
+			encryption_header: encryption_header,
 			current_chunk_number: current_chunk_number,
 			symlink_real_paths: symlink_real_paths,
 			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL),
