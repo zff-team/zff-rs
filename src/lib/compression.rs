@@ -1,3 +1,12 @@
+// - STD
+use std::io::Read;
+use std::borrow::Borrow;
+
+// - internal
+use crate::{
+	Result,
+};
+
 // - external
 use serde::{Serialize};
 
@@ -23,4 +32,26 @@ impl From<&str> for CompressionAlgorithm {
 			"none" | _ => CompressionAlgorithm::None,
 		}
 	}
+}
+
+// returns decompressed bytes.
+pub fn decompress_buffer<C>(buffer: &[u8], compression_algorithm: C) -> Result<Vec<u8>>
+where
+	C: Borrow<CompressionAlgorithm>,
+{
+	match compression_algorithm.borrow() {
+    	CompressionAlgorithm::None => return Ok(buffer.to_vec()),
+    	CompressionAlgorithm::Zstd => {
+    		let mut decompressed_buffer = Vec::new();
+			let mut decoder = zstd::stream::read::Decoder::new(buffer)?;
+			decoder.read_to_end(&mut decompressed_buffer)?;
+			return Ok(decompressed_buffer);
+    	},
+    	CompressionAlgorithm::Lz4 => {
+    		let mut decompressed_buffer = Vec::new();
+			let mut decompressor = lz4_flex::frame::FrameDecoder::new(buffer);
+			decompressor.read_to_end(&mut decompressed_buffer)?;
+			return Ok(decompressed_buffer);
+    	}
+    }
 }
