@@ -97,6 +97,8 @@ pub enum ZffErrorKind {
 	UnimplementedFileType,
 	/// Error will be returned, if no files left in vector.
 	NoFilesLeft,
+	/// Error for Seek.
+	Seek,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -139,6 +141,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::NotAvailableForFileType => "NotAvailableForFileType",
 			ZffErrorKind::UnimplementedFileType => "UnimplementedFileType",
 			ZffErrorKind::NoFilesLeft => "NoFilesLeft",
+			ZffErrorKind::Seek => "Seek",
 		};
 	write!(f, "{}", err_msg)
 	}
