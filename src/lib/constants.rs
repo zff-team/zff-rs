@@ -58,8 +58,8 @@ pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &'static str = "The segment 
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &'static str = "Unseekable position (position is negative).";
 
-pub(crate) const ERROR_IO_ZFFREADER_MISSING_OBJECT: &'static str = "Missing object for active object number in zffreader. This is an application bug.";
-pub(crate) const ERROR_IO_ZFFREADER_MISSING_FILE: &'static str = "Missing file for active file number in zffreader. This is an application bug.";
+pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &'static str = "Missing object number in zffreader: ";
+pub(crate) const ERROR_ZFFREADER_MISSING_FILE: &'static str = "Missing file number in zffreader: ";
 
 pub(crate) const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred while trying to rewrite the main header to the output file. The written data length specified is not correctly listed in the header.";
 
