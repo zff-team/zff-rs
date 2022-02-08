@@ -15,6 +15,7 @@ use crate::{
 	header::{ObjectHeader},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 	File,
+	EncryptionAlgorithm,
 };
 
 pub enum Object {
@@ -23,6 +24,26 @@ pub enum Object {
 }
 
 impl Object {
+
+	pub fn encryption_algorithm(&self) -> Option<&EncryptionAlgorithm> {
+		match self {
+			Object::Physical(obj) => Some(obj.header().encryption_header()?.algorithm()),
+			Object::Logical(obj) => Some(obj.header().encryption_header()?.algorithm()),
+		}
+	}
+	pub fn encryption_key(&self) -> Option<&Vec<u8>> {
+		match self {
+			Object::Physical(obj) => obj.encryption_key.as_ref(),
+			Object::Logical(obj) => obj.encryption_key.as_ref(),
+		}
+	}
+	pub fn header(&self) -> &ObjectHeader {
+		match self {
+			Object::Physical(obj) => obj.header(),
+			Object::Logical(obj) => obj.header(),
+		}
+	}
+
 	pub fn position(&self) -> u64 {
 		match self {
 			Object::Physical(obj) => obj.position(),
@@ -41,15 +62,17 @@ impl Object {
 pub struct PhysicalObjectInformation {
 	header: ObjectHeader,
 	footer: ObjectFooterPhysical,
+	encryption_key: Option<Vec<u8>>,
 	position: u64,
 }
 
 impl PhysicalObjectInformation {
-	pub fn new(header: ObjectHeader, footer: ObjectFooterPhysical) -> Self {
+	pub fn new(header: ObjectHeader, footer: ObjectFooterPhysical, encryption_key: Option<Vec<u8>>) -> Self {
 		Self {
 			header: header,
 			footer: footer,
 			position: 0,
+			encryption_key: encryption_key
 		}
 	}
 
@@ -73,17 +96,19 @@ impl PhysicalObjectInformation {
 pub struct LogicalObjectInformation {
 	header: ObjectHeader,
 	footer: ObjectFooterLogical,
+	encryption_key: Option<Vec<u8>>,
 	files: HashMap<u64, File>, // <File number, file>
 	active_file_number: u64,
 }
 
 impl LogicalObjectInformation {
-	pub fn new(header: ObjectHeader, footer: ObjectFooterLogical) -> Self {
+	pub fn new(header: ObjectHeader, footer: ObjectFooterLogical, encryption_key: Option<Vec<u8>>) -> Self {
 		Self {
 			header: header,
 			footer: footer,
 			files: HashMap::new(),
 			active_file_number: 0,
+			encryption_key: encryption_key,
 		}
 	}
 
