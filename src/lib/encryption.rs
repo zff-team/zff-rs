@@ -17,12 +17,11 @@ use aes_gcm_siv::{
 };
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
-use serde::{Serialize};
 
 /// Defines all encryption algorithms (for use in data and header encryption), which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub enum EncryptionAlgorithm {
 	/// AES (128-Bit) in Galois/Counter Mode operation with misuse resistance in the event of the reuse of a cryptographic nonce.\
 	/// Encoded with value 0.
@@ -35,7 +34,7 @@ pub enum EncryptionAlgorithm {
 /// Defines all KDF schemes, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub enum KDFScheme {
 	/// KDF scheme PBKDF2-SHA256, with encoding value 0.
 	PBKDF2SHA256 = 0,
@@ -44,7 +43,7 @@ pub enum KDFScheme {
 /// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub enum PBEScheme {
 	/// AES128-CBC encryption scheme used in pbe with the encoding value 0.
 	AES128CBC = 0,

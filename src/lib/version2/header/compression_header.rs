@@ -16,12 +16,9 @@ use crate::{
 	ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM,
 };
 
-// - external
-use serde::{Serialize};
-
 /// Header for the data compression parameters.\
 /// This header is part of the main header.
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub struct CompressionHeader {
 	version: u8,
 	algorithm: CompressionAlgorithm,

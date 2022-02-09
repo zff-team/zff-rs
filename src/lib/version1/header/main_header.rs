@@ -26,7 +26,6 @@ use crate::version1::{
 };
 
 // - external
-use serde::ser::{Serialize, Serializer, SerializeStruct};
 use byteorder::{ReadBytesExt, BigEndian};
 
 /// The main header is the first Header, which can be found at the beginning of the first segment.\
@@ -383,27 +382,4 @@ impl HeaderCoding for MainHeader {
 			length_of_data);
 		Ok(main_header)
 	}
-}
-
-impl Serialize for MainHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("MainHeader", 10)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("encryption", &self.encryption_header)?;
-        state.serialize_field("compression", &self.compression_header)?;
-
-        state.serialize_field("description", &self.description_header)?;
-        state.serialize_field("hashing", &self.hash_header)?;
-        state.serialize_field("chunk_size", &(1<<&self.chunk_size))?;
-
-        state.serialize_field("signature_flag", &(self.signature_flag != 0))?;
-        state.serialize_field("segment_size", &self.segment_size.to_string())?;
-        state.serialize_field("unique_identifier", &self.unique_identifier)?;
-
-        state.serialize_field("length_of_data", &self.length_of_data.to_string())?;
-        state.end()
-    }
 }

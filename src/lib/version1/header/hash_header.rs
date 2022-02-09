@@ -14,10 +14,6 @@ use crate::version1::{
 	ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE,
 };
 
-// - external
-use serde::ser::{Serialize, Serializer, SerializeStruct};
-use hex::ToHex;
-
 /// Header for the hash values of the dumped data stream.
 /// This header is part of the main header and contains 0 or more hash values of the dumped data.\
 #[derive(Debug,Clone)]
@@ -86,18 +82,6 @@ impl HeaderCoding for HashHeader {
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
 		Ok(HashHeader::new(header_version, hashes))
 	}
-}
-
-impl Serialize for HashHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("HashHeader", 3)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("hash_value", &self.hashes)?;
-        state.end()
-    }
 }
 
 /// This is a part of the [HashHeader](struct.HashHeader.html).
@@ -178,17 +162,4 @@ impl HeaderCoding for HashValue {
 	 let hash = Vec::<u8>::decode_directly(&mut cursor)?;
 		Ok(HashValue::new(structure_version, hash_type, hash))
 	}
-}
-
-impl Serialize for HashValue {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("HashValue", 3)?;
-        state.serialize_field("structure_version", &self.version)?;
-        state.serialize_field("hash_type", &self.hash_type)?;
-        state.serialize_field("hash", &self.hash.encode_hex::<String>())?;
-        state.end()
-    }
 }

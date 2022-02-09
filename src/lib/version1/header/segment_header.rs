@@ -11,12 +11,9 @@ use crate::version1::{
 	HEADER_IDENTIFIER_SEGMENT_HEADER,
 };
 
-// - external
-use serde::{Serialize};
-
 /// The segment header contains all informations about the specific segment. Each segment has his own segment header.\
 /// This header is **not** a part of the main header.\
-#[derive(Debug,Clone,Eq,Serialize)]
+#[derive(Debug,Clone,Eq)]
 pub struct SegmentHeader {
 	version: u8,
 	unique_identifier: i64,

@@ -15,8 +15,6 @@ use crate::{
 };
 
 // - external
-use serde::ser::{Serialize, Serializer, SerializeStruct};
-use hex::ToHex;
 use ed25519_dalek::{SIGNATURE_LENGTH};
 
 /// Header for the hash values of the dumped data stream.
@@ -87,18 +85,6 @@ impl HeaderCoding for HashHeader {
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
 		Ok(HashHeader::new(header_version, hashes))
 	}
-}
-
-impl Serialize for HashHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("HashHeader", 3)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("hash_value", &self.hashes)?;
-        state.end()
-    }
 }
 
 /// This is a part of the [HashHeader](struct.HashHeader.html).
@@ -203,17 +189,4 @@ impl HeaderCoding for HashValue {
 
 		Ok(HashValue::new(structure_version, hash_type, hash, ed25519_signature))
 	}
-}
-
-impl Serialize for HashValue {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("HashValue", 3)?;
-        state.serialize_field("structure_version", &self.version)?;
-        state.serialize_field("hash_type", &self.hash_type)?;
-        state.serialize_field("hash", &self.hash.encode_hex::<String>())?;
-        state.end()
-    }
 }

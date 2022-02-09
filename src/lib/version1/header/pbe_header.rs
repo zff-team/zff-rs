@@ -21,11 +21,6 @@ use crate::version1::{
 	ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME,
 };
 
-// - external
-use serde::Serialize;
-use serde::ser::{Serialize as SerializeTrait, Serializer, SerializeStruct};
-use hex::ToHex;
-
 /// The pbe header contains all informations for the encryption of the encryption key.\
 /// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
 /// encrypted with an user password.\
@@ -121,27 +116,10 @@ impl HeaderCoding for PBEHeader {
 	}
 }
 
-impl SerializeTrait for PBEHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("PBEHeader", 10)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("kdf_scheme", &self.kdf_scheme)?;
-        state.serialize_field("encryption_scheme", &self.encryption_scheme)?;
-        match &self.kdf_parameters {
-        	KDFParameters::PBKDF2SHA256Parameters(params) => state.serialize_field("pbkdf2sha256_parameters", &params)?,
-        }
-        state.serialize_field("pbencryption_nonce", &self.pbencryption_nonce.encode_hex::<String>())?;
-        state.end()
-    }
-}
-
 /// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub enum KDFParameters {
 	/// stores a struct [PBKDF2SHA256Parameters].
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
@@ -228,16 +206,4 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 		Ok(parameters)
 	}
 
-}
-
-impl SerializeTrait for PBKDF2SHA256Parameters {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("PBKDF2SHA256Parameters", 10)?;
-        state.serialize_field("iterations", &self.iterations)?;
-        state.serialize_field("salt", &self.salt.encode_hex::<String>())?;
-        state.end()
-    }
 }

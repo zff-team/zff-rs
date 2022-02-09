@@ -10,12 +10,6 @@ use crate::{
 	HEADER_IDENTIFIER_MAIN_HEADER,
 };
 
-
-
-// - external
-use serde::ser::{Serialize, Serializer, SerializeStruct};
-
-
 /// The main header is the first Header, which can be found at the beginning of the first segment.\
 /// This header contains a lot of other headers (e.g. compression header, ...) and start information.
 #[derive(Debug,Clone)]
@@ -96,19 +90,4 @@ impl HeaderCoding for MainHeader {
 
 		Ok(MainHeader::new(version, chunk_size, segment_size, unique_identifier))
 	}
-}
-
-impl Serialize for MainHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("MainHeader", 10)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("chunk_size", &(1<<&self.chunk_size))?;
-        state.serialize_field("segment_size", &self.segment_size.to_string())?;
-        state.serialize_field("unique_identifier", &self.unique_identifier)?;
-
-        state.end()
-    }
 }

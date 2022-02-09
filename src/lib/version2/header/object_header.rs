@@ -2,9 +2,6 @@
 use std::io::{Cursor, Read};
 use std::fmt;
 
-// - external
-use serde::{Serialize};
-
 // - internal
 use crate::{
 	Result,
@@ -225,7 +222,7 @@ impl ObjectHeader {
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]
-#[derive(Debug,Clone,Eq,PartialEq,Hash,Serialize)]
+#[derive(Debug,Clone,Eq,PartialEq,Hash)]
 pub enum ObjectType {
 	Physical = 1,
 	Logical = 2,

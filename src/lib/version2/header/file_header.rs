@@ -25,13 +25,10 @@ use crate::version2::header::{
 	EncryptionHeader,
 };
 
-// - external
-use serde::{Serialize};
-
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq,Hash,Serialize)]
+#[derive(Debug,Clone,Eq,PartialEq,Hash)]
 pub enum FileType {
 	File = 1,
 	Directory = 2,

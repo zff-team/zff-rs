@@ -24,10 +24,6 @@ use crate::version2::header::{
 	KDFParameters,
 };
 
-// - external
-use serde::ser::{Serialize, Serializer, SerializeStruct};
-use hex::ToHex;
-
 /// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
 /// The encryption header is the only optional header part of the main header
 /// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
@@ -144,19 +140,4 @@ impl HeaderCoding for EncryptionHeader {
 		cursor.read_exact(&mut nonce)?;
 		Ok(EncryptionHeader::new(header_version, pbe_header, encryption_algorithm, encryption_key, nonce))
 	}
-}
-
-impl Serialize for EncryptionHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("EncryptionHeader", 10)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("pbe_header", &self.pbe_header)?;
-        state.serialize_field("algorithm", &self.algorithm)?;
-        state.serialize_field("encrypted_encryption_key", &self.encrypted_encryption_key.encode_hex::<String>())?;
-        state.serialize_field("encryption_header_nonce", &self.encrypted_header_nonce.encode_hex::<String>())?;
-        state.end()
-    }
 }

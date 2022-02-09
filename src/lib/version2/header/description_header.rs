@@ -17,10 +17,6 @@ use crate::{
 	ENCODING_KEY_NOTES,
 };
 
-// - external
-use serde::ser::{Serialize, Serializer, SerializeStruct};
-
-
 /// The description header contains all data,
 /// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
 /// This header is part of the main header.
@@ -185,19 +181,4 @@ impl HeaderCoding for DescriptionHeader {
 
 		Ok(description_header)
 	}
-}
-
-impl Serialize for DescriptionHeader {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("DescriptionHeader", 10)?;
-        state.serialize_field("header_version", &self.version)?;
-        state.serialize_field("case_number", &self.case_number)?;
-        state.serialize_field("evidence_number", &self.evidence_number)?;
-        state.serialize_field("examiner_name", &self.examiner_name)?;
-        state.serialize_field("notes", &self.notes)?;
-        state.end()
-    }
 }

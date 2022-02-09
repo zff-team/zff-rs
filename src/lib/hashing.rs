@@ -6,12 +6,11 @@ use blake2::{Blake2b, Digest};
 use sha2::{Sha256, Sha512};
 use sha3::{Sha3_256};
 use digest::DynDigest;
-use serde::{Serialize};
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq,Hash,Serialize)]
+#[derive(Debug,Clone,Eq,PartialEq,Hash)]
 pub enum HashType {
 	/// The Blake2b-512 algorithm with the encoding value 0.
 	Blake2b512 = 0,
@@ -48,7 +47,7 @@ impl fmt::Display for HashType {
 }
 
 /// structure contains serveral methods to handle hashing
-#[derive(Debug,Clone,Serialize)]
+#[derive(Debug,Clone)]
 pub struct Hash;
 
 impl Hash {
