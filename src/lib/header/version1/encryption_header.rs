@@ -2,17 +2,16 @@
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	EncryptionAlgorithm,
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
-	header::PBEHeader,
+	header::version1::{PBEHeader, KDFParameters},
 	ZffError,
 	KDFScheme,
 	PBEScheme,
-	header::KDFParameters,
 	Encryption,
 };
 

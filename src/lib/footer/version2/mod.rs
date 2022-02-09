@@ -1,8 +1,8 @@
 // - modules
-mod file_footer;
-mod object_footer;
-mod segment_footer;
-mod main_footer;
+pub(crate) mod file_footer;
+pub(crate) mod object_footer;
+pub(crate) mod segment_footer;
+pub(crate) mod main_footer;
 
 // - re-exports
 pub use file_footer::*;

@@ -25,7 +25,7 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL,
 };
 
-use crate::version2::{
+use crate::{
 	header::{ObjectHeader, MainHeader, ChunkHeader, HashValue, HashHeader, FileHeader, CompressionHeader, EncryptionHeader},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 	FileEncoder, 

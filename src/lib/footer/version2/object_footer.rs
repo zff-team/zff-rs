@@ -17,7 +17,7 @@ use crate::{
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
 	ERROR_HEADER_DECODER_HEADER_LENGTH,
 };
-use crate::version2::header::{
+use crate::header::{
 	HashHeader,
 };
 

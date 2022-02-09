@@ -2,21 +2,19 @@
 use std::io::Cursor;
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
 	ZffErrorKind,
 };
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
 	ENCODING_KEY_CASE_NUMBER,
 	ENCODING_KEY_EVIDENCE_NUMBER,
 	ENCODING_KEY_EXAMINER_NAME,
 	ENCODING_KEY_NOTES,
-	ENCODING_KEY_ACQISITION_START,
-	ENCODING_KEY_ACQISITION_END,
 };
 
 /// The description header contains all data,
@@ -44,8 +42,6 @@ pub struct DescriptionHeader {
 	evidence_number: Option<String>,
 	examiner_name: Option<String>,
 	notes: Option<String>,
-	acquisition_start: u64,
-	acquisition_end: u64,
 }
 
 impl DescriptionHeader {
@@ -58,8 +54,6 @@ impl DescriptionHeader {
 			evidence_number: None,
 			examiner_name: None,
 			notes: None,
-			acquisition_start: 0,
-			acquisition_end: 0,
 		}
 	}
 
@@ -81,16 +75,6 @@ impl DescriptionHeader {
 	/// sets some notes as ```String```.
 	pub fn set_notes<V: Into<String>>(&mut self, value: V) {
 		self.notes = Some(value.into())
-	}
-
-	/// sets the acquisition start, as u64 unix timestamp.
-	pub fn set_acquisition_start(&mut self, value: u64) {
-		self.acquisition_start = value
-	}
-
-	/// sets the acquisition end, as u64 unix timestamp.
-	pub fn set_acquisition_end(&mut self, value: u64) {
-		self.acquisition_end = value
 	}
 
 	/// returns the case number, if available.
@@ -124,16 +108,6 @@ impl DescriptionHeader {
 			None => None
 		}
 	}
-
-	/// returns the acquisition start as u64 unix timestamp - initialized with zero.
-	pub fn acquisition_start(&self) -> u64 {
-		self.acquisition_start.clone()
-	}
-
-	/// returns the acquisition end as u64 unix timestamp - initialized with zero.
-	pub fn acquisition_end(&self) -> u64 {
-		self.acquisition_end.clone()
-	}
 }
 
 impl HeaderCoding for DescriptionHeader {
@@ -163,8 +137,6 @@ impl HeaderCoding for DescriptionHeader {
 		if let Some(notes) = self.notes() {
 			vec.append(&mut notes.encode_for_key(ENCODING_KEY_NOTES));
 		};
-		vec.append(&mut self.acquisition_start.encode_for_key(ENCODING_KEY_ACQISITION_START));
-		vec.append(&mut self.acquisition_end.encode_for_key(ENCODING_KEY_ACQISITION_END));
 		vec
 	}
 
@@ -206,8 +178,6 @@ impl HeaderCoding for DescriptionHeader {
 				_ => return Err(e)
 			},
 		}
-		description_header.set_acquisition_start(u64::decode_for_key(&mut cursor, ENCODING_KEY_ACQISITION_START)?);
-		description_header.set_acquisition_end(u64::decode_for_key(&mut cursor, ENCODING_KEY_ACQISITION_END)?);
 
 		Ok(description_header)
 	}

@@ -6,7 +6,7 @@ use std::collections::{HashMap};
 use std::time::{SystemTime};
 
 // - internal
-use crate::version2::{
+use crate::{
 	header::{FileHeader, FileType, MainHeader, ChunkHeader, HashValue, HashHeader, CompressionHeader, EncryptionHeader},
 	footer::{FileFooter},
 };

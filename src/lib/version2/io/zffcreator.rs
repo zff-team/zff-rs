@@ -25,10 +25,12 @@ use crate::{
 	METADATA_EXT_KEY_UID,
 	METADATA_EXT_KEY_GID,
 };
-use crate::version2::{
-	object::{PhysicalObjectEncoder, LogicalObjectEncoder},
+use crate::{
 	header::{ObjectHeader, MainHeader, SegmentHeader, FileType, FileHeader, ChunkHeader},
 	footer::{SegmentFooter, MainFooter},
+	version2::{
+		object::{PhysicalObjectEncoder, LogicalObjectEncoder},
+	}
 };
 
 // - external

@@ -3,7 +3,7 @@ use std::cmp::{PartialEq};
 use std::io::{Cursor};
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,

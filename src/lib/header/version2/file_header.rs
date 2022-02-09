@@ -21,7 +21,7 @@ use crate::{
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER
 };
 
-use crate::version2::header::{
+use crate::header::{
 	EncryptionHeader,
 };
 

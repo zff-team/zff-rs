@@ -2,12 +2,12 @@
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	ValueEncoder,
 	ValueDecoder,
 	HeaderCoding,
-	header::{
+	header::version1::{
 		CompressionHeader,
 		DescriptionHeader,
 		EncryptionHeader,

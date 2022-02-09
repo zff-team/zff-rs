@@ -2,6 +2,8 @@
 pub mod version1;
 pub mod version2;
 pub mod constants;
+pub mod header;
+pub mod footer;
 mod hashing;
 mod compression;
 mod encryption;

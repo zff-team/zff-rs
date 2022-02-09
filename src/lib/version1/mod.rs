@@ -133,8 +133,6 @@
 mod constants;
 mod io;
 mod segment;
-pub mod header;
-pub mod footer;
 
 // - re-exports
 pub use constants::*;
@@ -145,16 +143,8 @@ pub(crate) use super::{
 	ZffError,
 	ZffErrorKind,
 	HeaderCoding,
-	ValueDecoder,
-	ValueEncoder,
-	Hash,
 	HashType,
 	CompressionAlgorithm,
 	EncryptionAlgorithm,
 	Encryption,
-	PBEScheme,
-	KDFScheme,
-	Signature,
-	file_extension_next_value,
-	buffer_chunk,
 };

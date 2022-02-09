@@ -7,11 +7,10 @@ use std::fs::{File, remove_file};
 
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
-	header::{MainHeader,SegmentHeader,ChunkHeader, HashValue, HashHeader},
-	footer::{SegmentFooter},
-	Segment,
+	header::version1::{MainHeader,SegmentHeader,ChunkHeader, HashValue, HashHeader},
+	footer::version1::{SegmentFooter},
 	CompressionAlgorithm,
 	HeaderCoding,
 	ZffError,
@@ -23,6 +22,10 @@ use crate::version1::{
 	Signature,
 	file_extension_next_value,
 	buffer_chunk,
+};
+
+use crate::version1::{
+	Segment,
 };
 
 use crate::version1::{

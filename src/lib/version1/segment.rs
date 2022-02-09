@@ -4,11 +4,11 @@ use std::io::{Read,Seek,SeekFrom};
 use std::collections::HashMap;
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	HeaderCoding,
-	header::{SegmentHeader, ChunkHeader},
-	footer::{SegmentFooter},
+	header::version1::{SegmentHeader, ChunkHeader},
+	footer::version1::{SegmentFooter},
 	ZffError,
 	ZffErrorKind,
 	CompressionAlgorithm,

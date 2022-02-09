@@ -21,7 +21,7 @@ use crate::{
 	SignatureFlag,
 };
 
-use crate::version2::header::{
+use crate::header::{
 	EncryptionHeader,
 	CompressionHeader,
 	DescriptionHeader,

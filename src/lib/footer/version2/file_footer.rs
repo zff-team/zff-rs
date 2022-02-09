@@ -9,7 +9,7 @@ use crate::{
 	ValueEncoder,
 	FOOTER_IDENTIFIER_FILE_FOOTER,
 };
-use crate::version2::header::{
+use crate::header::{
 	HashHeader,
 };
 

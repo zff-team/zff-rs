@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::{Cursor};
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	HeaderCoding,
 	ValueEncoder,
