@@ -1,4 +1,5 @@
 // - STD
+use std::os::unix::fs::MetadataExt;
 use std::io::{Read, Cursor, Seek, SeekFrom, copy as io_copy};
 use std::fs::{File};
 use std::path::{PathBuf};
@@ -349,6 +350,7 @@ pub struct LogicalObjectEncoder {
 	encryption_header: Option<EncryptionHeader>,
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
+	hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
 	object_footer: ObjectFooterLogical,
 	header_encryption: bool,
 }
@@ -366,8 +368,9 @@ impl LogicalObjectEncoder {
 		signature_key_bytes: Option<Vec<u8>>,
 		main_header: MainHeader,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
+		hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
 		current_chunk_number: u64,
-		header_encryption: bool) -> Result<LogicalObjectEncoder> {		
+		header_encryption: bool,) -> Result<LogicalObjectEncoder> {		
 
 		let encoded_header = if header_encryption {
 			if let Some(ref encryption_key) = encryption_key {
@@ -380,9 +383,9 @@ impl LogicalObjectEncoder {
 		};
 
 		let mut files = files;
-		let (current_file, current_file_header) = match files.pop() {
+		let (current_file, mut current_file_header) = match files.pop() {
 			Some((file, header)) => (file, header),
-			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, ""))
+			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
 		let current_file_number = current_file_header.file_number();
 		let symlink_real_path = match symlink_real_paths.get(&current_file_number) {
@@ -393,8 +396,25 @@ impl LogicalObjectEncoder {
 	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 	    	None => None
 	    };
+	    let metadata = current_file.metadata()?;
 	    let encryption_header = obj_header.encryption_header().map(ToOwned::to_owned);
-		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption)?);
+
+	    let mut hardlink_filenumber = None;
+	    match hardlink_map.get(&metadata.dev()) {
+	    	Some(inner_map) => {
+	    		match inner_map.get(&metadata.ino()) {
+	    			Some(fno) => {
+	    				if *fno != current_file_header.file_number() {
+	    					current_file_header.transform_to_hardlink();
+	    					hardlink_filenumber = Some(*fno);
+	    				};
+	    			},
+	    			None => (),
+	    		}
+	    	},
+	    	None => (),
+	    }
+		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber)?);
 		
 		Ok(Self {
 			obj_number: obj_header.object_number(),
@@ -412,6 +432,7 @@ impl LogicalObjectEncoder {
 			encryption_header: encryption_header,
 			current_chunk_number: current_chunk_number,
 			symlink_real_paths: symlink_real_paths,
+			hardlink_map: hardlink_map,
 			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL),
 			header_encryption: header_encryption,
 		})
@@ -459,6 +480,7 @@ impl LogicalObjectEncoder {
 					},
 					Err(e) => match e.get_kind() {
 						ZffErrorKind::ReadEOF => (),
+						ZffErrorKind::NotAvailableForFileType => (),
 						_ => return Err(e)
 					}
 				};
@@ -467,7 +489,7 @@ impl LogicalObjectEncoder {
 				let file_footer = file_encoder.get_encoded_footer();
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
-				let (current_file, current_file_header) = match self.files.pop() {
+				let (current_file, mut current_file_header) = match self.files.pop() {
 					Some((file, header)) => (file, header),
 					None => {
 						self.current_file_encoder = None;
@@ -483,10 +505,30 @@ impl LogicalObjectEncoder {
 			    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 			    	None => None
 			    };
-				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption)?);
+
+			    let metadata = current_file.metadata()?;
+
+			    // transform the next header to hardlink, if the file is one.
+			    let mut hardlink_filenumber = None;
+			    match self.hardlink_map.get(&metadata.dev()) {
+			    	Some(inner_map) => {
+			    		match inner_map.get(&metadata.ino()) {
+			    			Some(fno) => {
+			    				if *fno != current_file_header.file_number() {
+			    					current_file_header.transform_to_hardlink();
+			    					hardlink_filenumber = Some(*fno);
+			    				};
+			    			},
+			    			None => (),
+			    		}
+			    	},
+			    	None => (),
+			    }
+			    self.current_file_header_read = false;
+				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber)?);
 				return Ok(file_footer);
 			},
-			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "")),
+			None => return Err(ZffError::new(ZffErrorKind::ReadEOF, "")),
 		}	
 	}
 
