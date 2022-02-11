@@ -33,6 +33,7 @@ pub enum FileType {
 	File = 1,
 	Directory = 2,
 	Symlink = 3,
+	Hardlink = 4,
 }
 
 impl fmt::Display for FileType {
@@ -41,6 +42,7 @@ impl fmt::Display for FileType {
 			FileType::File => "File",
 			FileType::Directory => "Directory",
 			FileType::Symlink => "Symlink",
+			FileType::Hardlink => "Hardlink",
 		};
 		write!(f, "{}", msg)
 	}
@@ -111,6 +113,9 @@ impl FileHeader {
 	}
 	pub fn metadata_ext(&self) -> &HashMap<String, String> {
 		&self.metadata_ext
+	}
+	pub fn transform_to_hardlink(&mut self) {
+		self.file_type = FileType::Hardlink
 	}
 
 	/// encodes the file header to a ```Vec<u8>```. The encryption flag will be set to 2.
