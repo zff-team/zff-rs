@@ -1,6 +1,6 @@
 # Zff
 
-[![dependency status][deps-image]][deps-link]
+> At the moment version 2 of Zff is under development. The final specification (see wiki) and development is now almost complete.
 
 Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image or physical memory.
 The focus of zff is on speed, security and modularity in concert with forensic requirements.The modular design promises high maintainability and scalability.
