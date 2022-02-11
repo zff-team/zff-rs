@@ -1,7 +1,7 @@
 // - STD
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 use std::path::{PathBuf};
-use std::fs::{File, OpenOptions, remove_file, read_link, read_dir};
+use std::fs::{File, Metadata, OpenOptions, remove_file, read_link, read_dir};
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -154,7 +154,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 		//write the object header
 		if !self.written_object_header {
 			self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
-			segment_footer.add_object_header_offset(self.object_encoder.obj_number(), written_bytes);
+			segment_footer.add_object_header_offset(self.object_encoder.obj_number(), seek_value + written_bytes);
 			written_bytes += output.write(&self.object_encoder.get_encoded_header())? as u64;
 			self.written_object_header = true;
 		};
@@ -182,7 +182,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 						} else {
 							//write the appropriate object footer and break the loop
 							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
-							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), written_bytes);
+							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), seek_value + written_bytes);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
 							break;
 						}
@@ -227,12 +227,12 @@ impl ZffCreatorLogical {
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
 		header_encryption: bool,
-		output_filenpath: O,
-		description_notes: Option<String>,) -> Result<ZffCreatorLogical> {
+		description_notes: Option<String>,
+		output_filenpath: O)-> Result<ZffCreatorLogical> {
 		let initial_chunk_number = 1;
 		let mut current_file_number = 1;
 		let mut parent_file_number = 0;
-
+		let mut hardlink_map = HashMap::new();
 		let mut unaccessable_files = Vec::new();
 		let mut directories_to_traversal = VecDeque::new(); //<directory_path, parent_file_number>
 		let mut files = Vec::new();
@@ -247,91 +247,30 @@ impl ZffCreatorLogical {
 				},
 			};
 
+			// - files in root tree
 			let metadata = file.metadata()?;
 			if metadata.file_type().is_dir() {
 				directories_to_traversal.push_back((path, parent_file_number)); // parent_file_number of root directory is always 0.
-			} else if metadata.file_type().is_file() {
-				let filetype = FileType::File;
-				let filename = path.to_string_lossy();
-				let atime = match metadata.accessed() {
-					Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
-					Err(_) => 0
+			} else {
+				if metadata.file_type().is_symlink() {
+					match read_link(&path) {
+						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
+						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
+					};
+				}
+				let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
+					Ok(file_header) => file_header,
+					Err(_) => continue, //TODO: check if there should be a real error handling possible.
 				};
-				let mtime = match metadata.modified() {
-					Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				#[cfg(target_family = "windows")]
-				let ctime = match metadata.modified() {
-					Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				#[cfg(target_family = "unix")]
-				let ctime = metadata.ctime() as u64;
-
-				let btime = match metadata.created() {
-					Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				let metadata_ext = get_metadata_ext(&file)?;
-				let file_header = FileHeader::new(
-					DEFAULT_HEADER_VERSION_FILE_HEADER,
-					current_file_number,
-					filetype,
-					filename,
-					parent_file_number,
-					atime,
-					mtime,
-					ctime,
-					btime,
-					metadata_ext);
-				current_file_number += 1;
-				files.push((file, file_header));
-			} else if metadata.file_type().is_symlink() {
-				let filetype = FileType::Symlink;
-				let filename = path.to_string_lossy();
-				let atime = match metadata.accessed() {
-					Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				let mtime = match metadata.modified() {
-					Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				#[cfg(target_family = "windows")]
-				let ctime = match metadata.modified() {
-					Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				#[cfg(target_family = "unix")]
-				let ctime = metadata.ctime() as u64;
-
-				let btime = match metadata.created() {
-					Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
-					Err(_) => 0
-				};
-				let metadata_ext = get_metadata_ext(&file)?;
-				let file_header = FileHeader::new(
-					DEFAULT_HEADER_VERSION_FILE_HEADER,
-					current_file_number,
-					filetype,
-					filename,
-					parent_file_number,
-					atime,
-					mtime,
-					ctime,
-					btime,
-					metadata_ext);
-				match read_link(path) {
-					Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
-					Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::new()),
-				};
+				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 				current_file_number += 1;
 				files.push((file, file_header));
 			}
 		}
 
+		// - files in subfolders
 		loop {
+			// - folder
 			let mut inner_dir_elements = VecDeque::new();
 			let (current_dir, dir_parent_file_number) = match directories_to_traversal.pop_front() {
 				Some((current_dir, dir_parent_file_number)) => (current_dir, dir_parent_file_number),
@@ -355,45 +294,16 @@ impl ZffCreatorLogical {
 			};
 
 			parent_file_number = current_file_number;
-
 			let metadata = file.metadata()?;
-			let filetype = FileType::Directory;
-			let filename = current_dir.to_string_lossy();
-			let atime = match metadata.accessed() {
-				Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
-				Err(_) => 0
+			let file_header = match get_file_header(&metadata, &file, &current_dir, current_file_number, dir_parent_file_number) {
+				Ok(file_header) => file_header,
+				Err(_) => continue, //TODO: check if there should be a real error handling possible.
 			};
-			let mtime = match metadata.modified() {
-				Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
-				Err(_) => 0
-			};
-			#[cfg(target_family = "windows")]
-			let ctime = match metadata.modified() {
-				Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
-				Err(_) => 0
-			};
-			#[cfg(target_family = "unix")]
-			let ctime = metadata.ctime() as u64;
-
-			let btime = match metadata.created() {
-				Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
-				Err(_) => 0
-			};
-			let metadata_ext = get_metadata_ext(&file)?;
-			let file_header = FileHeader::new(
-				DEFAULT_HEADER_VERSION_FILE_HEADER,
-				current_file_number,
-				filetype,
-				filename,
-				dir_parent_file_number,
-				atime,
-				mtime,
-				ctime,
-				btime,
-				metadata_ext);
+			add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 			current_file_number += 1;
 			files.push((file, file_header));
 
+			// files in current folder
 			for inner_element in element_iterator {
 				let inner_element = match inner_element {
 					Ok(element) => element,
@@ -412,84 +322,17 @@ impl ZffCreatorLogical {
 				let metadata = file.metadata()?;
 				if metadata.file_type().is_dir() {
 					inner_dir_elements.push_back((inner_element.path(), parent_file_number));
-				} else if metadata.file_type().is_file() {
-					let filetype = FileType::File;
-					let path = inner_element.path().clone();
-					let filename = path.to_string_lossy();
-					let atime = match metadata.accessed() {
-						Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					let mtime = match metadata.modified() {
-						Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					#[cfg(target_family = "windows")]
-					let ctime = match metadata.modified() {
-						Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					#[cfg(target_family = "unix")]
-					let ctime = metadata.ctime() as u64;
-
-					let btime = match metadata.created() {
-						Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					let metadata_ext = get_metadata_ext(&file)?;
-					let file_header = FileHeader::new(
-						DEFAULT_HEADER_VERSION_FILE_HEADER,
-						current_file_number,
-						filetype,
-						filename,
-						parent_file_number,
-						atime,
-						mtime,
-						ctime,
-						btime,
-						metadata_ext);
-					current_file_number += 1;
-					files.push((file, file_header));
-				} else if metadata.file_type().is_symlink() {
-					let filetype = FileType::Symlink;
-					let path = inner_element.path().clone();
-					let filename = path.to_string_lossy();
-					let atime = match metadata.accessed() {
-						Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					let mtime = match metadata.modified() {
-						Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					#[cfg(target_family = "windows")]
-					let ctime = match metadata.modified() {
-						Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					#[cfg(target_family = "unix")]
-					let ctime = metadata.ctime() as u64;
-
-					let btime = match metadata.created() {
-						Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
-						Err(_) => 0
-					};
-					let metadata_ext = get_metadata_ext(&file)?;
-					let file_header = FileHeader::new(
-						DEFAULT_HEADER_VERSION_FILE_HEADER,
-						current_file_number,
-						filetype,
-						filename,
-						parent_file_number,
-						atime,
-						mtime,
-						ctime,
-						btime,
-						metadata_ext);
+				} else {
 					match read_link(inner_element.path()) {
 						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
+					let path = inner_element.path().clone();
+					let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
+						Ok(file_header) => file_header,
+						Err(_) => continue, //TODO: check if there should be a real error handling possible.
+					};
+					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 					current_file_number += 1;
 					files.push((file, file_header));
 				}
@@ -508,6 +351,7 @@ impl ZffCreatorLogical {
 			signature_key_bytes,
 			main_header,
 			symlink_real_paths,
+			hardlink_map,
 			initial_chunk_number,
 			header_encryption)?; // 1 is always the initial chunk number.
 		Ok(Self {
@@ -603,7 +447,7 @@ impl ZffCreatorLogical {
 		//write the object header
 		if !self.written_object_header {
 			self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
-			segment_footer.add_object_header_offset(self.object_encoder.obj_number(), written_bytes);
+			segment_footer.add_object_header_offset(self.object_encoder.obj_number(), written_bytes+seek_value);
 			written_bytes += output.write(&self.object_encoder.get_encoded_header())? as u64;
 			self.written_object_header = true;
 		};
@@ -631,7 +475,7 @@ impl ZffCreatorLogical {
 						} else {
 							//write the appropriate object footer and break the loop
 							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
-							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), written_bytes);
+							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), written_bytes+seek_value);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
 							break;
 						}
@@ -677,4 +521,97 @@ fn get_metadata_ext(file: &File) -> Result<HashMap<String, String>> {
 	metadata_ext.insert(METADATA_EXT_KEY_GID.into(), metadata.gid().to_string());
 
 	Ok(metadata_ext)
+}
+
+fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
+	let mut timestamps = HashMap::new();
+
+	let atime = match metadata.accessed() {
+		Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
+		Err(_) => 0
+	};
+	let mtime = match metadata.modified() {
+		Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
+		Err(_) => 0
+	};
+	#[cfg(target_family = "windows")]
+	let ctime = match metadata.modified() {
+		Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
+		Err(_) => 0
+	};
+	#[cfg(target_family = "unix")]
+	let ctime = metadata.ctime() as u64;
+
+	let btime = match metadata.created() {
+		Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
+		Err(_) => 0
+	};
+
+	timestamps.insert("atime", atime);
+	timestamps.insert("mtime", mtime);
+	timestamps.insert("ctime", ctime);
+	timestamps.insert("btime", btime);
+
+	timestamps
+}
+
+fn get_file_header(metadata: &Metadata, file: &File, path: &PathBuf, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+	let filetype = if metadata.file_type().is_dir() {
+		FileType::Directory
+	} else if metadata.file_type().is_file() {
+		FileType::File
+	} else if metadata.file_type().is_symlink() {
+		FileType::Symlink
+	} else {
+		return Err(ZffError::new(ZffErrorKind::UnknownFileType, ""));
+	};
+
+	let filename = match path.file_name() {
+		Some(filename) => filename.to_string_lossy(),
+		None => path.to_string_lossy(),
+	};
+	let timestamps = get_time_from_metadata(&metadata);
+	let atime = timestamps.get("atime").unwrap();
+	let mtime = timestamps.get("mtime").unwrap();
+	let ctime = timestamps.get("ctime").unwrap();
+	let btime = timestamps.get("btime").unwrap();
+
+	let metadata_ext = get_metadata_ext(&file)?;
+
+	let file_header = FileHeader::new(
+					DEFAULT_HEADER_VERSION_FILE_HEADER,
+					current_file_number,
+					filetype,
+					filename,
+					parent_file_number,
+					*atime,
+					*mtime,
+					*ctime,
+					*btime,
+					metadata_ext);
+	Ok(file_header)
+}
+
+// returns ...
+// ... None, if there is no other hardlink available to this file or if there is another hardlink available to this file, but this is the first of the hardlinked files, you've read.
+// ... Some(filenumber), if there is another hardlink available and already was read.
+#[cfg(target_family = "unix")]
+fn add_to_hardlink_map(hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>, metadata: &Metadata, filenumber: u64) -> Option<u64> {
+	if metadata.nlink() > 1 {
+		match hardlink_map.get_mut(&metadata.dev()) {
+			Some(inner_map) => match inner_map.get_mut(&metadata.ino()) {
+				Some(fno) => return Some(*fno),
+				None => {
+					inner_map.insert(metadata.ino(), filenumber);
+					return None
+				},
+			},
+			None => {
+				hardlink_map.insert(metadata.dev(), HashMap::new());
+				hardlink_map.get_mut(&metadata.dev()).unwrap().insert(metadata.ino(), filenumber);
+				return None;
+			},
+		}
+	}
+	None
 }
