@@ -1,5 +1,7 @@
 // - STD
 use std::io::Cursor;
+use std::io::Read;
+use std::collections::HashMap;
 
 // - internal
 use crate::{
@@ -7,6 +9,7 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
+	ZffError,
 	ZffErrorKind,
 };
 use crate::{
@@ -15,6 +18,7 @@ use crate::{
 	ENCODING_KEY_EVIDENCE_NUMBER,
 	ENCODING_KEY_EXAMINER_NAME,
 	ENCODING_KEY_NOTES,
+	constants::*,
 };
 
 /// The description header contains all data,
@@ -38,10 +42,7 @@ use crate::{
 #[derive(Debug,Clone)]
 pub struct DescriptionHeader {
 	version: u8,
-	case_number: Option<String>,
-	evidence_number: Option<String>,
-	examiner_name: Option<String>,
-	notes: Option<String>,
+	identifier_map: HashMap<String, String>
 }
 
 impl DescriptionHeader {
@@ -50,36 +51,40 @@ impl DescriptionHeader {
 	pub fn new_empty(version: u8) -> DescriptionHeader {
 		Self {
 			version: version,
-			case_number: None,
-			evidence_number: None,
-			examiner_name: None,
-			notes: None,
+			identifier_map: HashMap::new(),
+		}
+	}
+
+	pub fn new(version: u8, identifier_map: HashMap<String, String>) -> DescriptionHeader {
+		Self {
+			version: version,
+			identifier_map: identifier_map,
 		}
 	}
 
 	/// sets the case number as ```String```.
 	pub fn set_case_number<V: Into<String>>(&mut self, value: V) {
-		self.case_number = Some(value.into())
+		self.identifier_map.insert(String::from(ENCODING_KEY_CASE_NUMBER), value.into());
 	}
 
 	/// sets the evidence number as ```String```.
 	pub fn set_evidence_number<V: Into<String>>(&mut self, value: V) {
-		self.evidence_number = Some(value.into())
+		self.identifier_map.insert(String::from(ENCODING_KEY_EVIDENCE_NUMBER), value.into());
 	}
 
 	/// sets the examiner name as ```String```.
 	pub fn set_examiner_name<V: Into<String>>(&mut self, value: V) {
-		self.examiner_name = Some(value.into())
+		self.identifier_map.insert(String::from(ENCODING_KEY_EXAMINER_NAME), value.into());
 	}
 
 	/// sets some notes as ```String```.
 	pub fn set_notes<V: Into<String>>(&mut self, value: V) {
-		self.notes = Some(value.into())
+		self.identifier_map.insert(String::from(ENCODING_KEY_NOTES), value.into());
 	}
 
 	/// returns the case number, if available.
 	pub fn case_number(&self) -> Option<&str> {
-		match &self.case_number {
+		match &self.identifier_map.get(ENCODING_KEY_CASE_NUMBER) {
 			Some(x) => Some(x),
 			None => None
 		}
@@ -87,7 +92,7 @@ impl DescriptionHeader {
 
 	/// returns the evidence number, if available.
 	pub fn evidence_number(&self) -> Option<&str> {
-		match &self.evidence_number {
+		match &self.identifier_map.get(ENCODING_KEY_EVIDENCE_NUMBER) {
 			Some(x) => Some(x),
 			None => None
 		}
@@ -95,7 +100,7 @@ impl DescriptionHeader {
 
 	/// returns the examiner name, if available.
 	pub fn examiner_name(&self) -> Option<&str> {
-		match &self.examiner_name {
+		match &self.identifier_map.get(ENCODING_KEY_EXAMINER_NAME) {
 			Some(x) => Some(x),
 			None => None
 		}
@@ -103,7 +108,7 @@ impl DescriptionHeader {
 
 	/// returns the notes, if some available.
 	pub fn notes(&self) -> Option<&str> {
-		match &self.notes {
+		match &self.identifier_map.get(ENCODING_KEY_NOTES) {
 			Some(x) => Some(x),
 			None => None
 		}
@@ -123,61 +128,27 @@ impl HeaderCoding for DescriptionHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
 		vec.push(self.version);
-		if let Some(case_number) = self.case_number() {
-			vec.append(&mut case_number.encode_for_key(ENCODING_KEY_CASE_NUMBER));
-		};
-		if let Some(evidence_number) = self.evidence_number() {
-			vec.append(&mut evidence_number.encode_for_key(ENCODING_KEY_EVIDENCE_NUMBER));
-		};
-		if let Some(examiner_name) = self.examiner_name() {
-			vec.append(&mut examiner_name.encode_for_key(ENCODING_KEY_EXAMINER_NAME));
-		};
-		if let Some(notes) = self.notes() {
-			vec.append(&mut notes.encode_for_key(ENCODING_KEY_NOTES));
-		};
+		vec.append(&mut self.identifier_map.encode_directly());
 		vec
+	}
+
+	/// decodes the header directly.
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
+		if !Self::check_identifier(data) {
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+		}
+		let header_length = Self::decode_header_length(data)? as usize;
+		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		data.read_exact(&mut header_content)?;
+		return Self::decode_content(header_content);
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<DescriptionHeader> {
 		let mut cursor = Cursor::new(data);
 		let version = u8::decode_directly(&mut cursor)?;
-		
-		let mut description_header = DescriptionHeader::new_empty(version);
-
-		let position = cursor.position();
-		match String::decode_for_key(&mut cursor, ENCODING_KEY_CASE_NUMBER) {
-			Ok(value) => description_header.set_case_number(value),
-			Err(e) => match e.get_kind() {
-				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
-				_ => return Err(e)
-			},
-		}
-		let position = cursor.position();
-		match String::decode_for_key(&mut cursor, ENCODING_KEY_EVIDENCE_NUMBER) {
-			Ok(value) => description_header.set_evidence_number(value),
-			Err(e) => match e.get_kind() {
-				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
-				_ => return Err(e)
-			},
-		}
-		let position = cursor.position();
-		match String::decode_for_key(&mut cursor, ENCODING_KEY_EXAMINER_NAME) {
-			Ok(value) => description_header.set_examiner_name(value),
-			Err(e) => match e.get_kind() {
-				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
-				_ => return Err(e)
-			},
-		}
-		let position = cursor.position();
-		match String::decode_for_key(&mut cursor, ENCODING_KEY_NOTES) {
-			Ok(value) => description_header.set_notes(value),
-			Err(e) => match e.get_kind() {
-				ZffErrorKind::HeaderDecoderKeyNotOnPosition => cursor.set_position(position),
-				_ => return Err(e)
-			},
-		}
+		let identifier_map = HashMap::<String, String>::decode_directly(&mut cursor)?;
+		let description_header = DescriptionHeader::new(version, identifier_map);
 
 		Ok(description_header)
 	}
