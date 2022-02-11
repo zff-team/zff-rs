@@ -148,6 +148,7 @@ impl ObjectHeader {
 		vec.append(&mut self.compression_header.encode_directly());
 		vec.push(self.signature_flag.clone() as u8);
 		vec.append(&mut self.description_header.encode_directly());
+		vec.push(self.object_type.clone() as u8);
 		vec
 	}
 
@@ -207,8 +208,8 @@ impl ObjectHeader {
 		};
 		let description_header = DescriptionHeader::decode_directly(inner_content)?;
 		let object_type = match u8::decode_directly(inner_content)? {
-			0 => ObjectType::Physical,
-			1 => ObjectType::Logical,
+			1 => ObjectType::Physical,
+			2 => ObjectType::Logical,
 			value @ _ => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("object_type value: {value}"))), //TODO: move to constants...
 		};
 		let inner_content = (
@@ -251,15 +252,15 @@ impl HeaderCoding for ObjectHeader {
 	/// encodes the (header) value/object directly (= without key).
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
+		let mut encoded_object_number = self.object_number.encode_directly();
 		let mut encoded_header = self.encode_header();
 		let identifier = Self::identifier();
-		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
+		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len() + encoded_object_number.len() + 1) as u64; //4 bytes identifier + 8 bytes for length + length of encoded content + len of object number + length of version
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
 		vec.push(self.version);
-		vec.append(&mut self.object_number.encode_directly());
+		vec.append(&mut encoded_object_number);
 		vec.append(&mut encoded_header);
-
 		vec
 	}
 
@@ -298,6 +299,7 @@ impl HeaderCoding for ObjectHeader {
 			signature_flag,
 			description_header,
 			object_type) = Self::decode_inner_content(&mut cursor)?;
+
 		let object_header = Self::new(
 			version,
 			object_number,
