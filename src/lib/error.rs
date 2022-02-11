@@ -55,6 +55,10 @@ pub enum ZffErrorKind {
 	InterruptedOutputStream,
 	/// Custom errors.
 	Custom,
+	/// Error will be returned, if the given filetype is unknown.
+	UnknownFileType,
+	/// Error will be returned, if the file number for the hard link is missing
+	MissingHardlinkFilenumber,
 	/// Error will be returned, if the data could not be decoded to the given header.
 	HeaderDecodeError,
 	/// Error will be returned, if the read identifier mismatch with the header identifier.
@@ -107,12 +111,14 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::IoError(_) => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
 			ZffErrorKind::Custom => "Custom",
+			ZffErrorKind::MissingHardlinkFilenumber => "MissingHardlinkFilenumber",
 			ZffErrorKind::FileExtensionParserError => "FileExtensionParserError",
 			ZffErrorKind::EncryptionError => "EncryptionError",
 			ZffErrorKind::Ed25519Error => "Ed25519Error",
 			ZffErrorKind::Base64DecodingError => "Base64DecodingError",
 			ZffErrorKind::Lz4Error => "Lz4Error",
 			ZffErrorKind::FromUtf8Error => "FromUtf8Error",
+			ZffErrorKind::UnknownFileType => "UnknownFileType",
 			ZffErrorKind::WrongSignatureKeyLength => "WrongSignatureKeyLength",
 			ZffErrorKind::MissingEncryptionHeader => "MissingEncryptionHeader",
 			ZffErrorKind::MissingEncryptionKey => "MissingEncryptionKey",
