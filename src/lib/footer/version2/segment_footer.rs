@@ -87,7 +87,7 @@ impl SegmentFooter {
 
 	/// adds an offset to the object footer offset table of the SegmentFooter.
 	pub fn add_object_footer_offset(&mut self, object_number: u64, offset: u64) {
-		self.object_header_offsets.insert(object_number, offset);
+		self.object_footer_offsets.insert(object_number, offset);
 	}
 
 	/// returns a reference of the object footer offset table

@@ -243,6 +243,8 @@ impl HeaderCoding for ObjectFooterLogical {
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.push(self.version);
+		vec.append(&mut self.file_header_segment_numbers.encode_directly());
+		vec.append(&mut self.file_header_offsets.encode_directly());
 		vec.append(&mut self.file_footer_segment_numbers.encode_directly());
 		vec.append(&mut self.file_footer_offsets.encode_directly());
 		vec
