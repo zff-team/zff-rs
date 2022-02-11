@@ -48,7 +48,6 @@ pub(crate) const ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM: &'static str = "unk
 pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER: &'static str = "The read identifier does not match the header identifier.";
 pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED: &'static str = "The main header is encrypted.";
 pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED: &'static str = "The main header is not encrypted.";
-pub(crate) const ERROR_MISSING_SEGMENT: &'static str = "A segment is missing.";
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_HEADER: &'static str = "A segment with a valid zff main header is missing.";
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &'static str = "A segment with a valid zff main footer is missing.";
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &'static str = "Missing object header in segment with following object number: ";
@@ -60,8 +59,6 @@ pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &'static str = "Unseek
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &'static str = "Missing object number in zffreader: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_FILE: &'static str = "Missing file number in zffreader: ";
-
-pub(crate) const ERROR_REWRITE_MAIN_HEADER: &'static str = "An error occurred while trying to rewrite the main header to the output file. The written data length specified is not correctly listed in the header.";
 
 // Default values
 /// the default chunk size as 2^x. This value is 15, so the default chunk size is 2^15 = 32768 bytes.
@@ -88,7 +85,7 @@ pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
 /// current header version for the [ChunkHeader](crate::header::ChunkHeader).
 pub const DEFAULT_HEADER_VERSION_CHUNK_HEADER: u8 = 1;
 /// current header version for the [HashValue](crate::header::HashValue) structure.
-pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 2;
 /// current header version for the [HashHeader](crate::header::HashHeader).
 pub const DEFAULT_HEADER_VERSION_HASH_HEADER: u8 = 1;
 /// current header version for the [SegmentHeader](crate::header::SegmentHeader).
@@ -99,7 +96,6 @@ pub const DEFAULT_HEADER_VERSION_COMPRESSION_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 2;
 pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 1;
-pub const DEFAULT_HEADER_VERSION_HASH_VALUE: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
 pub(crate) const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 1;
