@@ -1,6 +1,3 @@
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
-
 // - modules
 mod constants;
 mod io;

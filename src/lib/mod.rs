@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 // - modules
 pub mod version1;
 pub mod version2;
