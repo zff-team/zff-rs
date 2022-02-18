@@ -76,10 +76,10 @@ impl HeaderCoding for MainFooter {
 		vec.append(&mut self.number_of_segments.encode_directly());
 		vec.append(&mut self.object_header.encode_directly());
 		vec.append(&mut self.object_footer.encode_directly());
-		vec.append(&mut self.footer_offset.encode_directly());
 		if let Some(description_notes) = &self.description_notes {
 			vec.append(&mut description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
 		};
+		vec.append(&mut self.footer_offset.encode_directly());
 		vec
 	}
 
