@@ -1,6 +1,13 @@
 # Zff
 
-> At the moment version 2 of Zff is under development. The final specification (see wiki) and development is now almost complete.
+> At the moment Zff version 2 is under development. The format has been overhauled for this purpose to add many new features and improvements. The associated tool suite (zffacquire, etc.) are currently also adapted to the new format, or are then accordingly downward compatible. The following new features will be added with version 2:
+> - The format is built to be streamable (e.g. you could stream a backup directly via HTTP).
+> - Zff can contain backups within a container (e.g. if multiple disks belong to one device, so they stay together).
+> - An existing Zff container can be easily extended with additional backups.
+> - You can add logical backups (complete folder structures are kept). Metadata such as the MdItems of MacOS can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
+> - Individual backups can be encrypted with different encryption keys or passwords.
+> - There is now a finer choice of signing (e.g. you can sign only the hash values, which allows a much faster backup, but also brings restrictions in the manipulation analysis).
+
 
 Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image or physical memory.
 The focus of zff is on speed, security and modularity in concert with forensic requirements.The modular design promises high maintainability and scalability.
