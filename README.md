@@ -1,12 +1,12 @@
 # Zff
 
 > At the moment Zff version 2 is under development. The format has been overhauled for this purpose to add many new features and improvements. The associated tool suite (zffacquire, etc.) are currently also adapted to the new format, or are then accordingly downward compatible. The following new features will be added with version 2:
-> - The format is built to be streamable (e.g. you could stream a backup directly via HTTP).
-> - Zff can contain backups within a container (e.g. if multiple disks belong to one device, so they stay together).
-> - An existing Zff container can be easily extended with additional backups.
-> - You can add logical backups (complete folder structures are kept). Metadata such as the MdItems of MacOS can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
-> - Individual backups can be encrypted with different encryption keys or passwords.
-> - There is now a finer choice of signing (e.g. you can sign only the hash values, which allows a much faster backup, but also brings restrictions in the manipulation analysis).
+> - The format is built to be streamable (e.g. you could stream a zff dump/container directly via HTTP).
+> - Zff can contain dumps within a container (e.g. if multiple disks belong to one device, so they stay together).
+> - An existing Zff container can be easily extended with additional dumps.
+> - You can add logical dumps/backups (complete folder structures are kept). Metadata such as the MdItems of MacOS can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
+> - Individual dumps/container can be encrypted with different encryption keys or passwords.
+> - There is now a finer choice of signing (e.g. you can sign only the hash values, which allows a much faster dump, but also brings restrictions in the manipulation analysis).
 
 
 Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image or physical memory.
@@ -84,12 +84,12 @@ See the [wiki pages](https://github.com/ph0llux/zff/wiki/Zff-layout) for further
 
 This repository contains several tools to work with zff images (or acquire them). All tools and libraries are written in pure Rust.
 
-| Name | Type | Description | Crates.io | MRSV |
+| Name | Type | Description | Crates.io | MRSV
 |------|:----:|:------------|:---------:|:----:|
-| [zff](https://github.com/ph0llux/zff/tree/master/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.56.1 |
-| [zffacquire](https://github.com/ph0llux/zff/tree/master/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.56.1 |
-| [zffmetareader](https://github.com/ph0llux/zff/tree/master/zffmetareader) | binary | Tool to get meta information about a zff image | [![crates.io][zffmetareader-crates-io-image]][zffmetareader-crates-io-link] | 1.56.1 |
-| [zffmount](https://github.com/ph0llux/zff/tree/master/zffmount) | binary | Tool to mount a zff image with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.56.1 |
+| [zff](https://github.com/ph0llux/zff/tree/master/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.58.1 |
+| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.58.1 |
+| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.58.1 |
+| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.56.1 |
 
 [//]: # (badges)
 
@@ -102,8 +102,8 @@ This repository contains several tools to work with zff images (or acquire them)
 [zffacquire-crates-io-image]: https://img.shields.io/crates/v/zffacquire.svg
 [zffacquire-crates-io-link]: https://crates.io/crates/zffacquire
 
-[zffmetareader-crates-io-image]: https://img.shields.io/crates/v/zffmetareader.svg
-[zffmetareader-crates-io-link]: https://crates.io/crates/zffmetareader
+[zffanalyze-crates-io-image]: https://img.shields.io/crates/v/zffanalyze.svg
+[zffanalyze-crates-io-link]: https://crates.io/crates/zffanalyze
 
 [zffmount-crates-io-image]: https://img.shields.io/crates/v/zffmount.svg
 [zffmount-crates-io-link]: https://crates.io/crates/zffmount
