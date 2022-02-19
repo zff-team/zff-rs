@@ -239,16 +239,18 @@ impl ZffCreatorLogical {
 		let mut symlink_real_paths = HashMap::new();
 
 		for path in input_files {
+			let metadata = std::fs::symlink_metadata(&path)?;
 			let file = match File::open(&path) {
 				Ok(f) => f,
 				Err(_) => {
-					unaccessable_files.push(path.to_string_lossy().to_string());
+					if !metadata.is_symlink() {
+						unaccessable_files.push(path.to_string_lossy().to_string());
+					};
 					continue;
 				},
 			};
 
 			// - files in root tree
-			let metadata = file.metadata()?;
 			if metadata.file_type().is_dir() {
 				directories_to_traversal.push_back((path, parent_file_number)); // parent_file_number of root directory is always 0.
 			} else {
