@@ -237,9 +237,16 @@ impl ZffCreatorLogical {
 		let mut directories_to_traversal = VecDeque::new(); //<directory_path, parent_file_number>
 		let mut files = Vec::new();
 		let mut symlink_real_paths = HashMap::new();
+		let mut directory_childs = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
 
 		for path in input_files {
-			let metadata = std::fs::symlink_metadata(&path)?;
+			let metadata = match std::fs::symlink_metadata(&path) {
+				Ok(metadata) => metadata,
+				Err(_) => {
+					unaccessable_files.push(path.to_string_lossy().to_string());
+					continue;
+				},
+			};
 			let file = match File::open(&path) {
 				Ok(f) => f,
 				Err(_) => {
@@ -287,6 +294,13 @@ impl ZffCreatorLogical {
 				}
 			};
 
+			let metadata = match std::fs::symlink_metadata(&current_dir) {
+				Ok(metadata) => metadata,
+				Err(_) => {
+					unaccessable_files.push(current_dir.to_string_lossy().to_string());
+					continue;
+				},
+			};
 			let file = match File::open(&current_dir) {
 				Ok(f) => f,
 				Err(_) => {
@@ -296,7 +310,6 @@ impl ZffCreatorLogical {
 			};
 
 			parent_file_number = current_file_number;
-			let metadata = file.metadata()?;
 			let file_header = match get_file_header(&metadata, &file, &current_dir, current_file_number, dir_parent_file_number) {
 				Ok(file_header) => file_header,
 				Err(_) => continue, //TODO: check if there should be a real error handling possible.
@@ -314,6 +327,14 @@ impl ZffCreatorLogical {
 						continue;
 					}
 				};
+
+				let metadata = match std::fs::symlink_metadata(&inner_element.path()) {
+					Ok(metadata) => metadata,
+					Err(_) => {
+						unaccessable_files.push(current_dir.to_string_lossy().to_string());
+						continue;
+					},
+				};
 				let file = match File::open(&inner_element.path()) {
 					Ok(f) => f,
 					Err(_) => {
@@ -321,8 +342,13 @@ impl ZffCreatorLogical {
 						continue;
 					},
 				};
-				let metadata = file.metadata()?;
-				if metadata.file_type().is_dir() {
+				if let Some(files_vec) = directory_childs.get_mut(&parent_file_number) {
+					files_vec.push(current_file_number);
+				} else {
+					directory_childs.insert(parent_file_number, Vec::new());
+					directory_childs.get_mut(&parent_file_number).unwrap().push(current_file_number);
+				};
+ 				if metadata.file_type().is_dir() {
 					inner_dir_elements.push_back((inner_element.path(), parent_file_number));
 				} else {
 					match read_link(inner_element.path()) {
@@ -354,6 +380,7 @@ impl ZffCreatorLogical {
 			main_header,
 			symlink_real_paths,
 			hardlink_map,
+			directory_childs,
 			initial_chunk_number,
 			header_encryption)?; // 1 is always the initial chunk number.
 		Ok(Self {

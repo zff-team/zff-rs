@@ -351,6 +351,7 @@ pub struct LogicalObjectEncoder {
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
 	hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
+	directory_childs: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
 	header_encryption: bool,
 }
@@ -369,6 +370,7 @@ impl LogicalObjectEncoder {
 		main_header: MainHeader,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
 		hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
+		directory_childs: HashMap<u64, Vec<u64>>,
 		current_chunk_number: u64,
 		header_encryption: bool,) -> Result<LogicalObjectEncoder> {		
 
@@ -392,6 +394,10 @@ impl LogicalObjectEncoder {
 			Some(p) => Some(p.clone()),
 			None => None
 		};
+		let current_directory_childs = match directory_childs.get(&current_file_number) {
+			Some(childs) => childs.to_owned(),
+			None => Vec::new()
+		};
 		let signature_key = match &signature_key_bytes {
 	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 	    	None => None
@@ -414,14 +420,14 @@ impl LogicalObjectEncoder {
 	    	},
 	    	None => (),
 	    }
-		let file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber)?);
+		let first_file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber, current_directory_childs)?);
 		
 		Ok(Self {
 			obj_number: obj_header.object_number(),
 			//encoded_header_remaining_bytes: encoded_header.len(),
 			encoded_header: encoded_header,
 			files: files,
-			current_file_encoder: file_encoder,
+			current_file_encoder: first_file_encoder,
 			current_file_header_read: false,
 			current_file_number: current_file_number,
 			hash_types: hash_types,
@@ -433,6 +439,7 @@ impl LogicalObjectEncoder {
 			current_chunk_number: current_chunk_number,
 			symlink_real_paths: symlink_real_paths,
 			hardlink_map: hardlink_map,
+			directory_childs: directory_childs,
 			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL),
 			header_encryption: header_encryption,
 		})
@@ -501,6 +508,10 @@ impl LogicalObjectEncoder {
 					Some(p) => Some(p.clone()),
 					None => None
 				};
+				let current_directory_childs = match self.directory_childs.get(&self.current_file_number) {
+					Some(childs) => childs.to_owned(),
+					None => Vec::new(),
+				};
 				let signature_key = match &self.signature_key_bytes {
 			    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
 			    	None => None
@@ -525,7 +536,7 @@ impl LogicalObjectEncoder {
 			    	None => (),
 			    }
 			    self.current_file_header_read = false;
-				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber)?);
+				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber, current_directory_childs)?);
 				return Ok(file_footer);
 			},
 			None => return Err(ZffError::new(ZffErrorKind::ReadEOF, "")),
