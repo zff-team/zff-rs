@@ -201,134 +201,69 @@ impl FileEncoder {
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
 		let crc32;
 		let signature;
-		let mut chunk_data;
-		let compression_flag;
 		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);
+		let chunk_size = self.main_header.chunk_size();
 
-		match self.file_type {
+		let buf = match self.file_type {
 			FileType::Directory => {
-				let chunk_size = self.main_header.chunk_size();
 				let mut cursor = Cursor::new(&self.encoded_directory_childs);
 				cursor.set_position(self.read_bytes_underlying_data);
 				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
 				self.read_bytes_underlying_data += read_bytes;
-				if buf.len() == 0 {
-					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
-				};
-				self.update_hasher(&buf);
+				buf
 
-				crc32 = Self::calculate_crc32(&buf);
-				signature = self.calculate_signature(&buf);
-
-				let (compressed_data, inner_compression_flag) = self.compress_buffer(buf)?;
-				compression_flag = inner_compression_flag;
-
-				match &self.encryption_key {
-					Some(encryption_key) => {
-						let encryption_algorithm = match &self.encryption_header {
-							Some(header) => header.algorithm(),
-							None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-						};
-						let encrypted_data = Encryption::encrypt_message(
-							encryption_key,
-							&compressed_data,
-							chunk_header.chunk_number(),
-							encryption_algorithm)?;
-						chunk_data = encrypted_data;
-					},
-					None => chunk_data = compressed_data
-				}
 			},
 			FileType::Symlink => {
-				match &self.symlink_real_path {
-					//TODO: Test if this is possible to decode (empty String?!)
-					None => return Ok(String::from("").encode_directly()),
-					Some(link_path) => {
-						// let symlink_real = canonicalize(link_path)?; //TODO: Remove if not needed
-
-						crc32 = Self::calculate_crc32(&link_path.to_string_lossy().encode_directly());
-						signature = self.calculate_signature(&link_path.to_string_lossy().encode_directly());
-
-						let (compressed_data, inner_compression_flag) = self.compress_buffer(link_path.to_string_lossy().encode_directly())?; //TODO: check if path is too long (size > chunk_size)
-						compression_flag = inner_compression_flag;
-
-						match &self.encryption_key {
-							Some(encryption_key) => {
-								let encryption_algorithm = match &self.encryption_header {
-									Some(header) => header.algorithm(),
-									None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-								};
-								let encrypted_data = Encryption::encrypt_message(
-									encryption_key,
-									&compressed_data,
-									chunk_header.chunk_number(),
-									encryption_algorithm)?;
-								chunk_data = encrypted_data;
-							},
-							None => chunk_data = compressed_data
-						}
-					}
-				}
+				let mut cursor = match &self.symlink_real_path {
+					None => Cursor::new(String::from("").encode_directly()),
+					Some(link_path) => Cursor::new(link_path.to_string_lossy().encode_directly())
+				};
+				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+				self.read_bytes_underlying_data += read_bytes;
+				buf
 			},
 			FileType::Hardlink => {
-				let filenumber = match self.hard_link_filenumber {
-					Some(filenumber) => filenumber,
+				let mut cursor = match self.hard_link_filenumber {
+					Some(filenumber) => Cursor::new(filenumber.encode_directly()),
 					None => return Err(ZffError::new(ZffErrorKind::MissingHardlinkFilenumber, "")),
 				};
-				crc32 = Self::calculate_crc32(&filenumber.encode_directly());
-				signature = self.calculate_signature(&filenumber.encode_directly());
-
-				let (compressed_data, inner_compression_flag) = self.compress_buffer(filenumber.encode_directly())?;
-				compression_flag = inner_compression_flag;
-
-				match &self.encryption_key {
-					Some(encryption_key) => {
-						let encryption_algorithm = match &self.encryption_header {
-							Some(header) => header.algorithm(),
-							None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-						};
-						let encrypted_data = Encryption::encrypt_message(
-							encryption_key,
-							&compressed_data,
-							chunk_header.chunk_number(),
-							encryption_algorithm)?;
-						chunk_data = encrypted_data;
-					},
-					None => chunk_data = compressed_data
-				}
-			}
+				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+				self.read_bytes_underlying_data += read_bytes;
+				buf
+			},
 			FileType::File => {
-				let chunk_size = self.main_header.chunk_size();
 				let (buf, read_bytes) = buffer_chunk(&mut self.underlying_file, chunk_size as usize)?;
 				self.read_bytes_underlying_data += read_bytes;
-				if buf.len() == 0 {
-					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+				buf
+			},
+		};
+		if buf.len() == 0 {
+			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+		};
+		self.update_hasher(&buf);
+
+		crc32 = Self::calculate_crc32(&buf);
+		signature = self.calculate_signature(&buf);
+
+		let (compressed_data, inner_compression_flag) = self.compress_buffer(buf)?;
+		let compression_flag = inner_compression_flag;
+
+		let mut chunk_data = match &self.encryption_key {
+			Some(encryption_key) => {
+				let encryption_algorithm = match &self.encryption_header {
+					Some(header) => header.algorithm(),
+					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
-				self.update_hasher(&buf);
+				let encrypted_data = Encryption::encrypt_message(
+					encryption_key,
+					&compressed_data,
+					chunk_header.chunk_number(),
+					encryption_algorithm)?;
+				encrypted_data
+			},
+			None => compressed_data
+		};
 
-				crc32 = Self::calculate_crc32(&buf);
-				signature = self.calculate_signature(&buf);
-
-				let (compressed_data, inner_compression_flag) = self.compress_buffer(buf)?;
-				compression_flag = inner_compression_flag;
-
-				match &self.encryption_key {
-					Some(encryption_key) => {
-						let encryption_algorithm = match &self.encryption_header {
-							Some(header) => header.algorithm(),
-							None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-						};
-						let encrypted_data = Encryption::encrypt_message(
-							encryption_key,
-							&compressed_data,
-							chunk_header.chunk_number(),
-							encryption_algorithm)?;
-						chunk_data = encrypted_data;
-					},
-					None => chunk_data = compressed_data
-				}
-			}
-		}
 		let mut chunk = Vec::new();
 
 	    // prepare chunk header:
