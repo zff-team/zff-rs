@@ -218,6 +218,11 @@ impl<R: Read + Seek> ZffReader<R> {
 		objects
 	}
 
+	/// returns a reference of the appropriate object with the given object number
+	pub fn object(&self, object_number: u64) -> Option<&Object> {
+		self.objects.get(&object_number)
+	}
+
 	pub fn set_reader_physical_object(&mut self, object_number: u64) -> Result<u64> {
 		match self.objects.get(&object_number) {
 			Some(Object::Physical(object)) => {

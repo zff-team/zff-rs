@@ -57,6 +57,20 @@ impl Object {
 			Object::Logical(obj) => obj.set_position(position)
 		}
 	}
+
+	pub fn acquisition_start(&self) -> u64 {
+		match self {
+			Object::Physical(obj) => obj.footer.acquisition_start(),
+			Object::Logical(obj) => obj.footer.acquisition_start(),
+		}
+	}
+
+	pub fn acquisition_end(&self) -> u64 {
+		match self {
+			Object::Physical(obj) => obj.footer.acquisition_end(),
+			Object::Logical(obj) => obj.footer.acquisition_end(),
+		}
+	}
 }
 
 pub struct PhysicalObjectInformation {
