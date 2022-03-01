@@ -185,6 +185,39 @@ impl<R: Read + Seek> ZffReader<R> {
 		})
 	}
 
+	/// returns a list of physical object numbers
+	pub fn physical_object_numbers(&self) -> Vec<u64> {
+		let mut objects = Vec::new();
+		for (object_number, object_information) in &self.objects {
+			match object_information {
+				Object::Physical(_) => objects.push(*object_number),
+				_ => ()
+			};
+		}
+		objects
+	}
+
+	/// returns a list of logical object numbers
+	pub fn logical_object_numbers(&self) -> Vec<u64> {
+		let mut objects = Vec::new();
+		for (object_number, object_information) in &self.objects {
+			match object_information {
+				Object::Logical(_) => objects.push(*object_number),
+				_ => ()
+			};
+		}
+		objects
+	}
+
+	/// returns a list of object numbers (physical + logical objects)
+	pub fn object_numbers(&self) -> Vec<u64> {
+		let mut objects = Vec::new();
+		for (object_number, _) in &self.objects {
+			objects.push(*object_number)
+		}
+		objects
+	}
+
 	pub fn set_reader_physical_object(&mut self, object_number: u64) -> Result<u64> {
 		match self.objects.get(&object_number) {
 			Some(Object::Physical(object)) => {
