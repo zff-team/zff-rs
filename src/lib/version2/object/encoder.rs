@@ -474,6 +474,7 @@ impl LogicalObjectEncoder {
 				// return file header
 				if !self.current_file_header_read {
 					self.current_file_header_read = true;
+					self.object_footer.set_acquisition_start(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
 					self.object_footer.add_file_header_segment_number(self.current_file_number, current_segment_no);
 					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
 					return Ok(file_encoder.get_encoded_header());
@@ -539,7 +540,10 @@ impl LogicalObjectEncoder {
 				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber, current_directory_childs)?);
 				return Ok(file_footer);
 			},
-			None => return Err(ZffError::new(ZffErrorKind::ReadEOF, "")),
+			None => {
+				self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+				return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+			},
 		}	
 	}
 
