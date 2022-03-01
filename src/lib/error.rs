@@ -11,6 +11,7 @@ use aes_gcm_siv::aead::Error as EncryptionError;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
 use lz4_flex::frame::Error as Lz4Error;
+use time::error::ComponentRange as ComponentRangeError;
 
 /// The main error-type of this crate.
 #[derive(Debug)]
@@ -36,6 +37,8 @@ pub enum ZffErrorKind {
 	Ed25519Error,
 	/// contains a base64::DecodeError.
 	Base64DecodingError,
+	/// contains a time::error::ComponentRange.
+	ComponentRangeError,
 	/// If the signature key length is != 64.
 	WrongSignatureKeyLength,
 	/// If an error occures while compressing the input data with the lz4-algorithm.
@@ -116,6 +119,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::EncryptionError => "EncryptionError",
 			ZffErrorKind::Ed25519Error => "Ed25519Error",
 			ZffErrorKind::Base64DecodingError => "Base64DecodingError",
+			ZffErrorKind::ComponentRangeError => "ComponentRangeError",
 			ZffErrorKind::Lz4Error => "Lz4Error",
 			ZffErrorKind::FromUtf8Error => "FromUtf8Error",
 			ZffErrorKind::UnknownFileType => "UnknownFileType",
@@ -293,6 +297,12 @@ impl From<Ed25519Error> for ZffError {
 impl From<Base64DecodingError> for ZffError {
 	fn from(e: Base64DecodingError) -> ZffError {
 		ZffError::new(ZffErrorKind::Base64DecodingError, e.to_string())
+	}
+}
+
+impl From<ComponentRangeError> for ZffError {
+	fn from(e: ComponentRangeError) -> ZffError {
+		ZffError::new(ZffErrorKind::ComponentRangeError, e.to_string())
 	}
 }
 
