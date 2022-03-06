@@ -290,6 +290,11 @@ impl MainHeader {
 		&self.encryption_header
 	}
 
+	/// returns a reference to the inner description header
+	pub fn description_header(&self) -> &DescriptionHeader {
+		&self.description_header
+	}
+
 	/// returns a reference to the inner hash header 
 	pub fn hash_header(&self) -> &HashHeader {
 		&self.hash_header
