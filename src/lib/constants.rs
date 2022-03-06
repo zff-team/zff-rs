@@ -52,6 +52,7 @@ pub(crate) const ERROR_MISSING_SEGMENT_MAIN_HEADER: &'static str = "A segment wi
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &'static str = "A segment with a valid zff main footer is missing.";
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &'static str = "Missing object header in segment with following object number: ";
 pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &'static str = "Missing object footer in segment with following object number: ";
+pub(crate) const ERROR_MISMATCH_ZFF_VERSION: &'static str = "mismatch zff version";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &'static str = "The segment of the chunk was not found.";
 
