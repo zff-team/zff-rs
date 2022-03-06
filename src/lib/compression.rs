@@ -1,6 +1,7 @@
 // - STD
 use std::io::Read;
 use std::borrow::Borrow;
+use std::fmt;
 
 // - internal
 use crate::{
@@ -29,6 +30,17 @@ impl From<&str> for CompressionAlgorithm {
 			"none" | _ => CompressionAlgorithm::None,
 		}
 	}
+}
+
+impl fmt::Display for CompressionAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    	let value = match self {
+    		CompressionAlgorithm::Zstd => "Zstd",
+    		CompressionAlgorithm::Lz4 => "Lz4",
+    		CompressionAlgorithm::None => "None",
+    	};
+        write!(f, "{value}")
+    }
 }
 
 // returns decompressed bytes.
