@@ -18,6 +18,7 @@ use crate::{
 	EncryptionAlgorithm,
 };
 
+#[derive(Debug, Clone)]
 pub enum Object {
 	Physical(PhysicalObjectInformation),
 	Logical(LogicalObjectInformation)
@@ -73,6 +74,7 @@ impl Object {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct PhysicalObjectInformation {
 	header: ObjectHeader,
 	footer: ObjectFooterPhysical,
@@ -107,6 +109,7 @@ impl PhysicalObjectInformation {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct LogicalObjectInformation {
 	header: ObjectHeader,
 	footer: ObjectFooterLogical,
