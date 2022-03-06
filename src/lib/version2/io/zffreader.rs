@@ -24,7 +24,8 @@ use crate::{
 	ERROR_ZFFREADER_MISSING_OBJECT,
 	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
 	ERROR_ZFFREADER_MISSING_FILE,
-	ERROR_ZFFREADER_SEGMENT_NOT_FOUND
+	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
+	ERROR_MISMATCH_ZFF_VERSION
 };
 
 pub struct ZffReader<R: Read + Seek> {
@@ -61,15 +62,24 @@ impl<R: Read + Seek> ZffReader<R> {
 
 			if let None = main_header {
 				match MainHeader::decode_directly(&mut raw_segment) {
-					Ok(mh) => main_header = Some(mh),
+					Ok(mh) => {
+						match mh.version() {
+							2 => main_header = Some(mh),
+							_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
+						}
+						
+					},
 					Err(e) => match e.get_kind() {
 						ZffErrorKind::HeaderDecodeMismatchIdentifier => raw_segment.rewind()?,
 						_ => return Err(e),
 					}
 				}
 			};
-
 			let segment = Segment::new_from_reader(raw_segment)?;
+			match segment.header().version() {
+				2 => (),
+				_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
+			}
 
 			for chunk_number in segment.footer().chunk_offsets().keys() {
 				chunk_map.insert(*chunk_number, segment.header().segment_number());
