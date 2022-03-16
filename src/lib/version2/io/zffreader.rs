@@ -260,8 +260,8 @@ impl<R: Read + Seek> ZffReader<R> {
 		};
 	}
 
-	pub fn file_information(&mut self) -> Result<File> {
-		match self.objects.get_mut(&self.active_object) {
+	pub fn file_information(&self) -> Result<File> {
+		match self.objects.get(&self.active_object) {
 			Some(Object::Logical(object)) => {
 				object.get_active_file()
 			},
