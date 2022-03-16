@@ -238,6 +238,7 @@ impl ZffCreatorLogical {
 		let mut files = Vec::new();
 		let mut symlink_real_paths = HashMap::new();
 		let mut directory_childs = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
+		let mut root_dir_filenumbers = Vec::new();
 
 		for path in input_files {
 			let metadata = match std::fs::symlink_metadata(&path) {
@@ -256,6 +257,8 @@ impl ZffCreatorLogical {
 					continue;
 				},
 			};
+
+			root_dir_filenumbers.push(current_file_number);
 
 			// - files in root tree
 			if metadata.file_type().is_dir() {
@@ -374,6 +377,7 @@ impl ZffCreatorLogical {
 		let logical_object_encoder = LogicalObjectEncoder::new(
 			object_header,
 			files,
+			root_dir_filenumbers,
 			hash_types,
 			encryption_key,
 			signature_key_bytes,

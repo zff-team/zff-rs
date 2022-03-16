@@ -169,6 +169,7 @@ pub struct ObjectFooterLogical {
 	version: u8,
 	acquisition_start: u64,
 	acquisition_end: u64,
+	root_dir_filenumbers: Vec<u64>,
 	file_header_segment_numbers: HashMap<u64, u64>,
 	file_header_offsets: HashMap<u64, u64>,
 	file_footer_segment_numbers: HashMap<u64, u64>,
@@ -181,6 +182,7 @@ impl ObjectFooterLogical {
 			version: version,
 			acquisition_start: 0,
 			acquisition_end: 0,
+			root_dir_filenumbers: Vec::new(),
 			file_header_segment_numbers: HashMap::new(),
 			file_header_offsets: HashMap::new(),
 			file_footer_segment_numbers: HashMap::new(),
@@ -191,6 +193,7 @@ impl ObjectFooterLogical {
 		version: u8,
 		acquisition_start: u64,
 		acquisition_end: u64,
+		root_dir_filenumbers: Vec<u64>,
 		file_header_segment_numbers: HashMap<u64, u64>,
 		file_header_offsets: HashMap<u64, u64>,
 		file_footer_segment_numbers: HashMap<u64, u64>,
@@ -199,11 +202,20 @@ impl ObjectFooterLogical {
 			version: version,
 			acquisition_start: acquisition_start,
 			acquisition_end: acquisition_end,
+			root_dir_filenumbers: root_dir_filenumbers,
 			file_header_segment_numbers: file_header_segment_numbers,
 			file_header_offsets: file_header_offsets,
 			file_footer_segment_numbers: file_footer_segment_numbers,
 			file_footer_offsets: file_footer_offsets,
 		}
+	}
+
+	pub fn add_root_dir_filenumber(&mut self, filenumber: u64) {
+		self.root_dir_filenumbers.push(filenumber)
+	}
+
+	pub fn root_dir_filenumbers(&self) -> &Vec<u64> {
+		&self.root_dir_filenumbers
 	}
 
 	pub fn add_file_header_segment_number(&mut self, filenumber: u64, file_segment_number: u64) {
@@ -269,6 +281,7 @@ impl HeaderCoding for ObjectFooterLogical {
 		vec.push(self.version);
 		vec.append(&mut self.acquisition_start.encode_directly());
 		vec.append(&mut self.acquisition_end.encode_directly());
+		vec.append(&mut self.root_dir_filenumbers.encode_directly());
 		vec.append(&mut self.file_header_segment_numbers.encode_directly());
 		vec.append(&mut self.file_header_offsets.encode_directly());
 		vec.append(&mut self.file_footer_segment_numbers.encode_directly());
@@ -280,11 +293,12 @@ impl HeaderCoding for ObjectFooterLogical {
 		let footer_version = u8::decode_directly(&mut cursor)?;
 		let acquisition_start = u64::decode_directly(&mut cursor)?;
 		let acquisition_end = u64::decode_directly(&mut cursor)?;
+		let root_dir_filenumbers = Vec::<u64>::decode_directly(&mut cursor)?;
 		let file_header_segment_numbers = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let file_header_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let file_footer_segment_numbers = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let file_footer_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
-		Ok(ObjectFooterLogical::new(footer_version, acquisition_start, acquisition_end, file_header_segment_numbers, file_header_offsets, file_footer_segment_numbers, file_footer_offsets))
+		Ok(ObjectFooterLogical::new(footer_version, acquisition_start, acquisition_end, root_dir_filenumbers, file_header_segment_numbers, file_header_offsets, file_footer_segment_numbers, file_footer_offsets))
 	}
 
 }

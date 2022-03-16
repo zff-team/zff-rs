@@ -364,6 +364,7 @@ impl LogicalObjectEncoder {
 	pub fn new(
 		obj_header: ObjectHeader,
 		files: Vec<(File, FileHeader)>,
+		root_dir_filenumbers: Vec<u64>,
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
 		signature_key_bytes: Option<Vec<u8>>,
@@ -422,6 +423,11 @@ impl LogicalObjectEncoder {
 	    }
 		let first_file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber, current_directory_childs)?);
 		
+		let mut object_footer = ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL);
+		for filenumber in root_dir_filenumbers {
+			object_footer.add_root_dir_filenumber(filenumber)
+		};
+
 		Ok(Self {
 			obj_number: obj_header.object_number(),
 			//encoded_header_remaining_bytes: encoded_header.len(),
@@ -440,7 +446,7 @@ impl LogicalObjectEncoder {
 			symlink_real_paths: symlink_real_paths,
 			hardlink_map: hardlink_map,
 			directory_childs: directory_childs,
-			object_footer: ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL),
+			object_footer: object_footer,
 			header_encryption: header_encryption,
 		})
 	}
