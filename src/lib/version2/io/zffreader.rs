@@ -301,12 +301,12 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				}
 			}
 		};
-		let mut current_chunk_number = ((first_chunk_number * chunk_size as u64))+object.position() / chunk_size as u64;
+		let mut current_chunk_number = (first_chunk_number * chunk_size as u64 + object.position()) / chunk_size as u64;
 		let mut inner_position = (object.position() % chunk_size as u64) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
 
 		loop {
-			if read_bytes == buffer.len() || current_chunk_number >= last_chunk_number {
+			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
 				break;
 			}
 			let segment = match self.chunk_map.get(&current_chunk_number) {
