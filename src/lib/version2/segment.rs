@@ -82,15 +82,12 @@ impl<R: Read + Seek> Segment<R> {
 			Some(offset) => offset.clone(),
 			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
 		};
-		
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
 		let chunk_size = chunk_header.chunk_size();
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-		
-		let mut raw_data_buffer = Vec::with_capacity(*chunk_size as usize);
+		let mut raw_data_buffer = vec![0u8; *chunk_size as usize];
 		self.data.read_exact(&mut raw_data_buffer)?;
-
 		let raw_data_buffer = match object.encryption_algorithm() {
 			Some(algo) => {
 				match object.encryption_key() {
@@ -102,7 +99,6 @@ impl<R: Read + Seek> Segment<R> {
 			},
 			None => raw_data_buffer,
 		};
-
 		if chunk_header.compression_flag() {
 			let compression_algorithm = object.header().compression_header().algorithm().clone();
 			return decompress_buffer(&raw_data_buffer, compression_algorithm);
