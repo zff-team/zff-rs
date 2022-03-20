@@ -6,7 +6,7 @@ pub use encoder::*;
 
 // - internal
 use crate::{
-	header::{FileHeader},
+	header::{FileHeader, FileType},
 	footer::{FileFooter},
 };
 
@@ -32,6 +32,15 @@ impl File {
 
 	pub fn footer(&self) -> &FileFooter {
 		&self.footer
+	}
+
+	/// returns the parent file number
+	pub fn parent(&self) -> u64 {
+		self.header.parent_file_number()
+	}
+
+	pub fn filetype(&self) -> FileType {
+		self.header.file_type()
 	}
 
 	pub fn position(&self) -> u64 {
