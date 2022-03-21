@@ -10,7 +10,7 @@ use crate::{
 	footer::{FileFooter},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct File {
 	header: FileHeader,
 	footer: FileFooter,
