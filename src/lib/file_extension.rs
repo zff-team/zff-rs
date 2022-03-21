@@ -37,3 +37,23 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 		Ok(String::from("z") + &next_value.to_string())
 	}
 }
+
+pub fn file_extension_previous_value<V: Into<String>>(value: V) -> Result<String> {
+	let value = value.into();
+
+	let mut chars = value.chars();
+	match chars.next() {
+		Some(FILE_EXTENSION_START) => (),
+		_ => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, FILE_EXTENSION_PARSER_ERROR)),
+	};
+	let mut previous_value: u64 = match chars.as_str().parse() {
+		Ok(val) => val,
+		Err(e) => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, e.to_string())),
+	};
+	previous_value -= 1;
+	if previous_value <= 9 {
+		return Ok(String::from("z0") + &previous_value.to_string())
+	} else {
+		Ok(String::from("z") + &previous_value.to_string())
+	}
+}
