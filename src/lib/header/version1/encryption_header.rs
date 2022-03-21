@@ -26,7 +26,7 @@ use crate::version1::{
 /// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password based encryption method,
 /// described by the containing [PBEHeader].
 /// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub struct EncryptionHeader {
 	version: u8,
 	pbe_header: PBEHeader,

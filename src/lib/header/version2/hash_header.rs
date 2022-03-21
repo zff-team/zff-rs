@@ -19,7 +19,7 @@ use ed25519_dalek::{SIGNATURE_LENGTH};
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of the main header and contains 0 or more hash values of the dumped data.\
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub struct HashHeader {
 	version: u8,
 	hashes: Vec<HashValue>,
@@ -70,7 +70,7 @@ impl HeaderCoding for HashHeader {
 
 /// This is a part of the [HashHeader](struct.HashHeader.html).
 /// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,PartialEq,Eq)]
 pub struct HashValue {
 	version: u8,
 	hash_type: HashType,

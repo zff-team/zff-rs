@@ -26,7 +26,7 @@ use crate::version1::{
 /// encrypted with an user password.\
 /// This encryption of the encryption key is done via a password-based encryption (PBE).\
 /// All metadata about this PBE can be found in this PBEHeader.\
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,PartialEq,Eq)]
 pub struct PBEHeader {
 	version: u8,
 	kdf_scheme: KDFScheme,
@@ -119,7 +119,7 @@ impl HeaderCoding for PBEHeader {
 /// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub enum KDFParameters {
 	/// stores a struct [PBKDF2SHA256Parameters].
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
@@ -152,7 +152,7 @@ impl ValueDecoder for KDFParameters {
 }
 
 /// struct to store the parameters for the KDF PBKDF2-SHA256.
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub struct PBKDF2SHA256Parameters {
 	iterations: u16,
 	salt: [u8; 32],

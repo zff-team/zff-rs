@@ -48,7 +48,7 @@ impl fmt::Display for FileType {
 	}
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub struct FileHeader {
 	version: u8,
 	file_number: u64,

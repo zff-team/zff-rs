@@ -1,6 +1,8 @@
 // - STD
 use std::io::{Cursor, Read};
 use std::fmt;
+use std::cmp::{PartialEq,Eq};
+use std::hash::{Hash, Hasher};
 
 // - internal
 use crate::{
@@ -310,4 +312,18 @@ impl HeaderCoding for ObjectHeader {
 			object_type);
 		Ok(object_header)
 	}
+}
+
+impl PartialEq for ObjectHeader {
+    fn eq(&self, other: &Self) -> bool {
+        self.object_number == other.object_number
+    }
+}
+
+impl Eq for ObjectHeader {}
+
+impl Hash for ObjectHeader {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+        self.object_number.hash(state);
+    }
 }

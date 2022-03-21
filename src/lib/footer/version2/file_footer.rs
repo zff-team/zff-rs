@@ -13,7 +13,7 @@ use crate::header::{
 	HashHeader,
 };
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub struct FileFooter {
 	version: u8,
 	acquisition_start: u64,
