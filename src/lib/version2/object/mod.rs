@@ -12,7 +12,7 @@ use crate::{
 	Result,
 	ZffError,
 	ZffErrorKind,
-	header::{ObjectHeader},
+	header::{ObjectHeader, EncryptionHeader},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 	File,
 	EncryptionAlgorithm,
@@ -42,6 +42,20 @@ impl Object {
 		match self {
 			Object::Physical(obj) => obj.header(),
 			Object::Logical(obj) => obj.header(),
+		}
+	}
+
+	pub fn object_number(&self) -> u64 {
+		match self {
+			Object::Physical(obj) => obj.header().object_number(),
+			Object::Logical(obj) => obj.header().object_number(),
+		}
+	}
+
+	pub fn encryption_header(&self) -> Option<&EncryptionHeader> {
+		match self {
+			Object::Physical(obj) => obj.header().encryption_header(),
+			Object::Logical(obj) => obj.header().encryption_header(),
 		}
 	}
 

@@ -28,6 +28,9 @@ use crate::{
 	ERROR_MISMATCH_ZFF_VERSION
 };
 
+// - external
+use crc32fast::Hasher as CRC32Hasher;
+
 pub struct ZffReader<R: Read + Seek> {
 	main_header: MainHeader,
 	main_footer: MainFooter,
@@ -38,9 +41,8 @@ pub struct ZffReader<R: Read + Seek> {
 }
 
 impl<R: Read + Seek> ZffReader<R> {
-	// TODO: encrypted segments?
 	// encryption_passwords: <object number, decryption password>
-	pub fn new(raw_segments: Vec<R>, encryption_passwords: HashMap<u64, Vec<u8>>) -> Result<ZffReader<R>> {
+	pub fn new(raw_segments: Vec<R>, encryption_passwords: HashMap<u64, String>) -> Result<ZffReader<R>> {
 		let mut main_header = None;
 		let mut main_footer = None;
 		let mut segments = HashMap::new();
@@ -104,7 +106,13 @@ impl<R: Read + Seek> ZffReader<R> {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
 			};
 			if let Some(encryption_password) = encryption_passwords.get(object_number) {
-				let header = segment.read_encrypted_object_header(*object_number, encryption_password)?;
+				let header = match segment.read_encrypted_object_header(*object_number, encryption_password) {
+					Ok(header) => header,
+					Err(e) => match e.get_kind() {
+						ZffErrorKind::HeaderDecodeEncryptedHeader => segment.read_object_header(*object_number)?,
+						_ => return Err(e)
+					},
+				};
 				object_header.insert(object_number, header);
 			} else {
 				let header = segment.read_object_header(*object_number)?;
@@ -231,6 +239,51 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// returns a reference of the appropriate object with the given object number
 	pub fn object(&self, object_number: u64) -> Option<&Object> {
 		self.objects.get(&object_number)
+	}
+
+	/// returns all objects of this reader
+	pub fn objects(&self) -> Vec<&Object> {
+		let mut objects = Vec::new();
+		for (_, object) in &self.objects {
+			objects.push(object)
+		}
+		objects
+	}
+
+	//TODO: move
+	fn calculate_crc32(buffer: &Vec<u8>) -> u32 {
+		let mut crc32_hasher = CRC32Hasher::new();
+		crc32_hasher.update(buffer);
+		let crc32 = crc32_hasher.finalize();
+		crc32
+	}
+
+	pub fn check_decryption(&mut self, object_number: u64) -> Result<bool> {
+		let object = match self.objects.get_mut(&object_number) {
+			Some(object) => object,
+			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, ""))
+		};
+		let first_chunk_number = {
+			match object {
+				Object::Physical(object) => object.footer().first_chunk_number(),
+				Object::Logical(object) => object.get_active_file()?.footer().first_chunk_number(),
+			}
+		};
+		let segment = match self.chunk_map.get(&first_chunk_number) {
+			Some(segment_no) => match self.segments.get_mut(segment_no) {
+				Some(segment) => segment,
+				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+			},
+			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+		};
+		let chunk = segment.raw_chunk(first_chunk_number)?;
+		let crc32 = chunk.header().crc32();
+		let chunk_data = segment.chunk_data(first_chunk_number, object)?;
+		if Self::calculate_crc32(&chunk_data) == crc32 {
+			return Ok(true);
+		} else {
+			return Ok(false);
+		}
 	}
 
 	pub fn set_reader_physical_object(&mut self, object_number: u64) -> Result<u64> {

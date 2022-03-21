@@ -38,6 +38,62 @@ use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
 use time::{OffsetDateTime};
 
+pub enum ObjectEncoder<R: Read> {
+	Physical(PhysicalObjectEncoder<R>),
+	Logical(LogicalObjectEncoder),
+}
+
+impl<R: Read> ObjectEncoder<R> {
+	pub fn obj_number(&self) -> u64 {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.obj_number,
+			ObjectEncoder::Logical(obj) => obj.obj_number,
+		}
+	}
+
+	pub fn current_chunk_number(&self) -> u64 {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.current_chunk_number,
+			ObjectEncoder::Logical(obj) => obj.current_chunk_number,
+		}
+	}
+
+	pub fn get_encoded_header(&mut self) -> Vec<u8> {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.get_encoded_header(),
+			ObjectEncoder::Logical(obj) => obj.get_encoded_header(),
+		}
+	}
+
+	pub fn main_header(&self) -> &MainHeader {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.main_header(),
+			ObjectEncoder::Logical(obj) => obj.main_header(),
+		}
+	}
+
+	pub fn encryption_key(&self) -> Option<Vec<u8>> {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.encryption_key.clone(),
+			ObjectEncoder::Logical(obj) => obj.encryption_key.clone(),
+		}
+	}
+
+	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.get_encoded_footer(),
+			ObjectEncoder::Logical(obj) => obj.get_encoded_footer(),
+		}
+	}
+
+	pub fn get_next_data(&mut self, current_offset: u64, current_segment_no: u64) -> Result<Vec<u8>> {
+		match self {
+			ObjectEncoder::Physical(obj) => obj.get_next_chunk(),
+			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no),
+		}
+	}
+
+}
 
 //TODO: Documentation; Acquisition-start will be set by calling self.get_encoded_header(), acq-end by calling self.get_encoded_footer().
 pub struct PhysicalObjectEncoder<R: Read> {
@@ -73,11 +129,16 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		reader: R,
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
-		signature_key: Option<Keypair>,
+		signature_key_bytes: Option<Vec<u8>>,
 		main_header: MainHeader,
 		current_chunk_number: u64,
 		header_encryption: bool) -> Result<PhysicalObjectEncoder<R>> {
 		
+		let signature_key = match &signature_key_bytes {
+	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
+	    	None => None
+	    };
+
 		let encoded_header = if header_encryption {
 			if let Some(ref encryption_key) = encryption_key {
 				obj_header.encode_encrypted_header_directly(encryption_key)?
@@ -122,6 +183,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		}
 	}
 
+	//TODO: move
 	fn calculate_crc32(buffer: &Vec<u8>) -> u32 {
 		let mut crc32_hasher = CRC32Hasher::new();
 		crc32_hasher.update(buffer);
@@ -200,32 +262,34 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    let crc32 = Self::calculate_crc32(&buf);
 	    let signature = self.calculate_signature(&buf);
 
-	    let (mut chunked_data, compression_flag) = self.compress_buffer(buf)?;
+	    let (chunked_data, compression_flag) = self.compress_buffer(buf)?;
 
 	    // prepare chunk header:
-	    let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);
-	    chunk_header.set_chunk_size(chunked_data.len() as u64);
+	    let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);  
 	    chunk_header.set_crc32(crc32);
 	    chunk_header.set_signature(signature);
 	    if compression_flag {
 			chunk_header.set_compression_flag()
 		}
-		chunk.append(&mut chunk_header.encode_directly());
-		match &self.encryption_key {
+		let mut chunked_data = match &self.encryption_key {
 			Some(encryption_key) => {
 				let encryption_algorithm = match &self.encryption_header {
 					Some(header) => header.algorithm(),
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
-				let mut encrypted_data = Encryption::encrypt_message(
+				let encrypted_data = Encryption::encrypt_message(
 					encryption_key,
 					&chunked_data,
 					chunk_header.chunk_number(),
 					encryption_algorithm)?;
-				chunk.append(&mut encrypted_data);
+				encrypted_data
 			},
-			None => chunk.append(&mut chunked_data),
-		}
+			None => chunked_data,
+		};
+		
+		chunk_header.set_chunk_size(chunked_data.len() as u64);
+		chunk.append(&mut chunk_header.encode_directly());
+		chunk.append(&mut chunked_data);
 		self.current_chunk_number += 1;
 	    return Ok(chunk);
 	}
@@ -357,7 +421,6 @@ pub struct LogicalObjectEncoder {
 }
 
 impl LogicalObjectEncoder {
-
 	pub fn get_encoded_footer(&self) -> Vec<u8> {
 		self.object_footer.encode_directly()
 	}
