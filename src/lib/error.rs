@@ -106,6 +106,8 @@ pub enum ZffErrorKind {
 	NoFilesLeft,
 	/// Error will be returned, if no objects left in vector/map.
 	NoObjectsLeft,
+	/// Error will be returned, if no chunks left in vector/map.
+	NoChunksLeft,
 	/// Error for Seek.
 	Seek,
 }
@@ -154,6 +156,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::UnimplementedFileType => "UnimplementedFileType",
 			ZffErrorKind::NoFilesLeft => "NoFilesLeft",
 			ZffErrorKind::NoObjectsLeft => "NoObjectsLeft",
+			ZffErrorKind::NoChunksLeft => "NoChunksLeft",
 			ZffErrorKind::Seek => "Seek",
 		};
 	write!(f, "{}", err_msg)
