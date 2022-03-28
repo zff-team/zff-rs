@@ -41,15 +41,35 @@ impl MainFooter {
 	pub fn version(&self) -> u8 {
 		self.version
 	}
+
+	pub fn set_number_of_segments(&mut self, number: u64) {
+		self.number_of_segments = number
+	}
+
 	pub fn number_of_segments(&self) -> u64 {
 		self.number_of_segments
 	}
+
+	pub fn add_object_header(&mut self, object_number: u64, segment_no: u64) {
+		self.object_header.insert(object_number, segment_no);
+	}
+
 	pub fn object_header(&self) -> &HashMap<u64, u64> {
 		&self.object_header
 	}
+
+	pub fn add_object_footer(&mut self, object_number: u64, segment_no: u64) {
+		self.object_footer.insert(object_number, segment_no);
+	}
+
 	pub fn object_footer(&self) -> &HashMap<u64, u64> {
 		&self.object_footer
 	}
+
+	pub fn set_footer_offset(&mut self, offset: u64) {
+		self.footer_offset = offset
+	}
+
 	pub fn footer_offset(&self) -> u64 {
 		self.footer_offset
 	}

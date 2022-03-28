@@ -58,6 +58,10 @@ impl ObjectHeader {
 			object_type: object_type,
 		}
 	}
+
+	pub fn set_object_number(&mut self, object_number: u64) {
+		self.object_number = object_number
+	}
 	
 	pub fn object_number(&self) -> u64 {
 		self.object_number
