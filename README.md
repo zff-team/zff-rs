@@ -1,27 +1,29 @@
 # Zff
 
-> At the moment Zff version 2 is under development. The format has been overhauled for this purpose to add many new features and improvements. The associated tool suite (zffacquire, etc.) are currently also adapted to the new format, or are then accordingly downward compatible. The following new features will be added with version 2:
-> - The format is built to be streamable (e.g. you could stream a zff dump/container directly via HTTP).
-> - Zff can contain dumps within a container (e.g. if multiple disks belong to one device, so they stay together).
-> - An existing Zff container can be easily extended with additional dumps.
-> - You can add logical dumps/backups (complete folder structures are kept). Metadata such as the MdItems of MacOS can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
-> - Individual dumps/container can be encrypted with different encryption keys or passwords.
-> - There is now a finer choice of signing (e.g. you can sign only the hash values, which allows a much faster dump, but also brings restrictions in the manipulation analysis).
+> Zff version 2 is in the testing stage. It has only been tested by me internally so far and requires further independent testing. 
+For this purpose, the corresponding tools can also be used (see below in the corresponding table). 
 
 
 Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image or physical memory.
 The focus of zff is on speed, security and modularity in concert with forensic requirements.The modular design promises high maintainability and scalability.
 Zff is an alternative to the ewf and aff file formats and is not compatible with them.
 
-## Features included in zff (most of them are optional)
+## Features included in Zff(v2) (most of them are optional)
+- The format is built to be streamable (e.g. you could stream a zff dump/container directly via HTTP).
+- Zff can contain dumps within a container (e.g. if multiple disks belong to one device, so they stay together).
+- An existing Zff container can be easily extended with additional dumps.
+- You can add logical dumps/backups (complete folder structures are kept). Metadata such as the Uid or Gid on unix systems can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
 - The disk image can be stored in several split segments.
 - The data can be stored in compressed format (modern [compression algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#compression-algorithm-flag) like __Zstd__)
 - The stored data can be optionally encrypted with a password. Used here are best practices reccomended by PKCS#5 (see [KDF schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#kdf-flag) and [encryption schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-scheme-flag) for available implementations). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently implemented algorithms are listed in the [encryption algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-algorithms) section.
-- The integrity of the stored data can optionally be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](https://github.com/ph0llux/zff/wiki/Zff-layout#hash-types-flag) section.
-- The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm __Ed25519__ is used for this purpose.
+- Individual dumps/container can be encrypted with different encryption keys or passwords.
+- The integrity of the stored data can be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](https://github.com/ph0llux/zff/wiki/Zff-layout#hash-types-flag) section.
+- The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm __Ed25519__ is used for this purpose. There is now a fine choice of signing possible (e.g. you can sign only the hash values, which allows a much faster dump, but also brings restrictions in the manipulation analysis, or you can sign every chunk independently).
 - The stored data is organized in small chunks. 
+
 Above mentioned compression, encryption and signature methods are applied to each chunk separately. This makes it possible to access a corresponding part of the data in real time without the need to decompress or decrypt the complete image first.
 Authenticity verification can also be applied to individual chunks and does not have to be applied to the entire image.
+
 
 ## benchmarks
 
