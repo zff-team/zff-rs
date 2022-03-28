@@ -18,6 +18,7 @@ use crate::{
 /// The SegmentFooter is a footer which is be written at the end of each segment.
 /// The footer contains a table on the chunks, present in the appropriate segment.
 /// The offset table is internally managed as a ```Vec<u64>```.
+#[derive(Debug,Clone)]
 pub struct SegmentFooter {
 	version: u8,
 	length_of_segment: u64,
