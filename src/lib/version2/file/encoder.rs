@@ -214,22 +214,28 @@ impl FileEncoder {
 
 			},
 			FileType::Symlink => {
-				let mut cursor = match &self.symlink_real_path {
-					None => Cursor::new(String::from("").encode_directly()),
-					Some(link_path) => Cursor::new(link_path.to_string_lossy().encode_directly())
-				};
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
-				self.read_bytes_underlying_data += read_bytes;
-				buf
+				match &self.symlink_real_path {
+					None => Vec::new(),
+					Some(link_path) => {
+						let mut cursor = Cursor::new(link_path.to_string_lossy().encode_directly());
+						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+						self.read_bytes_underlying_data += read_bytes;
+						self.symlink_real_path = None;
+						buf
+					},
+				}
 			},
 			FileType::Hardlink => {
-				let mut cursor = match self.hard_link_filenumber {
-					Some(filenumber) => Cursor::new(filenumber.encode_directly()),
-					None => return Err(ZffError::new(ZffErrorKind::MissingHardlinkFilenumber, "")),
-				};
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
-				self.read_bytes_underlying_data += read_bytes;
-				buf
+				match self.hard_link_filenumber {
+					Some(filenumber) => {
+						let mut cursor = Cursor::new(filenumber.encode_directly());
+						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+						self.read_bytes_underlying_data += read_bytes;
+						self.hard_link_filenumber = None;
+						buf
+					},
+					None => Vec::new(),
+				}		
 			},
 			FileType::File => {
 				let (buf, read_bytes) = buffer_chunk(&mut self.underlying_file, chunk_size as usize)?;

@@ -114,8 +114,12 @@ impl FileHeader {
 	pub fn metadata_ext(&self) -> &HashMap<String, String> {
 		&self.metadata_ext
 	}
+
+	//TODO: Documentation!
 	pub fn transform_to_hardlink(&mut self) {
-		self.file_type = FileType::Hardlink
+		if self.file_type != FileType::Symlink {
+			self.file_type = FileType::Hardlink
+		}
 	}
 
 	/// encodes the file header to a ```Vec<u8>```. The encryption flag will be set to 2.
@@ -228,7 +232,8 @@ impl FileHeader {
 			1 => FileType::File,
 			2 => FileType::Directory,
 			3 => FileType::Symlink,
-			val @ _ => return Err(ZffError::new(ZffErrorKind::UnknownObjectTypeValue, val.to_string()))
+			4 => FileType::Hardlink,
+			val @ _ => return Err(ZffError::new(ZffErrorKind::UnknownFileType, val.to_string()))
 		};
 		let filename = String::decode_directly(inner_content)?;
 		let parent_file_number = u64::decode_directly(inner_content)?;
