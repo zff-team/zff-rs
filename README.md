@@ -36,7 +36,7 @@ The following benchmarks were all run on my notebook, which has the following sp
 The installed operating system was Gentoo Linux.\
 Input and output storage device was the internal NVMe.
 
-The following benchmark was created for a \~20GB prebuilt image, which was generated using the script under benchmarks/example01.sh.
+The following benchmark was created for a \~20GB prebuilt image, which was generated using [this script](https://gist.github.com/ph0llux/6969329b060d393e199442dc0787dc9a).
 ![Acquisition time](https://github.com/ph0llux/zff/blob/master/benchmark/acquisition_time.png?raw=true)
 \
 ¹Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".\
