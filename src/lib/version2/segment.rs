@@ -32,9 +32,9 @@ impl<R: Read + Seek> Segment<R> {
 	/// creates a new [Segment] by the given values.
 	fn new(header: SegmentHeader, data: R, footer: SegmentFooter) -> Segment<R> {
 		Self {
-			header: header,
-			data: data,
-			footer: footer,
+			header,
+			data,
+			footer,
 			raw_reader_position: 0,
 		}
 	}
@@ -85,7 +85,7 @@ impl<R: Read + Seek> Segment<R> {
 	/// Returns the chunked data, uncompressed and unencrypted
 	pub fn chunk_data(&mut self, chunk_number: u64, object: &Object) -> Result<Vec<u8>> {
 		let chunk_offset = match self.footer().chunk_offsets().get(&chunk_number) {
-			Some(offset) => offset.clone(),
+			Some(offset) => *offset,
 			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
 		};
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
@@ -107,9 +107,9 @@ impl<R: Read + Seek> Segment<R> {
 		};
 		if chunk_header.compression_flag() {
 			let compression_algorithm = object.header().compression_header().algorithm().clone();
-			return decompress_buffer(&raw_data_buffer, compression_algorithm);
+			decompress_buffer(&raw_data_buffer, compression_algorithm)
 		} else {
-			return Ok(raw_data_buffer)
+			Ok(raw_data_buffer)
 		}
 		
 	}

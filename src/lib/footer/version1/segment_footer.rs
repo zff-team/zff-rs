@@ -26,7 +26,7 @@ impl SegmentFooter {
 	/// creates a new empty SegmentFooter.
 	pub fn new_empty(version: u8) -> SegmentFooter {
 		Self {
-			version: version,
+			version,
 			chunk_offsets: Vec::new()
 		}
 	}
@@ -34,8 +34,8 @@ impl SegmentFooter {
 	/// creates a new SegmentFooter with a given "offset table" (represented as ```Vec<u64>```).
 	pub fn new(version: u8, chunk_offsets: Vec<u64>) -> SegmentFooter {
 		Self {
-			version: version,
-			chunk_offsets: chunk_offsets,
+			version,
+			chunk_offsets,
 		}
 	}
 

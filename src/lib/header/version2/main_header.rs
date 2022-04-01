@@ -31,10 +31,10 @@ impl MainHeader {
 		segment_size: u64,
 		unique_identifier: i64) -> MainHeader {
 		Self {
-			version: version,
-			chunk_size: chunk_size,
-			segment_size: segment_size,
-			unique_identifier: unique_identifier,
+			version,
+			chunk_size,
+			segment_size,
+			unique_identifier,
 		}
 	}
 
@@ -75,8 +75,7 @@ impl HeaderCoding for MainHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.push(self.chunk_size);
 		vec.append(&mut self.segment_size.encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());

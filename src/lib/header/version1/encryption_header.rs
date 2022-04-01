@@ -45,11 +45,11 @@ impl EncryptionHeader {
 		encrypted_header_nonce: [u8; 12], //used for header encryption
 		) -> EncryptionHeader {
 		Self {
-			version: version,
-			pbe_header: pbe_header,
-			algorithm: algorithm,
-			encrypted_encryption_key: encrypted_encryption_key,
-			encrypted_header_nonce: encrypted_header_nonce
+			version,
+			pbe_header,
+			algorithm,
+			encrypted_encryption_key,
+			encrypted_header_nonce
 		}
 	}
 
@@ -110,9 +110,7 @@ impl HeaderCoding for EncryptionHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-
-		vec.push(self.version);
+		let mut vec = vec![self.version];
 		vec.append(&mut self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
 		vec.append(&mut self.encrypted_encryption_key.encode_directly());

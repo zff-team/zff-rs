@@ -43,7 +43,7 @@ pub enum ObjectEncoder<R: Read> {
 	/// Wrapper for [PhysicalObjectEncoder].
 	Physical(PhysicalObjectEncoder<R>),
 	/// Wrapper for [LogicalObjectEncoder].
-	Logical(LogicalObjectEncoder),
+	Logical(Box<LogicalObjectEncoder>),
 }
 
 impl<R: Read> ObjectEncoder<R> {
@@ -146,7 +146,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		header_encryption: bool) -> Result<PhysicalObjectEncoder<R>> {
 		
 		let signature_key = match &signature_key_bytes {
-	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
+	    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
 	    	None => None
 	    };
 
@@ -167,19 +167,19 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		Ok(Self {
 			obj_number: obj_header.object_number(),
 			encoded_header_remaining_bytes: encoded_header.len(),
-			encoded_header: encoded_header,
+			encoded_header,
 			underlying_data: reader,
 			read_bytes_underlying_data: 0,
 			current_chunked_data: None,
 			current_chunked_data_remaining_bytes: 0,
-			current_chunk_number: current_chunk_number,
+			current_chunk_number,
 			initial_chunk_number: current_chunk_number,
 			encoded_footer: Vec::new(),
 			encoded_footer_remaining_bytes: 0,
-			hasher_map: hasher_map,
-			encryption_key: encryption_key,
-			signature_key: signature_key,
-			main_header: main_header,
+			hasher_map,
+			encryption_key,
+			signature_key,
+			main_header,
 			compression_header: obj_header.compression_header(),
 			encryption_header: obj_header.encryption_header().map(ToOwned::to_owned),
 			has_hash_signatures: obj_header.has_hash_signatures(),
@@ -188,25 +188,22 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		})
 	}
 
-	fn update_hasher(&mut self, buffer: &Vec<u8>) {
+	fn update_hasher(&mut self, buffer: &[u8]) {
 		for hasher in self.hasher_map.values_mut() {
 			hasher.update(buffer);
 		}
 	}
 
 	//TODO: move
-	fn calculate_crc32(buffer: &Vec<u8>) -> u32 {
+	fn calculate_crc32(buffer: &[u8]) -> u32 {
 		let mut crc32_hasher = CRC32Hasher::new();
 		crc32_hasher.update(buffer);
-		let crc32 = crc32_hasher.finalize();
-		crc32
+		
+		crc32_hasher.finalize()
 	}
 
-	fn calculate_signature(&self, buffer: &Vec<u8>) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
-		match &self.signature_key {
-			None => None,
-			Some(keypair) => Some(Signature::sign(keypair, buffer)),
-		}
+	fn calculate_signature(&self, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
+		self.signature_key.as_ref().map(|keypair| Signature::sign(keypair, buffer))
 	}
 
 	// returns compressed/read bytes + flag if bytes are be compressed or not-
@@ -216,7 +213,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		let compression_threshold = self.compression_header.threshold();
 
 		match self.compression_header.algorithm() {
-	    	CompressionAlgorithm::None => return Ok((buf, compression_flag)),
+	    	CompressionAlgorithm::None => Ok((buf, compression_flag)),
 	    	CompressionAlgorithm::Zstd => {
 	    		let compression_level = *self.compression_header.level() as i32;
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
@@ -268,7 +265,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    let chunk_size = self.main_header.chunk_size();
 	    let (buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size as usize)?;
 	    self.read_bytes_underlying_data += read_bytes;
-	    if buf.len() == 0 {
+	    if buf.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 	    };
 	    self.update_hasher(&buf);
@@ -290,12 +287,12 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 					Some(header) => header.algorithm(),
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
-				let encrypted_data = Encryption::encrypt_message(
+				
+				Encryption::encrypt_message(
 					encryption_key,
 					&chunked_data,
 					chunk_header.chunk_number(),
-					encryption_algorithm)?;
-				encrypted_data
+					encryption_algorithm)?
 			},
 			None => chunked_data,
 		};
@@ -304,7 +301,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		chunk.append(&mut chunk_header.encode_directly());
 		chunk.append(&mut chunked_data);
 		self.current_chunk_number += 1;
-	    return Ok(chunk);
+	    Ok(chunk)
 	}
 
 	/// Generates a appropriate footer. Attention: A call of this method ...
@@ -319,10 +316,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        hash_value.set_hash(hash.to_vec());
 	        if self.has_hash_signatures {
 	        	let signature = self.calculate_signature(&hash.to_vec());
-	        	match signature {
-	        		Some(sig) => hash_value.set_ed25519_signature(sig),
-	        		None => ()
-	        	};
+	        	if let Some(sig) = signature { hash_value.set_ed25519_signature(sig) };
 	        };
 	        hash_values.push(hash_value);
 	    }
@@ -354,16 +348,13 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		let mut read_bytes = 0;
 		//read encoded header, if there are remaining bytes to read.
-        match self.encoded_header_remaining_bytes {
-            remaining_bytes @ 1.. => {
-                let mut inner_read_bytes = 0;
-                let mut inner_cursor = Cursor::new(&self.encoded_header);
-                inner_cursor.seek(SeekFrom::End(remaining_bytes as i64 * -1))?;
-                inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-                self.encoded_header_remaining_bytes -= inner_read_bytes;
-                read_bytes += inner_read_bytes;
-            },
-            _ => (),
+        if let remaining_bytes @ 1.. = self.encoded_header_remaining_bytes {
+            let mut inner_read_bytes = 0;
+            let mut inner_cursor = Cursor::new(&self.encoded_header);
+            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
+            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+            self.encoded_header_remaining_bytes -= inner_read_bytes;
+            read_bytes += inner_read_bytes;
         }
         loop {
         	if read_bytes == buf.len() {
@@ -375,7 +366,7 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
         		Some(data) => {
         			let mut inner_read_bytes = 0;
         			let mut inner_cursor = Cursor::new(&data);
-        			inner_cursor.seek(SeekFrom::End(self.current_chunked_data_remaining_bytes as i64 * -1))?;
+        			inner_cursor.seek(SeekFrom::End(-(self.current_chunked_data_remaining_bytes as i64)))?;
         			inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
         			self.current_chunked_data_remaining_bytes -= inner_read_bytes;
         			if self.current_chunked_data_remaining_bytes < 1 {
@@ -392,23 +383,20 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
         				Err(e) => match e.unwrap_kind() {
         					ZffErrorKind::ReadEOF => break,
         					ZffErrorKind::IoError(ioe) => return Err(ioe),
-        					e @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        					e => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
         				}
         			}
         		}
         	}
         }
         //read encoded footer, if there are remaining bytes to read.
-        match self.encoded_footer_remaining_bytes {
-            remaining_bytes @ 1.. => {
-                let mut inner_read_bytes = 0;
-                let mut inner_cursor = Cursor::new(&self.encoded_footer);
-                inner_cursor.seek(SeekFrom::End(remaining_bytes as i64 * -1))?;
-                inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-                self.encoded_footer_remaining_bytes -= inner_read_bytes;
-                read_bytes += inner_read_bytes;
-            },
-            _ => (),
+        if let remaining_bytes @ 1.. = self.encoded_footer_remaining_bytes {
+            let mut inner_read_bytes = 0;
+            let mut inner_cursor = Cursor::new(&self.encoded_footer);
+            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
+            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+            self.encoded_footer_remaining_bytes -= inner_read_bytes;
+            read_bytes += inner_read_bytes;
         }
         Ok(read_bytes)
 	}
@@ -475,36 +463,27 @@ impl LogicalObjectEncoder {
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
 		let current_file_number = current_file_header.file_number();
-		let symlink_real_path = match symlink_real_paths.get(&current_file_number) {
-			Some(p) => Some(p.clone()),
-			None => None
-		};
+		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
 		let current_directory_childs = match directory_childs.get(&current_file_number) {
 			Some(childs) => childs.to_owned(),
 			None => Vec::new()
 		};
 		let signature_key = match &signature_key_bytes {
-	    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
+	    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
 	    	None => None
 	    };
 	    let metadata = current_file.metadata()?;
 	    let encryption_header = obj_header.encryption_header().map(ToOwned::to_owned);
 
 	    let mut hardlink_filenumber = None;
-	    match hardlink_map.get(&metadata.dev()) {
-	    	Some(inner_map) => {
-	    		match inner_map.get(&metadata.ino()) {
-	    			Some(fno) => {
-	    				if *fno != current_file_header.file_number() {
-	    					current_file_header.transform_to_hardlink();
-	    					hardlink_filenumber = Some(*fno);
-	    				};
-	    			},
-	    			None => (),
-	    		}
-	    	},
-	    	None => (),
-	    }
+	    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
+    		if let Some(fno) = inner_map.get(&metadata.ino()) {
+				if *fno != current_file_header.file_number() {
+					current_file_header.transform_to_hardlink();
+					hardlink_filenumber = Some(*fno);
+				};
+	    	}
+     	}
 		let first_file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber, current_directory_childs)?);
 		
 		let mut object_footer = ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL);
@@ -515,23 +494,23 @@ impl LogicalObjectEncoder {
 		Ok(Self {
 			obj_number: obj_header.object_number(),
 			//encoded_header_remaining_bytes: encoded_header.len(),
-			encoded_header: encoded_header,
-			files: files,
+			encoded_header,
+			files,
 			current_file_encoder: first_file_encoder,
 			current_file_header_read: false,
-			current_file_number: current_file_number,
-			hash_types: hash_types,
-			encryption_key: encryption_key,
-			signature_key_bytes: signature_key_bytes,
-			main_header: main_header,
+			current_file_number,
+			hash_types,
+			encryption_key,
+			signature_key_bytes,
+			main_header,
 			compression_header: obj_header.compression_header(),
-			encryption_header: encryption_header,
-			current_chunk_number: current_chunk_number,
-			symlink_real_paths: symlink_real_paths,
-			hardlink_map: hardlink_map,
-			directory_childs: directory_childs,
-			object_footer: object_footer,
-			header_encryption: header_encryption,
+			encryption_header,
+			current_chunk_number,
+			symlink_real_paths,
+			hardlink_map,
+			directory_childs,
+			object_footer,
+			header_encryption,
 		})
 	}
 
@@ -547,11 +526,10 @@ impl LogicalObjectEncoder {
 
 	/// Returns the current signature key (if available).
 	pub fn signature_key(&self) -> Option<Keypair> {
-		let signature_key = match &self.signature_key_bytes {
-	    	Some(bytes) => Keypair::from_bytes(&bytes).ok(),
+	    match &self.signature_key_bytes {
+	    	Some(bytes) => Keypair::from_bytes(bytes).ok(),
 	    	None => None
-	    };
-	    signature_key
+	    }
 	}
 
 	/// Returns the encoded object header.
@@ -598,16 +576,13 @@ impl LogicalObjectEncoder {
 					},
 				};
 				self.current_file_number = current_file_header.file_number();
-				let symlink_real_path = match self.symlink_real_paths.get(&self.current_file_number) {
-					Some(p) => Some(p.clone()),
-					None => None
-				};
+				let symlink_real_path = self.symlink_real_paths.get(&self.current_file_number).cloned();
 				let current_directory_childs = match self.directory_childs.get(&self.current_file_number) {
 					Some(childs) => childs.to_owned(),
 					None => Vec::new(),
 				};
 				let signature_key = match &self.signature_key_bytes {
-			    	Some(bytes) => Some(Keypair::from_bytes(&bytes)?),
+			    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
 			    	None => None
 			    };
 
@@ -615,27 +590,21 @@ impl LogicalObjectEncoder {
 
 			    // transform the next header to hardlink, if the file is one.
 			    let mut hardlink_filenumber = None;
-			    match self.hardlink_map.get(&metadata.dev()) {
-			    	Some(inner_map) => {
-			    		match inner_map.get(&metadata.ino()) {
-			    			Some(fno) => {
-			    				if *fno != current_file_header.file_number() {
-			    					current_file_header.transform_to_hardlink();
-			    					hardlink_filenumber = Some(*fno);
-			    				};
-			    			},
-			    			None => (),
-			    		}
-			    	},
-			    	None => (),
-			    }
+			    if let Some(inner_map) = self.hardlink_map.get(&metadata.dev()) {
+		    		if let Some(fno) = inner_map.get(&metadata.ino()) {
+	    				if *fno != current_file_header.file_number() {
+	    					current_file_header.transform_to_hardlink();
+	    					hardlink_filenumber = Some(*fno);
+	    				};
+    			    }
+       			}
 			    self.current_file_header_read = false;
 				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber, current_directory_childs)?);
-				return Ok(file_footer);
+				Ok(file_footer)
 			},
 			None => {
 				self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
-				return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+				Err(ZffError::new(ZffErrorKind::ReadEOF, ""))
 			},
 		}	
 	}

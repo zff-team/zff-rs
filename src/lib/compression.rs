@@ -27,7 +27,7 @@ impl From<&str> for CompressionAlgorithm {
 		match algorithm.as_str() {
 			"zstd" => CompressionAlgorithm::Zstd,
 			"lz4" => CompressionAlgorithm::Lz4,
-			"none" | _ => CompressionAlgorithm::None,
+			_ => CompressionAlgorithm::None,
 		}
 	}
 }
@@ -49,18 +49,18 @@ where
 	C: Borrow<CompressionAlgorithm>,
 {
 	match compression_algorithm.borrow() {
-    	CompressionAlgorithm::None => return Ok(buffer.to_vec()),
+    	CompressionAlgorithm::None => Ok(buffer.to_vec()),
     	CompressionAlgorithm::Zstd => {
     		let mut decompressed_buffer = Vec::new();
 			let mut decoder = zstd::stream::read::Decoder::new(buffer)?;
 			decoder.read_to_end(&mut decompressed_buffer)?;
-			return Ok(decompressed_buffer);
+			Ok(decompressed_buffer)
     	},
     	CompressionAlgorithm::Lz4 => {
     		let mut decompressed_buffer = Vec::new();
 			let mut decompressor = lz4_flex::frame::FrameDecoder::new(buffer);
 			decompressor.read_to_end(&mut decompressed_buffer)?;
-			return Ok(decompressed_buffer);
+			Ok(decompressed_buffer)
     	}
     }
 }

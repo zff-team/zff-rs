@@ -32,13 +32,13 @@ impl FileFooter {
 	/// creates a new FileFooter by given values/hashes.
 	pub fn new(version: u8, acquisition_start: u64, acquisition_end: u64, hash_header: HashHeader, first_chunk_number: u64, number_of_chunks: u64, length_of_data: u64) -> FileFooter {
 		Self {
-			version: version,
-			acquisition_start: acquisition_start,
-			acquisition_end: acquisition_end,
-			hash_header: hash_header,
-			first_chunk_number: first_chunk_number,
-			number_of_chunks: number_of_chunks,
-			length_of_data: length_of_data,
+			version,
+			acquisition_start,
+			acquisition_end,
+			hash_header,
+			first_chunk_number,
+			number_of_chunks,
+			length_of_data,
 		}
 	}
 
@@ -85,8 +85,7 @@ impl HeaderCoding for FileFooter {
 		FOOTER_IDENTIFIER_FILE_FOOTER
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.push(self.version);
+		let mut vec = vec![self.version];
 		vec.append(&mut self.acquisition_start.encode_directly());
 		vec.append(&mut self.acquisition_end.encode_directly());
 		vec.append(&mut self.hash_header.encode_directly());

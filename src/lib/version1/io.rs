@@ -81,14 +81,14 @@ impl<R: Read> ZffWriter<R> {
 	        hasher_map.insert(value.hash_type().clone(), hasher);
 	    };
 		Self {
-			main_header: main_header,
-			input: input,
+			main_header,
+			input,
 			output_filenpath: output_filenpath.into(),
 			read_bytes: 0,
-			hasher_map: hasher_map,
-			signature_key: signature_key,
-			encryption_key: encryption_key,
-			header_encryption: header_encryption,
+			hasher_map,
+			signature_key,
+			encryption_key,
+			header_encryption,
 			current_chunk_no: 1,
 			current_segment_no: 1,
 			eof_reached: false,
@@ -123,7 +123,7 @@ impl<R: Read> ZffWriter<R> {
 	        } 
 	    };
 
-	    output_file.write(&encoded_main_header)?;
+	    output_file.write_all(&encoded_main_header)?;
 
 	    //writes the first segment
 	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64).await?;
@@ -160,10 +160,7 @@ impl<R: Read> ZffWriter<R> {
 	    //rewrite main_header with the correct number of bytes of the COMPRESSED data.
 	    self.main_header.set_length_of_data(self.read_bytes);
 	    self.main_header.set_hash_header(hash_header);
-	    match SystemTime::now().duration_since(UNIX_EPOCH) {
-	        Ok(now) => self.main_header.set_acquisition_end(now.as_secs()),
-	        Err(_) => ()
-	    };
+	    if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) { self.main_header.set_acquisition_end(now.as_secs()) };
 	    output_file.rewind()?;
 	    let encoded_main_header = match &encryption_key {
 	        None => self.main_header.encode_directly(),
@@ -180,29 +177,25 @@ impl<R: Read> ZffWriter<R> {
 	            self.main_header.encode_directly()
 	        }  
 	    };
-	    output_file.write(&encoded_main_header)?;
+	    output_file.write_all(&encoded_main_header)?;
 
 	    Ok(())
 	}
 
-	async fn update_hasher(&mut self, buffer: &Vec<u8>) {
+	async fn update_hasher(&mut self, buffer: &[u8]) {
 		for hasher in self.hasher_map.values_mut() {
 			hasher.update(buffer);
 		}
 	}
 
-	async fn get_crc32(buffer: &Vec<u8>) -> u32 {
+	async fn get_crc32(buffer: &[u8]) -> u32 {
 		let mut crc32_hasher = CRC32Hasher::new();
 		crc32_hasher.update(buffer);
-		let crc32 = crc32_hasher.finalize();
-		crc32
+		crc32_hasher.finalize()
 	}
 
-	async fn calculate_signature(&self, buffer: &Vec<u8>) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
-		match &self.signature_key {
-			None => None,
-			Some(keypair) => Some(Signature::sign(keypair, buffer)),
-		}
+	async fn calculate_signature(&self, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
+		self.signature_key.as_ref().map(|keypair| Signature::sign(keypair, buffer))
 	}
 
 	async fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
@@ -211,7 +204,7 @@ impl<R: Read> ZffWriter<R> {
 		let compression_threshold = self.main_header.compression_header().threshold();
 
 		match self.main_header.compression_header().algorithm() {
-	    	CompressionAlgorithm::None => return Ok((buf, compression_flag)),
+	    	CompressionAlgorithm::None => Ok((buf, compression_flag)),
 	    	CompressionAlgorithm::Zstd => {
 	    		let compression_level = *self.main_header.compression_header().level() as i32;
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
@@ -243,7 +236,7 @@ impl<R: Read> ZffWriter<R> {
 		let chunk_size = self.main_header.chunk_size();
 	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
 	    self.read_bytes += read_bytes;
-	    if buf.len() == 0 {
+	    if buf.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 	    };
 	    self.update_hasher(&buf).await;
@@ -251,7 +244,7 @@ impl<R: Read> ZffWriter<R> {
 	    let signature = self.calculate_signature(&buf).await;
 
 	    let (chunked_data, compression_flag) = self.compress_buffer(buf).await?;
-	    return Ok((chunked_data, crc32, signature, compression_flag));
+	    Ok((chunked_data, crc32, signature, compression_flag))
 	}
 
 	// returns written_bytes
@@ -397,7 +390,7 @@ impl<R: Read> ZffWriter<R> {
 		segment_header.set_length_of_segment(segment_header_length + written_bytes);
 		output.seek(SeekFrom::Start(seek_value))?;
 		written_bytes += output.write(&segment_header.encode_directly())? as u64;
-		return Ok(written_bytes);
+		Ok(written_bytes)
 	}
 
 	/// returns a reference to the underlying [MainHeader](crate::header::MainHeader)
@@ -421,11 +414,8 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 	pub fn new(mut segment_data: Vec<R>, main_header: MainHeader) -> Result<ZffReader<R>> {
 		let mut segments = HashMap::new();
 		let mut chunk_map = HashMap::new();
-		loop {
-			let segment = match segment_data.pop() {
-				Some(data) => Segment::new_from_reader(data)?,
-				None => break,
-			};
+		while let Some(data) = segment_data.pop() {
+			let segment = Segment::new_from_reader(data)?;
 			let segment_number = segment.header().segment_number();
 
 			for chunk_number in segment.chunk_offsets().keys() {
@@ -438,9 +428,9 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 			return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT))
 		};
 		Ok(Self {
-			main_header: main_header,
-			segments: segments,
-			chunk_map: chunk_map,
+			main_header,
+			segments,
+			chunk_map,
 			position: 0,
 			encryption_key: None,
 			encryption_algorithm: EncryptionAlgorithm::AES256GCMSIV, //is set to an encryption algorithm: this value will never be used without the self.encryption_key value.
@@ -507,12 +497,12 @@ impl<R: 'static +  Read + Seek> ZffReader<R> {
 			return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT))
 		};
 		let mut corrupt_chunks = Vec::new();
-		for (chunk_number, _) in &self.chunk_map.clone() {
+		for chunk_number in self.chunk_map.clone().keys() {
 			match self.verify_chunk(*chunk_number, publickey) {
 				Ok(true) => (),
-				Ok(false) => corrupt_chunks.push(chunk_number.clone()),
+				Ok(false) => corrupt_chunks.push(*chunk_number),
 				Err(e) => match e.get_kind() {
-					ZffErrorKind::MissingSegment => if ignore_missing_segments { () } else { return Err(e) },
+					ZffErrorKind::MissingSegment => if !ignore_missing_segments { return Err(e) },
 					_ => return Err(e),
 				},
 			}
@@ -541,14 +531,14 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				Ok(data) => data,
 				Err(e) => match e.unwrap_kind() {
 					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
 				},
 			},
 			Some(key) => match segment.chunk_data_decrypted(current_chunk, compression_algorithm, key, &self.encryption_algorithm) {
 				Ok(data) => data,
 				Err(e) => match e.unwrap_kind() {
 					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
 				},
 			}
 		};
@@ -573,21 +563,21 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				Ok(data) => data,
 				Err(e) => match e.unwrap_kind() {
 					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
 				},
 			},
 			Some(key) => match segment.chunk_data_decrypted(current_chunk, compression_algorithm, key, &self.encryption_algorithm) {
 				Ok(data) => data,
 				Err(e) => match e.unwrap_kind() {
 					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
 				},
 			}
 		};
 			read_bytes += chunk_data.as_slice().read(&mut buffer[read_bytes..])?;
 		}
 		self.position += read_bytes as u64;
-		return Ok(read_bytes);
+		Ok(read_bytes)
 	}
 }
 
@@ -597,12 +587,10 @@ impl<R: Read + Seek> Seek for ZffReader<R> {
 			SeekFrom::Start(value) => self.position = value,
 			SeekFrom::Current(value) => if self.position as i64 + value < 0 {
 				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+			} else if value >= 0 {
+   					self.position += value as u64;
 			} else {
-				if value >= 0 {
-					self.position += value as u64;
-				} else {
-					self.position -= value as u64;
-				}
+				self.position -= value as u64;
 			},
 			SeekFrom::End(value) => if self.position as i64 + value < 0 {
 				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))

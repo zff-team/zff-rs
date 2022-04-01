@@ -38,5 +38,5 @@ where
     } else {
         buf[..bytes_read].to_vec()
     };
-    return Ok((buf, bytes_read as u64))
+    Ok((buf, bytes_read as u64))
 }

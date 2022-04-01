@@ -29,8 +29,8 @@ impl HashHeader {
 	/// creates a new HashHeader by given values/hashes.
 	pub fn new(version: u8, hashes: Vec<HashValue>) -> HashHeader {
 		Self {
-			version: version,
-			hashes: hashes,
+			version,
+			hashes,
 		}
 	}
 
@@ -53,8 +53,7 @@ impl HeaderCoding for HashHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.hashes.encode_directly());
 
 		vec
@@ -82,10 +81,10 @@ impl HashValue {
 	/// creates a new [HashValue] with the given parameters.
 	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,) -> HashValue{
 		Self {
-			version: version,
-			hash_type: hash_type,
-			hash: hash,
-			ed25519_signature: ed25519_signature,
+			version,
+			hash_type,
+			hash,
+			ed25519_signature,
 		}
 	}
 	/// creates a new, empty [HashValue] for a given hashtype.
@@ -93,7 +92,7 @@ impl HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
 			version: structure_version,
-			hash_type: hash_type,
+			hash_type,
 			hash: vec!(0u8; hash_default_len/8),
 			ed25519_signature: None
 		}
@@ -121,7 +120,7 @@ impl HashValue {
 
 	/// returns the appropriate signature
 	pub fn ed25519_signature(&self) -> Option<[u8; SIGNATURE_LENGTH]> {
-		self.ed25519_signature.clone()
+		self.ed25519_signature
 	}
 }
 
@@ -139,7 +138,7 @@ impl HeaderCoding for HashValue {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.push(self.hash_type.clone() as u8);
 		vec.append(&mut self.hash.encode_directly());
 		match self.ed25519_signature {

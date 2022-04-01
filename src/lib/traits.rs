@@ -82,11 +82,7 @@ pub trait HeaderCoding {
 			Ok(val) => val,
 			Err(_) => return false,
 		};
-		if identifier == Self::identifier() { 
-			return true;
-		} else {
-			return false;
-		}
+		identifier == Self::identifier()
 	}
 	
 	/// helper method to check, if the key is on position.
@@ -104,11 +100,7 @@ pub trait HeaderCoding {
 			Ok(key) => key,
 			Err(_) => return false,
 		};
-		if read_key == key.into() {
-			return true;
-		} else {
-			return false;
-		}
+		read_key == key.into()
 	}
 
 	/// decodes the content of the header.
@@ -122,7 +114,7 @@ pub trait HeaderCoding {
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
-		return Self::decode_content(header_content);
+		Self::decode_content(header_content)
 	}
 
 	/// decodes the header for the given key.
@@ -161,9 +153,9 @@ impl ValueEncoder for bool {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		if *self {
-			vec.push(0 as u8);
+			vec.push(0_u8);
 		} else {
-			vec.push(1 as u8);
+			vec.push(1_u8);
 		};
 		vec
 	}
@@ -171,9 +163,7 @@ impl ValueEncoder for bool {
 
 impl ValueEncoder for u8 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.push(*self);
-		vec
+		vec![*self]
 	}
 }
 
@@ -341,11 +331,7 @@ pub trait ValueDecoder {
 			Ok(key) => key,
 			Err(_) => return false,
 		};
-		if read_key == key.into() {
-			return true;
-		} else {
-			return false;
-		}
+		read_key == key.into()
 	}
 
 	/// decodes the value directly.
@@ -365,11 +351,7 @@ impl ValueDecoder for bool {
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<bool> {
 		let data = data.read_u8()?;
-		if data != 0 {
-			return Ok(true);
-		} else {
-			return Ok(false)
-		}
+		Ok(data != 0)
 	}
 }
 

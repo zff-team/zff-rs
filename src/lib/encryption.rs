@@ -120,21 +120,21 @@ impl Encryption {
 	/// the given chunk data (if selected, then **after the compression**).
 	/// Returns a the cipthertext as ```Vec<u8>```.
 	/// # Example
-	///	```
+	/// ```
 	/// use zff::*;
 	/// use hex::ToHex;
 	///
 	/// fn main() -> Result<()> {
-	///		let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
-	///		let chunk_no = 1; // 12Byte/96Bit Key
-	///		let message = "My message";
+	///        let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
+	///        let chunk_no = 1; // 12Byte/96Bit Key
+	///        let message = "My message";
 	/// 
-	///		let ciphertext = Encryption::encrypt_message(key, message, chunk_no, EncryptionAlgorithm::AES256GCMSIV)?;
+	///        let ciphertext = Encryption::encrypt_message(key, message, chunk_no, EncryptionAlgorithm::AES256GCMSIV)?;
 	/// 
-	///		assert_eq!(ciphertext.encode_hex::<String>(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
-	///		Ok(())
+	///        assert_eq!(ciphertext.encode_hex::<String>(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
+	///        Ok(())
 	/// }
-	///	```
+	/// ```
 	/// # Error
 	/// This method will fail, if the encryption fails.
 	pub fn encrypt_message<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
@@ -231,11 +231,9 @@ impl Encryption {
 	/// ```no_run
 	/// use zff::*;
 	/// 
-	/// fn main() {
-	/// 	let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
-	/// 	let my_new_random_super_secret_key = Encryption::gen_random_key(keysize);
-	/// 	//...
-	/// }
+	/// let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
+	/// let my_new_random_super_secret_key = Encryption::gen_random_key(keysize);
+	/// //...
 	/// ```
 	pub fn gen_random_key(length: usize) -> Vec<u8> {
 		let mut key = vec!(0u8; length/8);

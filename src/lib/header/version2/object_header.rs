@@ -58,13 +58,13 @@ impl ObjectHeader {
 		description_header: DescriptionHeader,
 		object_type: ObjectType) -> ObjectHeader {
 		Self {
-			version: version,
-			object_number: object_number,
-			encryption_header: encryption_header,
-			compression_header: compression_header,
-			signature_flag: signature_flag,
-			description_header: description_header,
-			object_type: object_type,
+			version,
+			object_number,
+			encryption_header,
+			compression_header,
+			signature_flag,
+			description_header,
+			object_type,
 		}
 	}
 
@@ -100,18 +100,12 @@ impl ObjectHeader {
 
 	/// returns, if the chunks has a ed25519 signature or not.
 	pub fn has_per_chunk_signature(&self) -> bool {
-		match &self.signature_flag {
-			SignatureFlag::PerChunkSignatures => return true,
-			_ => return false,
-		}
+		matches!(&self.signature_flag, SignatureFlag::PerChunkSignatures)
 	}
 
 	/// checks if a signature method was used. Returns true if and false if not.
 	pub fn has_hash_signatures(&self) -> bool {
-		match &self.signature_flag {
-			SignatureFlag::NoSignatures => return false,
-			_ => return true,
-		}
+		!matches!(&self.signature_flag, SignatureFlag::NoSignatures)
 	}
 
 	/// encodes the object header to a ```Vec<u8>```. The encryption flag will be set to 2.
@@ -146,7 +140,7 @@ impl ObjectHeader {
 		let encryption_flag: u8 = 2;
 
 		let mut vec = Vec::new();
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
 		vec.push(encryption_flag);
 		vec.append(&mut encryption_header.encode_directly());
@@ -160,7 +154,7 @@ impl ObjectHeader {
 			encryption_header.algorithm()
 			)?;
 		vec.append(&mut encrypted_data.encode_directly());
-		return Ok(vec);
+		Ok(vec)
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
@@ -225,13 +219,13 @@ impl ObjectHeader {
 			0 => SignatureFlag::NoSignatures,
 			1 => SignatureFlag::HashValueSignatureOnly,
 			2 => SignatureFlag::PerChunkSignatures,
-			value @ _ => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("signature_flag value: {value}"))), //TODO: move to constants...
+			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("signature_flag value: {value}"))), //TODO: move to constants...
 		};
 		let description_header = DescriptionHeader::decode_directly(inner_content)?;
 		let object_type = match u8::decode_directly(inner_content)? {
 			1 => ObjectType::Physical,
 			2 => ObjectType::Logical,
-			value @ _ => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("object_type value: {value}"))), //TODO: move to constants...
+			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("object_type value: {value}"))), //TODO: move to constants...
 		};
 		let inner_content = (
 			compression_header,
@@ -311,13 +305,12 @@ impl HeaderCoding for ObjectHeader {
 		let version = u8::decode_directly(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
 		//encryption flag:
-		let mut encryption_header = None;
 		let encryption_flag = u8::decode_directly(&mut cursor)?;
-		if encryption_flag == 1 {
-			encryption_header = Some(EncryptionHeader::decode_directly(&mut cursor)?);
-		} else if encryption_flag > 1 {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, ""))//TODO
-		}
+		let encryption_header = match encryption_flag {
+			0 => None,
+			1 => Some(EncryptionHeader::decode_directly(&mut cursor)?),
+			_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, "")) //TODO
+		};
 		let (compression_header,
 			signature_flag,
 			description_header,

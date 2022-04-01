@@ -23,8 +23,8 @@ impl File {
 	/// creates a new [File] instance for the given [FileHeader] and [FileFooter].
 	pub fn new(header: FileHeader, footer: FileFooter) -> File {
 		Self {
-			header: header,
-			footer: footer,
+			header,
+			footer,
 			position: 0
 		}
 	}

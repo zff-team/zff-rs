@@ -64,10 +64,7 @@ impl<R: Read> ZffCreator<R> {
 		output_filenpath: O) -> Result<ZffCreator<R>>{
 
 		let initial_chunk_number = 1;
-		let signature_key_bytes = match signature_key {
-			Some(keypair) => Some(keypair.to_bytes().to_vec()),
-			None => None
-		};
+		let signature_key_bytes = signature_key.map(|keypair| keypair.to_bytes().to_vec());
 
 		let mut object_encoder_vec = Vec::new();
 		for (object_header, input_data) in physical_objects {
@@ -237,7 +234,7 @@ impl<R: Read> ZffCreator<R> {
 				directory_childs,
 				initial_chunk_number,
 				header_encryption)?;
-			object_encoder_vec.push((ObjectEncoder::Logical(object_encoder), (false, unaccessable_files)));
+			object_encoder_vec.push((ObjectEncoder::Logical(Box::new(object_encoder)), (false, unaccessable_files)));
 		}
 		object_encoder_vec.reverse();
 		let (object_encoder, (written_object_header, unaccessable_files)) = match object_encoder_vec.pop() {
@@ -246,14 +243,14 @@ impl<R: Read> ZffCreator<R> {
 		};
 
 		Ok(Self {
-			object_encoder_vec: object_encoder_vec,
-			object_encoder: object_encoder,
-			written_object_header: written_object_header,
-			unaccessable_files: unaccessable_files,
+			object_encoder_vec,
+			object_encoder,
+			written_object_header,
+			unaccessable_files,
 			output_filenpath: output_filenpath.into(),
 			current_segment_no: 1, //initial segment number should always be 1.
 			last_accepted_segment_filepath: PathBuf::new(),
-			description_notes: description_notes,
+			description_notes,
 			object_header_segment_numbers: HashMap::new(),
 			object_footer_segment_numbers: HashMap::new(),
 		})
@@ -277,7 +274,7 @@ impl<R: Read> ZffCreator<R> {
 
 		//check if the segment size is to small
 		if (seek_value as usize +
-			&segment_header.encode_directly().len() +
+			segment_header.encode_directly().len() +
 			self.object_encoder.get_encoded_header().len() +
 			target_chunk_size) > self.object_encoder.main_header().segment_size() as usize {
 	        
@@ -355,7 +352,7 @@ impl<R: Read> ZffCreator<R> {
 	    let mut output_file = File::create(&first_segment_filename)?;
 		let encoded_main_header = self.object_encoder.main_header().encode_directly();
 
-	    output_file.write(&encoded_main_header)?;
+	    output_file.write_all(&encoded_main_header)?;
 	    let mut main_footer_start_offset = self.write_next_segment(&mut output_file, encoded_main_header.len() as u64)? +
 	    								   encoded_main_header.len() as u64;
 
@@ -395,7 +392,7 @@ impl<R: Read> ZffCreator<R> {
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
-	    output_file.write(&main_footer.encode_directly())?;
+	    output_file.write_all(&main_footer.encode_directly())?;
 
 	    Ok(())
 	}
@@ -426,10 +423,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 		description_notes: Option<String>,
 		output_filenpath: O) -> Result<ZffCreatorPhysical<R>> {
 		let initial_chunk_number = 1;
-		let signature_key_bytes = match signature_key {
-			Some(keypair) => Some(keypair.to_bytes().to_vec()),
-			None => None
-		};
+		let signature_key_bytes = signature_key.map(|keypair| keypair.to_bytes().to_vec());
 
 		Ok(Self {
 			object_encoder: PhysicalObjectEncoder::new(
@@ -445,7 +439,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 			current_segment_no: 1, // initial segment number should always be 1.
 			written_object_header: false,
 			last_accepted_segment_filepath: PathBuf::new(),
-			description_notes: description_notes,
+			description_notes,
 			object_header_segment_numbers: HashMap::new(),
 			object_footer_segment_numbers: HashMap::new(),
 		})
@@ -459,7 +453,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    let mut output_file = File::create(&first_segment_filename)?;
 		let encoded_main_header = self.object_encoder.main_header().encode_directly();
 
-	    output_file.write(&encoded_main_header)?;
+	    output_file.write_all(&encoded_main_header)?;
 	    let mut main_footer_start_offset = self.write_next_segment(&mut output_file, encoded_main_header.len() as u64)? +
 	    								   encoded_main_header.len() as u64;
 
@@ -484,7 +478,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
-	    output_file.write(&main_footer.encode_directly())?;
+	    output_file.write_all(&main_footer.encode_directly())?;
 
 	    Ok(())
 	}
@@ -508,7 +502,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 
 		//check if the segment size is to small
 		if (seek_value as usize +
-			&segment_header.encode_directly().len() +
+			segment_header.encode_directly().len() +
 			self.object_encoder.get_encoded_header().len() +
 			target_chunk_size) > self.object_encoder.main_header().segment_size() as usize {
 	        
@@ -741,10 +735,7 @@ impl ZffCreatorLogical {
 				directories_to_traversal.append(&mut inner_dir_elements);
 			}
 		}
-		let signature_key_bytes = match signature_key {
-			Some(keypair) => Some(keypair.to_bytes().to_vec()),
-			None => None
-		};
+		let signature_key_bytes = signature_key.map(|keypair| keypair.to_bytes().to_vec());
 		let logical_object_encoder = LogicalObjectEncoder::new(
 			object_header,
 			files,
@@ -764,8 +755,8 @@ impl ZffCreatorLogical {
 			current_segment_no: 1, // 1 is always the initial segment no.
 			written_object_header: false,
 			last_accepted_segment_filepath: PathBuf::new(),
-			unaccessable_files: unaccessable_files,
-			description_notes: description_notes,
+			unaccessable_files,
+			description_notes,
 			object_header_segment_numbers: HashMap::new(),
 			object_footer_segment_numbers: HashMap::new(),
 		})
@@ -781,7 +772,7 @@ impl ZffCreatorLogical {
 
 		let encoded_main_header = self.object_encoder.main_header().encode_directly();
 
-	    output_file.write(&encoded_main_header)?;
+	    output_file.write_all(&encoded_main_header)?;
 	    let mut main_footer_start_offset = self.write_next_segment(&mut output_file, encoded_main_header.len() as u64)? +
 	    								   encoded_main_header.len() as u64;
 
@@ -807,7 +798,7 @@ impl ZffCreatorLogical {
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    //TODO: Handle encrypted main footer.
-	    output_file.write(&main_footer.encode_directly())?;
+	    output_file.write_all(&main_footer.encode_directly())?;
 
 	    Ok(())
 	}
@@ -835,7 +826,7 @@ impl ZffCreatorLogical {
 
 		//check if the segment size is to small
 		if (seek_value as usize +
-			&segment_header.encode_directly().len() +
+			segment_header.encode_directly().len() +
 			self.object_encoder.get_encoded_header().len() +
 			target_chunk_size) > self.object_encoder.main_header().segment_size() as usize {
 	        

@@ -30,10 +30,10 @@ impl CompressionHeader {
 	/// returns a new compression header with the given values.
 	pub fn new(version: u8,compression_algo: CompressionAlgorithm, level: u8, threshold: f32) -> CompressionHeader {
 		Self {
-			version: version,
+			version,
 			algorithm: compression_algo,
-			level: level,
-			threshold: threshold,
+			level,
+			threshold,
 		}
 	}
 
@@ -66,11 +66,7 @@ impl HeaderCoding for CompressionHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-
-		vec.push(self.version);
-		vec.push(self.algorithm.clone() as u8);
-		vec.push(self.level);
+		let mut vec = vec![self.version, self.algorithm.clone() as u8, self.level];
 		vec.append(&mut self.threshold.encode_directly());
 		
 		vec

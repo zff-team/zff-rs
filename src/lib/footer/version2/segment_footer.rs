@@ -34,7 +34,7 @@ impl SegmentFooter {
 	/// creates a new empty SegmentFooter.
 	pub fn new_empty(version: u8) -> SegmentFooter {
 		Self {
-			version: version,
+			version,
 			length_of_segment: 0,
 			object_header_offsets: HashMap::new(),
 			object_footer_offsets: HashMap::new(),
@@ -46,12 +46,12 @@ impl SegmentFooter {
 	/// creates a new SegmentFooter.
 	pub fn new(version: u8, length_of_segment: u64, object_header_offsets: HashMap<u64, u64>, object_footer_offsets: HashMap<u64, u64>, chunk_offsets: HashMap<u64, u64>, footer_offset: u64) -> SegmentFooter {
 		Self {
-			version: version,
-			length_of_segment: length_of_segment,
-			object_header_offsets: object_header_offsets,
-			object_footer_offsets: object_footer_offsets,
-			chunk_offsets: chunk_offsets,
-			footer_offset: footer_offset,
+			version,
+			length_of_segment,
+			object_header_offsets,
+			object_footer_offsets,
+			chunk_offsets,
+			footer_offset,
 		}
 	}
 
@@ -115,7 +115,6 @@ impl HeaderCoding for SegmentFooter {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
 		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.length_of_segment.encode_directly());
 		vec.append(&mut self.object_header_offsets.encode_directly());

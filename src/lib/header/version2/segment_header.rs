@@ -26,17 +26,17 @@ impl SegmentHeader {
 	/// returns a new empty [SegmentHeader]
 	pub fn new_empty(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
 		Self {
-			version: version,
-			unique_identifier: unique_identifier,
-			segment_number: segment_number,
+			version,
+			unique_identifier,
+			segment_number,
 		}
 	}
 	/// returns a new [SegmentHeader] with the given values.
 	pub fn new(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
 		Self {
-			version: version,
-			unique_identifier: unique_identifier,
-			segment_number: segment_number,
+			version,
+			unique_identifier,
+			segment_number,
 		}
 	}
 

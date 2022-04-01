@@ -1,7 +1,7 @@
 // - STD
 use std::fs::{File, Metadata};
 use std::collections::HashMap;
-use std::path::{PathBuf};
+use std::path::{Path};
 
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -89,7 +89,7 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
 	timestamps
 }
 
-fn get_file_header(metadata: &Metadata, file: &File, path: &PathBuf, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+fn get_file_header(metadata: &Metadata, file: &File, path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
 	let filetype = if metadata.file_type().is_dir() {
 		FileType::Directory
 	} else if metadata.file_type().is_file() {
@@ -104,13 +104,13 @@ fn get_file_header(metadata: &Metadata, file: &File, path: &PathBuf, current_fil
 		Some(filename) => filename.to_string_lossy(),
 		None => path.to_string_lossy(),
 	};
-	let timestamps = get_time_from_metadata(&metadata);
+	let timestamps = get_time_from_metadata(metadata);
 	let atime = timestamps.get("atime").unwrap();
 	let mtime = timestamps.get("mtime").unwrap();
 	let ctime = timestamps.get("ctime").unwrap();
 	let btime = timestamps.get("btime").unwrap();
 
-	let metadata_ext = get_metadata_ext(&file)?;
+	let metadata_ext = get_metadata_ext(file)?;
 
 	let file_header = FileHeader::new(
 					DEFAULT_HEADER_VERSION_FILE_HEADER,

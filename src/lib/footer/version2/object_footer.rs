@@ -49,11 +49,11 @@ impl ObjectFooter {
 			Err(_) => return 0,
 		};
 		if identifier == ObjectFooterPhysical::identifier() { 
-			return 1;
+			1
 		} else if identifier == ObjectFooterLogical::identifier() {
-			return 2;
+			2
 		} else {
-			return 0;
+			0
 		}
 	}
 
@@ -73,15 +73,15 @@ impl ObjectFooter {
 				let length = Self::decode_header_length(data)? as usize;
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
-				return Ok(ObjectFooter::Physical(ObjectFooterPhysical::decode_content(content_buffer)?));
+				Ok(ObjectFooter::Physical(ObjectFooterPhysical::decode_content(content_buffer)?))
 			},
 			2 => {
 				let length = Self::decode_header_length(data)? as usize;
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
-				return Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(content_buffer)?));
+				Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(content_buffer)?))
 			},
-			_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
+			_ => Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
 	}
 }
@@ -109,13 +109,13 @@ impl ObjectFooterPhysical {
 	/// creates a new [ObjectFooterPhysical] with the given values.
 	pub fn new(version: u8, acquisition_start: u64, acquisition_end: u64, length_of_data: u64, first_chunk_number: u64, number_of_chunks: u64, hash_header: HashHeader) -> ObjectFooterPhysical {
 		Self {
-			version: version,
-			acquisition_start: acquisition_start,
-			acquisition_end: acquisition_end,
-			length_of_data: length_of_data,
-			first_chunk_number: first_chunk_number,
-			number_of_chunks: number_of_chunks,
-			hash_header: hash_header,
+			version,
+			acquisition_start,
+			acquisition_end,
+			length_of_data,
+			first_chunk_number,
+			number_of_chunks,
+			hash_header,
 		}
 	}
 
@@ -159,8 +159,7 @@ impl HeaderCoding for ObjectFooterPhysical {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.push(self.version);
+		let mut vec = vec![self.version];
 		vec.append(&mut self.acquisition_start.encode_directly());
 		vec.append(&mut self.acquisition_end.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
@@ -207,7 +206,7 @@ impl ObjectFooterLogical {
 	/// creates a new empty [ObjectFooterLogical]
 	pub fn new_empty(version: u8) -> ObjectFooterLogical {
 		Self {
-			version: version,
+			version,
 			acquisition_start: 0,
 			acquisition_end: 0,
 			root_dir_filenumbers: Vec::new(),
@@ -229,14 +228,14 @@ impl ObjectFooterLogical {
 		file_footer_segment_numbers: HashMap<u64, u64>,
 		file_footer_offsets: HashMap<u64, u64>) -> ObjectFooterLogical {
 		Self {
-			version: version,
-			acquisition_start: acquisition_start,
-			acquisition_end: acquisition_end,
-			root_dir_filenumbers: root_dir_filenumbers,
-			file_header_segment_numbers: file_header_segment_numbers,
-			file_header_offsets: file_header_offsets,
-			file_footer_segment_numbers: file_footer_segment_numbers,
-			file_footer_offsets: file_footer_offsets,
+			version,
+			acquisition_start,
+			acquisition_end,
+			root_dir_filenumbers,
+			file_header_segment_numbers,
+			file_header_offsets,
+			file_footer_segment_numbers,
+			file_footer_offsets,
 		}
 	}
 
@@ -325,8 +324,7 @@ impl HeaderCoding for ObjectFooterLogical {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.push(self.version);
+		let mut vec = vec![self.version];
 		vec.append(&mut self.acquisition_start.encode_directly());
 		vec.append(&mut self.acquisition_end.encode_directly());
 		vec.append(&mut self.root_dir_filenumbers.encode_directly());

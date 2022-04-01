@@ -169,19 +169,19 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
 	/// fn my_func() -> Result<()> {
-	/// 	let custom_error = ZffError::new(
-	///								ZffErrorKind::Custom, "My detailed custom error message");
-	///		Err(custom_error)
+	///     let custom_error = ZffError::new(
+	///                                ZffErrorKind::Custom, "My detailed custom error message");
+	///        Err(custom_error)
 	/// }
 	/// fn main() {
-	///		match my_func() {
-	///			Err(x) => println!("It work's! Your custom error message is: {}", x),
-	///			_ => ()
-	///		}
+	///        match my_func() {
+	///            Err(x) => println!("It work's! Your custom error message is: {}", x),
+	///            _ => ()
+	///        }
 	/// }
 	pub fn new<S: Into<String>>(kind: ZffErrorKind, details: S) -> ZffError {
 		ZffError {
-			kind: kind,
+			kind,
 			details: details.into()
 		}
 	}
@@ -191,14 +191,14 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, Result};
 	/// fn my_func() -> Result<()> {
-	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
-	///		Err(custom_error)
+	///     let custom_error = ZffError::new_custom("My detailed custom error message");
+	///        Err(custom_error)
 	/// }
 	/// fn main() {
-	///		match my_func() {
-	///			Err(x) => println!("It work's! Your custom error message is: {}", x),
-	///			_ => ()
-	///		}
+	///        match my_func() {
+	///            Err(x) => println!("It work's! Your custom error message is: {}", x),
+	///            _ => ()
+	///        }
 	/// }
 	pub fn new_custom<S: Into<String>>(details: S) -> ZffError {
 		ZffError {
@@ -212,14 +212,14 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, Result};
 	/// fn my_func() -> Result<()> {
-	/// 	let decode_error = ZffError::new_header_decode_error("error while trying to decode CompressionHeader from given data");
-	///		Err(decode_error)
+	///     let decode_error = ZffError::new_header_decode_error("error while trying to decode CompressionHeader from given data");
+	///        Err(decode_error)
 	/// }
 	/// fn main() {
-	///		match my_func() {
-	///			Err(x) => println!("It work's! Your custom error message is: {}", x),
-	///			_ => ()
-	///		}
+	///        match my_func() {
+	///            Err(x) => println!("It work's! Your custom error message is: {}", x),
+	///            _ => ()
+	///        }
 	/// }
 	pub fn new_header_decode_error<S: Into<String>>(details: S) -> ZffError {
 		ZffError {
@@ -233,19 +233,19 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
 	/// fn my_func() -> Result<()> {
-	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
-	///		Err(custom_error)
+	///     let custom_error = ZffError::new_custom("My detailed custom error message");
+	///        Err(custom_error)
 	/// }
 	/// fn main() {
-	/// 	match my_func() {
-	/// 		Err(x) => {
-	/// 			assert!(matches!(x.get_kind(), &ZffErrorKind::Custom));
-	/// 		},
-	/// 		_ => ()
-	/// 	}
+	///     match my_func() {
+	///         Err(x) => {
+	///             assert!(matches!(x.get_kind(), &ZffErrorKind::Custom));
+	///         },
+	///         _ => ()
+	///     }
 	/// }
 	pub fn get_kind(&self) -> &ZffErrorKind {
-		return &self.kind
+		&self.kind
 	}
 
 	/// returns the error kind and consumes self.
@@ -253,19 +253,19 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
 	/// fn my_func() -> Result<()> {
-	/// 	let custom_error = ZffError::new_custom("My detailed custom error message");
-	///		Err(custom_error)
+	///     let custom_error = ZffError::new_custom("My detailed custom error message");
+	///        Err(custom_error)
 	/// }
 	/// fn main() {
-	/// 	match my_func() {
-	/// 		Err(x) => {
-	/// 			assert!(matches!(x.unwrap_kind(), ZffErrorKind::Custom));
-	/// 		},
-	/// 		_ => ()
-	/// 	}
+	///     match my_func() {
+	///         Err(x) => {
+	///             assert!(matches!(x.unwrap_kind(), ZffErrorKind::Custom));
+	///         },
+	///         _ => ()
+	///     }
 	/// }
 	pub fn unwrap_kind(self) -> ZffErrorKind {
-		return self.kind
+		self.kind
 	}
 }
 
@@ -320,7 +320,7 @@ impl From<FromUtf8Error> for ZffError {
 
 impl fmt::Display for ZffError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let err_msg = format!("{}: {}", self.kind.to_string(), self.details);
+		let err_msg = format!("{}: {}", self.kind, self.details);
 		write!(f, "{}", err_msg)
 	}
 }

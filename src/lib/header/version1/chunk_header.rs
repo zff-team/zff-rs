@@ -32,8 +32,8 @@ impl ChunkHeader {
 	/// creates a new empty chunk header with a given chunk number. All other values are set to ```0``` or ```None```.
 	pub fn new_empty(version: u8, chunk_number: u64) -> ChunkHeader {
 		Self {
-			version: version,
-			chunk_number: chunk_number,
+			version,
+			chunk_number,
 			chunk_size: 0,
 			crc32: 0,
 			error_flag: false,
@@ -45,13 +45,13 @@ impl ChunkHeader {
 	/// creates a new header from the given data.
 	pub fn new(version: u8, chunk_number: u64, chunk_size: u64, crc32: u32, error_flag: bool, compression_flag: bool, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
 		Self {
-			version: version,
-			chunk_number: chunk_number,
-			chunk_size: chunk_size,
-			crc32: crc32,
-			error_flag: error_flag,
-			compression_flag: compression_flag,
-			ed25519_signature: ed25519_signature
+			version,
+			chunk_number,
+			chunk_size,
+			crc32,
+			error_flag,
+			compression_flag,
+			ed25519_signature
 		}
 	}
 
@@ -122,9 +122,8 @@ impl HeaderCoding for ChunkHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
+		let mut vec = vec![self.version];
 
-		vec.push(self.version);
 		vec.append(&mut self.chunk_number.encode_directly());
 		vec.append(&mut self.chunk_size.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());

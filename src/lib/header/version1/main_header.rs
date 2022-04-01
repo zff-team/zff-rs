@@ -60,17 +60,17 @@ impl MainHeader {
 		unique_identifier: i64,
 		length_of_data: u64) -> MainHeader {
 		Self {
-			version: version,
-			encryption_header: encryption_header,
-			compression_header: compression_header,
-			description_header: description_header,
-			hash_header: hash_header,
-			chunk_size: chunk_size,
-			signature_flag: signature_flag,
-			segment_size: segment_size,
-			number_of_segments: number_of_segments,
-			unique_identifier: unique_identifier,
-			length_of_data: length_of_data,
+			version,
+			encryption_header,
+			compression_header,
+			description_header,
+			hash_header,
+			chunk_size,
+			signature_flag,
+			segment_size,
+			number_of_segments,
+			unique_identifier,
+			length_of_data,
 		}
 	}
 
@@ -83,8 +83,7 @@ impl MainHeader {
 	where
 		K: AsRef<[u8]>
 	{
-		let mut vec = Vec::new();
-		vec.push(self.version);
+		let mut vec = vec![self.version];
 		let encryption_header = match &self.encryption_header {
 			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 			Some(header) => {
@@ -104,7 +103,7 @@ impl MainHeader {
 			encryption_header.algorithm()
 			)?;
 		vec.append(&mut encrypted_data.encode_directly());
-		return Ok(vec);
+		Ok(vec)
 	}
 
 	fn check_encrypted_identifier<R: Read>(data: &mut R) -> bool {
@@ -112,11 +111,7 @@ impl MainHeader {
 			Ok(val) => val,
 			Err(_) => return false,
 		};
-		if identifier == Self::encrypted_header_identifier() { 
-			return true;
-		} else {
-			return false;
-		}
+		identifier == Self::encrypted_header_identifier()
 	}
 
 	/// decodes the encrypted main header with the given password.
@@ -252,7 +247,7 @@ impl MainHeader {
 
 	/// returns the segment size
 	pub fn segment_size(&self) -> u64 {
-		self.segment_size.clone()
+		self.segment_size
 	}
 
 	/// returns the len() of the ```Vec<u8>``` (encoded main header).
@@ -333,9 +328,8 @@ impl HeaderCoding for MainHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-
-		vec.push(self.version);
+		let mut vec = vec![self.version];
+		
 		match &self.encryption_header {
 			None => {
 				let encryption_flag: u8 = 0;
@@ -357,13 +351,12 @@ impl HeaderCoding for MainHeader {
 		let mut cursor = Cursor::new(data);
 		let version = u8::decode_directly(&mut cursor)?;
 		//encryption flag:
-		let mut encryption_header = None;
 		let encryption_flag = u8::decode_directly(&mut cursor)?;
-		if encryption_flag == 1 {
-			encryption_header = Some(EncryptionHeader::decode_directly(&mut cursor)?);
-		} else if encryption_flag > 1 {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED))
-		}
+		let encryption_header = match encryption_flag {
+			0 => None,
+			1 => Some(EncryptionHeader::decode_directly(&mut cursor)?),
+			_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED))
+		};
 		let (compression_header,
 			description_header,
 			hash_header,

@@ -18,8 +18,8 @@ impl Chunk {
 	/// Returns a new [Chunk] with the given values.
 	pub fn new(header: ChunkHeader, data: Vec<u8>) -> Chunk {
 		Self {
-			header: header,
-			data: data
+			header,
+			data
 		}
 	}
 

@@ -35,9 +35,9 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 	/// creates a new [Segment] by the given values.
 	fn new(header: SegmentHeader, data: R, chunk_offsets: HashMap<u64, u64>) -> Segment<R> {
 		Self {
-			header: header,
-			data: data,
-			chunk_offsets: chunk_offsets,
+			header,
+			data,
+			chunk_offsets,
 		}
 	}
 
@@ -47,10 +47,8 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 	/// use std::fs::File;
 	/// use zff::Segment;
 	/// 
-	/// fn main() {
-	/// 	let zff_segment = File::open("zff_file.z01").unwrap();
-	/// 	let segment = Segment::new_from_reader(zff_segment).unwrap();
-	/// }
+	/// let zff_segment = File::open("zff_file.z01").unwrap();
+	/// let segment = Segment::new_from_reader(zff_segment).unwrap();
 	/// ```
 	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
 		let stream_position = data.stream_position()?; //uses the current stream position. This is important for the first segment (which contains a main header);
@@ -87,24 +85,24 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + *chunk_offset))?;
 		let mut chunk_data = Vec::with_capacity(*chunk_size as usize);
-		self.data.read(&mut chunk_data)?;
+		self.data.read_exact(&mut chunk_data)?;
 		let mut buffer = Vec::new();
 		if !chunk_header.compression_flag() {
 			return Ok(chunk_data);
 		};
 		match compression_algorithm.borrow() {
 			CompressionAlgorithm::None => {
-				return Ok(chunk_data);
+				Ok(chunk_data)
 			}
 			CompressionAlgorithm::Zstd => {
 				let mut decoder = zstd::stream::read::Decoder::new(chunk_data.as_slice())?;
 				decoder.read_to_end(&mut buffer)?;
-				return Ok(buffer);
+				Ok(buffer)
 			},
 			CompressionAlgorithm::Lz4 => {
 				let mut decompressor = lz4_flex::frame::FrameDecoder::new(chunk_data.as_slice());
 				decompressor.read_to_end(&mut buffer)?;
-				return Ok(buffer);
+				Ok(buffer)
 			}
 		}
 	}
@@ -133,7 +131,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + *chunk_offset))?;
 		let mut encrypted_data = Vec::with_capacity(*chunk_size as usize);
-		self.data.read(&mut encrypted_data)?;
+		self.data.read_exact(&mut encrypted_data)?;
 		let decrypted_chunk_data = Encryption::decrypt_message(decryption_key, encrypted_data, chunk_number, encryption_algorithm)?;
 
 		if !chunk_header.compression_flag() {
@@ -141,19 +139,19 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		};
 		match compression_algorithm.borrow() {
 			CompressionAlgorithm::None => {
-				return Ok(decrypted_chunk_data);
+				Ok(decrypted_chunk_data)
 			}
 			CompressionAlgorithm::Zstd => {
 				let mut decompressed_buffer = Vec::new();
 				let mut decoder = zstd::stream::read::Decoder::new(decrypted_chunk_data.as_slice())?;
 				decoder.read_to_end(&mut decompressed_buffer)?;
-				return Ok(decompressed_buffer);
+				Ok(decompressed_buffer)
 			},
 			CompressionAlgorithm::Lz4 => {
 				let mut decompressed_buffer = Vec::new();
 				let mut decompressor = lz4_flex::frame::FrameDecoder::new(decrypted_chunk_data.as_slice());
 				decompressor.read_to_end(&mut decompressed_buffer)?;
-				return Ok(decompressed_buffer);
+				Ok(decompressed_buffer)
 			}
 		}
 	}

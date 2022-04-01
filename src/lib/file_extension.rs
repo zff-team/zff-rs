@@ -11,10 +11,8 @@ use crate::{
 /// ```
 /// use zff::*;
 /// 
-/// fn main() {
-/// 	let file_extension = "z01";
-/// 	assert_eq!(file_extension_next_value(file_extension).unwrap(), "z02");
-/// }
+/// let file_extension = "z01";
+/// assert_eq!(file_extension_next_value(file_extension).unwrap(), "z02");
 /// ```
 /// # Error
 /// fails if the file-extension is in an unsuitable format.
@@ -32,7 +30,7 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 	};
 	next_value += 1;
 	if next_value <= 9 {
-		return Ok(String::from("z0") + &next_value.to_string())
+		Ok(String::from("z0") + &next_value.to_string())
 	} else {
 		Ok(String::from("z") + &next_value.to_string())
 	}
@@ -43,10 +41,8 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 /// ```
 /// use zff::*;
 /// 
-/// fn main() {
-/// 	let file_extension = "z05";
-/// 	assert_eq!(file_extension_previous_value(file_extension).unwrap(), "z04");
-/// }
+/// let file_extension = "z05";
+/// assert_eq!(file_extension_previous_value(file_extension).unwrap(), "z04");
 /// ```
 /// # Error
 /// fails if the file-extension is in an unsuitable format or if the previous value is < 0.
@@ -64,7 +60,7 @@ pub fn file_extension_previous_value<V: Into<String>>(value: V) -> Result<String
 	};
 	previous_value -= 1;
 	if previous_value <= 9 {
-		return Ok(String::from("z0") + &previous_value.to_string())
+		Ok(String::from("z0") + &previous_value.to_string())
 	} else {
 		Ok(String::from("z") + &previous_value.to_string())
 	}

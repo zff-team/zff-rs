@@ -29,13 +29,11 @@ use crate::version1::{
 /// ```
 /// use zff::header::DescriptionHeader;
 /// 
-/// fn main() {
-/// 	let header_version = 1;
-/// 	let mut description_header = DescriptionHeader::new_empty(1);
+/// let header_version = 1;
+/// let mut description_header = DescriptionHeader::new_empty(1);
 /// 
-/// 	description_header.set_examiner_name("ph0llux");
-/// 	assert_eq!(Some("ph0llux"), description_header.examiner_name());
-/// }
+/// description_header.set_examiner_name("ph0llux");
+/// assert_eq!(Some("ph0llux"), description_header.examiner_name());
 /// ```
 #[derive(Debug,Clone)]
 pub struct DescriptionHeader {
@@ -53,7 +51,7 @@ impl DescriptionHeader {
 	/// All fields will be initialized with ```None``` or ```0```.
 	pub fn new_empty(version: u8) -> DescriptionHeader {
 		Self {
-			version: version,
+			version,
 			case_number: None,
 			evidence_number: None,
 			examiner_name: None,
@@ -127,12 +125,12 @@ impl DescriptionHeader {
 
 	/// returns the acquisition start as u64 unix timestamp - initialized with zero.
 	pub fn acquisition_start(&self) -> u64 {
-		self.acquisition_start.clone()
+		self.acquisition_start
 	}
 
 	/// returns the acquisition end as u64 unix timestamp - initialized with zero.
 	pub fn acquisition_end(&self) -> u64 {
-		self.acquisition_end.clone()
+		self.acquisition_end
 	}
 }
 
@@ -148,9 +146,8 @@ impl HeaderCoding for DescriptionHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
+		let mut vec = vec![self.version];
 
-		vec.push(self.version);
 		if let Some(case_number) = self.case_number() {
 			vec.append(&mut case_number.encode_for_key(ENCODING_KEY_CASE_NUMBER));
 		};

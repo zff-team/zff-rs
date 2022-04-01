@@ -45,11 +45,11 @@ impl PBEHeader {
 		pbencryption_nonce: [u8; 16],
 		) -> PBEHeader {
 		Self {
-			version: version,
-			kdf_scheme: kdf_scheme,
-			encryption_scheme: encryption_scheme,
-			kdf_parameters: kdf_parameters,
-			pbencryption_nonce: pbencryption_nonce,
+			version,
+			kdf_scheme,
+			encryption_scheme,
+			kdf_parameters,
+			pbencryption_nonce,
 		}
 	}
 
@@ -86,11 +86,7 @@ impl HeaderCoding for PBEHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-
-		vec.push(self.version);
-		vec.push(self.kdf_scheme.clone() as u8);
-		vec.push(self.encryption_scheme.clone() as u8);
+		let mut vec = vec![self.version, self.kdf_scheme.clone() as u8, self.encryption_scheme.clone() as u8];
 		vec.append(&mut self.kdf_parameters.encode_directly());
 		vec.append(&mut self.pbencryption_nonce.encode_directly());
 		vec
@@ -147,7 +143,7 @@ impl ValueDecoder for KDFParameters {
 		if let Ok(params) = PBKDF2SHA256Parameters::decode_directly(data) {
 			return Ok(KDFParameters::PBKDF2SHA256Parameters(params));
 		};
-		return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF));
+		Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF))
 	}
 }
 
@@ -162,8 +158,8 @@ impl PBKDF2SHA256Parameters {
 	/// returns a new [PBKDF2SHA256Parameters] with the given values.
 	pub fn new(iterations: u16, salt: [u8; 32]) -> PBKDF2SHA256Parameters {
 		Self {
-			iterations: iterations,
-			salt: salt,
+			iterations,
+			salt,
 		}
 	}
 

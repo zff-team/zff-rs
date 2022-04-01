@@ -115,48 +115,44 @@ impl FileEncoder {
 	    };
 		Ok(Self {
 			encoded_header_remaining_bytes: encoded_header.len(),
-			encoded_header: encoded_header,
+			encoded_header,
 			underlying_file: file,
-			hasher_map: hasher_map,
-			encryption_key: encryption_key,
-			signature_key: signature_key,
-			main_header: main_header,
-			compression_header: compression_header,
-			encryption_header: encryption_header,
+			hasher_map,
+			encryption_key,
+			signature_key,
+			main_header,
+			compression_header,
+			encryption_header,
 			file_type: file_header.file_type(),
 			initial_chunk_number: current_chunk_number,
-			current_chunk_number: current_chunk_number,
+			current_chunk_number,
 			read_bytes_underlying_data: 0,
-			symlink_real_path: symlink_real_path,
+			symlink_real_path,
 			current_chunked_data: None,
 			current_chunked_data_remaining_bytes: 0,
 			encoded_footer: Vec::new(),
 			encoded_footer_remaining_bytes: 0,
 			acquisition_start: 0,
 			acquisition_end: 0,
-			hard_link_filenumber: hard_link_filenumber,
-			encoded_directory_childs: encoded_directory_childs,
+			hard_link_filenumber,
+			encoded_directory_childs,
 		})
 	}
 
-	fn update_hasher(&mut self, buffer: &Vec<u8>) {
+	fn update_hasher(&mut self, buffer: &[u8]) {
 		for hasher in self.hasher_map.values_mut() {
 			hasher.update(buffer);
 		}
 	}
 
-	fn calculate_crc32(buffer: &Vec<u8>) -> u32 {
+	fn calculate_crc32(buffer: &[u8]) -> u32 {
 		let mut crc32_hasher = CRC32Hasher::new();
 		crc32_hasher.update(buffer);
-		let crc32 = crc32_hasher.finalize();
-		crc32
+		crc32_hasher.finalize()
 	}
 
-	fn calculate_signature(&self, buffer: &Vec<u8>) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
-		match &self.signature_key {
-			None => None,
-			Some(keypair) => Some(Signature::sign(keypair, buffer)),
-		}
+	fn calculate_signature(&self, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
+		self.signature_key.as_ref().map(|keypair| Signature::sign(keypair, buffer))
 	}
 
 	// returns compressed/read bytes + flag if bytes are be compressed or not-
@@ -166,7 +162,7 @@ impl FileEncoder {
 		let compression_threshold = self.compression_header.threshold();
 
 		match self.compression_header.algorithm() {
-	    	CompressionAlgorithm::None => return Ok((buf, compression_flag)),
+	    	CompressionAlgorithm::None => Ok((buf, compression_flag)),
 	    	CompressionAlgorithm::Zstd => {
 	    		let compression_level = *self.compression_header.level() as i32;
 	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
@@ -201,8 +197,6 @@ impl FileEncoder {
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
-		let crc32;
-		let signature;
 		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);
 		let chunk_size = self.main_header.chunk_size();
 
@@ -245,13 +239,13 @@ impl FileEncoder {
 				buf
 			},
 		};
-		if buf.len() == 0 {
+		if buf.is_empty() {
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 		};
 		self.update_hasher(&buf);
 
-		crc32 = Self::calculate_crc32(&buf);
-		signature = self.calculate_signature(&buf);
+		let crc32 = Self::calculate_crc32(&buf);
+		let signature = self.calculate_signature(&buf);
 
 		let (compressed_data, inner_compression_flag) = self.compress_buffer(buf)?;
 		let compression_flag = inner_compression_flag;
@@ -261,13 +255,12 @@ impl FileEncoder {
 				let encryption_algorithm = match &self.encryption_header {
 					Some(header) => header.algorithm(),
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-				};
-				let encrypted_data = Encryption::encrypt_message(
+				};	
+				Encryption::encrypt_message(
 					encryption_key,
 					&compressed_data,
 					chunk_header.chunk_number(),
-					encryption_algorithm)?;
-				encrypted_data
+					encryption_algorithm)?
 			},
 			None => compressed_data
 		};
@@ -285,7 +278,7 @@ impl FileEncoder {
 		chunk.append(&mut chunk_header.encode_directly());
 		chunk.append(&mut chunk_data);
 		self.current_chunk_number += 1;
-	    return Ok(chunk);
+	    Ok(chunk)
 	}
 
 	/// returns the appropriate encoded [FileFooter].
@@ -319,16 +312,13 @@ impl Read for FileEncoder {
 	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		let mut read_bytes = 0;
 		//read encoded header, if there are remaining bytes to read.
-        match self.encoded_header_remaining_bytes {
-            remaining_bytes @ 1.. => {
-                let mut inner_read_bytes = 0;
-                let mut inner_cursor = Cursor::new(&self.encoded_header);
-                inner_cursor.seek(SeekFrom::End(remaining_bytes as i64 * -1))?;
-                inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-                self.encoded_header_remaining_bytes -= inner_read_bytes;
-                read_bytes += inner_read_bytes;
-            },
-            _ => (),
+        if let remaining_bytes @ 1.. = self.encoded_header_remaining_bytes {
+            let mut inner_read_bytes = 0;
+            let mut inner_cursor = Cursor::new(&self.encoded_header);
+            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
+            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+            self.encoded_header_remaining_bytes -= inner_read_bytes;
+            read_bytes += inner_read_bytes;
         }
         loop {
         	if read_bytes == buf.len() {
@@ -340,7 +330,7 @@ impl Read for FileEncoder {
         		Some(data) => {
         			let mut inner_read_bytes = 0;
         			let mut inner_cursor = Cursor::new(&data);
-        			inner_cursor.seek(SeekFrom::End(self.current_chunked_data_remaining_bytes as i64 * -1))?;
+        			inner_cursor.seek(SeekFrom::End(-(self.current_chunked_data_remaining_bytes as i64)))?;
         			inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
         			self.current_chunked_data_remaining_bytes -= inner_read_bytes;
         			if self.current_chunked_data_remaining_bytes < 1 {
@@ -358,23 +348,20 @@ impl Read for FileEncoder {
         					ZffErrorKind::ReadEOF => break,
         					ZffErrorKind::NotAvailableForFileType => break,
         					ZffErrorKind::IoError(ioe) => return Err(ioe),
-        					e @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        					e => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
         				}
         			}
         		}
         	}
         }
         //read encoded footer, if there are remaining bytes to read.
-        match self.encoded_footer_remaining_bytes {
-            remaining_bytes @ 1.. => {
-                let mut inner_read_bytes = 0;
-                let mut inner_cursor = Cursor::new(&self.encoded_footer);
-                inner_cursor.seek(SeekFrom::End(remaining_bytes as i64 * -1))?;
-                inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-                self.encoded_footer_remaining_bytes -= inner_read_bytes;
-                read_bytes += inner_read_bytes;
-            },
-            _ => (),
+        if let remaining_bytes @ 1.. = self.encoded_footer_remaining_bytes {
+            let mut inner_read_bytes = 0;
+            let mut inner_cursor = Cursor::new(&self.encoded_footer);
+            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
+            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
+            self.encoded_footer_remaining_bytes -= inner_read_bytes;
+            read_bytes += inner_read_bytes;
         }
         Ok(read_bytes)
 	}

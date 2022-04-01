@@ -88,16 +88,16 @@ impl FileHeader {
 		btime: u64,
 		metadata_ext: HashMap<String, String>) -> FileHeader {
 		Self {
-			version: version,
-			file_number: file_number,
-			file_type: file_type,
+			version,
+			file_number,
+			file_type,
 			filename: filename.into(),
-			parent_file_number: parent_file_number,
-			atime: atime,
-			mtime: mtime,
-			ctime: ctime,
-			btime: btime,
-			metadata_ext: metadata_ext
+			parent_file_number,
+			atime,
+			mtime,
+			ctime,
+			btime,
+			metadata_ext
 		}
 	}
 	/// returns the file number
@@ -167,7 +167,7 @@ impl FileHeader {
 		K: AsRef<[u8]>
 	{
 		let mut vec = Vec::new();
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.file_number.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
@@ -179,13 +179,12 @@ impl FileHeader {
 			encryption_header.algorithm()
 			)?;
 		vec.append(&mut encrypted_data.encode_directly());
-		return Ok(vec);
+		Ok(vec)
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		
-		vec.push(self.file_type.clone() as u8);
+		vec.append(&mut (self.file_type.clone() as u8).encode_directly());
 		vec.append(&mut self.filename().encode_directly());
 		vec.append(&mut self.parent_file_number.encode_directly());
 		vec.append(&mut self.atime.encode_directly());
@@ -255,7 +254,7 @@ impl FileHeader {
 			2 => FileType::Directory,
 			3 => FileType::Symlink,
 			4 => FileType::Hardlink,
-			val @ _ => return Err(ZffError::new(ZffErrorKind::UnknownFileType, val.to_string()))
+			val => return Err(ZffError::new(ZffErrorKind::UnknownFileType, val.to_string()))
 		};
 		let filename = String::decode_directly(inner_content)?;
 		let parent_file_number = u64::decode_directly(inner_content)?;
@@ -291,7 +290,7 @@ impl HeaderCoding for FileHeader {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.file_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec

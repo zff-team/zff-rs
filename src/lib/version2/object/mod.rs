@@ -22,9 +22,9 @@ use crate::{
 #[derive(Debug, Clone)]
 pub enum Object {
 	/// Contains a [PhysicalObjectInformation] instance.
-	Physical(PhysicalObjectInformation),
+	Physical(Box<PhysicalObjectInformation>),
 	/// Contains a [LogicalObjectInformation] instance.
-	Logical(LogicalObjectInformation)
+	Logical(Box<LogicalObjectInformation>)
 }
 
 impl Object {
@@ -114,10 +114,10 @@ impl PhysicalObjectInformation {
 	/// Creates a new [PhysicalObjectInformation] with the given values.
 	pub fn new(header: ObjectHeader, footer: ObjectFooterPhysical, encryption_key: Option<Vec<u8>>) -> Self {
 		Self {
-			header: header,
-			footer: footer,
+			header,
+			footer,
 			position: 0,
-			encryption_key: encryption_key
+			encryption_key
 		}
 	}
 
@@ -156,11 +156,11 @@ impl LogicalObjectInformation {
 	/// Creates a new [LogicalObjectInformation] with the given values.
 	pub fn new(header: ObjectHeader, footer: ObjectFooterLogical, encryption_key: Option<Vec<u8>>) -> Self {
 		Self {
-			header: header,
-			footer: footer,
+			header,
+			footer,
 			files: HashMap::new(),
 			active_file_number: 0,
-			encryption_key: encryption_key,
+			encryption_key,
 		}
 	}
 
@@ -206,7 +206,7 @@ impl LogicalObjectInformation {
 	pub fn get_active_file(&self) -> Result<File> {
 		match self.files.get(&self.active_file_number) {
 			Some(file) =>  Ok(file.clone()),
-			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file_number.to_string())),
+			None => Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file_number.to_string())),
 		}
 	} 
 
@@ -220,9 +220,6 @@ impl LogicalObjectInformation {
 
 	/// Sets the position for the appropriate [Reader](std::io::Read).
 	pub fn set_position(&mut self, position: u64) {
-		match self.files.get_mut(&self.active_file_number) {
-			Some(file) => file.set_position(position),
-			None => (),
-		}
+		if let Some(file) = self.files.get_mut(&self.active_file_number) { file.set_position(position) }
 	}
 }

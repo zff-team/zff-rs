@@ -37,13 +37,11 @@ use crate::{
 /// ```
 /// use zff::header::DescriptionHeader;
 /// 
-/// fn main() {
-/// 	let header_version = 2;
-/// 	let mut description_header = DescriptionHeader::new_empty(header_version);
+/// let header_version = 2;
+/// let mut description_header = DescriptionHeader::new_empty(header_version);
 /// 
-/// 	description_header.set_examiner_name("ph0llux");
-/// 	assert_eq!(Some("ph0llux"), description_header.examiner_name());
-/// }
+/// description_header.set_examiner_name("ph0llux");
+/// assert_eq!(Some("ph0llux"), description_header.examiner_name());
 /// ```
 #[derive(Debug,Clone)]
 pub struct DescriptionHeader {
@@ -56,7 +54,7 @@ impl DescriptionHeader {
 	/// All fields will be initialized with ```None``` or ```0```.
 	pub fn new_empty(version: u8) -> DescriptionHeader {
 		Self {
-			version: version,
+			version,
 			identifier_map: HashMap::new(),
 		}
 	}
@@ -64,8 +62,8 @@ impl DescriptionHeader {
 	/// Creates a new [DescriptionHeader] with the given identifier map.
 	pub fn new(version: u8, identifier_map: HashMap<String, String>) -> DescriptionHeader {
 		Self {
-			version: version,
-			identifier_map: identifier_map,
+			version,
+			identifier_map,
 		}
 	}
 
@@ -140,7 +138,7 @@ impl HeaderCoding for DescriptionHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.push(self.version);
+		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.identifier_map.encode_directly());
 		vec
 	}
@@ -153,7 +151,7 @@ impl HeaderCoding for DescriptionHeader {
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
-		return Self::decode_content(header_content);
+		Self::decode_content(header_content)
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<DescriptionHeader> {

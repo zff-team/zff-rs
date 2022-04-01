@@ -26,8 +26,8 @@ impl HashHeader {
 	/// creates a new HashHeader by given values/hashes.
 	pub fn new(version: u8, hashes: Vec<HashValue>) -> HashHeader {
 		Self {
-			version: version,
-			hashes: hashes,
+			version,
+			hashes,
 		}
 	}
 
@@ -49,9 +49,8 @@ impl HeaderCoding for HashHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
+		let mut vec = vec![self.version];
 
-		vec.push(self.version);
 		vec.append(&mut self.hashes.encode_directly());
 
 		vec
@@ -97,9 +96,9 @@ impl HashValue {
 	/// creates a new [HashValue](struct.HashValue.html) for the given parameters.
 	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>) -> HashValue{
 		Self {
-			version: version,
-			hash_type: hash_type,
-			hash: hash
+			version,
+			hash_type,
+			hash
 		}
 	}
 	/// creates a new, empty [HashValue](struct.HashValue.html) for a given hashtype.
@@ -107,7 +106,7 @@ impl HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
 			version: structure_version,
-			hash_type: hash_type,
+			hash_type,
 			hash: vec!(0u8; hash_default_len/8),
 		}
 	}
@@ -141,9 +140,7 @@ impl HeaderCoding for HashValue {
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.push(self.version);
-		vec.push(self.hash_type.clone() as u8);
+		let mut vec = vec![self.version, self.hash_type.clone() as u8];
 		vec.append(&mut self.hash.encode_directly());
 
 		vec

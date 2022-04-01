@@ -20,9 +20,6 @@ use crate::{
 	ED25519_DALEK_PUBKEY_LEN,
 };
 
-// - external
-use base64;
-
 /// structure contains serveral methods to handle signing of chunked data.
 pub struct Signature;
 
@@ -38,22 +35,22 @@ impl Signature {
 	pub fn new_keypair_from_base64<K: Into<String>>(key: K) -> Result<Keypair> {
 		let key = base64::decode(&key.into())?;
 		if key.len() == KEYPAIR_LENGTH {
-			return Ok(Keypair::from_bytes(&key)?);
+			Ok(Keypair::from_bytes(&key)?)
 		} else if key.len() == SECRET_KEY_LENGTH {
 			let sec_key = SecretKey::from_bytes(&key)?;
 			let pub_key: PublicKey = (&sec_key).into();
 			let mut keypair_bytes = Vec::new();
 			keypair_bytes.append(&mut key.to_vec());
 			keypair_bytes.append(&mut pub_key.to_bytes().to_vec());
-			return Ok(Keypair::from_bytes(&keypair_bytes)?);
+			Ok(Keypair::from_bytes(&keypair_bytes)?)
 		} else {
-			return Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""));
+			Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""))
 		}
 	}
 
 	/// sign the data with the given keypair bytes.
 	pub fn sign(keypair: &Keypair, message: &[u8]) -> [u8; ED25519_DALEK_SIGNATURE_LEN] {
-		let signature = keypair.sign(&message);
+		let signature = keypair.sign(message);
 		signature.to_bytes()
 	}
 
@@ -62,8 +59,8 @@ impl Signature {
 		let pub_key = PublicKey::from_bytes(&publickey)?;
 		let signature = Ed25519Signature::from_bytes(&signature)?;
 		match pub_key.verify(message, &signature) {
-			Ok(_) => return Ok(true),
-			Err(_) => return Ok(false),
+			Ok(_) => Ok(true),
+			Err(_) => Ok(false),
 		}
 	}
 }

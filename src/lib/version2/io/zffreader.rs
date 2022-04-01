@@ -51,7 +51,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		let mut segments = HashMap::new();
 		let mut chunk_map = HashMap::new();
 		for mut raw_segment in raw_segments {
-			if let None = main_footer {
+			if main_footer.is_none() {
 				raw_segment.seek(SeekFrom::End(-8))?;
 				let footer_offset = u64::decode_directly(&mut raw_segment)?;
 				raw_segment.seek(SeekFrom::Start(footer_offset))?;
@@ -65,7 +65,7 @@ impl<R: Read + Seek> ZffReader<R> {
 				raw_segment.rewind()?;
 			};
 
-			if let None = main_header {
+			if main_header.is_none() {
 				match MainHeader::decode_directly(&mut raw_segment) {
 					Ok(mh) => {
 						match mh.version() {
@@ -146,7 +146,7 @@ impl<R: Read + Seek> ZffReader<R> {
 						},
 					};
 					match footer {
-						ObjectFooter::Physical(footer) => { objects.insert(*object_number, Object::Physical(PhysicalObjectInformation::new(header.clone(), footer, encryption_key))); },
+						ObjectFooter::Physical(footer) => { objects.insert(*object_number, Object::Physical(Box::new(PhysicalObjectInformation::new(header.clone(), footer, encryption_key)))); },
 						ObjectFooter::Logical(footer) => {
 							let mut logical_object = LogicalObjectInformation::new(header.clone(), footer, encryption_key);
 							let mut file_footers = HashMap::new();
@@ -187,7 +187,7 @@ impl<R: Read + Seek> ZffReader<R> {
 								}
 							};
 
-							let object = Object::Logical(logical_object);
+							let object = Object::Logical(Box::new(logical_object));
 							objects.insert(*object_number, object);
 						},
 					}
@@ -197,11 +197,11 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 
 		Ok(Self {
-			main_header: main_header,
-			main_footer: main_footer,
-			objects: objects,
-			chunk_map: chunk_map,
-			segments: segments,
+			main_header,
+			main_footer,
+			objects,
+			chunk_map,
+			segments,
 			active_object: 1,
 		})
 	}
@@ -210,10 +210,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn physical_object_numbers(&self) -> Vec<u64> {
 		let mut objects = Vec::new();
 		for (object_number, object_information) in &self.objects {
-			match object_information {
-				Object::Physical(_) => objects.push(*object_number),
-				_ => ()
-			};
+			if let Object::Physical(_) = object_information { objects.push(*object_number) };
 		}
 		objects
 	}
@@ -222,10 +219,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn logical_object_numbers(&self) -> Vec<u64> {
 		let mut objects = Vec::new();
 		for (object_number, object_information) in &self.objects {
-			match object_information {
-				Object::Logical(_) => objects.push(*object_number),
-				_ => ()
-			};
+			if let Object::Logical(_) = object_information { objects.push(*object_number) };
 		}
 		objects
 	}
@@ -233,7 +227,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// returns a list of object numbers (physical + logical objects)
 	pub fn object_numbers(&self) -> Vec<u64> {
 		let mut objects = Vec::new();
-		for (object_number, _) in &self.objects {
+		for object_number in self.objects.keys() {
 			objects.push(*object_number)
 		}
 		objects
@@ -247,18 +241,17 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// returns all objects of this reader
 	pub fn objects(&self) -> Vec<&Object> {
 		let mut objects = Vec::new();
-		for (_, object) in &self.objects {
+		for object in self.objects.values() {
 			objects.push(object)
 		}
 		objects
 	}
 
 	//TODO: move
-	fn calculate_crc32(buffer: &Vec<u8>) -> u32 {
+	fn calculate_crc32(buffer: &[u8]) -> u32 {
 		let mut crc32_hasher = CRC32Hasher::new();
 		crc32_hasher.update(buffer);
-		let crc32 = crc32_hasher.finalize();
-		crc32
+		crc32_hasher.finalize()
 	}
 
 	/// Checks, if given object data could be decrypted.
@@ -284,9 +277,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		let crc32 = chunk.header().crc32();
 		let chunk_data = segment.chunk_data(first_chunk_number, object)?;
 		if Self::calculate_crc32(&chunk_data) == crc32 {
-			return Ok(true);
+			Ok(true)
 		} else {
-			return Ok(false);
+			Ok(false)
 		}
 	}
 
@@ -297,11 +290,11 @@ impl<R: Read + Seek> ZffReader<R> {
 		match self.objects.get(&object_number) {
 			Some(Object::Physical(object)) => {
 				self.active_object = object_number;
-				return Ok(object.position());
+				Ok(object.position())
 			},
-			Some(Object::Logical(_)) => return Err(ZffError::new(ZffErrorKind::MismatchObjectType, object_number.to_string())),
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
-		};
+			Some(Object::Logical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, object_number.to_string())),
+			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+		}
 	}
 
 	/// Sets the ZffReader to the given logical object and file number.
@@ -314,14 +307,14 @@ impl<R: Read + Seek> ZffReader<R> {
 				match object.footer().file_footer_offsets().get(&file_number) {
 					Some(_) => {
 						object.set_active_file_number(file_number)?;
-						return Ok(object.position());
+						Ok(object.position())
 					},
-					None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, file_number.to_string())),
+					None => Err(ZffError::new(ZffErrorKind::MissingFileNumber, file_number.to_string())),
 				}
 			},
-			Some(Object::Physical(_)) => return Err(ZffError::new(ZffErrorKind::MismatchObjectType, object_number.to_string())),
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
-		};
+			Some(Object::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, object_number.to_string())),
+			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+		}
 	}
 
 	/// Returns the appropriate file information of the current file.
@@ -332,8 +325,8 @@ impl<R: Read + Seek> ZffReader<R> {
 			Some(Object::Logical(object)) => {
 				object.get_active_file()
 			},
-			Some(Object::Physical(_)) => return Err(ZffError::new(ZffErrorKind::MismatchObjectType, &self.active_object.to_string())),
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, &self.active_object.to_string())),
+			Some(Object::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, &self.active_object.to_string())),
+			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, &self.active_object.to_string())),
 		}
 	}
 
@@ -388,7 +381,7 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				Ok(data) => data,
 				Err(e) => match e.unwrap_kind() {
 					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error @ _ => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
 				},
 			};
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
@@ -416,12 +409,10 @@ impl<R: Read + Seek> Seek for ZffReader<R> {
 			},
 			SeekFrom::Current(value) => if object.position() as i64 + value < 0 {
 				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+			} else if value >= 0 {
+   					object.set_position(object.position() + value as u64);
 			} else {
-				if value >= 0 {
-					object.set_position(object.position() + value as u64);
-				} else {
-					object.set_position(object.position() - value as u64);
-				}
+				object.set_position(object.position() - value as u64);
 			},
 			SeekFrom::End(value) => if object.position() as i64 + value < 0 {
 				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))

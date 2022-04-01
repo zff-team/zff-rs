@@ -30,12 +30,12 @@ impl MainFooter {
 	/// creates a new MainFooter with a given values.
 	pub fn new(version: u8, number_of_segments: u64, object_header: HashMap<u64, u64>, object_footer: HashMap<u64, u64>, description_notes: Option<String>, footer_offset: u64) -> MainFooter {
 		Self {
-			version: version,
-			number_of_segments: number_of_segments,
-			object_header: object_header,
-			object_footer: object_footer,
-			description_notes: description_notes,
-			footer_offset: footer_offset,
+			version,
+			number_of_segments,
+			object_header,
+			object_footer,
+			description_notes,
+			footer_offset,
 		}
 	}
 
@@ -81,7 +81,7 @@ impl MainFooter {
 
 	/// returns the description notes of the zff container (Not to be mixed up with the "notes" which can be created in the description header of each object!)).
 	pub fn description_notes(&self) -> Option<&str> {
-		Some(&self.description_notes.as_ref()?)
+		Some(self.description_notes.as_ref()?)
 	}
 }
 

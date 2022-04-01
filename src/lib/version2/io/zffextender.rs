@@ -71,7 +71,7 @@ impl<R: Read> ZffExtender<R> {
 		let mut last_segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
 		for ext_file in &files_to_extend {
 			let mut raw_segment = File::open(ext_file)?;
-			if let None = main_footer {
+			if main_footer.is_none() {
 				raw_segment.seek(SeekFrom::End(-8))?;
 				let footer_offset = u64::decode_directly(&mut raw_segment)?;
 				raw_segment.seek(SeekFrom::Start(footer_offset))?;
@@ -123,10 +123,7 @@ impl<R: Read> ZffExtender<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER))
 		};
 			
-		let signature_key_bytes = match signature_key {
-			Some(keypair) => Some(keypair.to_bytes().to_vec()),
-			None => None
-		};
+		let signature_key_bytes = signature_key.map(|keypair| keypair.to_bytes().to_vec());
 
 		let mut object_encoder_vec = Vec::new();
 		for (mut object_header, input_data) in physical_objects {
@@ -300,7 +297,7 @@ impl<R: Read> ZffExtender<R> {
 				directory_childs,
 				initial_chunk_number,
 				header_encryption)?;
-			object_encoder_vec.push((ObjectEncoder::Logical(object_encoder), (false, unaccessable_files)));
+			object_encoder_vec.push((ObjectEncoder::Logical(Box::new(object_encoder)), (false, unaccessable_files)));
 		}
 		object_encoder_vec.reverse();
 		let (object_encoder, (written_object_header, unaccessable_files)) = match object_encoder_vec.pop() {
@@ -309,16 +306,16 @@ impl<R: Read> ZffExtender<R> {
 		};
 
 		Ok(Self {
-			start_segment: last_segment.clone(),
+			start_segment: last_segment,
 			size_to_overwrite: size_to_overwrite as u64,
-			object_encoder_vec: object_encoder_vec,
-			object_encoder: object_encoder,
-			written_object_header: written_object_header,
-			unaccessable_files: unaccessable_files,
-			current_segment_no: current_segment_no,
+			object_encoder_vec,
+			object_encoder,
+			written_object_header,
+			unaccessable_files,
+			current_segment_no,
 			last_accepted_segment_filepath: PathBuf::new(),
-			main_footer: main_footer,
-			last_segment_footer: last_segment_footer,
+			main_footer,
+			last_segment_footer,
 		})
 	}
 
@@ -420,7 +417,7 @@ impl<R: Read> ZffExtender<R> {
 
 		//check if the segment size is to small
 		if (seek_value as usize +
-			&segment_header.encode_directly().len() +
+			segment_header.encode_directly().len() +
 			self.object_encoder.get_encoded_header().len() +
 			target_chunk_size) > self.object_encoder.main_header().segment_size() as usize {
 	        
@@ -548,7 +545,7 @@ impl<R: Read> ZffExtender<R> {
 		self.main_footer.set_footer_offset(main_footer_start_offset);
 		let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 		//TODO: Handle encrypted main footer.
-	    output_file.write(&self.main_footer.encode_directly())?;
+	    output_file.write_all(&self.main_footer.encode_directly())?;
 	    Ok(())
 	}
 
