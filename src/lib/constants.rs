@@ -107,8 +107,7 @@ pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
 /// current header version for the [ObjectHeader](crate::header::ObjectHeader).
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 1;
 
-/// current footer version of [ObjectFooterPhysical](crate::version2::footer::ObjectFooterPhysical)
-/// current footer version for the [ObjectFooterPhysical](crate::header::ObjectFooterPhysical).
+/// current footer version for the [ObjectFooterPhysical](crate::footer::ObjectFooterPhysical).
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
 /// current footer version for the [ObjectFooterLogical](crate::header::ObjectFooterLogical).
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 1;

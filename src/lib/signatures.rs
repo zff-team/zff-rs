@@ -63,6 +63,11 @@ impl Signature {
 			Err(_) => Ok(false),
 		}
 	}
+
+	/// calculates a signature of the given bytes with the given Keypair.
+	pub fn calculate_signature(signature_keypair: Option<&Keypair>, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
+		signature_keypair.as_ref().map(|keypair| Signature::sign(keypair, buffer))
+	}
 }
 
 /// The signature flags used in zff.

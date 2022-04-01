@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read, Seek, SeekFrom, copy as io_copy, Cursor};
+use std::io::{Read, Seek, SeekFrom, Cursor};
 use std::path::PathBuf;
 use std::fs::{File};
 use std::collections::{HashMap};
@@ -13,16 +13,16 @@ use crate::{
 use crate::{
 	Result,
 	buffer_chunk,
+	calculate_crc32,
+	compress_buffer,
 	HeaderCoding,
 	ValueEncoder,
 	HashType,
 	Hash,
 	Signature,
 	Encryption,
-	CompressionAlgorithm,
 	ZffError,
 	ZffErrorKind,
-	ED25519_DALEK_SIGNATURE_LEN,
 	DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_HEADER,
@@ -31,7 +31,6 @@ use crate::{
 
 // - external
 use digest::DynDigest;
-use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
 use time::{OffsetDateTime};
 
@@ -145,50 +144,6 @@ impl FileEncoder {
 		}
 	}
 
-	fn calculate_crc32(buffer: &[u8]) -> u32 {
-		let mut crc32_hasher = CRC32Hasher::new();
-		crc32_hasher.update(buffer);
-		crc32_hasher.finalize()
-	}
-
-	fn calculate_signature(&self, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
-		self.signature_key.as_ref().map(|keypair| Signature::sign(keypair, buffer))
-	}
-
-	// returns compressed/read bytes + flag if bytes are be compressed or not-
-	fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
-		let mut compression_flag = false;
-		let chunk_size = self.main_header.chunk_size();
-		let compression_threshold = self.compression_header.threshold();
-
-		match self.compression_header.algorithm() {
-	    	CompressionAlgorithm::None => Ok((buf, compression_flag)),
-	    	CompressionAlgorithm::Zstd => {
-	    		let compression_level = *self.compression_header.level() as i32;
-	    		let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
-	    		let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *self.compression_header.level() as usize)?;
-	    		if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
-	    			Ok((buf, compression_flag))
-	    		} else {
-	    			compression_flag = true;
-	    			Ok((compressed_data, compression_flag))
-	    		}
-	    	},
-	    	CompressionAlgorithm::Lz4 => {
-	    		let buffer = Vec::new();
-	    		let mut compressor = lz4_flex::frame::FrameEncoder::new(buffer);
-	    		io_copy(&mut buf.as_slice(), &mut compressor)?;
-	    		let compressed_data = compressor.finish()?;
-	    		if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
-	    			Ok((buf, compression_flag))
-	    		} else {
-	    			compression_flag = true;
-	    			Ok((compressed_data, compression_flag))
-	    		}
-	    	}
-	    }
-	}
-
 	/// returns the underlying encoded header
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
@@ -244,10 +199,10 @@ impl FileEncoder {
 		};
 		self.update_hasher(&buf);
 
-		let crc32 = Self::calculate_crc32(&buf);
-		let signature = self.calculate_signature(&buf);
+		let crc32 = calculate_crc32(&buf);
+		let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
 
-		let (compressed_data, inner_compression_flag) = self.compress_buffer(buf)?;
+		let (compressed_data, inner_compression_flag) = compress_buffer(buf, self.main_header.chunk_size(), &self.compression_header)?;
 		let compression_flag = inner_compression_flag;
 
 		let mut chunk_data = match &self.encryption_key {
