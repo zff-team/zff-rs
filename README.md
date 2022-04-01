@@ -3,17 +3,18 @@
 > Zff version 2 is in the testing stage. It has only been tested by me internally so far and requires further independent testing. 
 For this purpose, the corresponding tools can also be used (see below in the corresponding table). 
 
-
-Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image or physical memory.
-The focus of zff is on speed, security and modularity in concert with forensic requirements.The modular design promises high maintainability and scalability.
+Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
+The focus of zff is on speed, security and modularity in concert with forensic requirements. The modular design promises high maintainability and scalability.
 Zff is an alternative to the ewf and aff file formats and is not compatible with them.
 
+Zff is open source and is dual licensed (Apache-2.0 and MIT). This should ensure reasonable suitability for use in both open source and commercial tools.
+
 ## Features included in Zff(v2) (most of them are optional)
-- The format is built to be streamable (e.g. you could stream a zff dump/container directly via HTTP).
+- The format is built to be streamable (e.g. you could stream a zff dump/container via HTTP).
 - Zff can contain dumps within a container (e.g. if multiple disks belong to one device, so they stay together).
 - An existing Zff container can be easily extended with additional dumps.
 - You can add logical dumps/backups (complete folder structures are kept). Metadata such as the Uid or Gid on unix systems can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
-- The disk image can be stored in several split segments.
+- The container can be stored in several split segments.
 - The data can be stored in compressed format (modern [compression algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#compression-algorithm-flag) like __Zstd__)
 - The stored data can be optionally encrypted with a password. Used here are best practices reccomended by PKCS#5 (see [KDF schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#kdf-flag) and [encryption schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-scheme-flag) for available implementations). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently implemented algorithms are listed in the [encryption algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-algorithms) section.
 - Individual dumps/container can be encrypted with different encryption keys or passwords.
