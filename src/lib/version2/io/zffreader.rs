@@ -31,6 +31,7 @@ use crate::{
 // - external
 use crc32fast::Hasher as CRC32Hasher;
 
+/// The [ZffReader] can be used to [Read](std::io::Read) (decompressed, decrypted) from given zff-files directly.
 pub struct ZffReader<R: Read + Seek> {
 	main_header: MainHeader,
 	main_footer: MainFooter,
@@ -42,6 +43,8 @@ pub struct ZffReader<R: Read + Seek> {
 
 impl<R: Read + Seek> ZffReader<R> {
 	// encryption_passwords: <object number, decryption password>
+	/// Creates a new [ZffReader]. The ZffReader needs a [Vec] of [Reader](std::io::Read) of all segments of the zff container 
+	/// and a HashMap with the needed decryption passwords.
 	pub fn new(raw_segments: Vec<R>, encryption_passwords: HashMap<u64, String>) -> Result<ZffReader<R>> {
 		let mut main_header = None;
 		let mut main_footer = None;
@@ -258,6 +261,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		crc32
 	}
 
+	/// Checks, if given object data could be decrypted.
 	pub fn check_decryption(&mut self, object_number: u64) -> Result<bool> {
 		let object = match self.objects.get_mut(&object_number) {
 			Some(object) => object,
@@ -286,6 +290,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
+	/// Sets the ZffReader to the given physical object number
+	/// # Error
+	/// Fails if the given object number not exists, or if the object type of the given object number is a logical object.
 	pub fn set_reader_physical_object(&mut self, object_number: u64) -> Result<u64> {
 		match self.objects.get(&object_number) {
 			Some(Object::Physical(object)) => {
@@ -297,6 +304,10 @@ impl<R: Read + Seek> ZffReader<R> {
 		};
 	}
 
+	/// Sets the ZffReader to the given logical object and file number.
+	/// # Error
+	/// Fails if the given object number not exists,
+	/// or if the object type of the given object number is a logical object or the file number not exists in the appropriate object.
 	pub fn set_reader_logical_object_file(&mut self, object_number: u64, file_number: u64) -> Result<u64> {
 		match self.objects.get_mut(&object_number) {
 			Some(Object::Logical(object)) => {
@@ -313,6 +324,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		};
 	}
 
+	/// Returns the appropriate file information of the current file.
+	/// # Error
+	/// Fails if the active object is a physical object.
 	pub fn file_information(&self) -> Result<File> {
 		match self.objects.get(&self.active_object) {
 			Some(Object::Logical(object)) => {
@@ -323,6 +337,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
+	/// Returns the description notes of the zff container (if available).
 	pub fn description_notes(&self) -> Option<&str> {
 		self.main_footer.description_notes()
 	}

@@ -11,7 +11,10 @@ use crate::{
 };
 
 /// The main header is the first Header, which can be found at the beginning of the first segment.\
-/// This header contains a lot of other headers (e.g. compression header, ...) and start information.
+/// This header contains a lot of metadata about the zff container
+/// - the target chunk size: the size of the chunks in which the original data was read.
+/// - the target segment size
+/// - a unique identifier, written to each segment header: With this identifier you can uniquely assign the corresponding segments that belong together: there may be cases where you don't want to or can't do this via the file names.
 #[derive(Debug,Clone)]
 pub struct MainHeader {
 	version: u8,

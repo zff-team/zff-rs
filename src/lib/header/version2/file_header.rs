@@ -25,14 +25,18 @@ use crate::header::{
 	EncryptionHeader,
 };
 
-/// Defines all hashing algorithms, which are implemented in zff.
+/// Defines all file types, which are implemented for zff files.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
 pub enum FileType {
+	/// Represents a regular file (e.g. like "textfile.txt").
 	File = 1,
+	/// Represents a directory.
 	Directory = 2,
+	/// Represents a symbolic link.
 	Symlink = 3,
+	/// Represents a hard link (mostly used at unix like operating systems).
 	Hardlink = 4,
 }
 
@@ -48,6 +52,14 @@ impl fmt::Display for FileType {
 	}
 }
 
+/// Each dumped file* contains a [FileHeader] containing several metadata.
+/// The following metadata are included in a [FileHeader]:
+/// - the internal file number of the appropriate file.
+/// - the [FileType] of the appropriate file.
+/// - the original filename of the appropriate file **without** the full path (just the filename, e.g. "my_texfile.txt" or "my_directory")
+/// - the file number of the parent directory of this file (if the file lies into the root directory, this is 0 because the first valid file number in zff is 1).
+/// - the atime, mtime, ctime and btime.
+/// - A HashMap to extend the metadata based on the operating system/filesystem. Some fields are predefined, see [the full list in the wiki](https://github.com/ph0llux/zff/wiki/zff-header-layout#file-metadata-extended-information)
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct FileHeader {
 	version: u8,
@@ -63,6 +75,7 @@ pub struct FileHeader {
 }
 
 impl FileHeader {
+	/// creates a new [FileHeader] with the given values.
 	pub fn new<F: Into<String>>(
 		version: u8,
 		file_number: u64,
@@ -87,44 +100,52 @@ impl FileHeader {
 			metadata_ext: metadata_ext
 		}
 	}
+	/// returns the file number
 	pub fn file_number(&self) -> u64 {
 		self.file_number
 	}
+	/// returns the [FileType]
 	pub fn file_type(&self) -> FileType {
 		self.file_type.clone()
 	}
+	/// returns the filename
 	pub fn filename(&self) -> &str {
 		&self.filename
 	}
+	/// returns the file number of the parent directory
 	pub fn parent_file_number(&self) -> u64 {
 		self.parent_file_number
 	}
+	/// returns the atime
 	pub fn atime(&self) -> u64 {
 		self.atime
 	}
+	/// returns the mtime 
 	pub fn mtime(&self) -> u64 {
 		self.mtime
 	}
+	/// returns the ctime
 	pub fn ctime(&self) -> u64 {
 		self.ctime
 	}
+	/// returns the btime
 	pub fn btime(&self) -> u64 {
 		self.btime
 	}
+	/// returns the extended metadata [HashMap] as a reference.
 	pub fn metadata_ext(&self) -> &HashMap<String, String> {
 		&self.metadata_ext
 	}
 
-	//TODO: Documentation!
+	/// transforms the inner [FileType] to a [FileType::Hardlink]. This does not work with a [FileType::Symlink]!
 	pub fn transform_to_hardlink(&mut self) {
 		if self.file_type != FileType::Symlink {
 			self.file_type = FileType::Hardlink
 		}
 	}
 
-	/// encodes the file header to a ```Vec<u8>```. The encryption flag will be set to 2.
+	/// encodes the file header to a ```Vec<u8>```. The encryption flag of the appropriate object header has to be set to 2.
 	/// # Error
-	/// The method returns an error, if the encryption header is missing (=None).
 	/// The method returns an error, if the encryption fails.
 	pub fn encode_encrypted_header_directly<K>(&self, key: K, encryption_header: EncryptionHeader) -> Result<Vec<u8>>
 	where
@@ -175,7 +196,8 @@ impl FileHeader {
 		vec
 	}
 
-	/// decodes the encrypted header with the given key.
+	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader].
+	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader].
 	pub fn decode_encrypted_header_with_key<R, K>(data: &mut R, key: K, encryption_header: EncryptionHeader) -> Result<FileHeader>
 	where
 		R: Read,

@@ -18,7 +18,7 @@ use crate::{
 use ed25519_dalek::{SIGNATURE_LENGTH};
 
 /// Header for the hash values of the dumped data stream.
-/// This header is part of the main header and contains 0 or more hash values of the dumped data.\
+/// This header is part of various footers and contains 0 or more hash values of the dumped data.\
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct HashHeader {
 	version: u8,
@@ -68,7 +68,7 @@ impl HeaderCoding for HashHeader {
 	}
 }
 
-/// This is a part of the [HashHeader](struct.HashHeader.html).
+/// This is a part of the [HashHeader].
 /// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct HashValue {
@@ -79,7 +79,7 @@ pub struct HashValue {
 }
 
 impl HashValue {
-	/// creates a new [HashValue](struct.HashValue.html) for the given parameters.
+	/// creates a new [HashValue] with the given parameters.
 	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,) -> HashValue{
 		Self {
 			version: version,
@@ -88,7 +88,7 @@ impl HashValue {
 			ed25519_signature: ed25519_signature,
 		}
 	}
-	/// creates a new, empty [HashValue](struct.HashValue.html) for a given hashtype.
+	/// creates a new, empty [HashValue] for a given hashtype.
 	pub fn new_empty(structure_version: u8, hash_type: HashType) -> HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
@@ -99,7 +99,7 @@ impl HashValue {
 		}
 	}
 
-	/// returns the type of hash as [HashType](enum.HashType.html).
+	/// returns the type of hash as [HashType](crate::hashing::HashType).
 	pub fn hash_type(&self) -> &HashType {
 		&self.hash_type
 	}

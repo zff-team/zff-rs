@@ -31,7 +31,7 @@ impl SegmentFooter {
 		}
 	}
 
-	/// creates a new SegmentFooter with a given "offset table" (represented as ```Vec<u64>```.
+	/// creates a new SegmentFooter with a given "offset table" (represented as ```Vec<u64>```).
 	pub fn new(version: u8, chunk_offsets: Vec<u64>) -> SegmentFooter {
 		Self {
 			version: version,

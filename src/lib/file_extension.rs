@@ -6,7 +6,7 @@ use crate::{
 	FILE_EXTENSION_PARSER_ERROR,
 };
 
-/// returns the next file extension value.
+/// Returns the next file extension value.
 /// # Example
 /// ```
 /// use zff::*;
@@ -38,6 +38,18 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 	}
 }
 
+/// Returns the previous file extension value.
+/// # Example
+/// ```
+/// use zff::*;
+/// 
+/// fn main() {
+/// 	let file_extension = "z05";
+/// 	assert_eq!(file_extension_previous_value(file_extension).unwrap(), "z04");
+/// }
+/// ```
+/// # Error
+/// fails if the file-extension is in an unsuitable format or if the previous value is < 0.
 pub fn file_extension_previous_value<V: Into<String>>(value: V) -> Result<String> {
 	let value = value.into();
 

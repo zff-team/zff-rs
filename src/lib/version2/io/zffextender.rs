@@ -38,6 +38,7 @@ use super::{
 use ed25519_dalek::{Keypair};
 
 //TODO: this extender is completly untested and should be tested before using it.
+/// The [ZffExtender] allows you, to extend an existing zff container by additional objects.
 pub struct ZffExtender<R: Read> {
 	start_segment: PathBuf,
 	size_to_overwrite: u64, //number of bytes to overwrite at the last segment
@@ -52,6 +53,7 @@ pub struct ZffExtender<R: Read> {
 }
 
 impl<R: Read> ZffExtender<R> {
+	/// Creates a new [ZffExtender] instance.
 	pub fn new(files_to_extend: Vec<PathBuf>,
 		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
@@ -320,6 +322,7 @@ impl<R: Read> ZffExtender<R> {
 		})
 	}
 
+	// extends the (last) segment.
 	fn extend_current_segment<W: Write + Seek>(
 		&mut self,
 		output: &mut W) -> Result<u64> {
@@ -486,6 +489,7 @@ impl<R: Read> ZffExtender<R> {
 		Ok(written_bytes)
 	}
 
+	/// extends the current .zXX files and generate additional .zXX, if needed.
 	pub fn extend(&mut self) -> Result<()> {
 		let mut segment_filename = PathBuf::from(&self.start_segment);
 		self.last_accepted_segment_filepath = segment_filename.clone();

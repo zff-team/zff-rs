@@ -36,6 +36,7 @@ use super::{
 use ed25519_dalek::{Keypair};
 
 //TODO: this creator is completly untested and should be tested before using it.
+/// The ZffCreator can be used to create a new zff container by the given files/values.
 pub struct ZffCreator<R: Read> {
 	object_encoder_vec: Vec<(ObjectEncoder<R>, (bool, Vec<String>))>, // (ObjectEncoder, (written_object_header, unaccessable_files))
 	object_encoder: ObjectEncoder<R>, //the current object encoder
@@ -50,6 +51,7 @@ pub struct ZffCreator<R: Read> {
 }
 
 impl<R: Read> ZffCreator<R> {
+	/// Creates a new [ZffCreator] instance for the given values.
 	pub fn new<O: Into<String>>(
 		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
@@ -344,6 +346,7 @@ impl<R: Read> ZffCreator<R> {
 		Ok(written_bytes)
 	}
 
+	/// generates the appropriate .zXX files.
 	pub fn generate_files(&mut self) -> Result<()> {
 		let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
 	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
@@ -398,7 +401,7 @@ impl<R: Read> ZffCreator<R> {
 	}
 }
 
-/// TODO: Docs
+/// TODO: Remove. Should be replaced by [ZffCreator].
 pub struct ZffCreatorPhysical<R: Read> {
 	object_encoder: PhysicalObjectEncoder<R>,
 	output_filenpath: String,
@@ -411,6 +414,7 @@ pub struct ZffCreatorPhysical<R: Read> {
 }
 
 impl<R: Read> ZffCreatorPhysical<R> {
+	/// TODO: Remove. Should be replaced by [ZffCreator].
 	pub fn new<O: Into<String>>(
 		object_header: ObjectHeader,
 		input_data: R,
@@ -446,7 +450,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 			object_footer_segment_numbers: HashMap::new(),
 		})
 	}
-
+	/// TODO: Remove. Should be replaced by [ZffCreator].
 	pub fn generate_files(&mut self) -> Result<()> {
 		let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
 	    let mut file_extension = String::from(FILE_EXTENSION_FIRST_VALUE);
@@ -571,7 +575,7 @@ impl<R: Read> ZffCreatorPhysical<R> {
 	}
 }
 
-/// TODO: Docs
+/// TODO: Remove. Should be replaced by [ZffCreator].
 pub struct ZffCreatorLogical {
 	object_encoder: LogicalObjectEncoder,
 	output_filenpath: String,
@@ -585,6 +589,7 @@ pub struct ZffCreatorLogical {
 }
 
 impl ZffCreatorLogical {
+	/// TODO: Remove. Should be replaced by [ZffCreator].
 	pub fn new<O: Into<String>>(
 		object_header: ObjectHeader,
 		input_files: Vec<PathBuf>,
@@ -765,7 +770,7 @@ impl ZffCreatorLogical {
 			object_footer_segment_numbers: HashMap::new(),
 		})
 	}
-
+	/// TODO: Remove. Should be replaced by [ZffCreator].
 	pub fn generate_files(&mut self) -> Result<()> {
 
 		let mut first_segment_filename = PathBuf::from(&self.output_filenpath);
@@ -806,7 +811,7 @@ impl ZffCreatorLogical {
 
 	    Ok(())
 	}
-
+	/// TODO: Remove. Should be replaced by [ZffCreator].
 	pub fn unaccessable_files(&self) -> &Vec<String> {
 		&self.unaccessable_files
 	}

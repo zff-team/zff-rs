@@ -43,7 +43,7 @@ impl fmt::Display for CompressionAlgorithm {
     }
 }
 
-// returns decompressed bytes.
+/// decompresses a buffer with the given [CompressionAlgorithm].
 pub fn decompress_buffer<C>(buffer: &[u8], compression_algorithm: C) -> Result<Vec<u8>>
 where
 	C: Borrow<CompressionAlgorithm>,

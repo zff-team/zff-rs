@@ -1,4 +1,5 @@
 // - modules
+/// Contains IO modules to create, read and extend zff container in version 2.
 pub mod io;
 mod object;
 mod file;

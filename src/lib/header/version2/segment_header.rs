@@ -11,8 +11,10 @@ use crate::{
 	HEADER_IDENTIFIER_SEGMENT_HEADER,
 };
 
-/// The segment header contains all informations about the specific segment. Each segment has his own segment header.\
-/// This header is **not** a part of the main header.\
+/// The [SegmentHeader] contains a lot of initial metadata of the appropriate segment. Each segment has its own segment header.\
+/// The following metadata are included in the [SegmentHeader]:
+/// - The unique identifier value
+/// - the number of the appropriate segment (the first segment starts always with a 1).
 #[derive(Debug,Clone,Eq)]
 pub struct SegmentHeader {
 	version: u8,
@@ -21,7 +23,7 @@ pub struct SegmentHeader {
 }
 
 impl SegmentHeader {
-	/// returns a new empty segment header
+	/// returns a new empty [SegmentHeader]
 	pub fn new_empty(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
 		Self {
 			version: version,
@@ -29,7 +31,7 @@ impl SegmentHeader {
 			segment_number: segment_number,
 		}
 	}
-	/// returns a new segment header with the given values.
+	/// returns a new [SegmentHeader] with the given values.
 	pub fn new(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
 		Self {
 			version: version,
@@ -38,12 +40,12 @@ impl SegmentHeader {
 		}
 	}
 
-	/// returns the unique identifier of image (each segment should have the same identifier).
+	/// returns the unique identifier of the zff container (each segment should have the same identifier).
 	pub fn unique_identifier(&self) -> i64 {
 		self.unique_identifier
 	}
 
-	/// returns the segment number.
+	/// returns the number of this segment.
 	pub fn segment_number(&self) -> u64 {
 		self.segment_number
 	}

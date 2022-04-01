@@ -35,6 +35,7 @@ use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
 use time::{OffsetDateTime};
 
+/// The [FileEncoder] can be used to encode a [crate::file::File].
 pub struct FileEncoder {
 	/// An encoded [FileHeader].
 	encoded_header: Vec<u8>,
@@ -74,6 +75,7 @@ pub struct FileEncoder {
 }
 
 impl FileEncoder {
+	/// creates a new [FileEncoder] with the given values.
 	pub fn new(
 		file_header: FileHeader,
 		file: File,
@@ -191,13 +193,13 @@ impl FileEncoder {
 	    }
 	}
 
-	// returns the encoded header
+	/// returns the underlying encoded header
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		self.encoded_header.clone()
 	}
 
-	//returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
+	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
 		let crc32;
 		let signature;
@@ -286,6 +288,8 @@ impl FileEncoder {
 	    return Ok(chunk);
 	}
 
+	/// returns the appropriate encoded [FileFooter].
+	/// A call of this method finalizes the underlying hashers. You should be care.
 	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
 		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
@@ -309,7 +313,8 @@ impl FileEncoder {
 	}
 }
 
-/// this implement Read for [FileEncoder]. This implementation should only used for a single zff segment file.
+/// this implement Read for [FileEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
+/// State: completly untested.
 impl Read for FileEncoder {
 	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		let mut read_bytes = 0;

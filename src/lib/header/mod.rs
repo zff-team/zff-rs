@@ -1,5 +1,7 @@
 // - modules
+/// This module contains the version 1 of all zff header.
 pub mod version1;
+/// This module contains the version 2 of all zff header.
 pub mod version2;
 
 // - re-export

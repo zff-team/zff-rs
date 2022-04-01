@@ -1,5 +1,7 @@
 // - modules
+/// This module contains the version 1 of all zff footer.
 pub mod version1;
+/// This module contains the version 2 of all zff footer.
 pub mod version2;
 
 // - re-exports -- this section contains the footer of the current zff version.

@@ -22,18 +22,24 @@ use crate::{
 };
 
 /// The description header contains all data,
-/// which describes the dumped data (e.g. case number, examiner name or acquisition date).\
-/// This header is part of the main header.
-/// The special thing about this header is that the contained values\
-/// - are all optional except for the version.\
-/// - have a prefixed identifier, which is encoded with.
+/// which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).\
+/// The description information are stored in a HashMap (e.g. like ["acquisition tool", "zffacquire"]).
+/// Some fields are predefined, to be able to ensure a certain degree of compatibility between different tools.
+/// The following fields are predefined:
+/// - case number (for the appropriate HashMap key, see [ENCODING_KEY_CASE_NUMBER](crate::constants::ENCODING_KEY_CASE_NUMBER))
+/// - evidence number (for the appropriate HashMap key, see [ENCODING_KEY_EVIDENCE_NUMBER](crate::constants::ENCODING_KEY_EVIDENCE_NUMBER))
+/// - examiner name (for the appropriate HashMap key, see [ENCODING_KEY_EXAMINER_NAME](crate::constants::ENCODING_KEY_EXAMINER_NAME))
+/// - notes ((for the appropriate HashMap key, see [ENCODING_KEY_NOTES](crate::constants::ENCODING_KEY_NOTES))
+/// 
+/// But you are free to define custom additional key-value pairs.
+/// 
 /// # Example
 /// ```
 /// use zff::header::DescriptionHeader;
 /// 
 /// fn main() {
-/// 	let header_version = 1;
-/// 	let mut description_header = DescriptionHeader::new_empty(1);
+/// 	let header_version = 2;
+/// 	let mut description_header = DescriptionHeader::new_empty(header_version);
 /// 
 /// 	description_header.set_examiner_name("ph0llux");
 /// 	assert_eq!(Some("ph0llux"), description_header.examiner_name());
@@ -55,6 +61,7 @@ impl DescriptionHeader {
 		}
 	}
 
+	/// Creates a new [DescriptionHeader] with the given identifier map.
 	pub fn new(version: u8, identifier_map: HashMap<String, String>) -> DescriptionHeader {
 		Self {
 			version: version,
@@ -88,6 +95,11 @@ impl DescriptionHeader {
 			Some(x) => Some(x),
 			None => None
 		}
+	}
+
+	/// inserts a custom key-value pair
+	pub fn custom_identifier_value<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+		self.identifier_map.insert(key.into(), value.into());
 	}
 
 	/// returns the evidence number, if available.

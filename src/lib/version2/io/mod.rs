@@ -10,7 +10,6 @@ use std::os::unix::fs::MetadataExt;
 mod zffcreator;
 mod zffreader;
 mod zffextender;
-//pub mod stream; -> TODO
 
 // - re-exports
 pub use zffcreator::*;

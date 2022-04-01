@@ -24,15 +24,17 @@ use crate::header::{
 // - external
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
 
-
+/// Each object contains its own object footer.
 #[derive(Debug, Clone)]
 pub enum ObjectFooter {
+	/// A physical object contains a [ObjectFooterPhysical].
 	Physical(ObjectFooterPhysical),
+	/// A logical object contains a [ObjectFooterLogical].
 	Logical(ObjectFooterLogical),
 }
 
 impl ObjectFooter {
-
+	/// returns the version of the object footer.
 	pub fn version(&self) -> u8 {
 		match self {
 			ObjectFooter::Physical(phy) => phy.version(),
@@ -63,7 +65,8 @@ impl ObjectFooter {
 		}
 	}
 
-	/// decodes the header directly.
+	/// Reads the data from the given [Reader](std::io::Read) and returns a decoded object footer.
+	/// Returns an error, if the decoding process fails.
 	pub fn decode_directly<R: Read>(data: &mut R) -> Result<ObjectFooter> {
 		match Self::check_identifier(data) {
 			1 => {
@@ -83,6 +86,14 @@ impl ObjectFooter {
 	}
 }
 
+/// An [ObjectFooterPhysical] is written at the end of each physical object.
+/// This footer contains various information about the acquisition process:
+/// - the acquisition start time
+/// - the acquisition start time
+/// - the size of the (uncompressed and unencrypted) underlying data
+/// - the first chunk number, which is used for this physical dump
+/// - the total number of chunks, used for this physical dump
+/// - a hash header with the appropriate hash values of the underlying physical dump
 #[derive(Debug,Clone)]
 pub struct ObjectFooterPhysical {
 	version: u8,
@@ -95,6 +106,7 @@ pub struct ObjectFooterPhysical {
 }
 
 impl ObjectFooterPhysical {
+	/// creates a new [ObjectFooterPhysical] with the given values.
 	pub fn new(version: u8, acquisition_start: u64, acquisition_end: u64, length_of_data: u64, first_chunk_number: u64, number_of_chunks: u64, hash_header: HashHeader) -> ObjectFooterPhysical {
 		Self {
 			version: version,
@@ -107,26 +119,32 @@ impl ObjectFooterPhysical {
 		}
 	}
 
+	/// returns the appropriate acquisition start time.
 	pub fn acquisition_start(&self) -> u64 {
 		self.acquisition_start
 	}
 
+	/// returns the appropriate acquisition start time.
 	pub fn acquisition_end(&self) -> u64 {
 		self.acquisition_end
 	}
 
+	/// returns the first chunk number, which is used for this physical dump.
 	pub fn first_chunk_number(&self) -> u64 {
 		self.first_chunk_number
 	}
 
+	/// returns the total number of chunks, used for this physical dump.
 	pub fn number_of_chunks(&self) -> u64 {
 		self.number_of_chunks
 	}
 
+	/// returns the size of the (uncompressed and unencrypted) underlying data.
 	pub fn length_of_data(&self) -> u64 {
 		self.length_of_data
 	}
 
+	/// returns a hash header with the appropriate hash values of the underlying physical dump.
 	pub fn hash_header(&self) -> &HashHeader {
 		&self.hash_header
 	}
@@ -164,6 +182,15 @@ impl HeaderCoding for ObjectFooterPhysical {
 	}
 }
 
+/// An [ObjectFooterLogical] is written at the end of each logical object container.
+/// This footer contains various information about the acquisition process:
+/// - the acquisition start time
+/// - the acquisition start time
+/// - a [Vec] of the filenumbers of the appropriate files in the root directory
+/// - a [HashMap] in which segment numbers the corresponding file headers can be found.
+/// - a [HashMap] in which offsets of the corresponding file headers can be found.
+/// - a [HashMap] in which segment numbers the corresponding file footers can be found.
+/// - a [HashMap] in which offsets the corresponding file footers can be found.
 #[derive(Debug,Clone)]
 pub struct ObjectFooterLogical {
 	version: u8,
@@ -177,6 +204,7 @@ pub struct ObjectFooterLogical {
 }
 
 impl ObjectFooterLogical {
+	/// creates a new empty [ObjectFooterLogical]
 	pub fn new_empty(version: u8) -> ObjectFooterLogical {
 		Self {
 			version: version,
@@ -189,6 +217,8 @@ impl ObjectFooterLogical {
 			file_footer_offsets: HashMap::new()
 		}
 	}
+
+	/// creates a new [ObjectFooterLogical] with the given values.
 	pub fn new(
 		version: u8,
 		acquisition_start: u64,
@@ -210,58 +240,76 @@ impl ObjectFooterLogical {
 		}
 	}
 
+	/// adds a new filenumber to the underlying [Vec] of the filenumbers of the appropriate files in the root directory.
 	pub fn add_root_dir_filenumber(&mut self, filenumber: u64) {
 		self.root_dir_filenumbers.push(filenumber)
 	}
 
+	/// returns the underlying [Vec] of the filenumbers of the appropriate files in the root directory as a reference.
 	pub fn root_dir_filenumbers(&self) -> &Vec<u64> {
 		&self.root_dir_filenumbers
 	}
 
+	/// adds a file number / segment number combination to the appropriate underlying [HashMap],
+	/// which contains the appropriate segment numbers of the corresponding file headers.
 	pub fn add_file_header_segment_number(&mut self, filenumber: u64, file_segment_number: u64) {
 		self.file_header_segment_numbers.insert(filenumber, file_segment_number);
 	}
 
+	/// adds a file number / offset combination to the appropriate underlying [HashMap],
+	/// which contains the appropriate offsets of the corresponding file headers.
 	pub fn add_file_header_offset(&mut self, filenumber: u64, fileoffset: u64) {
 		self.file_header_offsets.insert(filenumber, fileoffset);
 	}
 
+	/// returns the underlying [HashMap], which contains the segment numbers and the corresponding file headers.
 	pub fn file_header_segment_numbers(&self) -> &HashMap<u64, u64> {
 		&self.file_header_segment_numbers
 	}
 
+	/// returns the underlying [HashMap], which contains the offsets and the corresponding file headers.
 	pub fn file_header_offsets(&self) -> &HashMap<u64, u64> {
 		&self.file_header_offsets
 	}
 
+	/// adds a file number / segment number combination to the appropriate underlying [HashMap],
+	/// which contains the appropriate segment numbers of the corresponding file footers.
 	pub fn add_file_footer_segment_number(&mut self, filenumber: u64, file_segment_number: u64) {
 		self.file_footer_segment_numbers.insert(filenumber, file_segment_number);
 	}
 
+	/// adds a file number / offset combination to the appropriate underlying [HashMap],
+	/// which contains the appropriate offsets of the corresponding file footers.
 	pub fn add_file_footer_offset(&mut self, filenumber: u64, fileoffset: u64) {
 		self.file_footer_offsets.insert(filenumber, fileoffset);
 	}
 
+	/// returns the underlying [HashMap], which contains the segment numbers and the corresponding file footers.
 	pub fn file_footer_segment_numbers(&self) -> &HashMap<u64, u64> {
 		&self.file_footer_segment_numbers
 	}
 
+	/// returns the underlying [HashMap], which contains the offsets and the corresponding file footers.
 	pub fn file_footer_offsets(&self) -> &HashMap<u64, u64> {
 		&self.file_footer_offsets
 	}
 
+	/// returns the acquisition start time.
 	pub fn acquisition_start(&self) -> u64 {
 		self.acquisition_start
 	}
 
+	/// returns the acquisition end time.
 	pub fn acquisition_end(&self) -> u64 {
 		self.acquisition_end
 	}
 
+	/// sets the acquisition start time.
 	pub fn set_acquisition_start(&mut self, start: u64) {
 		self.acquisition_start = start;
 	}
 
+	/// sets the acquisition end time.
 	pub fn set_acquisition_end(&mut self, end: u64) {
 		self.acquisition_end = end;
 	}

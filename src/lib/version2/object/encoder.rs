@@ -38,12 +38,16 @@ use crc32fast::Hasher as CRC32Hasher;
 use ed25519_dalek::{Keypair};
 use time::{OffsetDateTime};
 
+/// An encoder for each object. This is a wrapper Enum for [PhysicalObjectEncoder] and [LogicalObjectEncoder].
 pub enum ObjectEncoder<R: Read> {
+	/// Wrapper for [PhysicalObjectEncoder].
 	Physical(PhysicalObjectEncoder<R>),
+	/// Wrapper for [LogicalObjectEncoder].
 	Logical(LogicalObjectEncoder),
 }
 
 impl<R: Read> ObjectEncoder<R> {
+	/// returns the appropriate object number.
 	pub fn obj_number(&self) -> u64 {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.obj_number,
@@ -51,6 +55,7 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns the current chunk number.
 	pub fn current_chunk_number(&self) -> u64 {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.current_chunk_number,
@@ -58,6 +63,7 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns the appropriate encoded [ObjectHeader].
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.get_encoded_header(),
@@ -65,6 +71,7 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns the underlying [MainHeader].
 	pub fn main_header(&self) -> &MainHeader {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.main_header(),
@@ -72,6 +79,7 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns the underlying encryption key (if available).
 	pub fn encryption_key(&self) -> Option<Vec<u8>> {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.encryption_key.clone(),
@@ -79,6 +87,7 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns the appropriate object footer.
 	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.get_encoded_footer(),
@@ -86,6 +95,7 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns the next data.
 	pub fn get_next_data(&mut self, current_offset: u64, current_segment_no: u64) -> Result<Vec<u8>> {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.get_next_chunk(),
@@ -95,7 +105,7 @@ impl<R: Read> ObjectEncoder<R> {
 
 }
 
-//TODO: Documentation; Acquisition-start will be set by calling self.get_encoded_header(), acq-end by calling self.get_encoded_footer().
+/// The [PhysicalObjectEncoder] can be used to encode a physical object.
 pub struct PhysicalObjectEncoder<R: Read> {
 	/// The number of this object
 	obj_number: u64,
@@ -124,6 +134,7 @@ pub struct PhysicalObjectEncoder<R: Read> {
 }
 
 impl<R: Read> PhysicalObjectEncoder<R> {
+	/// Returns a new [PhysicalObjectEncoder] by the given values.
 	pub fn new(
 		obj_header: ObjectHeader,
 		reader: R,
@@ -232,22 +243,24 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    }
 	}
 
+	/// Returns the appropriate object number.
 	pub fn obj_number(&self) -> u64 {
 		self.obj_number
 	}
 
+	/// Returns the current chunk number.
 	pub fn current_chunk_number(&self) -> u64 {
 		self.current_chunk_number
 	}
 
-	// returns the encoded header
+	/// Returns the encoded header. A call of this method sets the acquisition start time to the current time.
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		self.encoded_header.clone()
 	}
 
 
-	//returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
+	/// Returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
 		let mut chunk = Vec::new();
 
@@ -294,7 +307,9 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    return Ok(chunk);
 	}
 
-	// generates a appropriate footer
+	/// Generates a appropriate footer. Attention: A call of this method ...
+	/// - sets the acquisition end time to the current time
+	/// - finalizes the underlying hashers
 	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
 		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
@@ -323,16 +338,18 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		footer.encode_directly()
 	}
 
+	/// Returns the underlying [MainHeader].
 	pub fn main_header(&self) -> &MainHeader {
 		&self.main_header
 	}
 
+	/// Returns the underlying encryption key (if available).
 	pub fn encryption_key(&self) -> Option<Vec<u8>> {
 		self.encryption_key.clone()
 	}
 }
 
-/// this implement Read for [PhysicalObjectEncoder]. This implementation should only used for a single zff segment file.
+/// This implement Read for [PhysicalObjectEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
 impl<D: Read> Read for PhysicalObjectEncoder<D> {
 	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		let mut read_bytes = 0;
@@ -397,6 +414,7 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 	}
 }
 
+/// The [LogicalObjectEncoder] can be used to encode a logical object.
 pub struct LogicalObjectEncoder {
 	/// The number of this object
 	obj_number: u64,
@@ -421,9 +439,12 @@ pub struct LogicalObjectEncoder {
 }
 
 impl LogicalObjectEncoder {
+	/// Returns the encoded footer for this object.
 	pub fn get_encoded_footer(&self) -> Vec<u8> {
 		self.object_footer.encode_directly()
 	}
+
+	/// Returns a new [LogicalObjectEncoder] by the given values.
 	pub fn new(
 		obj_header: ObjectHeader,
 		files: Vec<(File, FileHeader)>,
@@ -514,14 +535,17 @@ impl LogicalObjectEncoder {
 		})
 	}
 
+	/// Returns the appropriate object number.
 	pub fn obj_number(&self) -> u64 {
 		self.obj_number
 	}
 
+	/// Returns the current chunk number
 	pub fn current_chunk_number(&self) -> u64 {
 		self.current_chunk_number
 	}
 
+	/// Returns the current signature key (if available).
 	pub fn signature_key(&self) -> Option<Keypair> {
 		let signature_key = match &self.signature_key_bytes {
 	    	Some(bytes) => Keypair::from_bytes(&bytes).ok(),
@@ -530,13 +554,13 @@ impl LogicalObjectEncoder {
 	    signature_key
 	}
 
-	// returns the encoded header
+	/// Returns the encoded object header.
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		self.encoded_header.clone()
 	}
 
-	//returns the next encoded data - an encoded file header, an encoded file chunk or an encoded file footer.
-	// This method will increment the self.current_chunk_number automatically.
+	/// Returns the next encoded data - an encoded [FileHeader], an encoded file chunk or an encoded [FileFooter].
+	/// This method will increment the self.current_chunk_number automatically.
 	pub fn get_next_data(&mut self, current_offset: u64, current_segment_no: u64) -> Result<Vec<u8>> {
 		match self.current_file_encoder {
 			Some(ref mut file_encoder) => {
@@ -616,10 +640,12 @@ impl LogicalObjectEncoder {
 		}	
 	}
 
+	/// Returns a reference to the underlying [MainHeader].
 	pub fn main_header(&self) -> &MainHeader {
 		&self.main_header
 	}
 
+	/// Returns the underlying encryption key (if available).
 	pub fn encryption_key(&self) -> Option<Vec<u8>> {
 		self.encryption_key.clone()
 	}

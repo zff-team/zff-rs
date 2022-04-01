@@ -29,6 +29,14 @@ use crate::header::{
 	DescriptionHeader,
 };
 
+/// Each object starts with a [ObjectHeader]. The [ObjectHeader] contains several metadata of the appropriate underlying object.
+/// The following metadata are stored in an [ObjectHeader]:
+/// - The appropriate number of the objects (the first object always starts with 1)
+/// - An [crate::header::EncryptionHeader], if an encryption was used.
+/// - A [crate::header::CompressionHeader], containing the appropriate compression information
+/// - A flag, if a signature method was used.
+/// - A [crate::header::DescriptionHeader] for this object.
+/// - The [ObjectType] of this object. 
 #[derive(Debug,Clone)]
 pub struct ObjectHeader {
 	version: u8,
@@ -41,6 +49,7 @@ pub struct ObjectHeader {
 }
 
 impl ObjectHeader {
+	/// creates a new object with the given values
 	pub fn new(version: u8,
 		object_number: u64,
 		encryption_header: Option<EncryptionHeader>,
@@ -59,26 +68,32 @@ impl ObjectHeader {
 		}
 	}
 
+	/// sets the object number
 	pub fn set_object_number(&mut self, object_number: u64) {
 		self.object_number = object_number
 	}
 	
+	/// returns the object number
 	pub fn object_number(&self) -> u64 {
 		self.object_number
 	}
 	
+	/// returns the [crate::header::DescriptionHeader]
 	pub fn description_header(&self) -> DescriptionHeader {
 		self.description_header.clone()
 	}
 	
+	/// returns the [ObjectType]
 	pub fn object_type(&self) -> ObjectType {
 		self.object_type.clone()
 	}
 
+	/// returns a reference to the underlying [crate::header::EncryptionHeader], if available.
 	pub fn encryption_header(&self) -> Option<&EncryptionHeader> {
 		self.encryption_header.as_ref()
 	}
 
+	/// returns the underlying [crate::header::CompressionHeader]
 	pub fn compression_header(&self) -> CompressionHeader {
 		self.compression_header.clone()
 	}
@@ -91,13 +106,13 @@ impl ObjectHeader {
 		}
 	}
 
+	/// checks if a signature method was used. Returns true if and false if not.
 	pub fn has_hash_signatures(&self) -> bool {
 		match &self.signature_flag {
 			SignatureFlag::NoSignatures => return false,
 			_ => return true,
 		}
 	}
-
 
 	/// encodes the object header to a ```Vec<u8>```. The encryption flag will be set to 2.
 	/// # Error
@@ -227,11 +242,13 @@ impl ObjectHeader {
 	}
 }
 
-/// Defines all hashing algorithms, which are implemented in zff.
+/// Defines the [ObjectType], which can be used in zff container.
 #[repr(u8)]
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
 pub enum ObjectType {
+	/// An object containing a physical dump.
 	Physical = 1,
+	/// An object, containing logical files.
 	Logical = 2,
 }
 

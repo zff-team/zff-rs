@@ -18,26 +18,33 @@ use crate::{
 	EncryptionAlgorithm,
 };
 
+/// The [Object] contains the appropriate object information.
 #[derive(Debug, Clone)]
 pub enum Object {
+	/// Contains a [PhysicalObjectInformation] instance.
 	Physical(PhysicalObjectInformation),
+	/// Contains a [LogicalObjectInformation] instance.
 	Logical(LogicalObjectInformation)
 }
 
 impl Object {
-
+	/// Returns the used encryption algorithm of the underlying [ObjectHeader](crate::header::ObjectHeader), if available.
 	pub fn encryption_algorithm(&self) -> Option<&EncryptionAlgorithm> {
 		match self {
 			Object::Physical(obj) => Some(obj.header().encryption_header()?.algorithm()),
 			Object::Logical(obj) => Some(obj.header().encryption_header()?.algorithm()),
 		}
 	}
+
+	/// Returns the underlying encryption key, if available
 	pub fn encryption_key(&self) -> Option<&Vec<u8>> {
 		match self {
 			Object::Physical(obj) => obj.encryption_key.as_ref(),
 			Object::Logical(obj) => obj.encryption_key.as_ref(),
 		}
 	}
+
+	/// Returns a reference of the underlying [ObjectHeader](crate::header::ObjectHeader).
 	pub fn header(&self) -> &ObjectHeader {
 		match self {
 			Object::Physical(obj) => obj.header(),
@@ -45,6 +52,7 @@ impl Object {
 		}
 	}
 
+	/// Returns the object number of this object.
 	pub fn object_number(&self) -> u64 {
 		match self {
 			Object::Physical(obj) => obj.header().object_number(),
@@ -52,6 +60,7 @@ impl Object {
 		}
 	}
 
+	/// Returns the underlying [EncryptionHeader](crate::header::EncryptionHeader), if available.
 	pub fn encryption_header(&self) -> Option<&EncryptionHeader> {
 		match self {
 			Object::Physical(obj) => obj.header().encryption_header(),
@@ -59,6 +68,7 @@ impl Object {
 		}
 	}
 
+	/// Returns the current [Reader](std::io::Read) position.
 	pub fn position(&self) -> u64 {
 		match self {
 			Object::Physical(obj) => obj.position(),
@@ -66,6 +76,7 @@ impl Object {
 		}
 	}
 
+	/// Sets the position of the [Reader](std::io::Read).
 	pub fn set_position(&mut self, position: u64) {
 		match self {
 			Object::Physical(obj) => obj.set_position(position),
@@ -73,6 +84,7 @@ impl Object {
 		}
 	}
 
+	/// Returns the acquisition start time of the object.
 	pub fn acquisition_start(&self) -> u64 {
 		match self {
 			Object::Physical(obj) => obj.footer.acquisition_start(),
@@ -80,6 +92,7 @@ impl Object {
 		}
 	}
 
+	/// Returns the acquisition end time of the object.
 	pub fn acquisition_end(&self) -> u64 {
 		match self {
 			Object::Physical(obj) => obj.footer.acquisition_end(),
@@ -88,6 +101,7 @@ impl Object {
 	}
 }
 
+/// This struct contains several information about a physical object.
 #[derive(Debug, Clone)]
 pub struct PhysicalObjectInformation {
 	header: ObjectHeader,
@@ -97,6 +111,7 @@ pub struct PhysicalObjectInformation {
 }
 
 impl PhysicalObjectInformation {
+	/// Creates a new [PhysicalObjectInformation] with the given values.
 	pub fn new(header: ObjectHeader, footer: ObjectFooterPhysical, encryption_key: Option<Vec<u8>>) -> Self {
 		Self {
 			header: header,
@@ -106,23 +121,28 @@ impl PhysicalObjectInformation {
 		}
 	}
 
+	/// Returns a reference of the underlying object header.
 	pub fn header(&self) -> &ObjectHeader {
 		&self.header
 	}
 
+	/// Returns a reference of the underlying object footer.
 	pub fn footer(&self) -> &ObjectFooterPhysical {
 		&self.footer
 	}
 
+	/// Returns the current position of the appropriate [Reader](std::io::Read).
 	pub fn position(&self) -> u64 {
 		self.position
 	}
 
+	/// Sets the position for the appropriate [Reader](std::io::Read).
 	pub fn set_position(&mut self, position: u64) {
 		self.position = position
 	}
 }
 
+/// This struct contains several information about a logical object.
 #[derive(Debug, Clone)]
 pub struct LogicalObjectInformation {
 	header: ObjectHeader,
@@ -133,6 +153,7 @@ pub struct LogicalObjectInformation {
 }
 
 impl LogicalObjectInformation {
+	/// Creates a new [LogicalObjectInformation] with the given values.
 	pub fn new(header: ObjectHeader, footer: ObjectFooterLogical, encryption_key: Option<Vec<u8>>) -> Self {
 		Self {
 			header: header,
@@ -143,18 +164,24 @@ impl LogicalObjectInformation {
 		}
 	}
 
+	/// Returns a reference of the underlying object header.
 	pub fn header(&self) -> &ObjectHeader {
 		&self.header
 	}
 
+	/// Returns a reference of the underlying object footer.
 	pub fn footer(&self) -> &ObjectFooterLogical {
 		&self.footer
 	}
 
+	/// Returns the number of the current active file.
 	pub fn active_file_number(&self) -> u64 {
 		self.active_file_number
 	}
 
+	/// Sets the number of the current active file.
+	/// # Error
+	/// Fails, if the given file number not exists in this object.
 	pub fn set_active_file_number(&mut self, file_number: u64) -> Result<()> {
 		match self.files.get(&file_number) {
 			Some(_) => self.active_file_number = file_number,
@@ -163,14 +190,19 @@ impl LogicalObjectInformation {
 		Ok(())
 	}
 
+	/// Returns a reference to a HashMap of the underlying [Files](crate::file::File) and their file numbers.
 	pub fn files(&self) -> &HashMap<u64, File> {
 		&self.files
 	}
 
+	/// Addss a file with its appropriate file number to the underlying HashMap of [Files](crate::file::File).
 	pub fn add_file(&mut self, file_number: u64, file: File) {
 		self.files.insert(file_number, file);
 	}
 
+	/// Returns a [File](crate::file::File) of the current active file.
+	/// # Error
+	/// Fails if the current set active file number is not available.
 	pub fn get_active_file(&self) -> Result<File> {
 		match self.files.get(&self.active_file_number) {
 			Some(file) =>  Ok(file.clone()),
@@ -178,6 +210,7 @@ impl LogicalObjectInformation {
 		}
 	} 
 
+	/// Returns the current position of the appropriate [Reader](std::io::Read).
 	pub fn position(&self) -> u64 {
 		match self.files.get(&self.active_file_number) {
 			Some(file) => file.position(),
@@ -185,6 +218,7 @@ impl LogicalObjectInformation {
 		}
 	}
 
+	/// Sets the position for the appropriate [Reader](std::io::Read).
 	pub fn set_position(&mut self, position: u64) {
 		match self.files.get_mut(&self.active_file_number) {
 			Some(file) => file.set_position(position),

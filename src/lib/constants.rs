@@ -1,18 +1,18 @@
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 // identifier: magic bytes
-pub const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666d;
-pub const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7a666645;
-pub const HEADER_IDENTIFIER_DESCRIPTION_HEADER: u32 = 0x7A666664;
-pub const HEADER_IDENTIFIER_SEGMENT_HEADER: u32 = 0x7A666673;
-pub const HEADER_IDENTIFIER_COMPRESSION_HEADER: u32 = 0x7A666663;
-pub const HEADER_IDENTIFIER_PBE_HEADER: u32 = 0x7A666670;
-pub const HEADER_IDENTIFIER_ENCRYPTION_HEADER: u32 = 0x7A666665;
-pub const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
-pub const HEADER_IDENTIFIER_HASH_HEADER: u32 = 0x7a666668;
-pub const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7a666648;
-pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7a66664f;
-pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
+pub(crate) const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666d;
+pub(crate) const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7a666645;
+pub(crate) const HEADER_IDENTIFIER_DESCRIPTION_HEADER: u32 = 0x7A666664;
+pub(crate) const HEADER_IDENTIFIER_SEGMENT_HEADER: u32 = 0x7A666673;
+pub(crate) const HEADER_IDENTIFIER_COMPRESSION_HEADER: u32 = 0x7A666663;
+pub(crate) const HEADER_IDENTIFIER_PBE_HEADER: u32 = 0x7A666670;
+pub(crate) const HEADER_IDENTIFIER_ENCRYPTION_HEADER: u32 = 0x7A666665;
+pub(crate) const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
+pub(crate) const HEADER_IDENTIFIER_HASH_HEADER: u32 = 0x7a666668;
+pub(crate) const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7a666648;
+pub(crate) const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7a66664f;
+pub(crate) const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
 
 pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
@@ -66,6 +66,7 @@ pub(crate) const ERROR_ZFFREADER_MISSING_FILE: &'static str = "Missing file numb
 pub const DEFAULT_CHUNK_SIZE: u8 = 15;
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
+/// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
 
 /// The default compression ratio threshold
@@ -95,21 +96,34 @@ pub const DEFAULT_HEADER_VERSION_SEGMENT_HEADER: u8 = 2;
 pub const DEFAULT_HEADER_VERSION_COMPRESSION_HEADER: u8 = 1;
 /// current header version for the [DescriptionHeader](crate::header::DescriptionHeader).
 pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 2;
+/// current header version for the [PBEHeader](crate::header::PBEHeader).
 pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 1;
+/// current header version for the [EncryptionHeader](crate::header::EncryptionHeader).
 pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 1;
+/// current header version for the [MainHeader](crate::header::MainHeader).
 pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
-pub(crate) const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
+/// current header version for the [FileHeader](crate::header::FileHeader).
+pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
+/// current header version for the [ObjectHeader](crate::header::ObjectHeader).
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 1;
 
 /// current footer version of [ObjectFooterPhysical](crate::version2::footer::ObjectFooterPhysical)
+/// current footer version for the [ObjectFooterPhysical](crate::header::ObjectFooterPhysical).
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
+/// current footer version for the [ObjectFooterLogical](crate::header::ObjectFooterLogical).
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 1;
-pub(crate) const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
-pub(crate) const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 1;
-pub(crate) const DEFAULT_FOOTER_VERSION_FILE_FOOTER: u8 = 1;
+/// current footer version for the [SegmentFooter](crate::header::SegmentFooter).
+pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
+/// current footer version for the [MainFooter](crate::header::MainFooter).
+pub const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 1;
+/// current footer version for the [FileFooter](crate::header::FileFooter).
+pub const DEFAULT_FOOTER_VERSION_FILE_FOOTER: u8 = 1;
 
+/// The default header signature length.
 pub const HEADER_SIGNATURE_LENGTH: usize = 4;
+/// The default size of the field "header length".
 pub const HEADER_LENGTH_LENGTH: usize = 8;
+/// The default size of the field "header version".
 pub const HEADER_VERSION_LENGTH: usize = 1;
 
 

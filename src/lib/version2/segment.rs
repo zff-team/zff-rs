@@ -18,6 +18,9 @@ use crate::{
 	ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT,
 };
 
+/// Represents a full [Segment], containing a [crate::header::SegmentHeader],
+/// a [crate::footer::SegmentFooter], a [Reader](std::io::Read) to the appropriate
+/// segmented data and a position marker for this [Reader](std::io::Read). 
 pub struct Segment<R: Read + Seek> {
 	header: SegmentHeader,
 	data: R,
@@ -36,6 +39,7 @@ impl<R: Read + Seek> Segment<R> {
 		}
 	}
 
+	/// Creates a new [Segment] from the given [Reader](std::io::Read).
 	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
 
@@ -56,10 +60,12 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(Self::new(segment_header, data, segment_footer))
 	}
 
+	/// Returns a reference to the underlying [crate::header::SegmentHeader].
 	pub fn header(&self) -> &SegmentHeader {
 		&self.header
 	}
 
+	/// Returns a reference to the underlying [crate::footer::SegmentFooter].
 	pub fn footer(&self) -> &SegmentFooter {
 		&self.footer
 	}
@@ -108,6 +114,7 @@ impl<R: Read + Seek> Segment<R> {
 		
 	}
 
+	/// Returns the [crate::header::ObjectHeader] of the given object number, if available in this [Segment]. Otherwise, returns an error.
 	pub fn read_object_header(&mut self, object_number: u64) -> Result<ObjectHeader> {
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
@@ -118,6 +125,9 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(object_header)
 	}
 
+	/// Returns the [crate::header::ObjectHeader] of the given object number (encrypts the encrypted object header on-the-fly with the given decryption password).
+	/// # Error
+	/// Fails if the [crate::header::ObjectHeader] could not be found in this [Segment] or/and if the decryption password is wrong.
 	pub fn read_encrypted_object_header<P>(&mut self, object_number: u64, decryption_password: P) -> Result<ObjectHeader>
 	where
 		P: AsRef<[u8]>,
@@ -131,6 +141,7 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(object_header)
 	}
 
+	/// Returns the [crate::footer::ObjectFooter] of the given object number, if available in this [Segment]. Otherwise, returns an error.
 	pub fn read_object_footer(&mut self, object_number: u64) -> Result<ObjectFooter> {
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 			Some(value) => value,

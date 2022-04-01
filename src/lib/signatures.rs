@@ -68,10 +68,13 @@ impl Signature {
 	}
 }
 
-
+/// The signature flags used in zff.
 #[derive(Debug,Clone)]
 pub enum SignatureFlag {
+	/// No signature method was used.
 	NoSignatures = 0,
+	/// The hash values will be signed only.
 	HashValueSignatureOnly = 1,
+	/// Every individual chunk and the hash values will be signed.
 	PerChunkSignatures = 2,
 }
