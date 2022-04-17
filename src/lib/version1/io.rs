@@ -101,7 +101,7 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	///writes the data to the appropriate files. The output files will be generated automatically by this method.
-	pub async fn generate_files(&mut self) -> Result<()> {
+	pub fn generate_files(&mut self) -> Result<()> {
 		let mut number_of_segments = 0;
 		let main_header_size = self.main_header.get_encoded_size();
 		if (self.main_header.segment_size() as usize) < main_header_size {
@@ -126,7 +126,7 @@ impl<R: Read> ZffWriter<R> {
 	    output_file.write_all(&encoded_main_header)?;
 
 	    //writes the first segment
-	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64).await?;
+	    let _ = self.write_segment(&mut output_file, encoded_main_header.len() as u64)?;
 	    number_of_segments += 1;
 
 	    loop {
@@ -136,7 +136,7 @@ impl<R: Read> ZffWriter<R> {
 	    	segment_filename.set_extension(&file_extension);
 	    	let mut output_file = File::create(&segment_filename)?;
 
-	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0).await?;
+	    	let written_bytes_in_segment = self.write_segment(&mut output_file, 0)?;
 	    	if written_bytes_in_segment == 0 {
 	            let _ = remove_file(segment_filename);
 	            break;
@@ -182,23 +182,23 @@ impl<R: Read> ZffWriter<R> {
 	    Ok(())
 	}
 
-	async fn update_hasher(&mut self, buffer: &[u8]) {
+	fn update_hasher(&mut self, buffer: &[u8]) {
 		for hasher in self.hasher_map.values_mut() {
 			hasher.update(buffer);
 		}
 	}
 
-	async fn get_crc32(buffer: &[u8]) -> u32 {
+	fn get_crc32(buffer: &[u8]) -> u32 {
 		let mut crc32_hasher = CRC32Hasher::new();
 		crc32_hasher.update(buffer);
 		crc32_hasher.finalize()
 	}
 
-	async fn calculate_signature(&self, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
+	fn calculate_signature(&self, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
 		self.signature_key.as_ref().map(|keypair| Signature::sign(keypair, buffer))
 	}
 
-	async fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
+	fn compress_buffer(&self, buf: Vec<u8>) -> Result<(Vec<u8>, bool)> {
 		let mut compression_flag = false;
 		let chunk_size = self.main_header.chunk_size();
 		let compression_threshold = self.main_header.compression_header().threshold();
@@ -232,28 +232,28 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	//returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>, CompressionFlag for ChunkHeader)
-	async fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; ED25519_DALEK_SIGNATURE_LEN]>, bool)> {
+	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; ED25519_DALEK_SIGNATURE_LEN]>, bool)> {
 		let chunk_size = self.main_header.chunk_size();
 	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;
 	    self.read_bytes += read_bytes;
 	    if buf.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 	    };
-	    self.update_hasher(&buf).await;
-	    let crc32 = Self::get_crc32(&buf).await;
-	    let signature = self.calculate_signature(&buf).await;
+	    self.update_hasher(&buf);
+	    let crc32 = Self::get_crc32(&buf);
+	    let signature = self.calculate_signature(&buf);
 
-	    let (chunked_data, compression_flag) = self.compress_buffer(buf).await?;
+	    let (chunked_data, compression_flag) = self.compress_buffer(buf)?;
 	    Ok((chunked_data, crc32, signature, compression_flag))
 	}
 
 	// returns written_bytes
-	async fn write_unencrypted_chunk<W>(&mut self, output: &mut W) -> Result<u64> 
+	fn write_unencrypted_chunk<W>(&mut self, output: &mut W) -> Result<u64> 
 	where
 		W: Write,
 	{
 		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_no);
-		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk().await?;
+		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk()?;
 		chunk_header.set_chunk_size(compressed_chunk.len() as u64);
 		chunk_header.set_crc32(crc32);
 		chunk_header.set_signature(signature);
@@ -268,7 +268,7 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	// returns written_bytes
-	async fn write_encrypted_chunk<W>(&mut self, output: &mut W, encryption_key: Vec<u8>) -> Result<u64> 
+	fn write_encrypted_chunk<W>(&mut self, output: &mut W, encryption_key: Vec<u8>) -> Result<u64> 
 	where
 		W: Write,
 	{
@@ -278,7 +278,7 @@ impl<R: Read> ZffWriter<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 		};
 		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_no); 
-		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk().await?;
+		let (compressed_chunk, crc32, signature, compression_flag) = self.prepare_chunk()?;
 		let encrypted_data = Encryption::encrypt_message(
 			encryption_key,
 			&compressed_chunk,
@@ -310,7 +310,7 @@ impl<R: Read> ZffWriter<R> {
 	//}
 
 	/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
-	async fn write_segment<W: Write + Seek>(
+	fn write_segment<W: Write + Seek>(
 		&mut self,
 		output: &mut W,
 		seek_value: u64 // The seek value is a value of bytes you need to skip (e.g. if this segment contains a main_header, you have to skip the main_header..)
@@ -344,7 +344,7 @@ impl<R: Read> ZffWriter<R> {
 			let encryption_key = self.encryption_key.clone();
 			match encryption_key {
 				None => {
-					let written_in_chunk = match self.write_unencrypted_chunk(output).await {
+					let written_in_chunk = match self.write_unencrypted_chunk(output) {
 						Ok(data) => data,
 						Err(e) => match e.get_kind() {
 							ZffErrorKind::ReadEOF => {
@@ -365,7 +365,7 @@ impl<R: Read> ZffWriter<R> {
 					written_bytes += written_in_chunk;
 				},
 				Some(encryption) => {
-					let written_in_chunk = match self.write_encrypted_chunk(output, encryption.to_vec()).await {
+					let written_in_chunk = match self.write_encrypted_chunk(output, encryption.to_vec()) {
 						Ok(data) => data,
 						Err(e) => match e.get_kind() {
 							ZffErrorKind::ReadEOF => {

@@ -2,7 +2,7 @@
 use std::fmt;
 
 // - external
-use blake2::{Blake2b, Digest};
+use blake2::{Blake2b512, Digest};
 use sha2::{Sha256, Sha512};
 use sha3::{Sha3_256};
 use digest::DynDigest;
@@ -54,7 +54,7 @@ impl Hash {
 	/// returns a new Hasher which implements [DynDigest](https://docs.rs/digest/0.9.0/digest/trait.DynDigest.html).
 	pub fn new_hasher(hash_type: &HashType) -> Box<dyn DynDigest> {
 		match hash_type {
-			HashType::Blake2b512 => Box::new(Blake2b::new()),
+			HashType::Blake2b512 => Box::new(Blake2b512::new()),
 			HashType::SHA256 => Box::new(Sha256::new()),
 			HashType::SHA512 => Box::new(Sha512::new()),
 			HashType::SHA3_256 => Box::new(Sha3_256::new()),
