@@ -11,6 +11,7 @@ use pkcs5::{
 	EncryptionScheme,
 	pbes2::Parameters as PBES2Parameters,
 };
+use scrypt::Params as ScryptParams;
 use aes_gcm_siv::{
 	Aes256GcmSiv, Aes128GcmSiv, Nonce, Key,
 	aead::{Aead, NewAead},
@@ -38,6 +39,8 @@ pub enum EncryptionAlgorithm {
 pub enum KDFScheme {
 	/// KDF scheme PBKDF2-SHA256, with encoding value 0.
 	PBKDF2SHA256 = 0,
+	/// KDF scheme scrypt, with encoding value 1.
+	Scrypt = 1,
 }
 
 /// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
@@ -60,7 +63,7 @@ impl Encryption {
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
 	pub fn encrypt_pbkdf2sha256_aes128cbc(
-		iterations: u16,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
@@ -75,7 +78,7 @@ impl Encryption {
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
 	pub fn encrypt_pbkdf2sha256_aes256cbc(
-		iterations: u16,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
@@ -91,7 +94,7 @@ impl Encryption {
 	/// # Error
 	/// if the decryption fails, or the given parameters are false.
 	pub fn decrypt_pbkdf2sha256_aes128cbc(
-		iterations: u16,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
@@ -106,7 +109,7 @@ impl Encryption {
 	/// # Error
 	/// if the decryption fails, or the given parameters are false.
 	pub fn decrypt_pbkdf2sha256_aes256cbc(
-		iterations: u16,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
@@ -114,6 +117,74 @@ impl Encryption {
 		let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.decrypt(password, ciphertext)?)
+	}
+
+	/// encrypts the given plaintext with the given values with Scrypt-AES128CBC.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
+	pub fn encrypt_scrypt_aes128cbc(
+		logn: u8,
+		r: u32,
+		p: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let encryption_scheme = EncryptionScheme::Pbes2(params);
+		Ok(encryption_scheme.encrypt(password, plaintext)?)
+	}
+
+	/// encrypts the given plaintext with the given values with Scrypt-AES256CBC.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
+	pub fn encrypt_scrypt_aes256cbc(
+		logn: u8,
+		r: u32,
+		p: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let encryption_scheme = EncryptionScheme::Pbes2(params);
+		Ok(encryption_scheme.encrypt(password, plaintext)?)
+	}
+
+	/// decrypts the given ciphertext with the given values with Scrypt-AES128CBC.
+	/// Returns the plaintext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
+	pub fn decrypt_scrypt_aes128cbc(
+		logn: u8,
+		r: u32,
+		p: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let encryption_scheme = EncryptionScheme::Pbes2(params);
+		Ok(encryption_scheme.decrypt(password, plaintext)?)
+	}
+
+	/// decrypts the given ciphertext with the given values with Scrypt-AES256CBC.
+	/// Returns the plaintext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
+	pub fn decrypt_scrypt_aes256cbc(
+		logn: u8,
+		r: u32,
+		p: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let encryption_scheme = EncryptionScheme::Pbes2(params);
+		Ok(encryption_scheme.decrypt(password, plaintext)?)
 	}
 
 	/// method to encrypt a message with a key and and the given chunk number. This method should primary used to encrypt

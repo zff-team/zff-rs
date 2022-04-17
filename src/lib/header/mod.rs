@@ -11,7 +11,8 @@ pub use version2::file_header::*;
 pub use version2::object_header::*;
 pub use version2::segment_header::*;
 pub use version2::hash_header::*;
+pub use version2::encryption_header::*;
+pub use version2::pbe_header::*;
 
-pub use version1::encryption_header::*;
 pub use version1::compression_header::*;
 pub use version1::chunk_header::*;

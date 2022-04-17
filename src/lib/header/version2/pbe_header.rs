@@ -13,9 +13,10 @@ use crate::{
 	ZffErrorKind,
 };
 
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_PBE_HEADER,
 	PBE_KDF_PARAMETERS_PBKDF2,
+	PBE_KDF_PARAMETERS_SCRYPT,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF,
 	ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME,
 	ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME,
@@ -119,12 +120,15 @@ impl HeaderCoding for PBEHeader {
 pub enum KDFParameters {
 	/// stores a struct [PBKDF2SHA256Parameters].
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
+	/// stores a struct [ScryptParameters].
+	ScryptParameters(ScryptParameters)
 }
 
 impl ValueEncoder for KDFParameters {
 	fn encode_directly(&self) -> Vec<u8> {
 		match self {
 			KDFParameters::PBKDF2SHA256Parameters(params) => params.encode_directly(),
+			KDFParameters::ScryptParameters(params) => params.encode_directly(),
 		}
 	}
 	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
@@ -140,23 +144,43 @@ impl ValueDecoder for KDFParameters {
 	type Item = KDFParameters;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<KDFParameters> {
-		if let Ok(params) = PBKDF2SHA256Parameters::decode_directly(data) {
-			return Ok(KDFParameters::PBKDF2SHA256Parameters(params));
-		};
-		Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF))
+		let identifier = u32::decode_directly(data)?;
+		let size = u64::decode_directly(data)?;
+		let mut params = vec![0u8; (size-12) as usize];
+		data.read_exact(&mut params)?;
+		
+		let mut params_cursor = Cursor::new(params);
+
+		if identifier == PBKDF2SHA256Parameters::identifier() {
+			let iterations = u32::decode_directly(&mut params_cursor)?;
+			let mut salt = [0; 32];
+			params_cursor.read_exact(&mut salt)?;
+			let parameters = PBKDF2SHA256Parameters::new(iterations, salt);
+			Ok(KDFParameters::PBKDF2SHA256Parameters(parameters))
+		} else if identifier == ScryptParameters::identifier() {
+			let logn = u8::decode_directly(&mut params_cursor)?;
+			let r = u32::decode_directly(&mut params_cursor)?;
+			let p = u32::decode_directly(&mut params_cursor)?;
+			let mut salt = [0; 32];
+			params_cursor.read_exact(&mut salt)?;
+			let parameters = ScryptParameters::new(logn, r, p, salt);
+			Ok(KDFParameters::ScryptParameters(parameters))
+		} else {
+			Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF))
+		}
 	}
 }
 
 /// struct to store the parameters for the KDF PBKDF2-SHA256.
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct PBKDF2SHA256Parameters {
-	iterations: u16,
+	iterations: u32,
 	salt: [u8; 32],
 }
 
 impl PBKDF2SHA256Parameters {
 	/// returns a new [PBKDF2SHA256Parameters] with the given values.
-	pub fn new(iterations: u16, salt: [u8; 32]) -> PBKDF2SHA256Parameters {
+	pub fn new(iterations: u32, salt: [u8; 32]) -> PBKDF2SHA256Parameters {
 		Self {
 			iterations,
 			salt,
@@ -164,7 +188,7 @@ impl PBKDF2SHA256Parameters {
 	}
 
 	/// returns the number of iterations
-	pub fn iterations(&self) -> u16 {
+	pub fn iterations(&self) -> u32 {
 		self.iterations
 	}
 
@@ -195,10 +219,85 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 	fn decode_content(data: Vec<u8>) -> Result<PBKDF2SHA256Parameters> {
 		let mut cursor = Cursor::new(data);
 
-		let iterations = u16::decode_directly(&mut cursor)?;
+		let iterations = u32::decode_directly(&mut cursor)?;
 		let mut salt = [0; 32];
 		cursor.read_exact(&mut salt)?;
 		let parameters = PBKDF2SHA256Parameters::new(iterations, salt);
+		Ok(parameters)
+	}
+
+}
+
+/// struct to store the parameters for the KDF Scrypt.
+#[derive(Debug,Clone,Eq,PartialEq)]
+pub struct ScryptParameters {
+	logn: u8,
+	r: u32,
+	p: u32,
+	salt: [u8; 32],
+}
+
+impl ScryptParameters {
+	/// returns a new [ScryptParameters] with the given values.
+	pub fn new(logn: u8, r: u32, p: u32, salt: [u8; 32]) -> ScryptParameters {
+		Self {
+			logn,
+			r,
+			p,
+			salt,
+		}
+	}
+
+	/// returns the logn
+	pub fn logn(&self) -> u8 {
+		self.logn
+	}
+
+	/// returns r
+	pub fn r(&self) -> u32 {
+		self.r
+	}
+
+	/// returns p
+	pub fn p(&self) -> u32 {
+		self.p
+	}
+
+	/// returns the salt
+	pub fn salt(&self) -> &[u8; 32] {
+		&self.salt
+	}
+}
+
+impl HeaderCoding for ScryptParameters {
+	type Item = ScryptParameters;
+
+	fn identifier() -> u32 {
+		PBE_KDF_PARAMETERS_SCRYPT
+	}
+
+	fn version(&self) -> u8 {
+		0
+	}
+
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut self.logn.encode_directly());
+		vec.append(&mut self.r.encode_directly());
+		vec.append(&mut self.p.encode_directly());
+		vec.append(&mut self.salt.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<ScryptParameters> {
+		let mut cursor = Cursor::new(data);
+
+		let logn = u8::decode_directly(&mut cursor)?;
+		let r = u32::decode_directly(&mut cursor)?;
+		let p = u32::decode_directly(&mut cursor)?;
+		let mut salt = [0; 32];
+		cursor.read_exact(&mut salt)?;
+		let parameters = ScryptParameters::new(logn, r, p, salt);
 		Ok(parameters)
 	}
 

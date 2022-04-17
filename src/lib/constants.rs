@@ -20,7 +20,8 @@ pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL: u32 = 0x7A666650;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL: u32 = 0x7A66664C;
 pub(crate) const FOOTER_IDENTIFIER_FILE_FOOTER: u32 = 0x7A666649;
 
-pub(crate) const PBE_KDF_PARAMETERS: u32 = 0x6B646670;
+pub(crate) const PBE_KDF_PARAMETERS_PBKDF2: u32 = 0x6B646670;
+pub(crate) const PBE_KDF_PARAMETERS_SCRYPT: u32 = 0x6b646673;
 
 // Encoding keys
 pub(crate) const ENCODING_KEY_CASE_NUMBER: &str = "cn";

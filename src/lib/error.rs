@@ -6,7 +6,8 @@ use std::io;
 // - internal
 
 // - external
-use pkcs5::CryptoError as PKCS5CryptoError;
+use pkcs5::Error as PKCS5CryptoError;
+use scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
 use aes_gcm_siv::aead::Error as EncryptionError;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
@@ -27,6 +28,8 @@ pub enum ZffErrorKind {
 	IoError(io::Error),
 	/// contains a pkcs5::CryptoError.
 	PKCS5CryptoError,
+	/// contains a scrypt::errors::InvalidParams.
+	ScryptErrorInvalidParams,
 	/// contains a STD FromUtf8Error.
 	FromUtf8Error,
 	/// Error which occurs when parsing the file extension.
@@ -96,6 +99,8 @@ pub enum ZffErrorKind {
 	MissingSegment,
 	/// Error will be returned, if the appropriate segment is malformed (e.g. the object header is missing)
 	MalformedSegment,
+	/// Error will be returned, if the header is malformed.
+	MalformedHeader,
 	/// Error will be returned, if no object type exists for the given value
 	UnknownObjectTypeValue,
 	/// Error will be returned, if you try to call a method, which is not available for this [FileType].
@@ -117,6 +122,7 @@ impl fmt::Display for ZffErrorKind {
 		let err_msg = match self {
 			ZffErrorKind::IoError(_) => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
+			ZffErrorKind::ScryptErrorInvalidParams => "ScryptErrorInvalidParams",
 			ZffErrorKind::Custom => "Custom",
 			ZffErrorKind::MissingHardlinkFilenumber => "MissingHardlinkFilenumber",
 			ZffErrorKind::FileExtensionParserError => "FileExtensionParserError",
@@ -151,6 +157,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::InvalidFlagValue => "InvalidFlagValue",
 			ZffErrorKind::MissingSegment => "MissingSegment",
 			ZffErrorKind::MalformedSegment => "MalformedSegment",
+			ZffErrorKind::MalformedHeader => "MalformedHeader",
 			ZffErrorKind::UnknownObjectTypeValue => "UnknownObjectTypeValue",
 			ZffErrorKind::NotAvailableForFileType => "NotAvailableForFileType",
 			ZffErrorKind::UnimplementedFileType => "UnimplementedFileType",
@@ -279,6 +286,12 @@ impl From<io::Error> for ZffError {
 impl From<PKCS5CryptoError> for ZffError {
 	fn from(e: PKCS5CryptoError) -> ZffError {
 		ZffError::new(ZffErrorKind::PKCS5CryptoError, e.to_string())
+	}
+}
+
+impl From<ScryptErrorInvalidParams> for ZffError {
+	fn from(e: ScryptErrorInvalidParams) -> ZffError {
+		ZffError::new(ZffErrorKind::ScryptErrorInvalidParams, e.to_string())
 	}
 }
 

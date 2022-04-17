@@ -8,7 +8,7 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
-	header::version1::{PBEHeader, KDFParameters},
+	header::{PBEHeader, KDFParameters},
 	ZffError,
 	ZffErrorKind,
 	KDFScheme,
@@ -16,7 +16,7 @@ use crate::{
 	Encryption,
 };
 
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
 	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
 };
@@ -78,23 +78,52 @@ impl EncryptionHeader {
 					let salt = parameters.salt();
 					match self.pbe_header.encryption_scheme() {
 						PBEScheme::AES128CBC => Encryption::decrypt_pbkdf2sha256_aes128cbc(
-							iterations.into(),
+							iterations,
 							salt,
 							self.pbe_header.nonce(),
 							&password,
 							&self.encrypted_encryption_key
 							),
 						PBEScheme::AES256CBC => Encryption::decrypt_pbkdf2sha256_aes256cbc(
-							iterations.into(),
+							iterations,
 							salt,
 							self.pbe_header.nonce(),
 							&password,
 							&self.encrypted_encryption_key
 							),
 					}
-				}	
+				}
+				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, ""))
 			},
-			_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, ""))
+			KDFScheme::Scrypt => match self.pbe_header.kdf_parameters() {
+				KDFParameters::ScryptParameters(parameters) => {
+					let logn = parameters.logn();
+					let p = parameters.p();
+					let r = parameters.r();
+					let salt = parameters.salt();
+					match self.pbe_header.encryption_scheme() {
+						PBEScheme::AES128CBC => Encryption::decrypt_scrypt_aes128cbc(
+							logn,
+							p,
+							r,
+							salt,
+							self.pbe_header.nonce(),
+							&password,
+							&self.encrypted_encryption_key
+							),
+						PBEScheme::AES256CBC => Encryption::decrypt_scrypt_aes256cbc(
+							logn,
+							p,
+							r,
+							salt,
+							self.pbe_header.nonce(),
+							&password,
+							&self.encrypted_encryption_key
+							),
+					}
+				},
+				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
+			}
 		}
 	}
 }
