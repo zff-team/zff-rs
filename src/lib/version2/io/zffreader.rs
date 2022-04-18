@@ -306,6 +306,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			Some(Object::Logical(object)) => {
 				match object.footer().file_footer_offsets().get(&file_number) {
 					Some(_) => {
+						self.active_object = object_number;
 						object.set_active_file_number(file_number)?;
 						Ok(object.position())
 					},
