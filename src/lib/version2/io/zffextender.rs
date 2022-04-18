@@ -194,14 +194,8 @@ impl<R: Read> ZffExtender<R> {
 			}
 
 			// - files in subfolders
-			loop {
-				// - folder
+			while let Some((current_dir, dir_parent_file_number)) = directories_to_traversal.pop_front() {
 				let mut inner_dir_elements = VecDeque::new();
-				let (current_dir, dir_parent_file_number) = match directories_to_traversal.pop_front() {
-					Some((current_dir, dir_parent_file_number)) => (current_dir, dir_parent_file_number),
-					None => break,
-				};
-				
 				let element_iterator = match read_dir(&current_dir) {
 					Ok(iterator) => iterator,
 					Err(_) => {
