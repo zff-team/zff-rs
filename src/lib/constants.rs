@@ -98,9 +98,9 @@ pub const DEFAULT_HEADER_VERSION_COMPRESSION_HEADER: u8 = 1;
 /// current header version for the [DescriptionHeader](crate::header::DescriptionHeader).
 pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 2;
 /// current header version for the [PBEHeader](crate::header::PBEHeader).
-pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 2;
 /// current header version for the [EncryptionHeader](crate::header::EncryptionHeader).
-pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 2;
 /// current header version for the [MainHeader](crate::header::MainHeader).
 pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
 /// current header version for the [FileHeader](crate::header::FileHeader).
