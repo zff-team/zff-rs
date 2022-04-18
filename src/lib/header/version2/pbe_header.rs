@@ -22,6 +22,9 @@ use crate::{
 	ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME,
 };
 
+// - external
+use byteorder::{BigEndian, ReadBytesExt};
+
 /// The pbe header contains all informations for the encryption of the encryption key.\
 /// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
 /// encrypted with an user password.\
@@ -95,10 +98,10 @@ impl HeaderCoding for PBEHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<PBEHeader> {
 		let mut cursor = Cursor::new(data);
-
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let kdf_scheme = match u8::decode_directly(&mut cursor)? {
 			0 => KDFScheme::PBKDF2SHA256,
+			1 => KDFScheme::Scrypt,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME))
 		};
 		let encryption_scheme = match u8::decode_directly(&mut cursor)? {
@@ -144,7 +147,7 @@ impl ValueDecoder for KDFParameters {
 	type Item = KDFParameters;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<KDFParameters> {
-		let identifier = u32::decode_directly(data)?;
+		let identifier = data.read_u32::<BigEndian>()?;
 		let size = u64::decode_directly(data)?;
 		let mut params = vec![0u8; (size-12) as usize];
 		data.read_exact(&mut params)?;
