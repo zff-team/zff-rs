@@ -241,9 +241,9 @@ impl ObjectHeader {
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
 pub enum ObjectType {
 	/// An object containing a physical dump.
-	Physical = 1,
+	Physical = 0,
 	/// An object, containing logical files.
-	Logical = 2,
+	Logical = 1,
 }
 
 impl fmt::Display for ObjectType {
