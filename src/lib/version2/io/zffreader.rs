@@ -256,7 +256,7 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Checks, if given object data could be decrypted.
 	pub fn check_decryption(&mut self, object_number: u64) -> Result<bool> {
-		let object = match self.objects.get_mut(&object_number) {
+		let object = match self.objects.get(&object_number) {
 			Some(object) => object,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, ""))
 		};
