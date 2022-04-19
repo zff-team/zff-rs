@@ -19,6 +19,7 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
 	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
 	ERROR_MISMATCH_ZFF_VERSION,
+	ERROR_MISSING_SEGMENT_MAIN_HEADER,
 };
 use crate::{
 	Segment,
@@ -32,17 +33,17 @@ use crate::{
 use super::{
 	add_to_hardlink_map,
 	get_file_header,
+	ObjectEncoderInformation,
 };
 
 // - external
 use ed25519_dalek::{Keypair};
 
-//TODO: this extender is completly untested and should be tested before using it.
 /// The [ZffExtender] allows you, to extend an existing zff container by additional objects.
 pub struct ZffExtender<R: Read> {
 	start_segment: PathBuf,
 	size_to_overwrite: u64, //number of bytes to overwrite at the last segment
-	object_encoder_vec: Vec<(ObjectEncoder<R>, (bool, Vec<String>))>, // (ObjectEncoder, (written_object_header, unaccessable_files))
+	object_encoder_vec: Vec<ObjectEncoderInformation<R>>,
 	object_encoder: ObjectEncoder<R>, //the current object encoder
 	written_object_header: bool,
 	unaccessable_files: Vec<String>,
@@ -60,9 +61,9 @@ impl<R: Read> ZffExtender<R> {
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
-		main_header: MainHeader, //TODO: read from source
 		header_encryption: bool) -> Result<ZffExtender<R>>{
 		let mut main_footer = None;
+		let mut main_header = None;
 		let mut last_segment = PathBuf::new();
 		let mut current_segment_no = 0;
 		let mut initial_chunk_number = 0;
@@ -83,7 +84,7 @@ impl<R: Read> ZffExtender<R> {
 						match MainHeader::decode_directly(&mut raw_segment) {
 							Ok(mh) => {
 								match mh.version() {
-									2 => (),
+									2 => main_header = Some(mh),
 									_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
 								}
 								
@@ -118,6 +119,10 @@ impl<R: Read> ZffExtender<R> {
 				}
 			};
 		}
+		let main_header = match main_header {
+			Some(mh) => mh,
+			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_HEADER))
+		};
 		let main_footer = match main_footer {
 			Some(mf) => mf,
 			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER))
@@ -138,7 +143,7 @@ impl<R: Read> ZffExtender<R> {
 				main_header.clone(),
 				initial_chunk_number,
 				header_encryption)?;
-			object_encoder_vec.push((ObjectEncoder::Physical(object_encoder), (false, Vec::new())));
+			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Physical(object_encoder), false, Vec::new()));
 		}
 		for (mut object_header, input_files) in logical_objects {
 			object_header.set_object_number(object_number);
@@ -291,11 +296,11 @@ impl<R: Read> ZffExtender<R> {
 				directory_childs,
 				initial_chunk_number,
 				header_encryption)?;
-			object_encoder_vec.push((ObjectEncoder::Logical(Box::new(object_encoder)), (false, unaccessable_files)));
+			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Logical(Box::new(object_encoder)), false, unaccessable_files));
 		}
 		object_encoder_vec.reverse();
-		let (object_encoder, (written_object_header, unaccessable_files)) = match object_encoder_vec.pop() {
-			Some(a) => a,
+		let (object_encoder, written_object_header, unaccessable_files) = match object_encoder_vec.pop() {
+			Some(creator_obj_encoder) => (creator_obj_encoder.object_encoder, creator_obj_encoder.written_object_header, creator_obj_encoder.unaccessable_files),
 			None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 		};
 
@@ -518,14 +523,14 @@ impl<R: Read> ZffExtender<R> {
 	    		Err(e) => match e.get_kind() {
 	    			ZffErrorKind::ReadEOF => {
 	    				remove_file(&segment_filename)?;
-	    				let (object_encoder, (written_object_header, unaccessable_files)) = match self.object_encoder_vec.pop() {
-	    					Some(a) => a,
+	    				let (object_encoder, written_object_header, unaccessable_files) = match self.object_encoder_vec.pop() {
+	    					Some(creator_obj_encoder) => (creator_obj_encoder.object_encoder, creator_obj_encoder.written_object_header, creator_obj_encoder.unaccessable_files),
 	    					None => break,
 	    				};
 	    				self.object_encoder = object_encoder;
 	    				self.written_object_header = written_object_header;
 	    				self.unaccessable_files = unaccessable_files;
-	    				self.current_segment_no -=1; //TODO: append to current segment?
+	    				self.current_segment_no -=1;
 	    				file_extension = file_extension_previous_value(file_extension)?;
 	    				seek_value = main_footer_start_offset;
 	    				main_footer_start_offset
@@ -538,7 +543,6 @@ impl<R: Read> ZffExtender<R> {
 		self.main_footer.set_number_of_segments(self.current_segment_no-1);
 		self.main_footer.set_footer_offset(main_footer_start_offset);
 		let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
-		//TODO: Handle encrypted main footer.
 	    output_file.write_all(&self.main_footer.encode_directly())?;
 	    Ok(())
 	}

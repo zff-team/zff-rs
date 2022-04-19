@@ -297,18 +297,6 @@ impl<R: Read> ZffWriter<R> {
 		Ok(written_bytes as u64)
 	}
 
-
-	// TODO!
-	// continues writing of data after an I/O interrupt of the INPUT stream.
-	// pub fn continue(&mut self) -> Result<()> {
-	//	unimplemented!()
-	//}
-
-	// continues writing of data to a segment after an I/O interrupt of the INPUT stream.
-	//fn continue_segment<W: Write + Seek>(&mut self, _output: &mut W, _seek_value: u64) -> Result<u64> { //returns the written bytes of the SEGMENT
-	//	unimplemented!()
-	//}
-
 	/// reads the data from given source and writes the data as a segment to the given destination with the given options/values.
 	fn write_segment<W: Write + Seek>(
 		&mut self,

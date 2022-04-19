@@ -30,15 +30,45 @@ use crate::{
 use super::{
 	get_file_header,
 	add_to_hardlink_map,
+	ObjectEncoderInformation,
 };
 
 // - external
 use ed25519_dalek::{Keypair};
 
-//TODO: this creator is completly untested and should be tested before using it.
+/// struct which contains the metadata of the appropriate creator (e.g. like encryption key, main header, ...).
+pub struct ZffCreatorMetadataParams {
+	encryption_key: Option<Vec<u8>>,
+	signature_key: Option<Keypair>,
+	main_header: MainHeader,
+	header_encryption: bool,
+	description_notes: Option<String>,
+	output_filenpath: String,
+}
+
+impl ZffCreatorMetadataParams {
+	/// constructs a struct with the given metadata.
+	pub fn with_data<O: Into<String>>(
+		encryption_key: Option<Vec<u8>>,
+		signature_key: Option<Keypair>,
+		main_header: MainHeader,
+		header_encryption: bool,
+		description_notes: Option<String>,
+		output_filenpath: O) -> ZffCreatorMetadataParams {
+		Self {
+			encryption_key,
+			signature_key,
+			main_header,
+			header_encryption,
+			description_notes,
+			output_filenpath: output_filenpath.into()
+		}
+	}
+}
+
 /// The ZffCreator can be used to create a new zff container by the given files/values.
 pub struct ZffCreator<R: Read> {
-	object_encoder_vec: Vec<(ObjectEncoder<R>, (bool, Vec<String>))>, // (ObjectEncoder, (written_object_header, unaccessable_files))
+	object_encoder_vec: Vec<ObjectEncoderInformation<R>>,
 	object_encoder: ObjectEncoder<R>, //the current object encoder
 	written_object_header: bool,
 	unaccessable_files: Vec<String>,
@@ -56,15 +86,10 @@ impl<R: Read> ZffCreator<R> {
 		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
 		hash_types: Vec<HashType>,
-		encryption_key: Option<Vec<u8>>,
-		signature_key: Option<Keypair>,
-		main_header: MainHeader,
-		header_encryption: bool,
-		description_notes: Option<String>,
-		output_filenpath: O) -> Result<ZffCreator<R>>{
+		params: ZffCreatorMetadataParams) -> Result<ZffCreator<R>>{
 
 		let initial_chunk_number = 1;
-		let signature_key_bytes = signature_key.map(|keypair| keypair.to_bytes().to_vec());
+		let signature_key_bytes = params.signature_key.map(|keypair| keypair.to_bytes().to_vec());
 
 		let mut object_encoder_vec = Vec::new();
 		for (object_header, input_data) in physical_objects {
@@ -72,12 +97,12 @@ impl<R: Read> ZffCreator<R> {
 				object_header,
 				input_data,
 				hash_types.clone(),
-				encryption_key.clone(),
+				params.encryption_key.clone(),
 				signature_key_bytes.clone(),
-				main_header.clone(),
+				params.main_header.clone(),
 				initial_chunk_number,
-				header_encryption)?;
-			object_encoder_vec.push((ObjectEncoder::Physical(object_encoder), (false, Vec::new())));
+				params.header_encryption)?;
+			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Physical(object_encoder), false, Vec::new()));
 		}
 		for (object_header, input_files) in logical_objects {
 			let mut current_file_number = 1;
@@ -122,7 +147,7 @@ impl<R: Read> ZffCreator<R> {
 					}
 					let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
 						Ok(file_header) => file_header,
-						Err(_) => continue, //TODO: check if there should be a real error handling possible.
+						Err(_) => continue,
 					};
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 					current_file_number += 1;
@@ -159,7 +184,7 @@ impl<R: Read> ZffCreator<R> {
 				parent_file_number = current_file_number;
 				let file_header = match get_file_header(&metadata, &file, &current_dir, current_file_number, dir_parent_file_number) {
 					Ok(file_header) => file_header,
-					Err(_) => continue, //TODO: check if there should be a real error handling possible.
+					Err(_) => continue,
 				};
 				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 				current_file_number += 1;
@@ -220,19 +245,19 @@ impl<R: Read> ZffCreator<R> {
 				files,
 				root_dir_filenumbers,
 				hash_types.clone(),
-				encryption_key.clone(),
+				params.encryption_key.clone(),
 				signature_key_bytes.clone(),
-				main_header.clone(),
+				params.main_header.clone(),
 				symlink_real_paths,
 				hardlink_map,
 				directory_childs,
 				initial_chunk_number,
-				header_encryption)?;
-			object_encoder_vec.push((ObjectEncoder::Logical(Box::new(object_encoder)), (false, unaccessable_files)));
+				params.header_encryption)?;
+			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Logical(Box::new(object_encoder)), false, unaccessable_files));
 		}
 		object_encoder_vec.reverse();
-		let (object_encoder, (written_object_header, unaccessable_files)) = match object_encoder_vec.pop() {
-			Some(a) => a,
+		let (object_encoder, written_object_header, unaccessable_files) = match object_encoder_vec.pop() {
+			Some(creator_obj_encoder) => (creator_obj_encoder.object_encoder, creator_obj_encoder.written_object_header, creator_obj_encoder.unaccessable_files),
 			None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 		};
 
@@ -241,10 +266,10 @@ impl<R: Read> ZffCreator<R> {
 			object_encoder,
 			written_object_header,
 			unaccessable_files,
-			output_filenpath: output_filenpath.into(),
+			output_filenpath: params.output_filenpath,
 			current_segment_no: 1, //initial segment number should always be 1.
 			last_accepted_segment_filepath: PathBuf::new(),
-			description_notes,
+			description_notes: params.description_notes,
 			object_header_segment_numbers: HashMap::new(),
 			object_footer_segment_numbers: HashMap::new(),
 		})
@@ -365,14 +390,14 @@ impl<R: Read> ZffCreator<R> {
 	    		Err(e) => match e.get_kind() {
 	    			ZffErrorKind::ReadEOF => {
 	    				remove_file(&segment_filename)?;
-	    				let (object_encoder, (written_object_header, unaccessable_files)) = match self.object_encoder_vec.pop() {
-	    					Some(a) => a,
+	    				let (object_encoder, written_object_header, unaccessable_files) = match self.object_encoder_vec.pop() {
+	    					Some(creator_obj_encoder) => (creator_obj_encoder.object_encoder, creator_obj_encoder.written_object_header, creator_obj_encoder.unaccessable_files),
 	    					None => break,
 	    				};
 	    				self.object_encoder = object_encoder;
 	    				self.written_object_header = written_object_header;
 	    				self.unaccessable_files = unaccessable_files;
-	    				self.current_segment_no -=1; //TODO: append to current segment?
+	    				self.current_segment_no -=1;
 	    				file_extension = file_extension_previous_value(&file_extension)?;
 	    				seek_value = main_footer_start_offset;
 	    				main_footer_start_offset

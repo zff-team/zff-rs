@@ -1,4 +1,5 @@
 // - STD
+use std::io::{Read};
 use std::fs::{File, Metadata};
 use std::collections::HashMap;
 use std::path::{Path};
@@ -22,6 +23,7 @@ use crate::{
 	header::{FileHeader, FileType},
 	ZffError,
 	ZffErrorKind,
+	ObjectEncoder,
 };
 
 use crate::{
@@ -35,6 +37,23 @@ use crate::{
 
 // - external
 use time::{OffsetDateTime};
+
+struct ObjectEncoderInformation<R: Read> {
+	pub object_encoder: ObjectEncoder<R>,
+	pub written_object_header: bool,
+	pub unaccessable_files: Vec<String>,
+}
+
+impl<R: Read> ObjectEncoderInformation<R> {
+	fn with_data(object_encoder: ObjectEncoder<R>, written_object_header: bool, unaccessable_files: Vec<String>) -> ObjectEncoderInformation<R> {
+		Self {
+			object_encoder,
+			written_object_header,
+			unaccessable_files
+		}
+	}
+}
+
 
 //TODO: target_os = "windows"
 //TODO: target_os = "macos"

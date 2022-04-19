@@ -3,13 +3,13 @@ use std::io::{Read};
 use std::collections::HashMap;
 
 // - internal
-use crate::version1::{
+use crate::{
 	Result,
 	ZffError,
 	ZffErrorKind,
 };
-//TODO
-use crate::version1::{
+
+use crate::constants::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	ERROR_HEADER_DECODER_HEADER_LENGTH,

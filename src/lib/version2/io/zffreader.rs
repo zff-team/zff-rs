@@ -16,6 +16,7 @@ use crate::{
 	LogicalObjectInformation,
 	Object,
 	File,
+	calculate_crc32,
 };
 
 use crate::{
@@ -27,9 +28,6 @@ use crate::{
 	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
 	ERROR_MISMATCH_ZFF_VERSION
 };
-
-// - external
-use crc32fast::Hasher as CRC32Hasher;
 
 /// The [ZffReader] can be used to [Read](std::io::Read) (decompressed, decrypted) from given zff-files directly.
 pub struct ZffReader<R: Read + Seek> {
@@ -247,13 +245,6 @@ impl<R: Read + Seek> ZffReader<R> {
 		objects
 	}
 
-	//TODO: move
-	fn calculate_crc32(buffer: &[u8]) -> u32 {
-		let mut crc32_hasher = CRC32Hasher::new();
-		crc32_hasher.update(buffer);
-		crc32_hasher.finalize()
-	}
-
 	/// Checks, if given object data could be decrypted.
 	pub fn check_decryption(&mut self, object_number: u64) -> Result<bool> {
 		let object = match self.objects.get(&object_number) {
@@ -276,7 +267,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		let chunk = segment.raw_chunk(first_chunk_number)?;
 		let crc32 = chunk.header().crc32();
 		let chunk_data = segment.chunk_data(first_chunk_number, object)?;
-		if Self::calculate_crc32(&chunk_data) == crc32 {
+		if calculate_crc32(&chunk_data) == crc32 {
 			Ok(true)
 		} else {
 			Ok(false)

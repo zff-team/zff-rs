@@ -66,6 +66,8 @@ pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &str = "A segment with a val
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str = "Missing object header in segment with following object number: ";
 pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object footer in segment with following object number: ";
 pub(crate) const ERROR_MISMATCH_ZFF_VERSION: &str = "mismatch zff version";
+pub(crate) const ERROR_INVALID_SIGNATURE_FLAG_VALUE: &str = "Invalid signature flag value:";
+pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 

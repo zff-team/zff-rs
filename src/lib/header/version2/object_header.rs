@@ -13,6 +13,7 @@ use crate::{
 	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
+	SignatureFlag,
 };
 
 use crate::{
@@ -20,7 +21,8 @@ use crate::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	HEADER_IDENTIFIER_OBJECT_HEADER,
-	SignatureFlag,
+	ERROR_INVALID_SIGNATURE_FLAG_VALUE,
+	ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE,
 };
 
 use crate::header::{
@@ -184,7 +186,7 @@ impl ObjectHeader {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encryption_flag = u8::decode_directly(&mut cursor)?;
 		if encryption_flag != 2 {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, "")); //TODO
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, ""));
 		}
 		let encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
@@ -219,13 +221,13 @@ impl ObjectHeader {
 			0 => SignatureFlag::NoSignatures,
 			1 => SignatureFlag::HashValueSignatureOnly,
 			2 => SignatureFlag::PerChunkSignatures,
-			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("signature_flag value: {value}"))), //TODO: move to constants...
+			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("{ERROR_INVALID_SIGNATURE_FLAG_VALUE} {value}"))),
 		};
 		let description_header = DescriptionHeader::decode_directly(inner_content)?;
 		let object_type = match u8::decode_directly(inner_content)? {
 			0 => ObjectType::Physical,
 			1 => ObjectType::Logical,
-			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("object_type value: {value}"))), //TODO: move to constants...
+			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("{ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE}{value}"))),
 		};
 		let inner_content = (
 			compression_header,
@@ -309,7 +311,7 @@ impl HeaderCoding for ObjectHeader {
 		let encryption_header = match encryption_flag {
 			0 => None,
 			1 => Some(EncryptionHeader::decode_directly(&mut cursor)?),
-			_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, "")) //TODO
+			flag_value => return Err(ZffError::new(ZffErrorKind::HeaderDecodeEncryptedHeader, flag_value.to_string()))
 		};
 		let (compression_header,
 			signature_flag,
