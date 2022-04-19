@@ -223,8 +223,8 @@ impl ObjectHeader {
 		};
 		let description_header = DescriptionHeader::decode_directly(inner_content)?;
 		let object_type = match u8::decode_directly(inner_content)? {
-			1 => ObjectType::Physical,
-			2 => ObjectType::Logical,
+			0 => ObjectType::Physical,
+			1 => ObjectType::Logical,
 			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("object_type value: {value}"))), //TODO: move to constants...
 		};
 		let inner_content = (
