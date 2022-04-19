@@ -1,18 +1,30 @@
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 // identifier: magic bytes
-pub(crate) const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666D;
-pub(crate) const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7A666645;
-pub(crate) const HEADER_IDENTIFIER_DESCRIPTION_HEADER: u32 = 0x7A666664;
-pub(crate) const HEADER_IDENTIFIER_SEGMENT_HEADER: u32 = 0x7A666673;
-pub(crate) const HEADER_IDENTIFIER_COMPRESSION_HEADER: u32 = 0x7A666663;
-pub(crate) const HEADER_IDENTIFIER_PBE_HEADER: u32 = 0x7A666670;
-pub(crate) const HEADER_IDENTIFIER_ENCRYPTION_HEADER: u32 = 0x7A666665;
-pub(crate) const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
-pub(crate) const HEADER_IDENTIFIER_HASH_HEADER: u32 = 0x7A666668;
-pub(crate) const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7A666648;
-pub(crate) const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
-pub(crate) const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
+/// The identifier of the [MainHeader](crate::header::MainHeader).
+pub const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666D;
+/// The identifier of the encrypted variant of the [MainHeader](crate::header::version1::MainHeader).
+pub const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7A666645;
+/// The identifier of the [DescriptionHeader](crate::header::DescriptionHeader).
+pub const HEADER_IDENTIFIER_DESCRIPTION_HEADER: u32 = 0x7A666664;
+/// The identifier of the [SegmentHeader](crate::header::SegmentHeader).
+pub const HEADER_IDENTIFIER_SEGMENT_HEADER: u32 = 0x7A666673;
+/// The identifier of the [CompressionHeader](crate::header::CompressionHeader).
+pub const HEADER_IDENTIFIER_COMPRESSION_HEADER: u32 = 0x7A666663;
+/// The identifier of the [PBEHeader](crate::header::PBEHeader).
+pub const HEADER_IDENTIFIER_PBE_HEADER: u32 = 0x7A666670;
+/// The identifier of the [EncryptionHeader](crate::header::EncryptionHeader).
+pub const HEADER_IDENTIFIER_ENCRYPTION_HEADER: u32 = 0x7A666665;
+/// The identifier of the [ChunkHeader](crate::header::ChunkHeader).
+pub const HEADER_IDENTIFIER_CHUNK_HEADER: u32 = 0x7A666643;
+/// The identifier of the [HashHeader](crate::header::HashHeader).
+pub const HEADER_IDENTIFIER_HASH_HEADER: u32 = 0x7A666668;
+/// The identifier of the [HashValue](crate::header::HashValue).
+pub const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7A666648;
+/// The identifier of the [ObjectHeader](crate::header::ObjectHeader).
+pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
+/// The identifier of the [FileHeader](crate::header::FileHeader).
+pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
 
 pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
