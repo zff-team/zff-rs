@@ -1,6 +1,6 @@
 // - STD
 use std::io::{Read};
-use std::fs::{File, Metadata};
+use std::fs::{Metadata};
 use std::collections::HashMap;
 use std::path::{Path};
 
@@ -55,11 +55,9 @@ impl<R: Read> ObjectEncoderInformation<R> {
 }
 
 
-//TODO: target_os = "windows"
 //TODO: target_os = "macos"
 #[cfg(target_os = "linux")]
-fn get_metadata_ext(file: &File) -> Result<HashMap<String, String>> {
-	let metadata = file.metadata()?;
+fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
 	let mut metadata_ext = HashMap::new();
 
 	//dev-id
@@ -73,7 +71,17 @@ fn get_metadata_ext(file: &File) -> Result<HashMap<String, String>> {
 	// gid
 	metadata_ext.insert(METADATA_EXT_KEY_GID.into(), metadata.gid().to_string());
 
-	Ok(metadata_ext)
+	metadata_ext
+}
+
+#[cfg(target_os = "windows")]
+fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
+	let metadata = file.metadata()?;
+
+	//dwFileAttributes
+	metadata_ext.insert(METADATA_EXT_DW_FILE_ATTRIBUTES.into(), metadata.file_attributes().to_string());
+
+	metadata_ext
 }
 
 fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
@@ -108,7 +116,7 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
 	timestamps
 }
 
-fn get_file_header(metadata: &Metadata, file: &File, path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+fn get_file_header(metadata: &Metadata, path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
 	let filetype = if metadata.file_type().is_dir() {
 		FileType::Directory
 	} else if metadata.file_type().is_file() {
@@ -129,7 +137,7 @@ fn get_file_header(metadata: &Metadata, file: &File, path: &Path, current_file_n
 	let ctime = timestamps.get("ctime").unwrap();
 	let btime = timestamps.get("btime").unwrap();
 
-	let metadata_ext = get_metadata_ext(file)?;
+	let metadata_ext = get_metadata_ext(metadata);
 
 	let file_header = FileHeader::new(
 					DEFAULT_HEADER_VERSION_FILE_HEADER,

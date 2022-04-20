@@ -43,25 +43,22 @@ pub struct ZffCreatorMetadataParams {
 	main_header: MainHeader,
 	header_encryption: bool,
 	description_notes: Option<String>,
-	output_filenpath: String,
 }
 
 impl ZffCreatorMetadataParams {
 	/// constructs a struct with the given metadata.
-	pub fn with_data<O: Into<String>>(
+	pub fn with_data(
 		encryption_key: Option<Vec<u8>>,
 		signature_key: Option<Keypair>,
 		main_header: MainHeader,
 		header_encryption: bool,
-		description_notes: Option<String>,
-		output_filenpath: O) -> ZffCreatorMetadataParams {
+		description_notes: Option<String>) -> ZffCreatorMetadataParams {
 		Self {
 			encryption_key,
 			signature_key,
 			main_header,
 			header_encryption,
 			description_notes,
-			output_filenpath: output_filenpath.into()
 		}
 	}
 }
@@ -86,6 +83,7 @@ impl<R: Read> ZffCreator<R> {
 		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
 		hash_types: Vec<HashType>,
+		output_filenpath: O,
 		params: ZffCreatorMetadataParams) -> Result<ZffCreator<R>>{
 
 		let initial_chunk_number = 1;
@@ -145,7 +143,7 @@ impl<R: Read> ZffCreator<R> {
 							Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 						};
 					}
-					let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
+					let file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
 					};
@@ -182,7 +180,7 @@ impl<R: Read> ZffCreator<R> {
 				};
 
 				parent_file_number = current_file_number;
-				let file_header = match get_file_header(&metadata, &file, &current_dir, current_file_number, dir_parent_file_number) {
+				let file_header = match get_file_header(&metadata, &current_dir, current_file_number, dir_parent_file_number) {
 					Ok(file_header) => file_header,
 					Err(_) => continue,
 				};
@@ -228,9 +226,9 @@ impl<R: Read> ZffCreator<R> {
 							Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 						};
 						let path = inner_element.path().clone();
-						let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
+						let file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
 							Ok(file_header) => file_header,
-							Err(_) => continue, //TODO: check if there should be a real error handling possible.
+							Err(_) => continue,
 						};
 						add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 						current_file_number += 1;
@@ -266,7 +264,7 @@ impl<R: Read> ZffCreator<R> {
 			object_encoder,
 			written_object_header,
 			unaccessable_files,
-			output_filenpath: params.output_filenpath,
+			output_filenpath: output_filenpath.into(),
 			current_segment_no: 1, //initial segment number should always be 1.
 			last_accepted_segment_filepath: PathBuf::new(),
 			description_notes: params.description_notes,
@@ -410,7 +408,6 @@ impl<R: Read> ZffCreator<R> {
 
 	    let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no-1, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), main_footer_start_offset);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
-	    //TODO: Handle encrypted main footer.
 	    output_file.write_all(&main_footer.encode_directly())?;
 
 	    Ok(())
