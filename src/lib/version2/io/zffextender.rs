@@ -94,7 +94,7 @@ impl<R: Read> ZffExtender<R> {
 								_ => return Err(e),
 							}
 						}
-						let segment = Segment::new_from_reader(raw_segment)?;
+						let segment = Segment::new_from_reader(&raw_segment)?;
 						match segment.header().version() {
 							2 => (),
 							_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
@@ -111,14 +111,34 @@ impl<R: Read> ZffExtender<R> {
 						size_to_overwrite += mf.header_size() + segment.footer().header_size();
 						let footer = segment.footer();
 						last_segment_footer = footer.clone();
+						continue;
 					},
 					Err(e) => match e.get_kind() {
-						ZffErrorKind::HeaderDecodeMismatchIdentifier => (),
+						ZffErrorKind::HeaderDecodeMismatchIdentifier => raw_segment.rewind()?,
 						_ => return Err(e)
 					}
 				}
-			};
+			}
+			match MainHeader::decode_directly(&mut raw_segment) {
+				Ok(mh) => {
+					match mh.version() {
+						2 => main_header = Some(mh),
+						_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
+					}
+					
+				},
+				Err(e) => match e.get_kind() {
+					ZffErrorKind::HeaderDecodeMismatchIdentifier => raw_segment.rewind()?,
+					_ => return Err(e),
+				}
+			}
+			let segment = Segment::new_from_reader(raw_segment)?;
+			match segment.header().version() {
+				2 => (),
+				_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
+			}		
 		}
+
 		let main_header = match main_header {
 			Some(mh) => mh,
 			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_HEADER))
@@ -188,7 +208,7 @@ impl<R: Read> ZffExtender<R> {
 							Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 						};
 					}
-					let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
+					let file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
 						Ok(file_header) => file_header,
 						Err(_) => continue, //TODO: check if there should be a real error handling possible.
 					};
@@ -225,7 +245,7 @@ impl<R: Read> ZffExtender<R> {
 				};
 
 				parent_file_number = current_file_number;
-				let file_header = match get_file_header(&metadata, &file, &current_dir, current_file_number, dir_parent_file_number) {
+				let file_header = match get_file_header(&metadata, &current_dir, current_file_number, dir_parent_file_number) {
 					Ok(file_header) => file_header,
 					Err(_) => continue, //TODO: check if there should be a real error handling possible.
 				};
@@ -271,7 +291,7 @@ impl<R: Read> ZffExtender<R> {
 							Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 						};
 						let path = inner_element.path().clone();
-						let file_header = match get_file_header(&metadata, &file, &path, current_file_number, parent_file_number) {
+						let file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
 							Ok(file_header) => file_header,
 							Err(_) => continue, //TODO: check if there should be a real error handling possible.
 						};
@@ -303,7 +323,6 @@ impl<R: Read> ZffExtender<R> {
 			Some(creator_obj_encoder) => (creator_obj_encoder.object_encoder, creator_obj_encoder.written_object_header, creator_obj_encoder.unaccessable_files),
 			None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 		};
-
 		Ok(Self {
 			start_segment: last_segment,
 			size_to_overwrite: size_to_overwrite as u64,
