@@ -37,6 +37,7 @@ pub struct ZffReader<R: Read + Seek> {
 	segments: HashMap<u64, Segment<R>>, //<segment number, Segment-object>, a HashMap is used here instead of a Vec for perfomance reasons.
 	chunk_map: HashMap<u64, u64>, //<chunk_number, segment_number> for better runtime performance.
 	active_object: u64, // the object number of the active object
+	undecryptable_objects: Vec<u64>, // contains all numbers of objects, which could not be decoded, because the appropriate object header is not decryptable with the given password.
 }
 
 impl<R: Read + Seek> ZffReader<R> {
@@ -48,6 +49,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		let mut main_footer = None;
 		let mut segments = HashMap::new();
 		let mut chunk_map = HashMap::new();
+		let mut undecryptable_objects = Vec::new();
 		for mut raw_segment in raw_segments {
 			if main_footer.is_none() {
 				raw_segment.seek(SeekFrom::End(-8))?;
@@ -116,8 +118,13 @@ impl<R: Read + Seek> ZffReader<R> {
 				};
 				object_header.insert(object_number, header);
 			} else {
-				let header = segment.read_object_header(*object_number)?;
-				object_header.insert(object_number, header);
+				match segment.read_object_header(*object_number) {
+					Ok(header) => { object_header.insert(object_number, header); },
+					Err(e) => match e.get_kind() {
+						ZffErrorKind::HeaderDecodeEncryptedHeader => undecryptable_objects.push(*object_number),
+						_ => return Err(e),
+					}
+				};
 			}
 		}
 		let mut object_footer = HashMap::new();
@@ -144,7 +151,35 @@ impl<R: Read + Seek> ZffReader<R> {
 						},
 					};
 					match footer {
-						ObjectFooter::Physical(footer) => { objects.insert(*object_number, Object::Physical(Box::new(PhysicalObjectInformation::new(header.clone(), footer, encryption_key)))); },
+						ObjectFooter::Physical(footer) => {
+							//checks if the first segment is readable (=decrypted)
+							let first_chunk_number = footer.first_chunk_number();
+							let phy_object = Object::Physical(Box::new(PhysicalObjectInformation::new(header.clone(), footer, encryption_key)));
+							let segment = match chunk_map.get(&first_chunk_number) {
+								Some(segment_no) => match segments.get_mut(segment_no) {
+									Some(segment) => segment,
+									None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+								},
+								None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+							};
+							let chunk = segment.raw_chunk(first_chunk_number)?;
+							let crc32 = chunk.header().crc32();
+							match segment.chunk_data(first_chunk_number, &phy_object) {
+								Ok(chunk_data) => {
+									if calculate_crc32(&chunk_data) == crc32 {
+										objects.insert(*object_number, phy_object);
+									} else {
+										undecryptable_objects.push(*object_number);
+									}
+								},
+								Err(e) => match e.get_kind() {
+									ZffErrorKind::IoError(_) => {
+										undecryptable_objects.push(*object_number);
+									},
+									_ => return Err(e)
+								}
+							};
+						},
 						ObjectFooter::Logical(footer) => {
 							let mut logical_object = LogicalObjectInformation::new(header.clone(), footer, encryption_key);
 							let mut file_footers = HashMap::new();
@@ -178,7 +213,7 @@ impl<R: Read + Seek> ZffReader<R> {
 								
 							};
 
-							for (file_number, footer) in file_footers {
+							for (file_number, footer) in file_footers.clone() {
 								match file_headers.get(&file_number) {
 									Some(header) => logical_object.add_file(file_number, File::new(header.clone(), footer)),
 									None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, file_number.to_string())),
@@ -186,11 +221,38 @@ impl<R: Read + Seek> ZffReader<R> {
 							};
 
 							let object = Object::Logical(Box::new(logical_object));
-							objects.insert(*object_number, object);
+							if let Some(minimum_file_number) = file_footers.keys().min() {
+								let first_file_footer = file_footers.get(minimum_file_number).unwrap();
+								let first_chunk_number = first_file_footer.first_chunk_number();
+								let segment = match chunk_map.get(&first_chunk_number) {
+									Some(segment_no) => match segments.get_mut(segment_no) {
+										Some(segment) => segment,
+										None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+									},
+									None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+								};
+								let chunk = segment.raw_chunk(first_chunk_number)?;
+								let crc32 = chunk.header().crc32();
+								match segment.chunk_data(first_chunk_number, &object) {
+									Ok(chunk_data) => {
+										if calculate_crc32(&chunk_data) == crc32 {
+											objects.insert(*object_number, object);
+										} else {
+											undecryptable_objects.push(*object_number);
+										}
+									},
+									Err(e) => match e.get_kind() {
+										ZffErrorKind::IoError(_) => {
+											undecryptable_objects.push(*object_number);
+										},
+										_ => return Err(e),
+									}
+								};
+							}
 						},
 					}
 				},
-				None => return Err(ZffError::new(ZffErrorKind::MissingObjectHeaderForPresentObjectFooter, object_number.to_string())),
+				None => if !undecryptable_objects.contains(object_number) { return Err(ZffError::new(ZffErrorKind::MissingObjectHeaderForPresentObjectFooter, object_number.to_string())) },
 			};
 		}
 
@@ -201,6 +263,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			chunk_map,
 			segments,
 			active_object: 1,
+			undecryptable_objects,
 		})
 	}
 
@@ -245,33 +308,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		objects
 	}
 
-	/// Checks, if given object data could be decrypted.
-	pub fn check_decryption(&mut self, object_number: u64) -> Result<bool> {
-		let object = match self.objects.get(&object_number) {
-			Some(object) => object,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, ""))
-		};
-		let first_chunk_number = {
-			match object {
-				Object::Physical(object) => object.footer().first_chunk_number(),
-				Object::Logical(object) => object.get_active_file()?.footer().first_chunk_number(),
-			}
-		};
-		let segment = match self.chunk_map.get(&first_chunk_number) {
-			Some(segment_no) => match self.segments.get_mut(segment_no) {
-				Some(segment) => segment,
-				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-			},
-			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-		};
-		let chunk = segment.raw_chunk(first_chunk_number)?;
-		let crc32 = chunk.header().crc32();
-		let chunk_data = segment.chunk_data(first_chunk_number, object)?;
-		if calculate_crc32(&chunk_data) == crc32 {
-			Ok(true)
-		} else {
-			Ok(false)
-		}
+	/// returns all numbers of undecryptable objects of this reader
+	pub fn undecryptable_objects(&self) -> &Vec<u64> {
+		&self.undecryptable_objects
 	}
 
 	/// Sets the ZffReader to the given physical object number
