@@ -27,7 +27,7 @@ Authenticity verification can also be applied to individual chunks and does not 
 
 ## Zff tools and libraries
 
-This repository contains several tools to work with zff images (or acquire them). All tools and libraries are written in pure Rust.
+There are several tools (and this library) to work with zff containers (or acquire them). All tools and libraries are written in pure Rust.
 
 | Name | Type | Description | Crates.io | MRSV
 |------|:----:|:------------|:---------:|:----:|
