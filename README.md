@@ -25,6 +25,16 @@ Zff is open source and is dual licensed (Apache-2.0 and MIT). This should ensure
 Above mentioned compression, encryption and signature methods are applied to each chunk separately. This makes it possible to access a corresponding part of the data in real time without the need to decompress or decrypt the complete image first.
 Authenticity verification can also be applied to individual chunks and does not have to be applied to the entire image.
 
+## Zff tools and libraries
+
+This repository contains several tools to work with zff images (or acquire them). All tools and libraries are written in pure Rust.
+
+| Name | Type | Description | Crates.io | MRSV
+|------|:----:|:------------|:---------:|:----:|
+| [zff](https://github.com/ph0llux/zff/tree/master/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.58.1 |
+| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.58.1 |
+| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.58.1 |
+| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.58.1 |
 
 ## benchmarks
 
@@ -82,17 +92,6 @@ dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
 ## Zff layout
 
 See the [wiki pages](https://github.com/ph0llux/zff/wiki/Zff-layout) for further information.
-
-## Zff tools and libraries
-
-This repository contains several tools to work with zff images (or acquire them). All tools and libraries are written in pure Rust.
-
-| Name | Type | Description | Crates.io | MRSV
-|------|:----:|:------------|:---------:|:----:|
-| [zff](https://github.com/ph0llux/zff/tree/master/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.58.1 |
-| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.58.1 |
-| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.58.1 |
-| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.56.1 |
 
 [//]: # (badges)
 
