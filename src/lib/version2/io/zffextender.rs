@@ -369,9 +369,10 @@ impl<R: Read> ZffExtender<R> {
 		};
 
 		// read chunks and write them into the Writer.
+		let mut last_segment_footer_len = self.last_segment_footer.encode_directly().len() as u64;
 		loop {
 			if (written_bytes +
-				self.last_segment_footer.encode_directly().len() as u64 +
+				 last_segment_footer_len +
 				target_chunk_size as u64) > target_segment_size as u64 {
 				
 				if written_bytes == self.size_to_overwrite {
@@ -406,6 +407,7 @@ impl<R: Read> ZffExtender<R> {
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) {
 				self.last_segment_footer.add_chunk_offset(current_chunk_number, current_offset);
+				last_segment_footer_len += 16;
 			};
 		}
 
@@ -457,9 +459,10 @@ impl<R: Read> ZffExtender<R> {
 		};
 
 		// read chunks and write them into the Writer.
+		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 		loop {
 			if (written_bytes +
-				segment_footer.encode_directly().len() as u64 +
+				segment_footer_len +
 				target_chunk_size as u64) > target_segment_size-seek_value as u64 {
 				
 				if written_bytes == segment_header.encode_directly().len() as u64 {
@@ -494,6 +497,7 @@ impl<R: Read> ZffExtender<R> {
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) {
 				segment_footer.add_chunk_offset(current_chunk_number, current_offset);
+				segment_footer_len += 16;
 			};
 		}
 

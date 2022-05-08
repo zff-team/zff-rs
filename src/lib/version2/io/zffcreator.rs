@@ -277,7 +277,7 @@ impl<R: Read> ZffCreator<R> {
 	&mut self,
 	output: &mut W,
 	seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
-	) -> Result<u64> {	
+	) -> Result<u64> {
 		output.seek(SeekFrom::Start(seek_value))?;
 		let mut written_bytes: u64 = 0;
 		let target_chunk_size = self.object_encoder.main_header().chunk_size();
@@ -313,9 +313,10 @@ impl<R: Read> ZffCreator<R> {
 		};
 
 		// read chunks and write them into the Writer.
+		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 		loop {
 			if (written_bytes +
-				segment_footer.encode_directly().len() as u64 +
+				segment_footer_len +
 				target_chunk_size as u64) > target_segment_size-seek_value as u64 {
 				
 				if written_bytes == segment_header.encode_directly().len() as u64 {
@@ -350,6 +351,7 @@ impl<R: Read> ZffCreator<R> {
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) {
 				segment_footer.add_chunk_offset(current_chunk_number, current_offset);
+				segment_footer_len += 16;
 			};
 		}
 
