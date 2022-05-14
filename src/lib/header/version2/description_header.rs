@@ -123,6 +123,11 @@ impl DescriptionHeader {
 			None => None
 		}
 	}
+
+	/// returns all key-value pairs of this header.
+	pub fn identifier_map(&self) -> &HashMap<String, String> {
+		&self.identifier_map
+	}
 }
 
 impl HeaderCoding for DescriptionHeader {

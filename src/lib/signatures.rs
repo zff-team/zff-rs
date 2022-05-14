@@ -1,3 +1,6 @@
+// - STD
+use std::fmt;
+
 // - external
 use ed25519_dalek::{
 	Keypair,
@@ -79,4 +82,15 @@ pub enum SignatureFlag {
 	HashValueSignatureOnly = 1,
 	/// Every individual chunk and the hash values will be signed.
 	PerChunkSignatures = 2,
+}
+
+impl fmt::Display for SignatureFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let msg = match self {
+			SignatureFlag::NoSignatures => "NoSignatures",
+			SignatureFlag::HashValueSignatureOnly => "HashValueSignatureOnly",
+			SignatureFlag::PerChunkSignatures => "PerChunkSignatures",
+		};
+		write!(f, "{}", msg)
+	}
 }

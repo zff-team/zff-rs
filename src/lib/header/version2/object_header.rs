@@ -110,6 +110,11 @@ impl ObjectHeader {
 		!matches!(&self.signature_flag, SignatureFlag::NoSignatures)
 	}
 
+	/// returns the signature flag
+	pub fn signature_flag(&self) -> &SignatureFlag {
+		&self.signature_flag
+	}
+
 	/// encodes the object header to a ```Vec<u8>```. The encryption flag will be set to 2.
 	/// # Error
 	/// The method returns an error, if the encryption header is missing (=None).
