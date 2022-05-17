@@ -361,7 +361,7 @@ pub struct LogicalObjectEncoder {
 	obj_number: u64,
 	encoded_header: Vec<u8>,
 	//encoded_header_remaining_bytes: usize,
-	files: Vec<(File, FileHeader)>,
+	files: Vec<(PathBuf, FileHeader)>,
 	current_file_encoder: Option<FileEncoder>,
 	current_file_header_read: bool,
 	current_file_number: u64,
@@ -388,7 +388,7 @@ impl LogicalObjectEncoder {
 	/// Returns a new [LogicalObjectEncoder] by the given values.
 	pub fn new(
 		obj_header: ObjectHeader,
-		files: Vec<(File, FileHeader)>,
+		files: Vec<(PathBuf, FileHeader)>,
 		root_dir_filenumbers: Vec<u64>,
 		hash_types: Vec<HashType>,
 		encryption_key: Option<Vec<u8>>,
@@ -411,10 +411,11 @@ impl LogicalObjectEncoder {
 		};
 
 		let mut files = files;
-		let (current_file, mut current_file_header) = match files.pop() {
+		let (current_path, mut current_file_header) = match files.pop() {
 			Some((file, header)) => (file, header),
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
+		let current_file = File::open(&current_path)?;
 		let current_file_number = current_file_header.file_number();
 		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
 		let current_directory_childs = match directory_childs.get(&current_file_number) {
@@ -521,13 +522,14 @@ impl LogicalObjectEncoder {
 				let file_footer = file_encoder.get_encoded_footer();
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
-				let (current_file, mut current_file_header) = match self.files.pop() {
+				let (current_path, mut current_file_header) = match self.files.pop() {
 					Some((file, header)) => (file, header),
 					None => {
 						self.current_file_encoder = None;
 						return Ok(file_footer)
 					},
 				};
+				let current_file = File::open(&current_path)?;
 				self.current_file_number = current_file_header.file_number();
 				let symlink_real_path = self.symlink_real_paths.get(&self.current_file_number).cloned();
 				let current_directory_childs = match self.directory_childs.get(&self.current_file_number) {

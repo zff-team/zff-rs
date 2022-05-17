@@ -121,8 +121,8 @@ impl<R: Read> ZffCreator<R> {
 						continue;
 					},
 				};
-				let file = match File::open(&path) {
-					Ok(f) => f,
+				match File::open(&path) {
+					Ok(_) => (),
 					Err(_) => {
 						if !metadata.is_symlink() {
 							unaccessable_files.push(path.to_string_lossy().to_string());
@@ -149,7 +149,7 @@ impl<R: Read> ZffCreator<R> {
 					};
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 					current_file_number += 1;
-					files.push((file, file_header));
+					files.push((path.clone(), file_header));
 				}
 			}
 
@@ -171,8 +171,8 @@ impl<R: Read> ZffCreator<R> {
 						continue;
 					},
 				};
-				let file = match File::open(&current_dir) {
-					Ok(f) => f,
+				match File::open(&current_dir) {
+					Ok(_) => (),
 					Err(_) => {
 						unaccessable_files.push(current_dir.to_string_lossy().to_string());
 						continue;
@@ -186,7 +186,7 @@ impl<R: Read> ZffCreator<R> {
 				};
 				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 				current_file_number += 1;
-				files.push((file, file_header));
+				files.push((current_dir.clone(), file_header));
 
 				// files in current folder
 				for inner_element in element_iterator {
@@ -205,8 +205,8 @@ impl<R: Read> ZffCreator<R> {
 							continue;
 						},
 					};
-					let file = match File::open(&inner_element.path()) {
-						Ok(f) => f,
+					match File::open(&inner_element.path()) {
+						Ok(_) => (),
 						Err(_) => {
 							unaccessable_files.push(inner_element.path().to_string_lossy().to_string());
 							continue;
@@ -232,7 +232,7 @@ impl<R: Read> ZffCreator<R> {
 						};
 						add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 						current_file_number += 1;
-						files.push((file, file_header));
+						files.push((inner_element.path().clone(), file_header));
 					}
 					directories_to_traversal.append(&mut inner_dir_elements);
 				}
