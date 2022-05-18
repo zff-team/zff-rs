@@ -374,7 +374,7 @@ pub struct LogicalObjectEncoder {
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
 	hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
-	directory_childs: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
+	directory_children: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
 	header_encryption: bool,
 }
@@ -396,7 +396,7 @@ impl LogicalObjectEncoder {
 		main_header: MainHeader,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
 		hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
-		directory_childs: HashMap<u64, Vec<u64>>,
+		directory_children: HashMap<u64, Vec<u64>>,
 		current_chunk_number: u64,
 		header_encryption: bool,) -> Result<LogicalObjectEncoder> {		
 
@@ -418,8 +418,8 @@ impl LogicalObjectEncoder {
 		let current_file = File::open(&current_path)?;
 		let current_file_number = current_file_header.file_number();
 		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
-		let current_directory_childs = match directory_childs.get(&current_file_number) {
-			Some(childs) => childs.to_owned(),
+		let current_directory_children = match directory_children.get(&current_file_number) {
+			Some(children) => children.to_owned(),
 			None => Vec::new()
 		};
 		let signature_key = match &signature_key_bytes {
@@ -438,7 +438,7 @@ impl LogicalObjectEncoder {
 				};
 	    	}
      	}
-		let first_file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber, current_directory_childs)?);
+		let first_file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber, current_directory_children)?);
 		
 		let mut object_footer = ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL);
 		for filenumber in root_dir_filenumbers {
@@ -462,7 +462,7 @@ impl LogicalObjectEncoder {
 			current_chunk_number,
 			symlink_real_paths,
 			hardlink_map,
-			directory_childs,
+			directory_children,
 			object_footer,
 			header_encryption,
 		})
@@ -532,8 +532,8 @@ impl LogicalObjectEncoder {
 				let current_file = File::open(&current_path)?;
 				self.current_file_number = current_file_header.file_number();
 				let symlink_real_path = self.symlink_real_paths.get(&self.current_file_number).cloned();
-				let current_directory_childs = match self.directory_childs.get(&self.current_file_number) {
-					Some(childs) => childs.to_owned(),
+				let current_directory_children = match self.directory_children.get(&self.current_file_number) {
+					Some(children) => children.to_owned(),
 					None => Vec::new(),
 				};
 				let signature_key = match &self.signature_key_bytes {
@@ -554,7 +554,7 @@ impl LogicalObjectEncoder {
     			    }
        			}
 			    self.current_file_header_read = false;
-				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber, current_directory_childs)?);
+				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber, current_directory_children)?);
 				Ok(file_footer)
 			},
 			None => {

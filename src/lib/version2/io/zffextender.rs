@@ -175,7 +175,7 @@ impl<R: Read> ZffExtender<R> {
 			let mut directories_to_traversal = VecDeque::new();
 			let mut files = Vec::new();
 			let mut symlink_real_paths = HashMap::new();
-			let mut directory_childs = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
+			let mut directory_children = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
 			let mut root_dir_filenumbers = Vec::new();
 
 			//files in virtual root folder
@@ -241,11 +241,11 @@ impl<R: Read> ZffExtender<R> {
 						continue;
 					},
 				};
-				if let Some(files_vec) = directory_childs.get_mut(&dir_parent_file_number) {
+				if let Some(files_vec) = directory_children.get_mut(&dir_parent_file_number) {
 					files_vec.push(dir_current_file_number);
 				} else {
-					directory_childs.insert(dir_parent_file_number, Vec::new());
-					directory_childs.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
+					directory_children.insert(dir_parent_file_number, Vec::new());
+					directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 				};
 
 				parent_file_number = dir_current_file_number;
@@ -285,11 +285,11 @@ impl<R: Read> ZffExtender<R> {
 					if metadata.file_type().is_dir() {
 						directories_to_traversal.push_back((inner_element.path(), parent_file_number, current_file_number));
 					} else {
-						if let Some(files_vec) = directory_childs.get_mut(&parent_file_number) {
+						if let Some(files_vec) = directory_children.get_mut(&parent_file_number) {
 							files_vec.push(current_file_number);
 						} else {
-							directory_childs.insert(parent_file_number, Vec::new());
-							directory_childs.get_mut(&parent_file_number).unwrap().push(current_file_number);
+							directory_children.insert(parent_file_number, Vec::new());
+							directory_children.get_mut(&parent_file_number).unwrap().push(current_file_number);
 						};
 
 						match read_link(inner_element.path()) {
@@ -319,7 +319,7 @@ impl<R: Read> ZffExtender<R> {
 				main_header.clone(),
 				symlink_real_paths,
 				hardlink_map,
-				directory_childs,
+				directory_children,
 				initial_chunk_number,
 				header_encryption)?;
 			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Logical(Box::new(object_encoder)), false, unaccessable_files));

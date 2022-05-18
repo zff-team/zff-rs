@@ -69,7 +69,7 @@ impl FileFooter {
 
 	/// if the file is a regular file, this method returns the original (uncompressed, unencrypted) size of the file (without "filesystem-"metadata - just the size of the file content).
 	/// if the file is a hardlink, this method returns the size of the inner value (just the size of the appropriate filenumber: 8).
-	/// if the file is a directory, this method returns the size of the underlying vector of childs.
+	/// if the file is a directory, this method returns the size of the underlying vector of children.
 	/// if the file is a symlink, this method returns the length of the linked path.
 	pub fn length_of_data(&self) -> u64 {
 		self.length_of_data

@@ -70,7 +70,7 @@ pub struct FileEncoder {
 	acquisition_start: u64,
 	acquisition_end: u64,
 	hard_link_filenumber: Option<u64>,
-	encoded_directory_childs: Vec<u8>,
+	encoded_directory_children: Vec<u8>,
 }
 
 impl FileEncoder {
@@ -88,7 +88,7 @@ impl FileEncoder {
 		symlink_real_path: Option<PathBuf>,
 		header_encryption: bool,
 		hard_link_filenumber: Option<u64>,
-		directory_childs: Vec<u64>) -> Result<FileEncoder> {
+		directory_children: Vec<u64>) -> Result<FileEncoder> {
 		
 		let encoded_header = if header_encryption {
 			if let Some(ref encryption_key) = encryption_key {
@@ -107,10 +107,10 @@ impl FileEncoder {
 	        let hasher = Hash::new_hasher(&h_type);
 	        hasher_map.insert(h_type.clone(), hasher);
 	    };
-	    let encoded_directory_childs = if directory_childs.is_empty() {
+	    let encoded_directory_children = if directory_children.is_empty() {
 	    	Vec::new()
 	    } else {
-	    	directory_childs.encode_directly()
+	    	directory_children.encode_directly()
 	    };
 		Ok(Self {
 			encoded_header_remaining_bytes: encoded_header.len(),
@@ -134,7 +134,7 @@ impl FileEncoder {
 			acquisition_start: 0,
 			acquisition_end: 0,
 			hard_link_filenumber,
-			encoded_directory_childs,
+			encoded_directory_children,
 		})
 	}
 
@@ -157,7 +157,7 @@ impl FileEncoder {
 
 		let buf = match self.file_type {
 			FileType::Directory => {
-				let mut cursor = Cursor::new(&self.encoded_directory_childs);
+				let mut cursor = Cursor::new(&self.encoded_directory_children);
 				cursor.set_position(self.read_bytes_underlying_data);
 				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
 				self.read_bytes_underlying_data += read_bytes;
