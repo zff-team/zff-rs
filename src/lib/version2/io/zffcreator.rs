@@ -103,17 +103,19 @@ impl<R: Read> ZffCreator<R> {
 			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Physical(object_encoder), false, Vec::new()));
 		}
 		for (object_header, input_files) in logical_objects {
-			let mut current_file_number = 1;
+			let mut current_file_number = 0;
 			let mut parent_file_number = 0;
 			let mut hardlink_map = HashMap::new();
 			let mut unaccessable_files = Vec::new();
-			let mut directories_to_traversal = VecDeque::new();
+			let mut directories_to_traversal = VecDeque::new(); // <(path, parent_file_number, current_file_number)>
 			let mut files = Vec::new();
 			let mut symlink_real_paths = HashMap::new();
 			let mut directory_childs = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
 			let mut root_dir_filenumbers = Vec::new();
 
+			//files in virtual root folder
 			for path in input_files {
+				current_file_number += 1;
 				let metadata = match std::fs::symlink_metadata(&path) {
 					Ok(metadata) => metadata,
 					Err(_) => {
@@ -130,12 +132,9 @@ impl<R: Read> ZffCreator<R> {
 						continue;
 					},
 				};
-
 				root_dir_filenumbers.push(current_file_number);
-
-				// - files in root tree
 				if metadata.file_type().is_dir() {
-					directories_to_traversal.push_back((path, parent_file_number)); // parent_file_number of root directory is always 0.
+					directories_to_traversal.push_back((path, parent_file_number, current_file_number));
 				} else {
 					if metadata.file_type().is_symlink() {
 						match read_link(&path) {
@@ -148,15 +147,13 @@ impl<R: Read> ZffCreator<R> {
 						Err(_) => continue,
 					};
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
-					current_file_number += 1;
 					files.push((path.clone(), file_header));
 				}
 			}
 
 			// - files in subfolders
-			while let Some((current_dir, dir_parent_file_number)) = directories_to_traversal.pop_front() {
-				let mut inner_dir_elements = VecDeque::new();
-				let element_iterator = match read_dir(&current_dir) {
+			while let Some((current_dir, dir_parent_file_number, dir_current_file_number)) = directories_to_traversal.pop_front() {
+  				let element_iterator = match read_dir(&current_dir) {
 					Ok(iterator) => iterator,
 					Err(_) => {
 						unaccessable_files.push(current_dir.to_string_lossy().to_string());
@@ -178,18 +175,24 @@ impl<R: Read> ZffCreator<R> {
 						continue;
 					},
 				};
+				if let Some(files_vec) = directory_childs.get_mut(&dir_parent_file_number) {
+					files_vec.push(dir_current_file_number);
+				} else {
+					directory_childs.insert(dir_parent_file_number, Vec::new());
+					directory_childs.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
+				};
 
-				parent_file_number = current_file_number;
-				let file_header = match get_file_header(&metadata, &current_dir, current_file_number, dir_parent_file_number) {
+				parent_file_number = dir_current_file_number;
+				let file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
 					Ok(file_header) => file_header,
 					Err(_) => continue,
 				};
-				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
-				current_file_number += 1;
+				add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
 				files.push((current_dir.clone(), file_header));
 
 				// files in current folder
 				for inner_element in element_iterator {
+					current_file_number += 1;
 					let inner_element = match inner_element {
 						Ok(element) => element,
 						Err(e) => {
@@ -212,15 +215,16 @@ impl<R: Read> ZffCreator<R> {
 							continue;
 						},
 					};
-					if let Some(files_vec) = directory_childs.get_mut(&parent_file_number) {
-						files_vec.push(current_file_number);
+					if metadata.file_type().is_dir() {
+						directories_to_traversal.push_back((inner_element.path(), parent_file_number, current_file_number));
 					} else {
-						directory_childs.insert(parent_file_number, Vec::new());
-						directory_childs.get_mut(&parent_file_number).unwrap().push(current_file_number);
-					};
-	 				if metadata.file_type().is_dir() {
-						inner_dir_elements.push_back((inner_element.path(), parent_file_number));
-					} else {
+						if let Some(files_vec) = directory_childs.get_mut(&parent_file_number) {
+							files_vec.push(current_file_number);
+						} else {
+							directory_childs.insert(parent_file_number, Vec::new());
+							directory_childs.get_mut(&parent_file_number).unwrap().push(current_file_number);
+						};
+
 						match read_link(inner_element.path()) {
 							Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
 							Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
@@ -231,10 +235,8 @@ impl<R: Read> ZffCreator<R> {
 							Err(_) => continue,
 						};
 						add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
-						current_file_number += 1;
 						files.push((inner_element.path().clone(), file_header));
 					}
-					directories_to_traversal.append(&mut inner_dir_elements);
 				}
 			}
 
