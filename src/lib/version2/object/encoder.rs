@@ -398,7 +398,7 @@ impl LogicalObjectEncoder {
 		hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
 		directory_children: HashMap<u64, Vec<u64>>,
 		current_chunk_number: u64,
-		header_encryption: bool,) -> Result<LogicalObjectEncoder> {		
+		header_encryption: bool) -> Result<LogicalObjectEncoder> {		
 
 		let encoded_header = if header_encryption {
 			if let Some(ref encryption_key) = encryption_key {

@@ -2,7 +2,7 @@
 #![deny(missing_docs)]
 //! This crate provides the reference implementation of the forensic file format Zff.
 //! Zff is a new file format for forensic images, as an alternative to EWF and AFF.
-//! Zff is focused on speed and security. If you want to learn more about ZFF, visit https://github.com/ph0llux/zff.
+//! Zff is focused on speed and security. If you want to learn more about ZFF, visit [https://github.com/ph0llux/zff](https://github.com/ph0llux/zff).
 
 // - modules
 /// This module contains several structs and methods to create and read zff images in version 1.

@@ -19,12 +19,19 @@ use crate::header::{
 /// The general structure of the file footer is the same for all file types.
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct FileFooter {
+	/// the version of the [FileFooter].
 	version: u8,
+	/// the acquisition start time for this file.
 	acquisition_start: u64,
+	/// the acquisition end/finish time for this file.
 	acquisition_end: u64,
+	/// The appropriate hash header for this file.
 	hash_header: HashHeader,
+	/// the first chunk number which was used for this file.
 	first_chunk_number: u64,
+	/// The full number of chunks for this file.
 	number_of_chunks: u64,
+	/// the original (uncompressed & unencrypted) length of the file.
 	length_of_data: u64,
 }
 
