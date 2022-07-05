@@ -1,5 +1,11 @@
 # Zff
 
+[![crate][crate-image]][crate-link]
+[![Docs][docs-image]][docs-link]
+![Apache2/MIT licensed][license-image]
+![Rust Version][rustc-image]
+[![website][website-image]][website-link]
+
 > Zff version 2 is in the testing stage. It has only been tested by me internally so far and requires further independent testing. 
 For this purpose, the corresponding tools can also be used (see below in the corresponding table). 
 
@@ -8,6 +14,8 @@ The focus of zff is on speed, security and modularity in concert with forensic r
 Zff is an alternative to the ewf and aff file formats and is not compatible with them.
 
 Zff is open source and is dual licensed (Apache-2.0 and MIT). This should ensure reasonable suitability for use in both open source and commercial tools.
+
+You can learn more about the file format and its specifications at [https://zff.dev](https://zff.dev).
 
 ## Features included in Zff(v2) (most of them are optional)
 
@@ -87,12 +95,18 @@ dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
 ```
 ## Zff layout
 
-See the [wiki pages](https://github.com/ph0llux/zff/wiki/Zff-layout) for further information.
+See the [website](https://zff.dev) for further information.
 
 [//]: # (badges)
 
-[deps-image]: https://deps.rs/repo/github/ph0llux/zff/status.svg
-[deps-link]: https://deps.rs/repo/github/ph0llux/zff
+[crate-image]: https://img.shields.io/crates/v/zff.svg
+[crate-link]: https://crates.io/crates/zff
+[docs-image]: https://docs.rs/zff/badge.svg
+[docs-link]: https://docs.rs/zff/
+[license-image]: https://img.shields.io/badge/license-Apache2.0/MIT-blue.svg
+[rustc-image]: https://img.shields.io/badge/rustc-1.58.1+-blue.svg
+[website-image]: https://img.shields.io/website-up-down-green-red/http/zff.dev.svg
+[website-link]: https://zff.dev
 
 [zff-crates-io-image]: https://img.shields.io/crates/v/zff.svg
 [zff-crates-io-link]: https://crates.io/crates/zff
