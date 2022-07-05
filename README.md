@@ -99,7 +99,7 @@ See the [website](https://zff.dev) for further information.
 
 [//]: # (badges)
 
-[crate-image]: https://img.shields.io/crates/v/zff.svg
+[crate-image]: https://buildstats.info/crate/zff
 [crate-link]: https://crates.io/crates/zff
 [docs-image]: https://docs.rs/zff/badge.svg
 [docs-link]: https://docs.rs/zff/
