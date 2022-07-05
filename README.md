@@ -33,15 +33,16 @@ There are several tools (and this library) to work with zff containers (or acqui
 
 ## benchmarks
 
-The following benchmarks were all run on my notebook, which has the following specifications:
-- Lenovo Thinkbook 14S Yoga ITL
-- Intel(R) 11th Gen i5-1135G7 @ AVG: 2.40GHz (MAX: 4.2 GHz)
-- 16GB DDR4-3200 RAM
-- internal WDC PC SN530 512GB NVMe\
+The following benchmarks were all run on a notebook, which has the following specifications:
+- Dell XPS 13 9310 2-in-1
+- 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+- 32GB LPDDR4x 4267 Mhz
+- KBG40ZPZ1T02 NVMe KIOXIA 1024GB\
 The installed operating system was Gentoo Linux.\
 Input and output storage device was the internal NVMe.
 
 The following benchmark was created for a \~20GB prebuilt image, which was generated using [this script](https://gist.github.com/ph0llux/6969329b060d393e199442dc0787dc9a).
+
 ![Acquisition time](https://raw.githubusercontent.com/ph0llux/zff/gh-pages/benchmark/acquisition_time.png)
 \
 ¹Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".\
