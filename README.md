@@ -10,20 +10,15 @@ Zff is an alternative to the ewf and aff file formats and is not compatible with
 Zff is open source and is dual licensed (Apache-2.0 and MIT). This should ensure reasonable suitability for use in both open source and commercial tools.
 
 ## Features included in Zff(v2) (most of them are optional)
-- The format is built to be streamable (e.g. you could stream a zff dump/container via HTTP).
-- Zff can contain dumps within a container (e.g. if multiple disks belong to one device, so they stay together).
-- An existing Zff container can be easily extended with additional dumps.
-- You can add logical dumps/backups (complete folder structures are kept). Metadata such as the Uid or Gid on unix systems can also be taken into account. Handling of files, folders, symlinks and hardlinks is possible.
-- The container can be stored in several split segments.
-- The data can be stored in compressed format (modern [compression algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#compression-algorithm-flag) like __Zstd__)
-- The stored data can be optionally encrypted with a password. Used here are best practices reccomended by PKCS#5 (see [KDF schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#kdf-flag) and [encryption schemes](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-scheme-flag) for available implementations). The encryption of the data is performed using AEAD (Authenticated Encryption with Associated Data) algorithms. Currently implemented algorithms are listed in the [encryption algorithms](https://github.com/ph0llux/zff/wiki/Zff-layout#encryption-algorithms) section.
-- Individual dumps/container can be encrypted with different encryption keys or passwords.
-- The integrity of the stored data can be ensured by using cryptographic hash values. The available hash algorithms are listed in the [hash types](https://github.com/ph0llux/zff/wiki/Zff-layout#hash-types-flag) section.
-- The authenticity of the data can be additionally ensured by digital signatures. The asymmetric signature algorithm __Ed25519__ is used for this purpose. There is now a fine choice of signing possible (e.g. you can sign only the hash values, which allows a much faster dump, but also brings restrictions in the manipulation analysis, or you can sign every chunk independently).
-- The stored data is organized in small chunks. 
 
-Above mentioned compression, encryption and signature methods are applied to each chunk separately. This makes it possible to access a corresponding part of the data in real time without the need to decompress or decrypt the complete image first.
-Authenticity verification can also be applied to individual chunks and does not have to be applied to the entire image.
+- ⚡ modern, blazingly fast methods to compress the dumped data (like Zstd or Lz4) ⚡
+- 🔒 the data can optinally be stored encrypted. Strong AEAD and PBE algorithms are used.  🔒
+- ☄ The format is built to be streamable (e.g. you could stream a zff dump/container via HTTP). ☄
+- 🪂 Zff can handle both: logical dumps (like filesystem extractions) and physical dumps (like dd dumps). 🪂
+- 🤹 The format is built to be splitable in multiple files. 🤹
+- 🍱 You can store multiple dumps within one zff-container and extend an existing zff container with additional dumps. 🍱
+- 🛡 To prevent manipulation attacks, the data can be stored signed. 🛡
+- 🔗 To ensure the integrity of the stored data, fast and modern hash algorithms are used. 🔗
 
 ## Zff tools and libraries
 
@@ -51,18 +46,17 @@ The following benchmark was created for a \~20GB prebuilt image, which was gener
 \
 ¹Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".\
 ²Using Guymager 0.8.12, with enabled Aff support and Aff compression level 1 in guymager.cfg, with MD5 hash calculation, without "HashVerifyDest".\
-³using ```zffacquire -i raw/example01.dd -o zff_lz4 -z lz4```\
-⁴using ```zffacquire -i raw/example01.dd -o zff -S```\
-⁵using ```zffacquire -i raw/example01.dd -o zff -p 123```\
-⁶using ```zffacquire -i raw/example01.dd -o zff```\
+³using ```zffacquire physical -i raw/example01.dd -o zff_lz4 -z lz4```\
+⁴using ```zffacquire physical -i raw/example01.dd -o zff -S per_chunk_signatures```\
+⁵using ```zffacquire physical -i raw/example01.dd -o zff -p 123```\
+⁶using ```zffacquire physical -i raw/example01.dd -o zff```\
 ⁷using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```\
 ⁸using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.\
 
-As you can see, there are hardly any differences worth mentioning between the dump using Guymager and zffacquire. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).\
+As you can see, zffacquire is in most cases much faster than the other tools - even if you store the data encrypted. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).\
 \
-The two fastest images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
+Two of the acquired images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
 For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.
-The dd commands were applied 10 times and then an average value was calculated over the determined values.
 ![Read speed](https://github.com/ph0llux/zff/blob/master/benchmark/read_speed_dd.png?raw=true)\
 ¹The following commands were used:
 ```bash
