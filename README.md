@@ -42,7 +42,7 @@ The installed operating system was Gentoo Linux.\
 Input and output storage device was the internal NVMe.
 
 The following benchmark was created for a \~20GB prebuilt image, which was generated using [this script](https://gist.github.com/ph0llux/6969329b060d393e199442dc0787dc9a).
-![Acquisition time](https://github.com/ph0llux/zff/blob/master/benchmark/acquisition_time.png?raw=true)
+![Acquisition time](https://raw.githubusercontent.com/ph0llux/zff/gh-pages/benchmark/acquisition_time.png)
 \
 ¹Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".\
 ²Using Guymager 0.8.12, with enabled Aff support and Aff compression level 1 in guymager.cfg, with MD5 hash calculation, without "HashVerifyDest".\
@@ -57,7 +57,8 @@ As you can see, zffacquire is in most cases much faster than the other tools - e
 \
 Two of the acquired images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
 For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.
-![Read speed](https://github.com/ph0llux/zff/blob/master/benchmark/read_speed_dd.png?raw=true)\
+![Read speed](https://raw.githubusercontent.com/ph0llux/zff/gh-pages/benchmark/read_speed_dd.png)
+\
 ¹The following commands were used:
 ```bash
 zffmount -i zff.z01 -m /tmp/zffmount
