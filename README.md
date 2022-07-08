@@ -7,26 +7,24 @@
 [![website][website-image]][website-link]
 
 > Zff version 2 is in the testing stage. It has only been tested by me internally so far and requires further independent testing. 
-For this purpose, the corresponding tools can also be used (see below in the corresponding table). 
+Corresponding tools can also be used for testing (see table below). 
 
-Zff (Z forensic file format) is a completley new designed file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
+Zff (Z forensic file format) is a completely new designed file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
 The focus of zff is on speed, security and modularity in concert with forensic requirements. The modular design promises high maintainability and scalability.
 Zff is an alternative to the ewf and aff file formats and is not compatible with them.
-
-Zff is open source and is dual licensed (Apache-2.0 and MIT). This should ensure reasonable suitability for use in both open source and commercial tools.
 
 You can learn more about the file format and its specifications at [https://zff.dev](https://zff.dev).
 
 ## Features included in Zff(v2) (most of them are optional)
 
 - ⚡ modern, blazingly fast methods to compress the dumped data (like Zstd or Lz4) ⚡
-- 🔒 the data can optinally be stored encrypted. Strong AEAD and PBE algorithms are used.  🔒
+- 🔒 the data can optionally be stored encrypted. Strong AEAD and PBE algorithms are used.  🔒
 - ☄ The format is built to be streamable (e.g. you could stream a zff dump/container via HTTP). ☄
 - 🪂 Zff can handle both: logical dumps (like filesystem extractions) and physical dumps (like dd dumps). 🪂
 - 🤹 The format is built to be splitable in multiple files. 🤹
 - 🍱 You can store multiple dumps within one zff-container and extend an existing zff container with additional dumps. 🍱
 - 🛡 To prevent manipulation attacks, the data can be stored signed. 🛡
-- 🔗 To ensure the integrity of the stored data, fast and modern hash algorithms are used. 🔗
+- 🔗 Fast and modern hash algorithms are used to ensure the integrity of stored data. 🔗
 
 ## Zff tools and libraries
 
@@ -39,7 +37,7 @@ There are several tools (and this library) to work with zff containers (or acqui
 | [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.58.1 |
 | [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.58.1 |
 
-## benchmarks
+## Benchmarks
 
 The following benchmarks were all run on a notebook, which has the following specifications:
 - Dell XPS 13 9310 2-in-1
@@ -96,6 +94,14 @@ dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
 ## Zff layout
 
 See the [website](https://zff.dev) for further information.
+
+## License
+
+Zff is open source and Apache 2.0 and MIT licensed. This should ensure compliance to use with both open source and commercial software.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 [//]: # (badges)
 
