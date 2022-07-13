@@ -16,10 +16,12 @@ use crate::{
 	LogicalObjectInformation,
 	Object,
 	File,
+	Signature,
 	calculate_crc32,
 };
 
 use crate::{
+	ED25519_DALEK_PUBKEY_LEN,
 	ERROR_MISSING_SEGMENT_MAIN_HEADER,
 	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
 	ERROR_ZFFREADER_MISSING_OBJECT,
@@ -364,6 +366,50 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Returns the description notes of the zff container (if available).
 	pub fn description_notes(&self) -> Option<&str> {
 		self.main_footer.description_notes()
+	}
+
+	/// Verifies the signed chunks with the given publickey. Returns a Vec of chunk numbers, which could NOT be verified.
+	pub fn verify_chunk_signatures(&mut self, publickey: [u8; ED25519_DALEK_PUBKEY_LEN]) -> Result<Vec<u64>> {
+		let current_object = self.object(self.active_object).unwrap().clone(); //unwrap should be safe here.
+		match current_object {
+			Object::Physical(ref obj_info) => {
+				let first_chunk_number = obj_info.footer().first_chunk_number();
+				let last_chunk_number = obj_info.footer().first_chunk_number() + obj_info.footer().number_of_chunks() - 1;
+
+				self.verify_chunks(publickey, first_chunk_number, last_chunk_number, &current_object)
+			},
+			Object::Logical(ref obj_info) => {
+				let mut corrupt_chunks = Vec::new();
+				for file in obj_info.files().values() {
+					let first_chunk_number = file.footer().first_chunk_number();
+					let last_chunk_number = file.footer().first_chunk_number() + file.footer().number_of_chunks() - 1;
+				
+					corrupt_chunks.append(&mut self.verify_chunks(publickey, first_chunk_number, last_chunk_number, &current_object)?);
+				}
+				Ok(corrupt_chunks)
+			},
+		}
+	}
+
+	fn verify_chunks(&mut self, publickey: [u8; ED25519_DALEK_PUBKEY_LEN], first_chunk_number: u64, last_chunk_number: u64, current_object: &Object) -> Result<Vec<u64>> {
+		let mut corrupt_chunks = Vec::new();
+
+		for chunk_number in first_chunk_number..=last_chunk_number {
+			let segment_no = self.chunk_map.get_mut(&chunk_number).unwrap();
+			let segment = self.segments.get_mut(segment_no).unwrap();
+
+			let chunk_data = segment.chunk_data(chunk_number, current_object)?;
+			let signature = match segment.raw_chunk(chunk_number)?.header().signature() {
+				Some(signature) => *signature,
+				None => return Err(ZffError::new(ZffErrorKind::NoSignatureFoundAtChunk, chunk_number.to_string())),
+			};
+
+			if !Signature::verify(publickey, &chunk_data, signature)? {
+				corrupt_chunks.push(chunk_number);
+			}
+		}
+
+		Ok(corrupt_chunks)
 	}
 }
 
