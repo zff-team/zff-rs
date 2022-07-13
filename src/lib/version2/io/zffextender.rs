@@ -347,6 +347,7 @@ impl<R: Read> ZffExtender<R> {
 	fn extend_current_segment<W: Write + Seek>(
 		&mut self,
 		output: &mut W) -> Result<u64> {
+		let mut eof = false;
 		// Yes, you can alternatively use stream_len(), but stream_len() uses three seek operations: the following code uses only one seek operation.
 		let mut written_bytes: u64 = match output.seek(SeekFrom::End(0)) {
 			Ok(value) => value - self.size_to_overwrite, // reduce the value of written bytes by the value of bytes you have to overwrite.
@@ -400,6 +401,7 @@ impl<R: Read> ZffExtender<R> {
 							self.main_footer.add_object_footer(self.object_encoder.obj_number(), self.current_segment_no);
 							self.last_segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), written_bytes);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
+							eof = true;
 							break;
 						}
 					},
@@ -419,7 +421,11 @@ impl<R: Read> ZffExtender<R> {
 
 		// finish the segment footer and write the encoded footer into the Writer.
 		self.last_segment_footer.set_footer_offset(written_bytes);
-		self.last_segment_footer.set_length_of_segment(written_bytes + self.last_segment_footer.encode_directly().len() as u64);
+		if eof {
+			self.last_segment_footer.set_length_of_segment(written_bytes + self.last_segment_footer.encode_directly().len() as u64 + self.main_footer.encode_directly().len() as u64);
+		} else {
+			self.last_segment_footer.set_length_of_segment(written_bytes + self.last_segment_footer.encode_directly().len() as u64);
+		}
 		written_bytes += output.write(&self.last_segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
 
@@ -430,6 +436,7 @@ impl<R: Read> ZffExtender<R> {
 	output: &mut W,
 	seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
 	) -> Result<u64> {	
+		let mut eof = false;
 		output.seek(SeekFrom::Start(seek_value))?;
 		let mut written_bytes: u64 = 0;
 		let target_chunk_size = self.object_encoder.main_header().chunk_size();
@@ -490,6 +497,7 @@ impl<R: Read> ZffExtender<R> {
 							self.main_footer.add_object_footer(self.object_encoder.obj_number(), self.current_segment_no);
 							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), seek_value + written_bytes);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
+							eof = true;
 							break;
 						}
 					},
@@ -509,7 +517,12 @@ impl<R: Read> ZffExtender<R> {
 
 		// finish the segment footer and write the encoded footer into the Writer.
 		segment_footer.set_footer_offset(seek_value + written_bytes);
-		segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
+		if eof {
+			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64 + self.main_footer.encode_directly().len() as u64);
+		} else {
+			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
+		}
+
 		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
 	}
@@ -574,6 +587,11 @@ impl<R: Read> ZffExtender<R> {
 		let mut output_file = OpenOptions::new().write(true).append(true).open(&self.last_accepted_segment_filepath)?;
 	    output_file.write_all(&self.main_footer.encode_directly())?;
 	    Ok(())
+	}
+
+	/// returns the unique identifier of the underlying zff container.
+	pub fn unique_segment_identifier(&self) -> i64 {
+		self.object_encoder.main_header().unique_identifier()
 	}
 
 }

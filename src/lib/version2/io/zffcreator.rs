@@ -280,6 +280,7 @@ impl<R: Read> ZffCreator<R> {
 	output: &mut W,
 	seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
 	) -> Result<u64> {
+		let mut eof = false; //true, if EOF of input stream is reached.
 		output.seek(SeekFrom::Start(seek_value))?;
 		let mut written_bytes: u64 = 0;
 		let target_chunk_size = self.object_encoder.main_header().chunk_size();
@@ -340,6 +341,7 @@ impl<R: Read> ZffCreator<R> {
 							self.object_footer_segment_numbers.insert(self.object_encoder.obj_number(), self.current_segment_no);
 							segment_footer.add_object_footer_offset(self.object_encoder.obj_number(), seek_value + written_bytes);
 							written_bytes += output.write(&self.object_encoder.get_encoded_footer())? as u64;
+							eof = true;
 							break;
 						}
 					},
@@ -359,7 +361,13 @@ impl<R: Read> ZffCreator<R> {
 
 		// finish the segment footer and write the encoded footer into the Writer.
 		segment_footer.set_footer_offset(seek_value + written_bytes);
-		segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
+		if eof {
+			let main_footer = MainFooter::new(DEFAULT_FOOTER_VERSION_MAIN_FOOTER, self.current_segment_no, self.object_header_segment_numbers.clone(), self.object_footer_segment_numbers.clone(), self.description_notes.clone(), 0);
+			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64 + main_footer.encode_directly().len() as u64);
+		} else {
+			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
+		}
+			
 		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
 	}
