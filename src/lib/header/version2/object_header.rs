@@ -101,7 +101,7 @@ impl ObjectHeader {
 	}
 
 	/// returns, if the chunks has a ed25519 signature or not.
-	pub fn has_per_chunk_signature(&self) -> bool {
+	pub fn has_per_chunk_signatures(&self) -> bool {
 		matches!(&self.signature_flag, SignatureFlag::PerChunkSignatures)
 	}
 
