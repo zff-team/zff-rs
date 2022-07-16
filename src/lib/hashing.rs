@@ -2,10 +2,11 @@
 use std::fmt;
 
 // - external
-use blake2::{Blake2b512, Digest};
+use blake3::{Hasher as Blake3};
+use blake2::{Blake2b512};
 use sha2::{Sha256, Sha512};
 use sha3::{Sha3_256};
-use digest::DynDigest;
+use digest::{DynDigest, Digest};
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]
@@ -20,6 +21,8 @@ pub enum HashType {
 	SHA512 = 2,
 	/// The SHA3-256 (keccak) algorithm with the encoding value 3.
 	SHA3_256 = 3,
+	/// The blake3 algorithm with the encoding value 4.
+	Blake3 = 4,
 }
 
 impl HashType {
@@ -30,6 +33,7 @@ impl HashType {
 			HashType::SHA256 => 256,
 			HashType::SHA512 => 512,
 			HashType::SHA3_256 => 256,
+			HashType::Blake3 => 256,
 		}
 	}
 }
@@ -41,6 +45,7 @@ impl fmt::Display for HashType {
 			HashType::SHA256 => "SHA256",
 			HashType::SHA512 => "SHA512",
 			HashType::SHA3_256 => "Sha3_256",
+			HashType::Blake3 => "Blake3"
 		};
 		write!(f, "{}", msg)
 	}
@@ -58,11 +63,12 @@ impl Hash {
 			HashType::SHA256 => Box::new(Sha256::new()),
 			HashType::SHA512 => Box::new(Sha512::new()),
 			HashType::SHA3_256 => Box::new(Sha3_256::new()),
+			HashType::Blake3 => Box::new(Blake3::new()),
 		}
 	}
 
 	/// returns the default hashtype of zff.
 	pub fn default_hashtype() -> HashType {
-		HashType::Blake2b512
+		HashType::Blake3
 	}
 }
