@@ -156,6 +156,7 @@ impl HeaderCoding for HashValue {
 			1 => HashType::SHA256,
 			2 => HashType::SHA512,
 			3 => HashType::SHA3_256,
+			4 => HashType::Blake3,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE)),
 		};
 	 	let hash = Vec::<u8>::decode_directly(&mut cursor)?;
