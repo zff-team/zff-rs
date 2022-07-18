@@ -7,6 +7,9 @@ use std::path::{Path};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
 
+#[cfg(target_family = "windows")]
+use std::os::windows::fs::MetadataExt;
+
 // - modules
 mod zffcreator;
 mod zffreader;
@@ -27,12 +30,22 @@ use crate::{
 };
 
 use crate::{
+	DEFAULT_HEADER_VERSION_FILE_HEADER,
+};
+
+#[cfg(target_family = "unix")]
+use crate::{
 	METADATA_EXT_KEY_GID,
 	METADATA_EXT_KEY_UID,
 	METADATA_EXT_KEY_MODE,
 	METADATA_EXT_KEY_DEVID,
 	METADATA_EXT_KEY_INODE,
-	DEFAULT_HEADER_VERSION_FILE_HEADER,
+};
+
+
+#[cfg(target_family = "windows")]
+use crate::{
+	METADATA_EXT_DW_FILE_ATTRIBUTES
 };
 
 // - external
@@ -76,7 +89,7 @@ fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
 
 #[cfg(target_os = "windows")]
 fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
-	let metadata = file.metadata()?;
+	let mut metadata_ext = HashMap::new();
 
 	//dwFileAttributes
 	metadata_ext.insert(METADATA_EXT_DW_FILE_ATTRIBUTES.into(), metadata.file_attributes().to_string());

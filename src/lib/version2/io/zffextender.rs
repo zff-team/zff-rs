@@ -31,9 +31,13 @@ use crate::{
 };
 
 use super::{
-	add_to_hardlink_map,
 	get_file_header,
 	ObjectEncoderInformation,
+};
+
+#[cfg(target_family = "unix")]
+use super::{
+	add_to_hardlink_map,
 };
 
 // - external
@@ -211,7 +215,10 @@ impl<R: Read> ZffExtender<R> {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
 					};
+
+					#[cfg(target_family = "unix")]
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
+					
 					files.push((path.clone(), file_header));
 				}
 			}
@@ -253,7 +260,9 @@ impl<R: Read> ZffExtender<R> {
 					Ok(file_header) => file_header,
 					Err(_) => continue,
 				};
+				#[cfg(target_family = "unix")]
 				add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
+				
 				let element_iterator = element_iterator.peekable();
 				files.push((current_dir.clone(), file_header));
 
@@ -301,7 +310,10 @@ impl<R: Read> ZffExtender<R> {
 							Ok(file_header) => file_header,
 							Err(_) => continue,
 						};
+
+						#[cfg(target_family = "unix")]
 						add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
+						
 						files.push((inner_element.path().clone(), file_header));
 					}
 

@@ -1,5 +1,7 @@
 // - STD
+#[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
+
 use std::io::{Read, Cursor, Seek, SeekFrom};
 use std::fs::{File};
 use std::path::{PathBuf};
@@ -430,6 +432,7 @@ impl LogicalObjectEncoder {
 	    let encryption_header = obj_header.encryption_header().map(ToOwned::to_owned);
 
 	    let mut hardlink_filenumber = None;
+	    #[cfg(target_family = "unix")]
 	    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
     		if let Some(fno) = inner_map.get(&metadata.ino()) {
 				if *fno != current_file_header.file_number() {
@@ -438,6 +441,7 @@ impl LogicalObjectEncoder {
 				};
 	    	}
      	}
+
 		let first_file_encoder = Some(FileEncoder::new(current_file_header, current_file, hash_types.clone(), encryption_key.clone(), signature_key, main_header.clone(), obj_header.compression_header(), encryption_header.clone(), current_chunk_number, symlink_real_path, header_encryption, hardlink_filenumber, current_directory_children)?);
 		
 		let mut object_footer = ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL);
@@ -545,6 +549,7 @@ impl LogicalObjectEncoder {
 
 			    // transform the next header to hardlink, if the file is one.
 			    let mut hardlink_filenumber = None;
+			    #[cfg(target_family = "unix")]
 			    if let Some(inner_map) = self.hardlink_map.get(&metadata.dev()) {
 		    		if let Some(fno) = inner_map.get(&metadata.ino()) {
 	    				if *fno != current_file_header.file_number() {
@@ -553,6 +558,7 @@ impl LogicalObjectEncoder {
 	    				};
     			    }
        			}
+       			
 			    self.current_file_header_read = false;
 				self.current_file_encoder = Some(FileEncoder::new(current_file_header, current_file, self.hash_types.clone(), self.encryption_key.clone(), signature_key, self.main_header.clone(), self.compression_header.clone(), self.encryption_header.clone(), self.current_chunk_number, symlink_real_path, self.header_encryption, hardlink_filenumber, current_directory_children)?);
 				Ok(file_footer)
