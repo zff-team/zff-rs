@@ -168,10 +168,10 @@ impl<R: Read + Seek> ZffReader<R> {
 							let crc32 = chunk.header().crc32();
 							match segment.chunk_data(first_chunk_number, &phy_object) {
 								Ok(chunk_data) => {
-									if calculate_crc32(&chunk_data) == crc32 {
-										objects.insert(*object_number, phy_object);
-									} else {
+									if calculate_crc32(&chunk_data) != crc32 && header.encryption_header().is_some() {
 										undecryptable_objects.push(*object_number);
+									} else {
+										objects.insert(*object_number, phy_object);
 									}
 								},
 								Err(e) => match e.get_kind() {
