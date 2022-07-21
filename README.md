@@ -6,9 +6,6 @@
 ![Rust Version][rustc-image]
 [![website][website-image]][website-link]
 
-> Zff version 2 is in the testing stage. It has only been tested by me internally so far and requires further independent testing. 
-Corresponding tools can also be used for testing (see table below). 
-
 Zff (Z forensic file format) is a completely new designed file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
 The focus of zff is on speed, security and modularity in concert with forensic requirements. The modular design promises high maintainability and scalability.
 Zff is an alternative to the ewf and aff file formats and is not compatible with them.
