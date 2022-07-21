@@ -1,11 +1,11 @@
 [package]
 name = "zff"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2021"
 rust-version = "1.58.1"
 license = "MIT OR Apache-2.0"
-description = "This crate is a library to interact with zff, a new file format for forensic images."
+description = "This crate is a library to interact with zff, a file format for forensic images."
 readme = "./README.md"
 homepage = "https://github.com/ph0llux/zff"
 repository = "https://github.com/ph0llux/zff"
