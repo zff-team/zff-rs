@@ -56,11 +56,21 @@ The following benchmark was created for a \~20GB prebuilt image, which was gener
 ⁶using ```zffacquire physical -i raw/example01.dd -o zff```\
 ⁷using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```\
 ⁸using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.\
+⁹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4```
+¹⁰using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 --threads 8```
+¹¹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy```
+¹²using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy --threads 8```
+¹³using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c lz4```
 
 As you can see, zffacquire is in most cases much faster than the other tools - even if you store the data encrypted. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).\
 \
+zffacquire and linpmem produce very good benchmarks using lz4 (which just goes to show how much switching compression algorithms can do!).
+
 Two of the acquired images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
 For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.
+
+Unfortunately, I have not found an official reference tool that could have been used to FUSE mount aff4 images (neither on www.aff4.org nor on docs.aff4.org).
+If someone can tell me one, I will update the benchmarks appropriately.
 
 ![Read speed](/benchmarks/read_speed_dd.png)
 \
