@@ -218,6 +218,7 @@ impl ObjectFooterLogical {
 	}
 
 	/// creates a new [ObjectFooterLogical] with the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		version: u8,
 		acquisition_start: u64,

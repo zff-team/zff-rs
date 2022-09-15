@@ -75,6 +75,7 @@ pub struct FileEncoder {
 
 impl FileEncoder {
 	/// creates a new [FileEncoder] with the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		file_header: FileHeader,
 		file: File,

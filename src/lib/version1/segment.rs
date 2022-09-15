@@ -84,7 +84,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		let chunk_size = chunk_header.chunk_size();
 
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + *chunk_offset))?;
-		let mut chunk_data = Vec::with_capacity(*chunk_size as usize);
+		let mut chunk_data = vec![0; *chunk_size as usize];
 		self.data.read_exact(&mut chunk_data)?;
 		let mut buffer = Vec::new();
 		if !chunk_header.compression_flag() {
@@ -130,7 +130,7 @@ impl<R: 'static +  Read + Seek> Segment<R> {
 		let chunk_size = chunk_header.chunk_size();
 		
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + *chunk_offset))?;
-		let mut encrypted_data = Vec::with_capacity(*chunk_size as usize);
+		let mut encrypted_data = vec![0; *chunk_size as usize];
 		self.data.read_exact(&mut encrypted_data)?;
 		let decrypted_chunk_data = Encryption::decrypt_message(decryption_key, encrypted_data, chunk_number, encryption_algorithm)?;
 

@@ -232,6 +232,7 @@ impl<R: Read> ZffWriter<R> {
 	}
 
 	//returns (chunked_buffer_bytes, crc32_sig, Option<ED25519SIG>, CompressionFlag for ChunkHeader)
+	#[allow(clippy::type_complexity)]
 	fn prepare_chunk(&mut self) -> Result<(Vec<u8>, u32, Option<[u8; ED25519_DALEK_SIGNATURE_LEN]>, bool)> {
 		let chunk_size = self.main_header.chunk_size();
 	    let (buf, read_bytes) = buffer_chunk(&mut self.input, chunk_size)?;

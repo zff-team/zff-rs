@@ -136,6 +136,7 @@ pub struct PhysicalObjectEncoder<R: Read> {
 
 impl<R: Read> PhysicalObjectEncoder<R> {
 	/// Returns a new [PhysicalObjectEncoder] by the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		obj_header: ObjectHeader,
 		reader: R,
@@ -270,7 +271,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
 	        hash_value.set_hash(hash.to_vec());
 	        if self.has_hash_signatures {
-	        	let signature = Signature::calculate_signature(self.signature_key.as_ref(), &hash.to_vec());
+	        	let signature = Signature::calculate_signature(self.signature_key.as_ref(), &hash);
 	        	if let Some(sig) = signature { hash_value.set_ed25519_signature(sig) };
 	        };
 	        hash_values.push(hash_value);
@@ -388,6 +389,7 @@ impl LogicalObjectEncoder {
 	}
 
 	/// Returns a new [LogicalObjectEncoder] by the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		obj_header: ObjectHeader,
 		files: Vec<(PathBuf, FileHeader)>,

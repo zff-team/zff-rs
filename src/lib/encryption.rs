@@ -218,13 +218,13 @@ impl Encryption {
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.encrypt(&nonce, message.as_ref())?);
+				Ok(cipher.encrypt(&nonce, message.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
 				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.encrypt(&nonce, message.as_ref())?);
+				Ok(cipher.encrypt(&nonce, message.as_ref())?)
 			},
-		};
+		}
 	}
 
 	/// method to decrypt a message with a key and and the given chunk number. This method should primary used to decrypt
@@ -242,13 +242,13 @@ impl Encryption {
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.decrypt(&nonce, message.as_ref())?);
+				Ok(cipher.decrypt(&nonce, message.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
 				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.decrypt(&nonce, message.as_ref())?);
+				Ok(cipher.decrypt(&nonce, message.as_ref())?)
 			},
-		};
+		}
 	}
 
 	/// encrypts the given header with the given nonce.
@@ -266,13 +266,13 @@ impl Encryption {
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.encrypt(nonce, message.as_ref())?);
+				Ok(cipher.encrypt(nonce, message.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
 				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.encrypt(nonce, message.as_ref())?);
+				Ok(cipher.encrypt(nonce, message.as_ref())?)
 			},
-		};
+		}
 	}
 
 	/// decrypts the given header with the given nonce and encryption key.
@@ -288,13 +288,13 @@ impl Encryption {
 		match *algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.decrypt(nonce, ciphertext.as_ref())?);
+				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
 				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
-				return Ok(cipher.decrypt(nonce, ciphertext.as_ref())?);
+				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
 			},
-		};
+		}
 	}
 
 	/// Generates a new random key, with the given key size.

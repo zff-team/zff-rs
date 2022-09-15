@@ -47,6 +47,7 @@ pub struct MainHeader {
 
 impl MainHeader {
 	/// returns a new main header with the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		version: u8,
 		encryption_header: Option<EncryptionHeader>,
@@ -197,6 +198,7 @@ impl MainHeader {
 		vec
 	}
 
+	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(inner_content: &mut R) -> Result<(
 		CompressionHeader,
 		DescriptionHeader,

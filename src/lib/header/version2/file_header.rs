@@ -76,6 +76,7 @@ pub struct FileHeader {
 
 impl FileHeader {
 	/// creates a new [FileHeader] with the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new<F: Into<String>>(
 		version: u8,
 		file_number: u64,
@@ -239,6 +240,7 @@ impl FileHeader {
 		Ok(file_header)
 	}
 
+	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(inner_content: &mut R) -> Result<(
 		FileType,
 		String, //Filename
