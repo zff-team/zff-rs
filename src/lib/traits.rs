@@ -1,6 +1,6 @@
 // - STD
 use std::io::{Read};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 // - internal
 use crate::{
@@ -8,6 +8,9 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 };
+
+// - external
+use itertools::Itertools;
 
 use crate::constants::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
@@ -297,6 +300,22 @@ impl ValueEncoder for Vec<u64> {
 
 impl<K, V> ValueEncoder for HashMap<K, V>
 where
+	K: ValueEncoder + std::cmp::Ord,
+	V: ValueEncoder + std::cmp::Ord
+{
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, value) in self.iter().sorted() {
+			vec.append(&mut key.encode_directly());
+			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+}
+
+impl<K, V> ValueEncoder for BTreeMap<K, V>
+where
 	K: ValueEncoder,
 	V: ValueEncoder
 {
@@ -484,5 +503,25 @@ where
 			hash_map.insert(key, value);
 		}
 		Ok(hash_map)
+	}
+}
+
+impl<K, V> ValueDecoder for BTreeMap<K, V>
+where
+	K: ValueDecoder<Item = K> + std::cmp::Ord,
+	V: ValueDecoder<Item = V>
+{
+
+	type Item = BTreeMap<K, V>;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<BTreeMap<K, V>> {
+		let length = u64::decode_directly(data)? as usize;
+		let mut btreemap = BTreeMap::new();
+		for _ in 0..length {
+			let key = K::decode_directly(data)?;
+			let value = V::decode_directly(data)?;
+			btreemap.insert(key, value);
+		}
+		Ok(btreemap)
 	}
 }
