@@ -26,6 +26,7 @@ byteorder = "1.4.3"
 rand = "0.7.3"
 base64 = "0.13.0"
 time = { version = "0.3.9" }
+itertools = "0.10.4"
 #encryption
 pkcs5 = { version = "0.5.0", features = [ "pbes2", "alloc", "scrypt" ] }
 scrypt = "0.10.0"
