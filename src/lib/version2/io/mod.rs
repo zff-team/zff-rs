@@ -12,12 +12,12 @@ use std::os::windows::fs::MetadataExt;
 
 // - modules
 mod zffcreator;
-mod zffreader;
 mod zffextender;
+mod reader;
 
 // - re-exports
+pub use reader::*;
 pub use zffcreator::*;
-pub use zffreader::*;
 pub use zffextender::*;
 
 // - internal
