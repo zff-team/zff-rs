@@ -1,5 +1,5 @@
 // - STD
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::io::{Cursor};
 
 // - internal
@@ -135,4 +135,124 @@ impl HeaderCoding for SegmentFooter {
 		let footer_offset = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentFooter::new(footer_version, length_of_segment, object_header_offsets, object_footer_offsets, chunk_offsets, footer_offset))
 	}
+}
+
+/// This is a variant of the [SegmentFooter] which uses [BTreeMap](std::collections::BTreeMap)s instead of HashMaps.
+/// There could be cases in which this variant **may** be faster that a normal [SegmentFooter] as some maps have to be stored sorted by their keys.
+#[derive(Debug,Clone)]
+pub struct SegmentFooterBTree {
+    version: u8,
+    length_of_segment: u64,
+    object_header_offsets: BTreeMap<u64, u64>, //<object number, offset>,
+    object_footer_offsets: BTreeMap<u64, u64>, //<object number, offset>,
+    chunk_offsets: BTreeMap<u64, u64>, //<chunk number, offset>
+    /// The offset where the footer starts.
+    footer_offset: u64,
+
+}
+
+impl SegmentFooterBTree {
+    /// creates a new empty SegmentFooterBTree.
+    pub fn new_empty(version: u8) -> SegmentFooterBTree {
+        Self {
+            version,
+            length_of_segment: 0,
+            object_header_offsets: BTreeMap::new(),
+            object_footer_offsets: BTreeMap::new(),
+            chunk_offsets: BTreeMap::new(),
+            footer_offset: 0,
+        }
+    }
+
+    /// creates a new SegmentFooterBTree.
+    pub fn new(version: u8, length_of_segment: u64, object_header_offsets: BTreeMap<u64, u64>, object_footer_offsets: BTreeMap<u64, u64>, chunk_offsets: BTreeMap<u64, u64>, footer_offset: u64) -> SegmentFooterBTree {
+        Self {
+            version,
+            length_of_segment,
+            object_header_offsets,
+            object_footer_offsets,
+            chunk_offsets,
+            footer_offset,
+        }
+    }
+    
+    /// returns the length of the segment in bytes.
+    pub fn length_of_segment(&self) -> u64 {
+        self.length_of_segment
+    }
+
+    /// overwrites the length value in the footer with the given value. This can be useful, if you create an 'empty'
+    /// footer (with length=0) and want to set the length value after reading the data from source to buffer.
+    pub fn set_length_of_segment(&mut self, value: u64) {
+        self.length_of_segment = value
+    }
+
+    /// adds an offset to the chunk offset table of the SegmentFooterBTree.
+    pub fn add_chunk_offset(&mut self, chunk_number: u64, offset: u64) {
+        self.chunk_offsets.insert(chunk_number, offset);
+    }
+
+    /// returns a reference of the chunk offset table
+    pub fn chunk_offsets(&self) -> &BTreeMap<u64, u64> {
+        &self.chunk_offsets
+    }
+
+    /// adds an offset to the object header offset table of the SegmentFooterBTree.
+    pub fn add_object_header_offset(&mut self, object_number: u64, offset: u64) {
+        self.object_header_offsets.insert(object_number, offset);
+    }
+
+    /// returns a reference of the object header offset table
+    pub fn object_header_offsets(&self) -> &BTreeMap<u64, u64> {
+        &self.object_header_offsets
+    }
+
+    /// adds an offset to the object footer offset table of the SegmentFooterBTree.
+    pub fn add_object_footer_offset(&mut self, object_number: u64, offset: u64) {
+        self.object_footer_offsets.insert(object_number, offset);
+    }
+
+    /// returns a reference of the object footer offset table
+    pub fn object_footer_offsets(&self) -> &BTreeMap<u64, u64> {
+        &self.object_footer_offsets
+    }
+   /// sets the offset of this footer
+    pub fn set_footer_offset(&mut self, offset: u64) {
+        self.footer_offset = offset;
+    }
+}
+
+impl HeaderCoding for SegmentFooterBTree {
+    type Item = SegmentFooterBTree;
+
+    fn identifier() -> u32 {
+        FOOTER_IDENTIFIER_SEGMENT_FOOTER
+    }
+
+    fn version(&self) -> u8 {
+        self.version
+    }
+
+    fn encode_header(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.append(&mut self.version.encode_directly());
+        vec.append(&mut self.length_of_segment.encode_directly());
+        vec.append(&mut self.object_header_offsets.encode_directly());
+        vec.append(&mut self.object_footer_offsets.encode_directly());
+        vec.append(&mut self.chunk_offsets.encode_directly());
+        vec.append(&mut self.footer_offset.encode_directly());
+        vec
+    }
+
+    fn decode_content(data: Vec<u8>) -> Result<SegmentFooterBTree> {
+        let mut cursor = Cursor::new(data);
+
+        let footer_version = u8::decode_directly(&mut cursor)?;
+        let length_of_segment = u64::decode_directly(&mut cursor)?;
+        let object_header_offsets = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let object_footer_offsets = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let chunk_offsets = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let footer_offset = u64::decode_directly(&mut cursor)?;
+        Ok(SegmentFooterBTree::new(footer_version, length_of_segment, object_header_offsets, object_footer_offsets, chunk_offsets, footer_offset))
+    }
 }

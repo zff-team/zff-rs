@@ -21,7 +21,7 @@ use crate::{
 };
 use crate::{
 	header::{ObjectHeader, MainHeader, SegmentHeader, ChunkHeader},
-	footer::{SegmentFooter, MainFooter},
+	footer::{SegmentFooterBTree as SegmentFooter, MainFooter},
 	version2::{
 		object::{ObjectEncoder, PhysicalObjectEncoder, LogicalObjectEncoder},
 	}
