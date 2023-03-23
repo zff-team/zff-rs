@@ -496,12 +496,14 @@ where
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<HashMap<K, V>> {
 		let length = u64::decode_directly(data)? as usize;
-		let mut hash_map = HashMap::with_capacity(length);
+		let mut hash_map = HashMap::new();
+		hash_map.try_reserve(length)?;
 		for _ in 0..length {
 			let key = K::decode_directly(data)?;
 			let value = V::decode_directly(data)?;
 			hash_map.insert(key, value);
 		}
+		hash_map.shrink_to_fit();
 		Ok(hash_map)
 	}
 }

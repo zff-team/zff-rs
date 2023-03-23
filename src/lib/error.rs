@@ -2,6 +2,7 @@
 use std::fmt;
 use std::string::FromUtf8Error;
 use std::io;
+use std::collections::TryReserveError;
 
 // - internal
 
@@ -85,6 +86,8 @@ pub enum ZffErrorKind {
 	MissingObjectNumber,
 	/// Error will be returned, if the file number looked for does not exist.
 	MissingFileNumber,
+	/// Error will be returned, if a needed password is not present.
+	MissingPassword,
 	/// Error will be returned, if the object number mismatches the given object type.
 	MismatchObjectType,
 	/// Error will be returned, if the main header could not be encrypted.
@@ -115,6 +118,8 @@ pub enum ZffErrorKind {
 	NoChunksLeft,
 	/// Error for Seek.
 	Seek,
+	/// Error will be returned, if the operation is not possible because of missing memory capacity.
+	OutOfMemory,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -150,6 +155,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::MissingObjectHeaderForPresentObjectFooter => "MissingObjectHeaderForPresentObjectFooter",
 			ZffErrorKind::MissingObjectNumber => "MissingObjectNumber",
 			ZffErrorKind::MissingFileNumber => "MissingFileNumber",
+			ZffErrorKind::MissingPassword => "MissingPassword",
 			ZffErrorKind::MismatchObjectType => "MismatchObjectType",
 			ZffErrorKind::MainHeaderEncryptionError => "MainHeaderEncryptionError",
 			ZffErrorKind::InvalidChunkNumber => "InvalidChunkNumber",
@@ -165,6 +171,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::NoObjectsLeft => "NoObjectsLeft",
 			ZffErrorKind::NoChunksLeft => "NoChunksLeft",
 			ZffErrorKind::Seek => "Seek",
+			ZffErrorKind::OutOfMemory => "OutOfMemory",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -328,6 +335,12 @@ impl From<ComponentRangeError> for ZffError {
 impl From<FromUtf8Error> for ZffError {
 	fn from(e: FromUtf8Error) -> ZffError {
 		ZffError::new(ZffErrorKind::FromUtf8Error, e.to_string())
+	}
+}
+
+impl From<TryReserveError> for ZffError {
+	fn from(e: TryReserveError) -> ZffError {
+		ZffError::new(ZffErrorKind::OutOfMemory, e.to_string())
 	}
 }
 
