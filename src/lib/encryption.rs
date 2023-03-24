@@ -13,8 +13,11 @@ use pkcs5::{
 };
 use scrypt::Params as ScryptParams;
 use aes_gcm_siv::{
-	Aes256GcmSiv, Aes128GcmSiv, Nonce, Key,
-	aead::{Aead, NewAead},
+	Aes256GcmSiv, Aes128GcmSiv, Nonce, KeyInit,
+	aead::{Aead},
+};
+use chacha20poly1305::{
+    ChaCha20Poly1305
 };
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
@@ -30,6 +33,8 @@ pub enum EncryptionAlgorithm {
 	/// AES (256-Bit) in Galois/Counter Mode operation with misuse resistance in the event of the reuse of a cryptographic nonce.\
 	/// Encoded with value 1.
 	AES256GCMSIV = 1,
+	/// Chacha20 stream cipher with Poly1305 universal hash function.
+	CHACHA20POLY1305 = 2,
 }
 
 /// Defines all KDF schemes, which are implemented in zff.
@@ -217,13 +222,17 @@ impl Encryption {
 		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
-				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes256GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.encrypt(&nonce, message.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
-				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes128GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.encrypt(&nonce, message.as_ref())?)
 			},
+			EncryptionAlgorithm::CHACHA20POLY1305 => {
+				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
+				Ok(cipher.encrypt(&nonce, message.as_ref())?)
+			}
 		}
 	}
 
@@ -241,13 +250,17 @@ impl Encryption {
 		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
-				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes256GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.decrypt(&nonce, message.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
-				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes128GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.decrypt(&nonce, message.as_ref())?)
 			},
+			EncryptionAlgorithm::CHACHA20POLY1305 => {
+				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
+				Ok(cipher.decrypt(&nonce, message.as_ref())?)
+			}
 		}
 	}
 
@@ -265,13 +278,17 @@ impl Encryption {
 		let nonce = Nonce::from_slice(nonce);
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
-				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes256GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.encrypt(nonce, message.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
-				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes128GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.encrypt(nonce, message.as_ref())?)
 			},
+			EncryptionAlgorithm::CHACHA20POLY1305 => {
+				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
+				Ok(cipher.encrypt(nonce, message.as_ref())?)
+			}
 		}
 	}
 
@@ -287,13 +304,17 @@ impl Encryption {
 		let nonce = Nonce::from_slice(nonce);
 		match *algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
-				let cipher = Aes256GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes256GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
 			},
 			EncryptionAlgorithm::AES128GCMSIV => {
-				let cipher = Aes128GcmSiv::new(Key::from_slice(key.as_ref()));
+				let cipher = Aes128GcmSiv::new_from_slice(key.as_ref())?;
 				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
 			},
+			EncryptionAlgorithm::CHACHA20POLY1305 => {
+				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
+				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
+			}
 		}
 	}
 

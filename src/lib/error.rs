@@ -10,6 +10,7 @@ use std::collections::TryReserveError;
 use pkcs5::Error as PKCS5CryptoError;
 use scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
 use aes_gcm_siv::aead::Error as EncryptionError;
+use digest::InvalidLength;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
 use lz4_flex::frame::Error as Lz4Error;
@@ -98,6 +99,8 @@ pub enum ZffErrorKind {
 	NoSignatureFoundAtChunk,
 	/// Error will be returned, if there is an invalid flag value.
 	InvalidFlagValue,
+	/// Error will be returned, if you try to use a invalid key length for the preferred encryption algorithm.
+	InvalidEncryptionKeySize,
 	/// Error will be returned, if the appropriate segment is missing in the zff image.
 	MissingSegment,
 	/// Error will be returned, if the appropriate segment is malformed (e.g. the object header is missing)
@@ -161,6 +164,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::InvalidChunkNumber => "InvalidChunkNumber",
 			ZffErrorKind::NoSignatureFoundAtChunk => "NoSignatureFoundAtChunk",
 			ZffErrorKind::InvalidFlagValue => "InvalidFlagValue",
+			ZffErrorKind::InvalidEncryptionKeySize => "InvalidEncryptionKeySize",
 			ZffErrorKind::MissingSegment => "MissingSegment",
 			ZffErrorKind::MalformedSegment => "MalformedSegment",
 			ZffErrorKind::MalformedHeader => "MalformedHeader",
@@ -341,6 +345,12 @@ impl From<FromUtf8Error> for ZffError {
 impl From<TryReserveError> for ZffError {
 	fn from(e: TryReserveError) -> ZffError {
 		ZffError::new(ZffErrorKind::OutOfMemory, e.to_string())
+	}
+}
+
+impl From<InvalidLength> for ZffError {
+	fn from(e: InvalidLength) -> ZffError {
+		ZffError::new(ZffErrorKind::InvalidEncryptionKeySize, e.to_string())
 	}
 }
 
