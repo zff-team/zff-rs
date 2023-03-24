@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek};
 use std::collections::HashMap;
 
 // - internal
@@ -7,7 +7,6 @@ use crate::{
 	Result,
 	Segment,
 	HeaderCoding,
-	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
 	header::{MainHeader},
@@ -19,6 +18,8 @@ use crate::{
 	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
 	ERROR_MISMATCH_ZFF_VERSION
 };
+
+use super::*;
 
 /// The [ZffMetadataReader] provide some methods to gain information about the underlying zff container.
 pub struct ZffMetadataReader<R: Read + Seek> {
@@ -148,45 +149,4 @@ impl<R: Read + Seek> ZffMetadataReader<R> {
 		&self.main_footer
 	}
 
-}
-
-fn find_mainfooter<R: Read + Seek>(data: &mut R) -> Result<MainFooter> {
-	data.seek(SeekFrom::End(-8))?;
-	let footer_offset = u64::decode_directly(data)?;
-	data.seek(SeekFrom::Start(footer_offset))?;
-	match MainFooter::decode_directly(data) {
-		Ok(mf) => {
-			data.rewind()?;
-			Ok(mf)
-		},
-		Err(e) => match e.get_kind() {
-			ZffErrorKind::HeaderDecodeMismatchIdentifier => {
-				data.rewind()?;
-				Err(ZffError::new(ZffErrorKind::Custom, ERROR_MISSING_SEGMENT_MAIN_FOOTER))
-			},
-			_ => Err(e)
-		}
-	}
-}
-
-fn objectstate<R: Read + Seek>(segment: &mut Segment<R>, object_number: u64) -> Result<ObjectState> {
-	let obj_header = match segment.read_object_header(object_number) {
-		Ok(header) => header,
-		Err(e) => match e.get_kind() {
-			ZffErrorKind::HeaderDecodeEncryptedHeader => return Ok(ObjectState::EncryptedHeader),
-			_ => return Err(e),
-		}
-	};
-	if obj_header.encryption_header().is_some() {
-		Ok(ObjectState::EncryptedData)
-	} else {
-		Ok(ObjectState::Unencrypted)
-	}
-}
-
-#[derive(PartialEq)]
-enum ObjectState {
-	Unencrypted,
-	EncryptedData,
-	EncryptedHeader,
 }
