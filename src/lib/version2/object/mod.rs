@@ -13,7 +13,7 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	header::{ObjectHeader, EncryptionHeader},
-	footer::{ObjectFooterPhysical, ObjectFooterLogical},
+	footer::{ObjectFooter, ObjectFooterPhysical, ObjectFooterLogical},
 	File,
 	EncryptionAlgorithm,
 };
@@ -28,6 +28,14 @@ pub enum Object {
 }
 
 impl Object {
+
+	pub fn new(header: ObjectHeader, footer: ObjectFooter, encryption_key: Option<Vec<u8>>) -> Object {
+		match footer {
+			ObjectFooter::Physical(footer) => Self::Physical(Box::new(PhysicalObjectInformation::new(header, footer, encryption_key))),
+			ObjectFooter::Logical(footer) => Self::Logical(Box::new(LogicalObjectInformation::new(header, footer, encryption_key))),
+		}
+	}
+
 	/// Returns the used encryption algorithm of the underlying [ObjectHeader](crate::header::ObjectHeader), if available.
 	pub fn encryption_algorithm(&self) -> Option<&EncryptionAlgorithm> {
 		match self {
