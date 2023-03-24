@@ -23,6 +23,7 @@ use crate::{
 
 use super::*;
 
+/// The ZffObjectReader implements io::Read and additional operations for a single zff-Object.
 pub struct ZffObjectReader<R: Read + Seek> {
 	object: Object,
 	segments: HashMap<u64, Segment<R>>, //<segment number, Segment-object> - this HashMap contains only the segments which contain the header/footer of the object and the appropriate chunks.
@@ -30,6 +31,8 @@ pub struct ZffObjectReader<R: Read + Seek> {
 }
 
 impl<R: Read + Seek> ZffObjectReader<R> {
+
+	/// Returns a new ZffObjectReader by the given parameter.
 	pub fn new<S: Into<String>>(
 		raw_segments: Vec<R>,
 		decryption_password: Option<S>,

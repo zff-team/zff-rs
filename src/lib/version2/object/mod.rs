@@ -29,6 +29,7 @@ pub enum Object {
 
 impl Object {
 
+	/// Returns a new Object by given header, footer and optional encryption key.
 	pub fn new(header: ObjectHeader, footer: ObjectFooter, encryption_key: Option<Vec<u8>>) -> Object {
 		match footer {
 			ObjectFooter::Physical(footer) => Self::Physical(Box::new(PhysicalObjectInformation::new(header, footer, encryption_key))),

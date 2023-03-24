@@ -29,6 +29,8 @@ pub struct ZffMetadataReader<R: Read + Seek> {
 }
 
 impl<R: Read + Seek> ZffMetadataReader<R> {
+
+	/// Returns a new ZffMetaReader by given segments.
 	pub fn new(raw_segments: Vec<R>) -> Result<ZffMetadataReader<R>> {
 		let mut main_header = None;
 		let mut main_footer = None;
