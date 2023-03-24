@@ -10,6 +10,7 @@ use crate::{
 	ZffErrorKind,
 	Chunk,
 	Encryption,
+	EncryptionAlgorithm,
 	Object,
 	decompress_buffer,
 	header::{SegmentHeader, ObjectHeader, ChunkHeader},
@@ -111,7 +112,25 @@ impl<R: Read + Seek> Segment<R> {
 		} else {
 			Ok(raw_data_buffer)
 		}
-		
+	}
+
+	/// Returns true if the chunk with the appropriate chunk numer is decryptable with the given encryption/decryption key.
+	/// Returns false if not.
+	pub fn test_decrypt_chunk(&mut self, chunk_number: u64, encryption_key: Vec<u8>, algorithm: &EncryptionAlgorithm) -> Result<bool> {
+		let chunk_offset = match self.footer().chunk_offsets().get(&chunk_number) {
+			Some(offset) => *offset,
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
+		};
+		self.data.seek(SeekFrom::Start(chunk_offset))?;
+		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
+		let chunk_size = chunk_header.chunk_size();
+		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
+		let mut raw_data_buffer = vec![0u8; *chunk_size as usize];
+		self.data.read_exact(&mut raw_data_buffer)?;
+		match Encryption::decrypt_message(encryption_key, raw_data_buffer, chunk_number, algorithm) {
+			Ok(_) => Ok(true),
+			Err(_) => Ok(false),
+		}
 	}
 
 	/// Returns the [crate::header::ObjectHeader] of the given object number, if available in this [Segment]. Otherwise, returns an error.
