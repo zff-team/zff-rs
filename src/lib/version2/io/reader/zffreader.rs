@@ -254,7 +254,8 @@ impl<R: Read + Seek> ZffReader<R> {
 						},
 					}
 				},
-				None => if !undecryptable_objects.contains(object_number) { return Err(ZffError::new(ZffErrorKind::MissingObjectHeaderForPresentObjectFooter, object_number.to_string())) },
+				None => if !undecryptable_objects.contains(object_number) { return Err(ZffError::new(
+					ZffErrorKind::MissingObjectHeaderForPresentObjectFooter, object_number.to_string())) },
 			};
 		}
 
