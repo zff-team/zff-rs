@@ -10,7 +10,7 @@ use crate::{
 
 };
 
-use crate::version1::{
+use crate::{
 	FOOTER_IDENTIFIER_SEGMENT_FOOTER,
 };
 

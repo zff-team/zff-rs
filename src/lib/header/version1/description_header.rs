@@ -9,7 +9,7 @@ use crate::{
 	ValueDecoder,
 	ZffErrorKind,
 };
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
 	ENCODING_KEY_CASE_NUMBER,
 	ENCODING_KEY_EVIDENCE_NUMBER,

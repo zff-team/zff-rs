@@ -13,7 +13,7 @@ use crate::{
 	ZffErrorKind,
 };
 
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_PBE_HEADER,
 	PBE_KDF_PARAMETERS_PBKDF2,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF,

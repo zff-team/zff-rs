@@ -16,7 +16,7 @@ use crate::{
 	Encryption,
 };
 
-use crate::version1::{
+use crate::{
 	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
 	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
 };

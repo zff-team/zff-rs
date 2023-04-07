@@ -5,8 +5,6 @@
 //! Zff is focused on speed and security. If you want to learn more about ZFF, visit [https://github.com/ph0llux/zff](https://github.com/ph0llux/zff).
 
 // - modules
-/// This module contains several structs and methods to create and read zff images in version 1.
-pub mod version1;
 /// This module contains several structs and methods to create, read and extend zff container in version 2.
 pub mod version2;
 /// This module contains all constants, used in this crate.
