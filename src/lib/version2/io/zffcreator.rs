@@ -67,6 +67,24 @@ impl ZffCreatorMetadataParams {
 	}
 }
 
+#[derive(Default)]
+pub struct ZffCreatorReadMetadata {
+	pub main_header_remaining_bytes: Vec<u8>,
+	pub cached_main_footer_start_offset: u64,
+	pub segment_header_remaining_bytes: Vec<u8>,
+	pub segment_footer: SegmentFooter,
+	pub object_header_remaining_bytes: Vec<u8>,
+	pub object_header_metadata_written: bool,
+}
+
+
+
+impl ZffCreatorReadMetadata {
+	fn new() -> Self {
+		ZffCreatorReadMetadata::default()
+	}
+}
+
 /// The ZffCreator can be used to create a new zff container by the given files/values.
 pub struct ZffCreator<R: Read> {
 	object_encoder_vec: Vec<ObjectEncoderInformation<R>>,
@@ -79,6 +97,7 @@ pub struct ZffCreator<R: Read> {
 	description_notes: Option<String>,
 	object_header_segment_numbers: HashMap<u64, u64>, //<object_number, segment_no>
 	object_footer_segment_numbers: HashMap<u64, u64>, //<object_number, segment_no>
+	read_metadata: ZffCreatorReadMetadata,
 }
 
 impl<R: Read> ZffCreator<R> {
@@ -268,10 +287,16 @@ impl<R: Read> ZffCreator<R> {
 			object_encoder_vec.push(ObjectEncoderInformation::with_data(ObjectEncoder::Logical(Box::new(object_encoder)), false, unaccessable_files));
 		}
 		object_encoder_vec.reverse();
-		let (object_encoder, written_object_header, unaccessable_files) = match object_encoder_vec.pop() {
+		let (mut object_encoder, written_object_header, unaccessable_files) = match object_encoder_vec.pop() {
 			Some(creator_obj_encoder) => (creator_obj_encoder.object_encoder, creator_obj_encoder.written_object_header, creator_obj_encoder.unaccessable_files),
 			None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 		};
+
+		let mut read_metadata = ZffCreatorReadMetadata::new();
+		read_metadata.main_header_remaining_bytes = object_encoder.main_header().encode_directly();
+		read_metadata.segment_header_remaining_bytes = SegmentHeader::new(
+			DEFAULT_HEADER_VERSION_SEGMENT_HEADER, object_encoder.main_header().unique_identifier(), 1).encode_directly();
+		read_metadata.object_header_remaining_bytes = object_encoder.get_encoded_header();
 
 		Ok(Self {
 			object_encoder_vec,
@@ -284,6 +309,7 @@ impl<R: Read> ZffCreator<R> {
 			description_notes: params.description_notes,
 			object_header_segment_numbers: HashMap::new(),
 			object_footer_segment_numbers: HashMap::new(),
+			read_metadata,
 		})
 	}
 
@@ -332,7 +358,7 @@ impl<R: Read> ZffCreator<R> {
 		loop {
 			if (written_bytes +
 				segment_footer_len +
-				target_chunk_size as u64) > target_segment_size-seek_value as u64 {
+				target_chunk_size as u64) > target_segment_size-seek_value {
 				
 				if written_bytes == segment_header.encode_directly().len() as u64 {
 					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
@@ -441,4 +467,53 @@ impl<R: Read> ZffCreator<R> {
 	pub fn unaccessable_files(&self) -> &Vec<String> {
 		&self.unaccessable_files
 	}
+}
+
+//TODO! unimplemented!
+impl<R: Read> Read for ZffCreator<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+		let mut read_bytes = 0;
+		// read remaining encoded main header bytes
+		if self.read_metadata.main_header_remaining_bytes.len() > buffer.len() {
+			let mut cursor = Cursor::new(self.read_metadata.main_header_remaining_bytes.drain(..buffer.len()));
+			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+		} else {
+			let mut cursor = Cursor::new(self.read_metadata.main_header_remaining_bytes.drain(..self.read_metadata.main_header_remaining_bytes.len()));
+			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+		}
+
+		// read remaining encoded segment header bytes
+		if self.read_metadata.segment_header_remaining_bytes.len() > buffer[read_bytes..].len() {
+			let mut cursor = Cursor::new(self.read_metadata.segment_header_remaining_bytes.drain(..buffer[read_bytes..].len()));
+			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+		} else {
+			let mut cursor = Cursor::new(self.read_metadata.segment_header_remaining_bytes.drain(..self.read_metadata.segment_header_remaining_bytes.len()));
+			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+		}
+
+		loop {
+			if read_bytes == buffer.len() {
+				self.read_metadata.cached_main_footer_start_offset += read_bytes as u64;
+				break;
+			}
+
+			// read remaining encoded object header bytes and set appropriate ZffCreator attributes
+			if !self.read_metadata.object_header_metadata_written {
+				self.object_header_segment_numbers.insert(self.object_encoder.obj_number(), 1);
+				self.read_metadata.segment_footer.add_object_header_offset(self.object_encoder.obj_number(), read_bytes as u64);
+				self.read_metadata.object_header_metadata_written = true;
+			}
+			if self.read_metadata.object_header_remaining_bytes.len() > buffer[read_bytes..].len() {
+				let mut cursor = Cursor::new(self.read_metadata.object_header_remaining_bytes.drain(..buffer[read_bytes..].len()));
+				read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+				//break;TODO?
+			} else {
+				let mut cursor = Cursor::new(self.read_metadata.object_header_remaining_bytes.drain(..self.read_metadata.object_header_remaining_bytes.len()));
+				read_bytes += cursor.read(&mut buffer[read_bytes..])?;
+				self.written_object_header = true;
+			}
+		}
+		Ok(read_bytes)
+	}
+	
 }
