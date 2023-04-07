@@ -147,7 +147,9 @@ impl FileEncoder {
 
 	/// returns the underlying encoded header
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
-		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+		if self.acquisition_start == 0 {
+			self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+		}
 		self.encoded_header.clone()
 	}
 
@@ -160,7 +162,7 @@ impl FileEncoder {
 			FileType::Directory => {
 				let mut cursor = Cursor::new(&self.encoded_directory_children);
 				cursor.set_position(self.read_bytes_underlying_data);
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
 				self.read_bytes_underlying_data += read_bytes;
 				buf
 
@@ -170,7 +172,7 @@ impl FileEncoder {
 					None => Vec::new(),
 					Some(link_path) => {
 						let mut cursor = Cursor::new(link_path.to_string_lossy().encode_directly());
-						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
 						self.read_bytes_underlying_data += read_bytes;
 						self.symlink_real_path = None;
 						buf
@@ -181,7 +183,7 @@ impl FileEncoder {
 				match self.hard_link_filenumber {
 					Some(filenumber) => {
 						let mut cursor = Cursor::new(filenumber.encode_directly());
-						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size as usize)?;
+						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
 						self.read_bytes_underlying_data += read_bytes;
 						self.hard_link_filenumber = None;
 						buf
@@ -190,7 +192,7 @@ impl FileEncoder {
 				}		
 			},
 			FileType::File => {
-				let (buf, read_bytes) = buffer_chunk(&mut self.underlying_file, chunk_size as usize)?;
+				let (buf, read_bytes) = buffer_chunk(&mut self.underlying_file, chunk_size)?;
 				self.read_bytes_underlying_data += read_bytes;
 				buf
 			},
@@ -256,7 +258,7 @@ impl FileEncoder {
 			hash_header,
 			self.initial_chunk_number,
 			self.current_chunk_number - self.initial_chunk_number,
-			self.read_bytes_underlying_data as u64,
+			self.read_bytes_underlying_data,
 			);
 		footer.encode_directly()
 	}

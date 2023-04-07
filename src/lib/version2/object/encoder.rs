@@ -208,7 +208,9 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 	/// Returns the encoded header. A call of this method sets the acquisition start time to the current time.
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
-		self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+		if self.acquisition_start == 0 {
+			self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+		}
 		self.encoded_header.clone()
 	}
 
@@ -219,7 +221,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 		// prepare chunked data:
 	    let chunk_size = self.main_header.chunk_size();
-	    let (buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size as usize)?;
+	    let (buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size)?;
 	    self.read_bytes_underlying_data += read_bytes;
 	    if buf.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
