@@ -13,6 +13,7 @@ use crate::{
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
+	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
 	ERROR_HEADER_DECODER_HEADER_LENGTH,
 };
 
@@ -251,6 +252,12 @@ pub struct SegmentFooter {
 
 }
 
+impl Default for SegmentFooter {
+	fn default() -> Self {
+		SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER)
+	}
+}
+
 impl SegmentFooter {
 	/// creates a new empty SegmentFooter.
 	pub fn new_empty(version: u8) -> SegmentFooter {
@@ -370,6 +377,12 @@ pub struct SegmentFooterBTree {
     /// The offset where the footer starts.
     footer_offset: u64,
 
+}
+
+impl Default for SegmentFooterBTree {
+	fn default() -> Self {
+		SegmentFooterBTree::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER)
+	}
 }
 
 impl SegmentFooterBTree {
