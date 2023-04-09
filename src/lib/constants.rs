@@ -47,6 +47,9 @@ pub(crate) const ENCODING_KEY_DESCRIPTION_NOTES: &str = "dn";
 // chunk header flags
 pub(crate) const ERROR_FLAG_VALUE: u8 = 1<<0;
 pub(crate) const COMPRESSION_FLAG_VALUE: u8 = 1<<1;
+pub(crate) const SAME_BYTES_FLAG_VALUE: u8 = 1<<2;
+pub(crate) const DUPLICATION_FLAG_VALUE: u8 = 1<<3;
+pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1<<4;
 
 // - Error messages
 pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE: &str = "Unknown hash type value.";
@@ -100,7 +103,7 @@ pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
 
 // default versions
 /// current header version for the [ChunkHeader](crate::header::ChunkHeader).
-pub const DEFAULT_HEADER_VERSION_CHUNK_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_CHUNK_HEADER: u8 = 2;
 /// current header version for the [HashValue](crate::header::HashValue) structure.
 pub const DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER: u8 = 2;
 /// current header version for the [HashHeader](crate::header::HashHeader).
