@@ -165,7 +165,7 @@ impl<R: Read + Seek> ZffReader<R> {
 								None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 							};
 							let chunk = segment.raw_chunk(first_chunk_number)?;
-							let crc32 = chunk.header().crc32();
+							let crc32 = chunk.header().crc32;
 							match segment.chunk_data(first_chunk_number, &phy_object) {
 								Ok(chunk_data) => {
 									if calculate_crc32(&chunk_data) != crc32 && header.encryption_header().is_some() {
@@ -234,7 +234,7 @@ impl<R: Read + Seek> ZffReader<R> {
 									None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 								};
 								let chunk = segment.raw_chunk(first_chunk_number)?;
-								let crc32 = chunk.header().crc32();
+								let crc32 = chunk.header().crc32;
 								match segment.chunk_data(first_chunk_number, &object) {
 									Ok(chunk_data) => {
 										if calculate_crc32(&chunk_data) == crc32 {
@@ -400,8 +400,8 @@ impl<R: Read + Seek> ZffReader<R> {
 			let segment = self.segments.get_mut(segment_no).unwrap();
 
 			let chunk_data = segment.chunk_data(chunk_number, current_object)?;
-			let signature = match segment.raw_chunk(chunk_number)?.header().signature() {
-				Some(signature) => *signature,
+			let signature = match segment.raw_chunk(chunk_number)?.header().ed25519_signature {
+				Some(signature) => signature,
 				None => return Err(ZffError::new(ZffErrorKind::NoSignatureFoundAtChunk, chunk_number.to_string())),
 			};
 

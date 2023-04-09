@@ -26,7 +26,7 @@ impl Chunk {
 	/// Returns a new [Chunk], read from the given [Reader](std::io::Read).
 	pub fn new_from_reader<R: Read>(data: &mut R) -> Result<Chunk> {
 		let chunk_header = ChunkHeader::decode_directly(data)?;
-		let mut chunk_data = vec![0; *chunk_header.chunk_size() as usize];
+		let mut chunk_data = vec![0; chunk_header.chunk_size as usize];
 		data.read_exact(&mut chunk_data)?;
 		Ok(Self::new(chunk_header, chunk_data))
 	}

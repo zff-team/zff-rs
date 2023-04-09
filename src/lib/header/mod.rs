@@ -4,6 +4,8 @@ pub mod version1;
 /// This module contains the version 2 of all zff header.
 pub mod version2;
 
+mod chunk_header;
+
 // - re-export
 pub use version2::main_header::*;
 pub use version2::description_header::*;
@@ -15,4 +17,5 @@ pub use version2::encryption_header::*;
 pub use version2::pbe_header::*;
 
 pub use version1::compression_header::*;
-pub use version1::chunk_header::*;
+
+pub use chunk_header::*;

@@ -91,22 +91,22 @@ impl<R: Read + Seek> Segment<R> {
 		};
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
-		let chunk_size = chunk_header.chunk_size();
+		let chunk_size = chunk_header.chunk_size;
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-		let mut raw_data_buffer = vec![0u8; *chunk_size as usize];
+		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
 		self.data.read_exact(&mut raw_data_buffer)?;
 		let raw_data_buffer = match object.encryption_algorithm() {
 			Some(algo) => {
 				match object.encryption_key() {
 					Some(encryption_key) => {
-						Encryption::decrypt_message(encryption_key, raw_data_buffer, chunk_number, algo)?
+						Encryption::decrypt_chunk_content(encryption_key, raw_data_buffer, chunk_number, algo)?
 					},
 					None => raw_data_buffer,
 				}
 			},
 			None => raw_data_buffer,
 		};
-		if chunk_header.compression_flag() {
+		if chunk_header.flags.compression {
 			let compression_algorithm = object.header().compression_header().algorithm().clone();
 			decompress_buffer(&raw_data_buffer, compression_algorithm)
 		} else {
@@ -123,11 +123,11 @@ impl<R: Read + Seek> Segment<R> {
 		};
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
 		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
-		let chunk_size = chunk_header.chunk_size();
+		let chunk_size = chunk_header.chunk_size;
 		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-		let mut raw_data_buffer = vec![0u8; *chunk_size as usize];
+		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
 		self.data.read_exact(&mut raw_data_buffer)?;
-		match Encryption::decrypt_message(encryption_key, raw_data_buffer, chunk_number, algorithm) {
+		match Encryption::decrypt_chunk_content(encryption_key, raw_data_buffer, chunk_number, algorithm) {
 			Ok(_) => Ok(true),
 			Err(_) => Ok(false),
 		}

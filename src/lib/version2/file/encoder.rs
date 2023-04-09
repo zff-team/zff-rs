@@ -23,7 +23,6 @@ use crate::{
 	Encryption,
 	ZffError,
 	ZffErrorKind,
-	DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_HEADER,
 	DEFAULT_FOOTER_VERSION_FILE_FOOTER,
@@ -155,7 +154,7 @@ impl FileEncoder {
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
-		let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);
+		let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 		let chunk_size = self.main_header.chunk_size();
 
 		let buf = match self.file_type {
@@ -214,10 +213,10 @@ impl FileEncoder {
 					Some(header) => header.algorithm(),
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};	
-				Encryption::encrypt_message(
+				Encryption::encrypt_chunk_content(
 					encryption_key,
 					&compressed_data,
-					chunk_header.chunk_number(),
+					chunk_header.chunk_number,
 					encryption_algorithm)?
 			},
 			None => compressed_data
@@ -226,11 +225,11 @@ impl FileEncoder {
 		let mut chunk = Vec::new();
 
 	    // prepare chunk header:
-		chunk_header.set_chunk_size(chunk_data.len() as u64); 
-		chunk_header.set_crc32(crc32);
-		chunk_header.set_signature(signature);
+		chunk_header.chunk_size = chunk_data.len() as u64; 
+		chunk_header.crc32 = crc32;
+		chunk_header.ed25519_signature = signature;
 		if compression_flag {
-			chunk_header.set_compression_flag()
+			chunk_header.flags.compression = true;
 		}
 
 		chunk.append(&mut chunk_header.encode_directly());

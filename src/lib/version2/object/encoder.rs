@@ -21,7 +21,6 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	Encryption,
-	DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_HEADER,
@@ -233,11 +232,11 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    let (chunked_data, compression_flag) = compress_buffer(buf, self.main_header.chunk_size(), &self.compression_header)?;
 
 	    // prepare chunk header:
-	    let mut chunk_header = ChunkHeader::new_empty(DEFAULT_HEADER_VERSION_CHUNK_HEADER, self.current_chunk_number);  
-	    chunk_header.set_crc32(crc32);
-	    chunk_header.set_signature(signature);
+	    let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);  
+	    chunk_header.crc32= crc32;
+	    chunk_header.ed25519_signature = signature;
 	    if compression_flag {
-			chunk_header.set_compression_flag()
+			chunk_header.flags.compression = true;
 		}
 		let mut chunked_data = match &self.encryption_key {
 			Some(encryption_key) => {
@@ -246,16 +245,16 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
 				
-				Encryption::encrypt_message(
+				Encryption::encrypt_chunk_content(
 					encryption_key,
 					&chunked_data,
-					chunk_header.chunk_number(),
+					chunk_header.chunk_number,
 					encryption_algorithm)?
 			},
 			None => chunked_data,
 		};
 		
-		chunk_header.set_chunk_size(chunked_data.len() as u64);
+		chunk_header.chunk_size = chunked_data.len() as u64;
 		chunk.append(&mut chunk_header.encode_directly());
 		chunk.append(&mut chunked_data);
 		self.current_chunk_number += 1;

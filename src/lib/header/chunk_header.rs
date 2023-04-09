@@ -10,12 +10,15 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
+	ZffError,
+	ZffErrorKind,
 	HEADER_IDENTIFIER_CHUNK_HEADER,
 	ERROR_FLAG_VALUE,
 	COMPRESSION_FLAG_VALUE,
 	SAME_BYTES_FLAG_VALUE,
 	DUPLICATION_FLAG_VALUE,
 	ENCRYPTION_FLAG_VALUE,
+	DEFAULT_HEADER_VERSION_CHUNK_HEADER
 };
 
 #[derive(Debug,Clone,Default)]
@@ -53,9 +56,9 @@ pub struct ChunkHeader {
 
 impl ChunkHeader {
 	/// creates a new empty chunk header with a given chunk number. All other values are set to ```0``` or ```None```.
-	pub fn new_empty(version: u8, chunk_number: u64) -> ChunkHeader {
+	pub fn new_empty(chunk_number: u64) -> ChunkHeader {
 		Self {
-			version,
+			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size: 0,
 			flags: ChunkHeaderFlags::default(),
@@ -65,9 +68,14 @@ impl ChunkHeader {
 	}
 
 	/// creates a new header from the given data.
-	pub fn new(version: u8, chunk_number: u64, chunk_size: u64, flags:ChunkHeaderFlags, crc32: u32, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
+	pub fn new(
+		chunk_number: u64,
+		chunk_size: u64,
+		flags:ChunkHeaderFlags,
+		crc32: u32,
+		ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
 		Self {
-			version,
+			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size,
 			flags,
@@ -121,7 +129,11 @@ impl HeaderCoding for ChunkHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<ChunkHeader> {
 		let mut cursor = Cursor::new(&data);
-		let version = u8::decode_directly(&mut cursor)?;
+		// check if version correspondends to the current version
+		match u8::decode_directly(&mut cursor)? {
+			DEFAULT_HEADER_VERSION_CHUNK_HEADER => (),
+			other_version => return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, other_version.to_string())),
+		};
 		let chunk_number = u64::decode_directly(&mut cursor)?;
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let flags = ChunkHeaderFlags::from(u8::decode_directly(&mut cursor)?);
@@ -133,7 +145,7 @@ impl HeaderCoding for ChunkHeader {
 			ed25519_signature = Some(buffer);
 		}
 
-		Ok(ChunkHeader::new(version, chunk_number, chunk_size, flags, crc32, ed25519_signature))
+		Ok(ChunkHeader::new(chunk_number, chunk_size, flags, crc32, ed25519_signature))
 	}
 }
 
@@ -150,9 +162,9 @@ pub struct EncryptedChunkHeader {
 
 impl EncryptedChunkHeader {
 	/// creates a new empty chunk header with a given chunk number. All other values are set to ```0``` or ```None```.
-	pub fn new_empty(version: u8, chunk_number: u64) -> EncryptedChunkHeader {
+	pub fn new_empty(chunk_number: u64) -> EncryptedChunkHeader {
 		Self {
-			version,
+			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size: 0,
 			flags: ChunkHeaderFlags::default(),
@@ -162,14 +174,14 @@ impl EncryptedChunkHeader {
 	}
 
 	/// creates a new header from the given data.
-	pub fn new(version: u8, 
+	pub fn new(
 		chunk_number: u64, 
 		chunk_size: u64, 
 		flags:ChunkHeaderFlags, 
 		crc32: u32, 
 		ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> EncryptedChunkHeader {
 		Self {
-			version,
+			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size,
 			flags,
@@ -223,7 +235,11 @@ impl HeaderCoding for EncryptedChunkHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<EncryptedChunkHeader> {
 		let mut cursor = Cursor::new(&data);
-		let version = u8::decode_directly(&mut cursor)?;
+		// check if version correspondends to the current version
+		match u8::decode_directly(&mut cursor)? {
+			DEFAULT_HEADER_VERSION_CHUNK_HEADER => (),
+			other_version => return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, other_version.to_string())),
+		};
 		let chunk_number = u64::decode_directly(&mut cursor)?;
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let flags = ChunkHeaderFlags::from(u8::decode_directly(&mut cursor)?);
@@ -235,6 +251,6 @@ impl HeaderCoding for EncryptedChunkHeader {
 			ed25519_signature = Some(buffer);
 		}
 
-		Ok(EncryptedChunkHeader::new(version, chunk_number, chunk_size, flags, crc32, ed25519_signature))
+		Ok(EncryptedChunkHeader::new(chunk_number, chunk_size, flags, crc32, ed25519_signature))
 	}
 }
