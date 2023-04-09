@@ -123,6 +123,8 @@ pub enum ZffErrorKind {
 	Seek,
 	/// Error will be returned, if the operation is not possible because of missing memory capacity.
 	OutOfMemory,
+	/// Error will be returned, if the version of this header or footer is unsupported by this library version.
+	UnsupportedVersion,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -176,6 +178,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::NoChunksLeft => "NoChunksLeft",
 			ZffErrorKind::Seek => "Seek",
 			ZffErrorKind::OutOfMemory => "OutOfMemory",
+			ZffErrorKind::UnsupportedVersion => "UnsupportedVersion",
 		};
 	write!(f, "{}", err_msg)
 	}
