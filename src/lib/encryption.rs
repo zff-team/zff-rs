@@ -59,6 +59,16 @@ pub enum PBEScheme {
 	AES256CBC = 1,
 }
 
+/// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
+#[repr(u8)]
+#[non_exhaustive]
+#[derive(Debug,Clone,Eq,PartialEq)]
+enum MessageType {
+	ChunkData,
+	ChunkHeaderCRC32,
+	ChunkHeaderEd25519,
+}
+
 /// structure contains serveral methods to handle encryption
 pub struct Encryption;
 
@@ -192,7 +202,7 @@ impl Encryption {
 		Ok(encryption_scheme.decrypt(password, plaintext)?)
 	}
 
-	/// method to encrypt a message with a key and and the given chunk number. This method should primary used to encrypt
+	/// method to encrypt a chunk content with a key and and the given chunk number. This method should primary used to encrypt
 	/// the given chunk data (if selected, then **after the compression**).
 	/// Returns a the cipthertext as ```Vec<u8>```.
 	/// # Example
@@ -213,13 +223,79 @@ impl Encryption {
 	/// ```
 	/// # Error
 	/// This method will fail, if the encryption fails.
-	pub fn encrypt_message<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	pub fn encrypt_chunk_content<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
-		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
+	}
+
+	pub fn encrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)
+	}
+
+	pub fn encrypt_chunk_header_ed25519_signature<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)
+	}
+
+	/// method to decrypt a chunk content with a key and and the given chunk number. This method should primary used to decrypt
+	/// the given chunk data (if selected, then **before the decompression**).
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_content<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
+	}
+
+	pub fn decrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)
+	}
+
+	pub fn decrypt_chunk_header_ed25519_signature<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)
+	}
+
+
+
+	fn encrypt_message<K, M, A, T>(key: K, message: M, chunk_no: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+		T: Borrow<MessageType>,
+	{
+		let nonce = match message_type.borrow() {
+			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(chunk_no)?,
+			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(chunk_no)?,
+			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(chunk_no)?,
+		};
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new_from_slice(key.as_ref())?;
@@ -236,18 +312,18 @@ impl Encryption {
 		}
 	}
 
-	/// method to decrypt a message with a key and and the given chunk number. This method should primary used to decrypt
-	/// the given chunk data (if selected, then **before the decompression**).
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_message<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	fn decrypt_message<K, M, A, T>(key: K, message: M, chunk_no: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
+		T: Borrow<MessageType>
 	{
-		let nonce = Encryption::chunk_as_crypto_nonce(chunk_no)?;
+		let nonce = match message_type.borrow() {
+			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(chunk_no)?,
+			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(chunk_no)?,
+			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(chunk_no)?,
+		};
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCMSIV => {
 				let cipher = Aes256GcmSiv::new_from_slice(key.as_ref())?;
@@ -263,6 +339,7 @@ impl Encryption {
 			}
 		}
 	}
+
 
 	/// encrypts the given header with the given nonce.
 	/// This method should primary used to encrypt the given header.
@@ -358,10 +435,34 @@ impl Encryption {
 		nonce
 	}
 
-	fn chunk_as_crypto_nonce(chunk_no: u64) -> Result<Nonce> {
+	/// Method to generate a 96-bit nonce for the chunk content. Will use the chunk number as nonce and fills the
+	/// missing bits with zeros.
+	fn gen_crypto_nonce_chunk_data(chunk_no: u64) -> Result<Nonce> {
 		let mut buffer = vec![];
 		buffer.write_u64::<LittleEndian>(chunk_no)?;
 		buffer.append(&mut vec!(0u8; 4));
+		Ok(*Nonce::from_slice(&buffer))
+	}
+
+	/// Method to generate a 96-bit nonce for the chunk crc32 value. Will use the chunk number as nonce and fills the
+	/// missing bits with zeros - except the last bit (the last bit is set).
+	fn gen_crypto_nonce_chunk_crc32(chunk_no: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(chunk_no)?;
+		buffer.append(&mut vec!(0u8; 4));
+		let buffer_len = buffer.len();
+		buffer[buffer_len - 1] |= 0b00000001;
+		Ok(*Nonce::from_slice(&buffer))
+	}
+
+	/// Method to generate a 96-bit nonce for the chunk ed25519 signature value. Will use the chunk number as nonce and fills the
+	/// missing bits with zeros - except the second to last bit (will be set).
+	fn gen_crypto_nonce_chunk_ed25519_signature(chunk_no: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(chunk_no)?;
+		buffer.append(&mut vec!(0u8; 4));
+		let buffer_len = buffer.len();
+		buffer[buffer_len - 1] |= 0b00000010;
 		Ok(*Nonce::from_slice(&buffer))
 	}
 }
