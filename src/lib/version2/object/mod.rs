@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 // - modules
-mod encoder;
+mod encoder; 
 
 // - re-exports
 pub use encoder::*;
@@ -38,10 +38,10 @@ impl Object {
 	}
 
 	/// Returns the used encryption algorithm of the underlying [ObjectHeader](crate::header::ObjectHeader), if available.
-	pub fn encryption_algorithm(&self) -> Option<&EncryptionAlgorithm> {
+	pub fn encryption_algorithm(&self) -> Option<EncryptionAlgorithm> {
 		match self {
-			Object::Physical(obj) => Some(obj.header().encryption_header()?.algorithm()),
-			Object::Logical(obj) => Some(obj.header().encryption_header()?.algorithm()),
+			Object::Physical(obj) => Some(obj.header().encryption_header.as_ref()?.algorithm().clone()),
+			Object::Logical(obj) => Some(obj.header().encryption_header.as_ref()?.algorithm().clone()),
 		}
 	}
 
@@ -64,16 +64,16 @@ impl Object {
 	/// Returns the object number of this object.
 	pub fn object_number(&self) -> u64 {
 		match self {
-			Object::Physical(obj) => obj.header().object_number(),
-			Object::Logical(obj) => obj.header().object_number(),
+			Object::Physical(obj) => obj.header().object_number,
+			Object::Logical(obj) => obj.header().object_number,
 		}
 	}
 
 	/// Returns the underlying [EncryptionHeader](crate::header::EncryptionHeader), if available.
 	pub fn encryption_header(&self) -> Option<&EncryptionHeader> {
 		match self {
-			Object::Physical(obj) => obj.header().encryption_header(),
-			Object::Logical(obj) => obj.header().encryption_header(),
+			Object::Physical(obj) => obj.header().encryption_header.as_ref(),
+			Object::Logical(obj) => obj.header().encryption_header.as_ref(),
 		}
 	}
 

@@ -1,14 +1,12 @@
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 // identifier: magic bytes
-/// The identifier of the [MainHeader](crate::header::MainHeader).
-pub const HEADER_IDENTIFIER_MAIN_HEADER: u32 = 0x7A66666D;
 /// The identifier of the encrypted variant of the [MainHeader](crate::header::version1::MainHeader).
 pub const HEADER_IDENTIFIER_ENCRYPTED_MAIN_HEADER: u32 = 0x7A666645;
 /// The identifier of the [DescriptionHeader](crate::header::DescriptionHeader).
 pub const HEADER_IDENTIFIER_DESCRIPTION_HEADER: u32 = 0x7A666664;
 /// The identifier of the [SegmentHeader](crate::header::SegmentHeader).
-pub const HEADER_IDENTIFIER_SEGMENT_HEADER: u32 = 0x7A666673;
+pub const HEADER_IDENTIFIER_SEGMENT_HEADER: u32 = 0x7A66666D;
 /// The identifier of the [CompressionHeader](crate::header::CompressionHeader).
 pub const HEADER_IDENTIFIER_COMPRESSION_HEADER: u32 = 0x7A666663;
 /// The identifier of the [PBEHeader](crate::header::PBEHeader).
@@ -25,6 +23,8 @@ pub const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7A666648;
 pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
 /// The identifier of the [FileHeader](crate::header::FileHeader).
 pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
+/// The identifier of the [ChunkMap](crate::header::ChunkMap).
+pub const HEADER_IDENTIFIER_CHUNK_MAP: u32 = 0x7a666678;
 
 pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
@@ -50,6 +50,12 @@ pub(crate) const COMPRESSION_FLAG_VALUE: u8 = 1<<1;
 pub(crate) const SAME_BYTES_FLAG_VALUE: u8 = 1<<2;
 pub(crate) const DUPLICATION_FLAG_VALUE: u8 = 1<<3;
 pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1<<4;
+
+// object header flags
+pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1<<0;
+pub(crate) const SIGN_HASH_FLAG_VALUE: u8 = 1<<1;
+pub(crate) const SIGN_CHUNKS_FLAG_VALUE: u8 = 1<<2;
+pub(crate) const PASSIVE_OBJECT_FLAG_VALUE: u8 = 1<<3;
 
 // - Error messages
 pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE: &str = "Unknown hash type value.";
@@ -124,6 +130,8 @@ pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
 pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
 /// current header version for the [ObjectHeader](crate::header::ObjectHeader).
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 1;
+/// current header version for the [ChunkMap](crate::header::ChunkMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_MAP: u8 = 1;
 
 /// current footer version for the [ObjectFooterPhysical](crate::footer::ObjectFooterPhysical).
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;

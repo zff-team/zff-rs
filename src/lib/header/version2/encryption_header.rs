@@ -21,6 +21,21 @@ use crate::{
 	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
 };
 
+/// This struct could be used to manage the encryption information while creating a zff container
+pub struct EncryptionInformation {
+	pub encryption_key: Vec<u8>,
+	pub algorithm: EncryptionAlgorithm,
+}
+
+impl EncryptionInformation {
+	pub fn new(key: Vec<u8>, algorithm: EncryptionAlgorithm) -> Self {
+		Self {
+			encryption_key: key,
+			algorithm
+		}
+	}
+}
+
 /// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
 /// The encryption header is the only optional header part of the main header
 /// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
@@ -33,7 +48,6 @@ pub struct EncryptionHeader {
 	pbe_header: PBEHeader,
 	algorithm: EncryptionAlgorithm,
 	encrypted_encryption_key: Vec<u8>,
-	encrypted_header_nonce: [u8; 12],
 }
 
 impl EncryptionHeader {
@@ -43,14 +57,12 @@ impl EncryptionHeader {
 		pbe_header: PBEHeader,
 		algorithm: EncryptionAlgorithm,
 		encrypted_encryption_key: Vec<u8>, //encrypted with set password
-		encrypted_header_nonce: [u8; 12], //used for header encryption
 		) -> EncryptionHeader {
 		Self {
 			version,
 			pbe_header,
 			algorithm,
 			encrypted_encryption_key,
-			encrypted_header_nonce
 		}
 	}
 
@@ -62,11 +74,6 @@ impl EncryptionHeader {
 	/// returns a reference to the inner PBE header.
 	pub fn pbe_header(&self) -> &PBEHeader {
 		&self.pbe_header
-	}
-
-	/// returns the nonce, used for header encryption. Note: this nonce is only used for the optionally header encryption.
-	pub fn nonce(&self) -> &[u8; 12] {
-		&self.encrypted_header_nonce
 	}
 
 	/// tries to decrypt the encryption key.
@@ -144,7 +151,6 @@ impl HeaderCoding for EncryptionHeader {
 		vec.append(&mut self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
 		vec.append(&mut self.encrypted_encryption_key.encode_directly());
-		vec.append(&mut self.encrypted_header_nonce.encode_directly());
 		vec
 	}
 
@@ -153,15 +159,13 @@ impl HeaderCoding for EncryptionHeader {
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let pbe_header = PBEHeader::decode_directly(&mut cursor)?;
 		let encryption_algorithm = match u8::decode_directly(&mut cursor)? {
-			0 => EncryptionAlgorithm::AES128GCMSIV,
-			1 => EncryptionAlgorithm::AES256GCMSIV,
+			0 => EncryptionAlgorithm::AES128GCM,
+			1 => EncryptionAlgorithm::AES256GCM,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
 		};
 		let key_length = u64::decode_directly(&mut cursor)? as usize;
 		let mut encryption_key = vec![0u8; key_length];
 		cursor.read_exact(&mut encryption_key)?;
-		let mut nonce = [0; 12];
-		cursor.read_exact(&mut nonce)?;
-		Ok(EncryptionHeader::new(header_version, pbe_header, encryption_algorithm, encryption_key, nonce))
+		Ok(EncryptionHeader::new(header_version, pbe_header, encryption_algorithm, encryption_key))
 	}
 }

@@ -21,6 +21,7 @@ pub struct MainFooter {
 	number_of_segments: u64,
 	object_header: HashMap<u64, u64>, // <object number, segment number>
 	object_footer: HashMap<u64, u64>, // <object number, segment number>
+	chunk_maps: HashMap<u64, u64>, //<highest chunk number, map offset>
 	description_notes: Option<String>,
 	/// offset in the current segment, where the footer starts.
 	footer_offset: u64,
@@ -28,12 +29,20 @@ pub struct MainFooter {
 
 impl MainFooter {
 	/// creates a new MainFooter with a given values.
-	pub fn new(version: u8, number_of_segments: u64, object_header: HashMap<u64, u64>, object_footer: HashMap<u64, u64>, description_notes: Option<String>, footer_offset: u64) -> MainFooter {
+	pub fn new(
+		version: u8,
+		number_of_segments: u64,
+		object_header: HashMap<u64, u64>,
+		object_footer: HashMap<u64, u64>,
+		chunk_maps: HashMap<u64, u64>,
+		description_notes: Option<String>,
+		footer_offset: u64) -> MainFooter {
 		Self {
 			version,
 			number_of_segments,
 			object_header,
 			object_footer,
+			chunk_maps,
 			description_notes,
 			footer_offset,
 		}
@@ -102,6 +111,7 @@ impl HeaderCoding for MainFooter {
 		vec.append(&mut self.number_of_segments.encode_directly());
 		vec.append(&mut self.object_header.encode_directly());
 		vec.append(&mut self.object_footer.encode_directly());
+		vec.append(&mut self.chunk_maps.encode_directly());
 		if let Some(description_notes) = &self.description_notes {
 			vec.append(&mut description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
 		};
@@ -116,6 +126,7 @@ impl HeaderCoding for MainFooter {
 		let number_of_segments = u64::decode_directly(&mut cursor)?;
 		let object_header = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let object_footer = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_maps = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let position = cursor.position();
 		let description_notes = match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
 			Ok(value) => Some(value),
@@ -128,6 +139,13 @@ impl HeaderCoding for MainFooter {
 			},
 		};
 		let footer_offset = u64::decode_directly(&mut cursor)?;
-		Ok(MainFooter::new(footer_version, number_of_segments, object_header, object_footer, description_notes, footer_offset))
+		Ok(MainFooter::new(
+			footer_version, 
+			number_of_segments, 
+			object_header, 
+			object_footer, 
+			chunk_maps,
+			description_notes, 
+			footer_offset))
 	}
 }

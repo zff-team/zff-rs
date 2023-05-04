@@ -124,8 +124,8 @@ impl HeaderCoding for EncryptionHeader {
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let pbe_header = PBEHeader::decode_directly(&mut cursor)?;
 		let encryption_algorithm = match u8::decode_directly(&mut cursor)? {
-			0 => EncryptionAlgorithm::AES128GCMSIV,
-			1 => EncryptionAlgorithm::AES256GCMSIV,
+			0 => EncryptionAlgorithm::AES128GCM,
+			1 => EncryptionAlgorithm::AES256GCM,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
 		};
 		let key_length = u64::decode_directly(&mut cursor)? as usize;

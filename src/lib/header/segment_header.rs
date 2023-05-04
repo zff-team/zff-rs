@@ -20,23 +20,17 @@ pub struct SegmentHeader {
 	version: u8,
 	unique_identifier: i64,
 	segment_number: u64,
+	chunkmap_size: u64,
 }
 
 impl SegmentHeader {
-	/// returns a new empty [SegmentHeader]
-	pub fn new_empty(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
-		Self {
-			version,
-			unique_identifier,
-			segment_number,
-		}
-	}
 	/// returns a new [SegmentHeader] with the given values.
-	pub fn new(version: u8, unique_identifier: i64, segment_number: u64) -> SegmentHeader {
+	pub fn new(version: u8, unique_identifier: i64, segment_number: u64, chunkmap_size: u64) -> SegmentHeader {
 		Self {
 			version,
 			unique_identifier,
 			segment_number,
+			chunkmap_size,
 		}
 	}
 
@@ -57,6 +51,7 @@ impl SegmentHeader {
 			version: self.version,
 			unique_identifier: self.unique_identifier,
 			segment_number: self.segment_number+1,
+			chunkmap_size: self.chunkmap_size
 		}
 	}
 }
@@ -78,6 +73,7 @@ impl HeaderCoding for SegmentHeader {
 		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());
 		vec.append(&mut self.segment_number.encode_directly());
+		vec.append(&mut self.chunkmap_size.encode_directly());
 		vec
 	}
 
@@ -87,7 +83,8 @@ impl HeaderCoding for SegmentHeader {
 		let version = u8::decode_directly(&mut cursor)?;
 		let unique_identifier = i64::decode_directly(&mut cursor)?;
 		let segment_number = u64::decode_directly(&mut cursor)?;
-		Ok(SegmentHeader::new(version, unique_identifier, segment_number))
+		let chunkmap_size = u64::decode_directly(&mut cursor)?;
+		Ok(SegmentHeader::new(version, unique_identifier, segment_number, chunkmap_size))
 	}
 }
 

@@ -1,8 +1,8 @@
 // - modules
-mod encoder;
+mod encoder; //TODO
 
 // - re-exports
-pub use encoder::*;
+pub use encoder::*; //TODO
 
 // - internal
 use crate::{
@@ -41,12 +41,12 @@ impl File {
 
 	/// returns the parent file number
 	pub fn parent(&self) -> u64 {
-		self.header.parent_file_number()
+		self.header.parent_file_number
 	}
 
 	/// returns the [FileType].
 	pub fn filetype(&self) -> FileType {
-		self.header.file_type()
+		self.header.file_type.clone()
 	}
 
 	/// returns the position of the [Reader](std::io::Read) used for this [File].

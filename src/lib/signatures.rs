@@ -1,6 +1,3 @@
-// - STD
-use std::fmt;
-
 // - external
 use ed25519_dalek::{
 	Keypair,
@@ -36,7 +33,7 @@ impl Signature {
 	/// returns a keypair, parsed from the input data (formatted as base64).\
 	/// Input data can be a secret key (32 bytes) or a secret/public keypair (64 bytes).
 	pub fn new_keypair_from_base64<K: Into<String>>(key: K) -> Result<Keypair> {
-		let key = base64::decode(&key.into())?;
+		let key = base64::decode(key.into())?;
 		if key.len() == KEYPAIR_LENGTH {
 			Ok(Keypair::from_bytes(&key)?)
 		} else if key.len() == SECRET_KEY_LENGTH {
@@ -70,27 +67,5 @@ impl Signature {
 	/// calculates a signature of the given bytes with the given Keypair.
 	pub fn calculate_signature(signature_keypair: Option<&Keypair>, buffer: &[u8]) -> Option<[u8; ED25519_DALEK_SIGNATURE_LEN]> {
 		signature_keypair.as_ref().map(|keypair| Signature::sign(keypair, buffer))
-	}
-}
-
-/// The signature flags used in zff.
-#[derive(Debug,Clone)]
-pub enum SignatureFlag {
-	/// No signature method was used.
-	NoSignatures = 0,
-	/// The hash values will be signed only.
-	HashValueSignatureOnly = 1,
-	/// Every individual chunk and the hash values will be signed.
-	PerChunkSignatures = 2,
-}
-
-impl fmt::Display for SignatureFlag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let msg = match self {
-			SignatureFlag::NoSignatures => "NoSignatures",
-			SignatureFlag::HashValueSignatureOnly => "HashValueSignatureOnly",
-			SignatureFlag::PerChunkSignatures => "PerChunkSignatures",
-		};
-		write!(f, "{}", msg)
 	}
 }

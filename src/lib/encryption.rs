@@ -4,6 +4,8 @@ use std::borrow::Borrow;
 // - internal
 use crate::{
 	Result,
+	ZffError,
+	ZffErrorKind,
 };
 
 // - external
@@ -19,6 +21,7 @@ use aes_gcm::{
 use chacha20poly1305::{
     ChaCha20Poly1305
 };
+use ed25519_dalek::SIGNATURE_LENGTH;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
 use typenum::consts::U12;
@@ -71,6 +74,10 @@ enum MessageType {
 	ChunkData,
 	ChunkHeaderCRC32,
 	ChunkHeaderEd25519,
+	FileHeader,
+	FileFooter,
+	ObjectHeader,
+	ObjectFooter,
 }
 
 /// structure contains serveral methods to handle encryption
@@ -254,6 +261,42 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)
 	}
 
+	pub fn encrypt_file_header<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
+	}
+
+	pub fn encrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileFooter)
+	}
+
+	pub fn encrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
+	}
+
+	pub fn encrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
+	}
+
 	/// method to decrypt a chunk content with a key and and the given chunk number. This method should primary used to decrypt
 	/// the given chunk data (if selected, then **before the decompression**).
 	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
@@ -268,27 +311,62 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
 	}
 
-	pub fn decrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	pub fn decrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<u32>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)
+		let bytes: [u8; 4] = match Encryption::decrypt_message(
+			key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)?.try_into() {
+			Ok(bytes) => bytes,
+			Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "")), //TODO: better error handling
+		};
+		Ok(u32::from_le_bytes(bytes))
 	}
 
-	pub fn decrypt_chunk_header_ed25519_signature<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	pub fn decrypt_chunk_header_ed25519_signature<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<[u8; SIGNATURE_LENGTH]>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)
+		let bytes: [u8; SIGNATURE_LENGTH] = match Encryption::decrypt_message(
+			key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)?.try_into() {
+			Ok(bytes) => bytes,
+			Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "")), //TODO: better error handling
+		};
+		Ok(bytes)
 	}
 
+	pub fn decrypt_file_header<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
+	}
 
+	pub fn decrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
+	}
 
-	fn encrypt_message<K, M, A, T>(key: K, message: M, chunk_no: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
+	pub fn decrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
+	}
+
+	fn encrypt_message<K, M, A, T>(key: K, message: M, nonce_value: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
@@ -296,9 +374,13 @@ impl Encryption {
 		T: Borrow<MessageType>,
 	{
 		let nonce = match message_type.borrow() {
-			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(chunk_no)?,
-			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(chunk_no)?,
-			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(chunk_no)?,
+			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
+			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(nonce_value)?,
+			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(nonce_value)?,
+			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
+			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
+			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
+			MessageType::ObjectFooter => Encryption::gen_crypto_nonce_object_footer(nonce_value)?,
 		};
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
@@ -316,7 +398,7 @@ impl Encryption {
 		}
 	}
 
-	fn decrypt_message<K, M, A, T>(key: K, message: M, chunk_no: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
+	fn decrypt_message<K, M, A, T>(key: K, message: M, nonce_value: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
@@ -324,9 +406,13 @@ impl Encryption {
 		T: Borrow<MessageType>
 	{
 		let nonce = match message_type.borrow() {
-			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(chunk_no)?,
-			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(chunk_no)?,
-			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(chunk_no)?,
+			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
+			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(nonce_value)?,
+			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(nonce_value)?,
+			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
+			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
+			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
+			MessageType::ObjectFooter => Encryption::gen_crypto_nonce_object_footer(nonce_value)?,
 		};
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
@@ -467,6 +553,50 @@ impl Encryption {
 		buffer.append(&mut vec!(0u8; 4));
 		let buffer_len = buffer.len();
 		buffer[buffer_len - 1] |= 0b00000010;
+		Ok(*Nonce::from_slice(&buffer))
+	}
+
+	/// Method to generate a 96-bit nonce for the file header. Will use the file number as nonce and fills the
+	/// missing bits with zeros - except the third to last bit (will be set).
+	fn gen_crypto_nonce_file_header(file_number: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(file_number)?;
+		buffer.append(&mut vec!(0u8; 4));
+		let buffer_len = buffer.len();
+		buffer[buffer_len - 1] |= 0b00000100;
+		Ok(*Nonce::from_slice(&buffer))
+	}
+
+	/// Method to generate a 96-bit nonce for the file footer. Will use the file number as nonce and fills the
+	/// missing bits with zeros - except the fourth to last bit (will be set).
+	fn gen_crypto_nonce_file_footer(file_number: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(file_number)?;
+		buffer.append(&mut vec!(0u8; 4));
+		let buffer_len = buffer.len();
+		buffer[buffer_len - 1] |= 0b00001000;
+		Ok(*Nonce::from_slice(&buffer))
+	}
+
+	/// Method to generate a 96-bit nonce for the object header. Will use the object number as nonce and fills the
+	/// missing bits with zeros - except the fourth to last bit (will be set).
+	fn gen_crypto_nonce_object_header(object_number: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(object_number)?;
+		buffer.append(&mut vec!(0u8; 4));
+		let buffer_len = buffer.len();
+		buffer[buffer_len - 1] |= 0b00010000;
+		Ok(*Nonce::from_slice(&buffer))
+	}
+
+	/// Method to generate a 96-bit nonce for the object footer. Will use the object number as nonce and fills the
+	/// missing bits with zeros - except the fourth to last bit (will be set).
+	fn gen_crypto_nonce_object_footer(object_number: u64) -> Result<Nonce> {
+		let mut buffer = vec![];
+		buffer.write_u64::<LittleEndian>(object_number)?;
+		buffer.append(&mut vec!(0u8; 4));
+		let buffer_len = buffer.len();
+		buffer[buffer_len - 1] |= 0b00100000;
 		Ok(*Nonce::from_slice(&buffer))
 	}
 }

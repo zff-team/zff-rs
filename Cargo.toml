@@ -1,6 +1,6 @@
 [package]
 name = "zff"
-version = "2.0.1"
+version = "3.0.0-alpha"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2021"
 rust-version = "1.60"
@@ -30,8 +30,9 @@ itertools = "0.10.4"
 #encryption
 pkcs5 = { version = "0.5.0", features = [ "pbes2", "alloc", "scrypt" ] }
 scrypt = "0.10.0"
-aes-gcm-siv = "0.11.1"
+aes-gcm = "0.10.1"
 chacha20poly1305 = "0.10.1"
+typenum = "1.16.0"
 #compression
 zstd = "0.11.1"
 lz4_flex = "0.9.2"

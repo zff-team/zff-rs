@@ -1,3 +1,5 @@
+// - modules
+
 // - STD
 use std::io::{Read, copy as io_copy};
 
@@ -8,7 +10,6 @@ use crate::{
     ZffErrorKind,
     CompressionAlgorithm,
     header::{CompressionHeader},
-
 };
 
 // - external

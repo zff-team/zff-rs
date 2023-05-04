@@ -7,7 +7,7 @@ use std::time::{SystemTime};
 
 // - internal
 use crate::{
-	header::{FileHeader, FileType, MainHeader, ChunkHeader, HashValue, HashHeader, CompressionHeader, EncryptionHeader},
+	header::{FileHeader, FileType, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader},
 	footer::{FileFooter},
 };
 use crate::{
@@ -35,21 +35,20 @@ use time::{OffsetDateTime};
 
 /// The [FileEncoder] can be used to encode a [crate::file::File].
 pub struct FileEncoder {
-	/// An encoded [FileHeader].
-	encoded_header: Vec<u8>,
+	/// The appropriate [FileHeader].
+	file_header: FileHeader,
 	/// remaining bytes of the encoded header to read. This is only (internally) used, if you will use the [Read] implementation of [FileEncoder].
 	encoded_header_remaining_bytes: usize,
+	/// The appropriate [ObjectHeader].
+	object_header: ObjectHeader,
 	/// The underlying [File](std::fs::File) object to read from.
 	underlying_file: File,
 	/// optinal signature key, to sign the data with the given keypair
 	signature_key: Option<Keypair>,
-	/// optinal encryption key, to encrypt the data with the given key
-	encryption_key: Option<Vec<u8>>,
+	/// optional encryption information, to encrypt the data with the given key and algorithm
+	encryption_information: Option<EncryptionInformation>,
 	/// HashMap for the Hasher objects to calculate the cryptographically hash values for this file. 
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
-	main_header: MainHeader,
-	compression_header: CompressionHeader,
-	encryption_header: Option<EncryptionHeader>,
 	/// The Type of this file
 	file_type: FileType,
 	/// The first chunk number for this file.
@@ -77,31 +76,22 @@ impl FileEncoder {
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		file_header: FileHeader,
+		object_header: ObjectHeader,
 		file: File,
 		hash_types: Vec<HashType>,
-		encryption_key: Option<Vec<u8>>,
+		encryption_information: Option<EncryptionInformation>,
 		signature_key: Option<Keypair>,
-		main_header: MainHeader,
-		compression_header: CompressionHeader,
-		encryption_header: Option<EncryptionHeader>,
 		current_chunk_number: u64,
 		symlink_real_path: Option<PathBuf>,
-		header_encryption: bool,
 		hard_link_filenumber: Option<u64>,
 		directory_children: Vec<u64>) -> Result<FileEncoder> {
+
+		let encoded_header = if let Some(enc_info) = &encryption_information {
+	    	file_header.encode_encrypted_header_directly(enc_info)?
+	    } else {
+	    	file_header.encode_directly()
+	    };
 		
-		let encoded_header = if header_encryption {
-			if let Some(ref encryption_key) = encryption_key {
-				match encryption_header {
-					Some(ref header) => file_header.encode_encrypted_header_directly(encryption_key, header.clone())?,
-					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-				}
-			} else {
-				return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ""));
-			}
-		} else {
-			file_header.encode_directly()
-		};
 		let mut hasher_map = HashMap::new();
 	    for h_type in hash_types {
 	        let hasher = Hash::new_hasher(&h_type);
@@ -112,17 +102,16 @@ impl FileEncoder {
 	    } else {
 	    	directory_children.encode_directly()
 	    };
+	    let file_type = file_header.file_type.clone();
 		Ok(Self {
 			encoded_header_remaining_bytes: encoded_header.len(),
-			encoded_header,
+			file_header,
+			object_header,
 			underlying_file: file,
 			hasher_map,
-			encryption_key,
+			encryption_information,
 			signature_key,
-			main_header,
-			compression_header,
-			encryption_header,
-			file_type: file_header.file_type(),
+			file_type,
 			initial_chunk_number: current_chunk_number,
 			current_chunk_number,
 			read_bytes_underlying_data: 0,
@@ -149,13 +138,18 @@ impl FileEncoder {
 		if self.acquisition_start == 0 {
 			self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		}
-		self.encoded_header.clone()
+		if let Some(enc_info) = &self.encryption_information {
+			//unwrap should be safe here, because we have already testet this before.
+	    	self.file_header.encode_encrypted_header_directly(enc_info).unwrap()
+	    } else {
+	    	self.file_header.encode_directly()
+	    }
 	}
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
 	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
 		let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
-		let chunk_size = self.main_header.chunk_size();
+		let chunk_size = self.object_header.chunk_size as usize;
 
 		let buf = match self.file_type {
 			FileType::Directory => {
@@ -195,6 +189,10 @@ impl FileEncoder {
 				self.read_bytes_underlying_data += read_bytes;
 				buf
 			},
+			FileType::SpecialFile => {
+				todo!()
+				//TODO!
+			}
 		};
 		if buf.is_empty() {
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
@@ -204,20 +202,19 @@ impl FileEncoder {
 		let crc32 = calculate_crc32(&buf);
 		let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
 
-		let (compressed_data, inner_compression_flag) = compress_buffer(buf, self.main_header.chunk_size(), &self.compression_header)?;
+		let (compressed_data, inner_compression_flag) = compress_buffer(
+			buf, 
+			self.object_header.chunk_size as usize, 
+			&self.object_header.compression_header)?;
 		let compression_flag = inner_compression_flag;
 
-		let mut chunk_data = match &self.encryption_key {
-			Some(encryption_key) => {
-				let encryption_algorithm = match &self.encryption_header {
-					Some(header) => header.algorithm(),
-					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-				};	
+		let mut chunk_data = match &self.encryption_information {
+			Some(encryption_information) => {	
 				Encryption::encrypt_chunk_content(
-					encryption_key,
+					&encryption_information.encryption_key,
 					&compressed_data,
 					chunk_header.chunk_number,
-					encryption_algorithm)?
+					&encryption_information.algorithm)?
 			},
 			None => compressed_data
 		};
@@ -240,7 +237,7 @@ impl FileEncoder {
 
 	/// returns the appropriate encoded [FileFooter].
 	/// A call of this method finalizes the underlying hashers. You should be care.
-	pub fn get_encoded_footer(&mut self) -> Vec<u8> {
+	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
 		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
 		for (hash_type, hasher) in self.hasher_map.clone() {
@@ -252,6 +249,7 @@ impl FileEncoder {
 		let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
 		let footer = FileFooter::new(
 			DEFAULT_FOOTER_VERSION_FILE_FOOTER,
+			self.file_header.file_number,
 			self.acquisition_start,
 			self.acquisition_end,
 			hash_header,
@@ -259,7 +257,11 @@ impl FileEncoder {
 			self.current_chunk_number - self.initial_chunk_number,
 			self.read_bytes_underlying_data,
 			);
-		footer.encode_directly()
+		if let Some(enc_info) = &self.encryption_information {
+	    	footer.encrypt_directly(enc_info)
+	    } else {
+	    	Ok(footer.encode_directly())
+	    }
 	}
 }
 
@@ -271,7 +273,7 @@ impl Read for FileEncoder {
 		//read encoded header, if there are remaining bytes to read.
         if let remaining_bytes @ 1.. = self.encoded_header_remaining_bytes {
             let mut inner_read_bytes = 0;
-            let mut inner_cursor = Cursor::new(&self.encoded_header);
+            let mut inner_cursor = Cursor::new(self.get_encoded_header());
             inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
             inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
             self.encoded_header_remaining_bytes -= inner_read_bytes;
@@ -279,7 +281,10 @@ impl Read for FileEncoder {
         }
         loop {
         	if read_bytes == buf.len() {
-        		self.encoded_footer = self.get_encoded_footer();
+        		self.encoded_footer = match self.get_encoded_footer() {
+        			Ok(footer) => footer,
+        			Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        		};
         		self.encoded_footer_remaining_bytes = self.encoded_footer.len();
 				break;
 			};

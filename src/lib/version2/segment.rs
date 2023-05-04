@@ -1,4 +1,5 @@
 // - STD
+use core::borrow::Borrow;
 use std::io::{Read, Seek, SeekFrom};
 
 // - internal
@@ -10,13 +11,14 @@ use crate::{
 	ZffErrorKind,
 	Chunk,
 	Encryption,
-	EncryptionAlgorithm,
-	Object,
+	CompressionAlgorithm,
 	decompress_buffer,
-	header::{SegmentHeader, ObjectHeader, ChunkHeader},
-	footer::{SegmentFooter, ObjectFooter},
+	header::{SegmentHeader, ObjectHeader, ChunkHeader, EncryptedChunkHeader, EncryptionInformation},
+	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
 	ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT,
 	ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT,
+	DEFAULT_LENGTH_HEADER_IDENTIFIER,
+	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 };
 
 /// Represents a full [Segment], containing a [crate::header::SegmentHeader],
@@ -73,63 +75,71 @@ impl<R: Read + Seek> Segment<R> {
 
 	/// Returns the raw chunk, if so present, then also encrypted and/or compressed.
 	pub fn raw_chunk(&mut self, chunk_number: u64) -> Result<Chunk> {
-		let chunk_offset = match self.footer.chunk_offsets().get(&chunk_number) {
-			Some(offset) => offset,
-			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
-		};
-		
-		self.data.seek(SeekFrom::Start(*chunk_offset))?;
-
+		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
+		self.data.seek(SeekFrom::Start(chunk_offset))?;
 		Chunk::new_from_reader(&mut self.data)
 	}
 
-	/// Returns the chunked data, uncompressed and unencrypted
-	pub fn chunk_data(&mut self, chunk_number: u64, object: &Object) -> Result<Vec<u8>> {
-		let chunk_offset = match self.footer().chunk_offsets().get(&chunk_number) {
-			Some(offset) => *offset,
-			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
+	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
+		let first_map_chunk_number = self.footer.chunk_map_table
+								 .range(..chunk_number).next_back()
+								 .map(|(k, _)| *k + 1)
+								 .unwrap_or(self.footer.first_chunk_number);
+		let chunk_map_offset = match self.footer.chunk_map_table.range((chunk_number + 1)..).next().map(|(_, offset)| *offset) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string())),
 		};
-		self.data.seek(SeekFrom::Start(chunk_offset))?;
-		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
-		let chunk_size = chunk_header.chunk_size;
-		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
-		self.data.read_exact(&mut raw_data_buffer)?;
-		let raw_data_buffer = match object.encryption_algorithm() {
-			Some(algo) => {
-				match object.encryption_key() {
-					Some(encryption_key) => {
-						Encryption::decrypt_chunk_content(encryption_key, raw_data_buffer, chunk_number, algo)?
-					},
-					None => raw_data_buffer,
-				}
-			},
-			None => raw_data_buffer,
-		};
-		if chunk_header.flags.compression {
-			let compression_algorithm = object.header().compression_header().algorithm().clone();
-			decompress_buffer(&raw_data_buffer, compression_algorithm)
-		} else {
-			Ok(raw_data_buffer)
-		}
+		
+		// skips the chunk map header and the other chunk entries.
+		let seek_offset = DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + 
+						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 +
+						  1 + // skip the ChunkMap header version
+						  ((chunk_number - first_map_chunk_number) * 2 * 8) +
+						  chunk_map_offset +
+						  8; // skip the chunk number itself and go directly to the appropiate offset;
+
+		//go to the appropriate chunk map.
+		self.data.seek(SeekFrom::Start(seek_offset))?;
+		u64::decode_directly(&mut self.data)
 	}
 
-	/// Returns true if the chunk with the appropriate chunk numer is decryptable with the given encryption/decryption key.
-	/// Returns false if not.
-	pub fn test_decrypt_chunk(&mut self, chunk_number: u64, encryption_key: Vec<u8>, algorithm: &EncryptionAlgorithm) -> Result<bool> {
-		let chunk_offset = match self.footer().chunk_offsets().get(&chunk_number) {
-			Some(offset) => *offset,
-			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string()))
-		};
+	/// Returns the chunked data, uncompressed and unencrypted
+	pub fn chunk_data<E, C>(&mut self, chunk_number: u64, encryption_information: Option<E>, compression_algorithm: C) -> Result<Vec<u8>>
+	where
+		E: Borrow<EncryptionInformation>,
+		C: Borrow<CompressionAlgorithm>,
+	{
+		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
-		let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
-		let chunk_size = chunk_header.chunk_size;
-		self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
+
+		let (compression_flag, chunk_size) = if encryption_information.is_some() {
+			let chunk_header = EncryptedChunkHeader::decode_directly(&mut self.data)?;
+			let compression_flag = chunk_header.flags.compression;
+			let chunk_size = chunk_header.chunk_size;
+			self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
+			(compression_flag, chunk_size)
+		} else {
+			let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
+			let compression_flag = chunk_header.flags.compression;
+			let chunk_size = chunk_header.chunk_size;
+			self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
+			(compression_flag, chunk_size)
+		};
 		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
 		self.data.read_exact(&mut raw_data_buffer)?;
-		match Encryption::decrypt_chunk_content(encryption_key, raw_data_buffer, chunk_number, algorithm) {
-			Ok(_) => Ok(true),
-			Err(_) => Ok(false),
+		
+		if let Some(enc_info) = encryption_information {
+			let enc_info = enc_info.borrow();
+			raw_data_buffer = Encryption::decrypt_chunk_content(
+				&enc_info.encryption_key, 
+				raw_data_buffer, 
+				chunk_number, 
+				&enc_info.algorithm)?;
+		}
+		if compression_flag {
+			decompress_buffer(&raw_data_buffer, compression_algorithm.borrow())
+		} else {
+			Ok(raw_data_buffer)
 		}
 	}
 
@@ -144,7 +154,7 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(object_header)
 	}
 
-	/// Returns the [crate::header::ObjectHeader] of the given object number (encrypts the encrypted object header on-the-fly with the given decryption password).
+	/// Returns the [crate::header::ObjectHeader] of the given object number (decrypts the encrypted object header on-the-fly with the given decryption password).
 	/// # Error
 	/// Fails if the [crate::header::ObjectHeader] could not be found in this [Segment] or/and if the decryption password is wrong.
 	pub fn read_encrypted_object_header<P>(&mut self, object_number: u64, decryption_password: P) -> Result<ObjectHeader>
@@ -168,6 +178,23 @@ impl<R: Read + Seek> Segment<R> {
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 		ObjectFooter::decode_directly(&mut self.data)
+	}
+
+	/// Returns the [crate::header::ObjectFooter] of the given object number (decrypts the encrypted object footer on-the-fly with the given decryption password).
+	/// # Error
+	/// Fails if the [crate::header::ObjectFooter] could not be found in this [Segment] or/and if the decryption password is wrong.
+	pub fn read_encrypted_object_footer<E>(&mut self, object_number: u64, encryption_information: E) -> Result<ObjectFooter>
+	where
+		E: Borrow<EncryptionInformation>,
+	{
+		let offset = match self.footer.object_footer_offsets().get(&object_number) {
+				Some(value) => value,
+				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
+		};
+		self.data.seek(SeekFrom::Start(*offset))?;
+		let encrypted_object_footer = EncryptedObjectFooter::decode_directly(&mut self.data)?;
+		let enc_info = encryption_information.borrow();
+		encrypted_object_footer.decrypt_and_consume(&enc_info.encryption_key, &enc_info.algorithm)
 	}
 }
 

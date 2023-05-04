@@ -9,7 +9,7 @@ use std::collections::TryReserveError;
 // - external
 use pkcs5::Error as PKCS5CryptoError;
 use scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
-use aes_gcm_siv::aead::Error as EncryptionError;
+use aes_gcm::aead::Error as EncryptionError;
 use digest::InvalidLength;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
@@ -125,6 +125,8 @@ pub enum ZffErrorKind {
 	OutOfMemory,
 	/// Error will be returned, if the version of this header or footer is unsupported by this library version.
 	UnsupportedVersion,
+	/// No Encryption detected.
+	NoEncryptionDetected,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -179,6 +181,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::Seek => "Seek",
 			ZffErrorKind::OutOfMemory => "OutOfMemory",
 			ZffErrorKind::UnsupportedVersion => "UnsupportedVersion",
+			ZffErrorKind::NoEncryptionDetected => "NoEncryptionDetected",
 		};
 	write!(f, "{}", err_msg)
 	}

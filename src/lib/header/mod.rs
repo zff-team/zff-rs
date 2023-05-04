@@ -5,13 +5,13 @@ pub mod version1;
 pub mod version2;
 
 mod chunk_header;
+mod segment_header;
+mod object_header;
+mod file_header;
+mod chunk_map;
 
 // - re-export
-pub use version2::main_header::*;
 pub use version2::description_header::*;
-pub use version2::file_header::*;
-pub use version2::object_header::*;
-pub use version2::segment_header::*;
 pub use version2::hash_header::*;
 pub use version2::encryption_header::*;
 pub use version2::pbe_header::*;
@@ -19,3 +19,7 @@ pub use version2::pbe_header::*;
 pub use version1::compression_header::*;
 
 pub use chunk_header::*;
+pub use segment_header::*;
+pub use object_header::*;
+pub use file_header::*;
+pub use chunk_map::*;
