@@ -1,4 +1,5 @@
 // - STD
+use std::path::Path;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
 
@@ -11,9 +12,7 @@ use std::time::{SystemTime};
 // - internal
 use crate::{
 	Result,
-	buffer_chunk,
-	calculate_crc32,
-	compress_buffer,
+	io::{buffer_chunk, calculate_crc32, compress_buffer},
 	HeaderCoding,
 	HashType,
 	Hash,
@@ -113,9 +112,9 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	encoded_footer: Vec<u8>,
 	encoded_footer_remaining_bytes: usize,
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
-	encryption_key: Option<Vec<u8>>,
 	signature_key: Option<Keypair>,
 	has_hash_signatures: bool,
+	encryption_key: Option<Vec<u8>>,
 	acquisition_start: u64,
 	acquisition_end: u64,
 }
@@ -126,7 +125,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		obj_header: ObjectHeader,
 		reader: R,
 		hash_types: Vec<HashType>,
-		encryption_key: Option<Vec<u8>>,
 		signature_key_bytes: Option<Vec<u8>>,
 		current_chunk_number: u64) -> Result<PhysicalObjectEncoder<R>> {
 		
@@ -135,10 +133,13 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    	None => None
 	    };
 
-		let encoded_header = if let Some(encryption_key) = &encryption_key {
-	    	obj_header.encode_encrypted_header_directly(encryption_key)?
+		let (encoded_header, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
+			match encryption_header.get_encryption_key() {
+				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, obj_header.object_number.to_string()))
+			}
 	    } else {
-	    	obj_header.encode_directly()
+	    	(obj_header.encode_directly(), None)
 	    };
 
 		let mut hasher_map = HashMap::new();
@@ -366,6 +367,7 @@ pub struct LogicalObjectEncoder {
 	hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
 	directory_children: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
+	unaccessable_files: Vec<PathBuf>
 }
 
 impl LogicalObjectEncoder {
@@ -383,6 +385,13 @@ impl LogicalObjectEncoder {
 	    }
 	}
 
+	pub fn add_unaccessable_file<F>(&mut self, file_path: F)
+	where
+		F: AsRef<Path>
+	{
+		self.unaccessable_files.push(file_path.as_ref().to_path_buf())
+	}
+
 	/// Returns a new [LogicalObjectEncoder] by the given values.
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
@@ -390,7 +399,6 @@ impl LogicalObjectEncoder {
 		files: Vec<(PathBuf, FileHeader)>,
 		root_dir_filenumbers: Vec<u64>,
 		hash_types: Vec<HashType>,
-		encryption_key: Option<Vec<u8>>,
 		signature_key_bytes: Option<Vec<u8>>,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
 		hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
@@ -398,10 +406,13 @@ impl LogicalObjectEncoder {
 		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
 
 		//test if the encryption is successful.
-		let _ = if let Some(encryption_key) = &encryption_key {
-	    	obj_header.encode_encrypted_header_directly(encryption_key)?
+		let (_encoded_header, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
+			match encryption_header.get_encryption_key() {
+				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, obj_header.object_number.to_string()))
+			}
 	    } else {
-	    	obj_header.encode_directly()
+	    	(obj_header.encode_directly(), None)
 	    };
 
 		let mut files = files;
@@ -470,6 +481,7 @@ impl LogicalObjectEncoder {
 			hardlink_map,
 			directory_children,
 			object_footer,
+			unaccessable_files: Vec::new(),
 		})
 	}
 

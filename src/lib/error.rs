@@ -127,6 +127,8 @@ pub enum ZffErrorKind {
 	UnsupportedVersion,
 	/// No Encryption detected.
 	NoEncryptionDetected,
+	/// If an invalid option was used.
+	InvalidOption,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -182,6 +184,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::OutOfMemory => "OutOfMemory",
 			ZffErrorKind::UnsupportedVersion => "UnsupportedVersion",
 			ZffErrorKind::NoEncryptionDetected => "NoEncryptionDetected",
+			ZffErrorKind::InvalidOption => "InvalidOption",
 		};
 	write!(f, "{}", err_msg)
 	}

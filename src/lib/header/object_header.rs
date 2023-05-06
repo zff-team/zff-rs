@@ -196,7 +196,7 @@ impl ObjectHeader {
 		if !flags.encryption {
 			return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, ""));
 		}
-		let encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
+		let mut encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let encryption_key = encryption_header.decrypt_encryption_key(password)?;
 		let algorithm = encryption_header.algorithm();

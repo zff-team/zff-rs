@@ -48,6 +48,7 @@ pub struct EncryptionHeader {
 	pbe_header: PBEHeader,
 	algorithm: EncryptionAlgorithm,
 	encrypted_encryption_key: Vec<u8>,
+	decrypted_encryption_key: Option<Vec<u8>>
 }
 
 impl EncryptionHeader {
@@ -63,6 +64,7 @@ impl EncryptionHeader {
 			pbe_header,
 			algorithm,
 			encrypted_encryption_key,
+			decrypted_encryption_key: None,
 		}
 	}
 
@@ -76,9 +78,22 @@ impl EncryptionHeader {
 		&self.pbe_header
 	}
 
+	/// returns the decrypted encryption key. If the Key is already encrypted, you will get an None and should use the decrypt_encryption_key() method.
+	pub fn get_encryption_key(&self) -> Option<Vec<u8>> {
+		self.decrypted_encryption_key.clone()
+	}
+
+	/// returns the decrypted encryption key. If the Key is already encrypted, you will get an None and should use the decrypt_encryption_key() method.
+	pub fn get_encryption_key_ref(&self) -> Option<&Vec<u8>> {
+		self.decrypted_encryption_key.as_ref()
+	}
+
 	/// tries to decrypt the encryption key.
-	pub fn decrypt_encryption_key<P: AsRef<[u8]>>(&self, password: P) -> Result<Vec<u8>> {
-		match self.pbe_header.kdf_scheme() {
+	pub fn decrypt_encryption_key<P: AsRef<[u8]>>(&mut self, password: P) -> Result<Vec<u8>> {
+		if let Some(decrypted_encryption_key) = &self.decrypted_encryption_key {
+			return Ok(decrypted_encryption_key.clone())
+		}
+		let decryption_key = match self.pbe_header.kdf_scheme() {
 			KDFScheme::PBKDF2SHA256 => match self.pbe_header.kdf_parameters() {
 				KDFParameters::PBKDF2SHA256Parameters(parameters) => {
 					let iterations = parameters.iterations();
@@ -131,7 +146,9 @@ impl EncryptionHeader {
 				},
 				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
 			}
-		}
+		}?;
+		self.decrypted_encryption_key = Some(decryption_key.clone());
+		Ok(decryption_key)
 	}
 }
 

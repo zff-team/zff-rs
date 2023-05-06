@@ -165,3 +165,8 @@ pub(crate) const METADATA_EXT_KEY_UID: &str = "uid";
 pub(crate) const METADATA_EXT_KEY_GID: &str = "gid";
 #[cfg(target_os = "windows")]
 pub(crate) const METADATA_EXT_DW_FILE_ATTRIBUTES: &str = "dwFileAttributes";
+
+pub(crate) const METADATA_ATIME: &str = "atime";
+pub(crate) const METADATA_MTIME: &str = "mtime";
+pub(crate) const METADATA_CTIME: &str = "ctime";
+pub(crate) const METADATA_BTIME: &str = "btime";

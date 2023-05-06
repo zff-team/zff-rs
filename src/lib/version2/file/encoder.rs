@@ -12,9 +12,7 @@ use crate::{
 };
 use crate::{
 	Result,
-	buffer_chunk,
-	calculate_crc32,
-	compress_buffer,
+	io::{buffer_chunk, calculate_crc32, compress_buffer},
 	HeaderCoding,
 	ValueEncoder,
 	HashType,
