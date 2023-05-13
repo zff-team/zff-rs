@@ -144,7 +144,7 @@ impl<R: Read> ZffWriter<R> {
 					DEFAULT_HEADER_VERSION_SEGMENT_HEADER => (),
 					_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
 				}
-				let current_segment_no = segment.header().segment_number();
+				let current_segment_no = segment.header().segment_number;
 				let initial_chunk_number = match segment.footer().chunk_map_table.keys().max() {
 					Some(x) => *x + 1,
 					None => return Err(ZffError::new(ZffErrorKind::NoChunksLeft, ""))
@@ -486,7 +486,6 @@ impl<R: Read> ZffWriter<R> {
 
 		//prepare segment header
 		let segment_header = SegmentHeader::new(
-			DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 			self.optional_parameter.unique_identifier,
 			self.current_segment_no,
 			chunkmap_size);
