@@ -284,7 +284,6 @@ fn get_file_header(metadata: &Metadata, path: &Path, current_file_number: u64, p
     let metadata_ext = get_metadata_ext(metadata);
 
     let file_header = FileHeader::new(
-                    DEFAULT_HEADER_VERSION_FILE_HEADER,
                     current_file_number,
                     filetype,
                     filename,

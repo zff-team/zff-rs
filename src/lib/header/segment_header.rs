@@ -69,7 +69,6 @@ impl HeaderCoding for SegmentHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<SegmentHeader> {
 		let mut cursor = Cursor::new(data);
-
 		let version = u8::decode_directly(&mut cursor)?;
 		if version != DEFAULT_HEADER_VERSION_SEGMENT_HEADER {
 			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))

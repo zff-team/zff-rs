@@ -11,6 +11,8 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
+	ZffError,
+	ZffErrorKind,
 	HEADER_IDENTIFIER_CHUNK_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_MAP,
 	CHUNKMAP_SQLITE_CREATE_TABLE_IFNOTEXISTS,
@@ -26,7 +28,6 @@ use blake3::Hash as Blake3Hash;
 
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct ChunkMap {
-	pub version: u8,
 	pub chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
 	target_size: usize,
 }
@@ -35,7 +36,6 @@ impl ChunkMap {
 	/// returns a new [ChunkMap] with the given values.
 	pub fn new(chunkmap: BTreeMap<u64, u64>) -> Self {
 		Self {
-			version: DEFAULT_HEADER_VERSION_CHUNK_MAP,
 			chunkmap,
 			target_size: 0,
 		}
@@ -44,7 +44,6 @@ impl ChunkMap {
 	/// returns a new, empty [ChunkMap] with the given values.
 	pub fn new_empty() -> Self {
 		Self {
-			version: DEFAULT_HEADER_VERSION_CHUNK_MAP,
 			chunkmap: BTreeMap::new(),
 			target_size: 0,
 		}
@@ -76,20 +75,23 @@ impl HeaderCoding for ChunkMap {
 	}
 
 	fn version(&self) -> u8 {
-		self.version
+		DEFAULT_HEADER_VERSION_CHUNK_MAP
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut self.version().encode_directly());
 		vec.append(&mut self.chunkmap.encode_directly());
 		vec
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
-		let _version = u8::decode_directly(&mut cursor)?; // TODO: return an unsupported header version, if the version does not match with the current version.
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_HEADER_VERSION_CHUNK_MAP {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
 		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		Ok(Self::new(chunkmap))
 	}

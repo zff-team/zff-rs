@@ -125,9 +125,9 @@ pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 2;
 /// current header version for the [MainHeader](crate::header::MainHeader).
 pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
 /// current header version for the [FileHeader](crate::header::FileHeader).
-pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 2;
 /// current header version for the [ObjectHeader](crate::header::ObjectHeader).
-pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 1;
+pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 2;
 /// current header version for the [ChunkMap](crate::header::ChunkMap) structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_MAP: u8 = 1;
 
