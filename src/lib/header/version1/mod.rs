@@ -4,7 +4,6 @@
 pub(crate) mod pbe_header;
 pub(crate) mod encryption_header;
 pub(crate) mod description_header;
-pub(crate) mod segment_header;
 pub(crate) mod compression_header;
 pub(crate) mod hash_header;
 
@@ -12,6 +11,5 @@ pub(crate) mod hash_header;
 pub use pbe_header::*;
 pub use encryption_header::*;
 pub use description_header::*;
-pub use segment_header::*;
 pub use compression_header::*;
 pub use hash_header::*;
