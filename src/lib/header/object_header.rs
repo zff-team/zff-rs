@@ -34,6 +34,11 @@ use crate::header::{
 	DescriptionHeader,
 };
 
+/// Holds the appropriate object flags:
+/// - the encryption flag, if the appropriate object is encrypted.
+/// - the sign hash flag, if the appropriate calculated hash value was signed.
+/// - the sign chunks flag, if the appropriate chunks are signed.
+/// - the passive object flag, if this object should not handled as an active object
 #[derive(Debug,Clone,Default)]
 pub struct ObjectFlags {
 	pub encryption: bool,
@@ -59,12 +64,11 @@ impl From<u8> for ObjectFlags {
 /// - The appropriate number of the objects (the first object always starts with 1)
 /// - An [crate::header::EncryptionHeader], if an encryption was used.
 /// - A [crate::header::CompressionHeader], containing the appropriate compression information
-/// - A flag, if a signature method was used.
 /// - A [crate::header::DescriptionHeader] for this object.
 /// - The [ObjectType] of this object. 
+/// - the appropriate [object flags](ObjectFlags).
 #[derive(Debug,Clone)]
 pub struct ObjectHeader {
-	pub version: u8,
 	pub object_number: u64,
 	pub flags: ObjectFlags,
 	pub encryption_header: Option<EncryptionHeader>,
@@ -75,7 +79,7 @@ pub struct ObjectHeader {
 }
 
 impl ObjectHeader {
-	/// creates a new object with the given values
+	/// creates a new object with the given values.
 	pub fn new(
 		object_number: u64,
 		encryption_header: Option<EncryptionHeader>,
@@ -85,7 +89,6 @@ impl ObjectHeader {
 		object_type: ObjectType,
 		flags: ObjectFlags) -> ObjectHeader {
 		Self {
-			version: DEFAULT_HEADER_VERSION_OBJECT_HEADER,
 			object_number,
 			encryption_header,
 			chunk_size,
@@ -106,7 +109,7 @@ impl ObjectHeader {
 		self.flags.sign_hash
 	}
 
-	/// encodes the object header to a ```Vec<u8>```. The encryption flag will be set to 2.
+	/// encodes the object header to a ```Vec<u8>```. The encryption flag will be set.
 	/// # Error
 	/// The method returns an error, if the encryption header is missing (=None).
 	/// The method returns an error, if the encryption fails.
@@ -137,12 +140,10 @@ impl ObjectHeader {
 		};
 
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut self.version().encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
 		let mut flags: u8 = 0;
-		if self.flags.encryption {
-			flags += ENCRYPT_OBJECT_FLAG_VALUE;
-		};
+		flags += ENCRYPT_OBJECT_FLAG_VALUE;
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
@@ -267,7 +268,7 @@ impl HeaderCoding for ObjectHeader {
 	}
 
 	fn version(&self) -> u8 {
-		self.version
+		DEFAULT_HEADER_VERSION_OBJECT_HEADER
 	}
 
 	/// encodes the (header) value/object directly (= without key).
@@ -279,7 +280,7 @@ impl HeaderCoding for ObjectHeader {
 		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len() + encoded_object_number.len() + 1) as u64; //4 bytes identifier + 8 bytes for length + length of encoded content + len of object number + length of version
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.push(self.version);
+		vec.push(self.version());
 		vec.append(&mut encoded_object_number);
 		vec.append(&mut encoded_header);
 		vec
@@ -311,7 +312,10 @@ impl HeaderCoding for ObjectHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<ObjectHeader> {
 		let mut cursor = Cursor::new(data);
-		let _version = u8::decode_directly(&mut cursor)?; //TODO: Check if this is a supported header version
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		let encryption_header = if flags.encryption {
