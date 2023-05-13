@@ -20,11 +20,11 @@ use crate::{
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	HEADER_IDENTIFIER_FILE_HEADER,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER
+	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
+	DEFAULT_HEADER_VERSION_FILE_HEADER,
 };
 
 use crate::header::{
-	EncryptionHeader,
 	EncryptionInformation,
 };
 
@@ -45,17 +45,6 @@ pub enum FileType {
 	SpecialFile = 5,
 }
 
-
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq,Hash)]
-pub enum SpecialFileType {
-	Fifo = 0,
-	Char = 1,
-	Block = 2,
-}
-
-
 impl fmt::Display for FileType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let msg = match self {
@@ -69,6 +58,19 @@ impl fmt::Display for FileType {
 	}
 }
 
+/// Defines all unix special file types
+#[repr(u8)]
+#[non_exhaustive]
+#[derive(Debug,Clone,Eq,PartialEq,Hash)]
+pub enum SpecialFileType {
+	/// Represents a Fifo.
+	Fifo = 0,
+	/// Represents a char device.
+	Char = 1,
+	/// Represents a block device.
+	Block = 2,
+}
+
 /// Each dumped file* contains a [FileHeader] containing several metadata.
 /// The following metadata are included in a [FileHeader]:
 /// - the internal file number of the appropriate file.
@@ -78,7 +80,6 @@ impl fmt::Display for FileType {
 /// - A HashMap to extend the metadata based on the operating system/filesystem. Some fields are predefined, see [the full list in the wiki](https://github.com/ph0llux/zff/wiki/zff-header-layout#file-metadata-extended-information)
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct FileHeader {
-	pub version: u8,
 	pub file_number: u64,
 	pub file_type: FileType,
 	pub filename: String,
@@ -89,14 +90,12 @@ pub struct FileHeader {
 impl FileHeader {
 	/// creates a new [FileHeader] with the given values.
 	pub fn new<F: Into<String>>(
-		version: u8,
 		file_number: u64,
 		file_type: FileType,
 		filename: F,
 		parent_file_number: u64,
 		metadata_ext: HashMap<String, String>) -> FileHeader {
 		Self {
-			version,
 			file_number,
 			file_type,
 			filename: filename.into(),
@@ -115,7 +114,6 @@ impl FileHeader {
 	/// encodes the file header to a ```Vec<u8>```. The encryption flag of the appropriate object header has to be set to 2.
 	/// # Error
 	/// The method returns an error, if the encryption fails.
-	//TODO: use EncryptionInformation instead of EncryptionHeader
 	pub fn encode_encrypted_header_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
@@ -138,7 +136,7 @@ impl FileHeader {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut self.version().encode_directly());
 		vec.append(&mut self.file_number.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
@@ -164,11 +162,10 @@ impl FileHeader {
 
 	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader].
 	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader].
-	//TODO: use EncryptionInformation instead of EncryptionHeader
-	pub fn decode_encrypted_header_with_key<R, K>(data: &mut R, key: K, encryption_header: EncryptionHeader) -> Result<FileHeader>
+	pub fn decode_encrypted_header_with_key<R, E>(data: &mut R, encryption_information: E) -> Result<FileHeader>
 	where
 		R: Read,
-		K: AsRef<[u8]>,
+		E: Borrow<EncryptionInformation>
 	{
 		if !Self::check_identifier(data) {
 			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
@@ -177,19 +174,25 @@ impl FileHeader {
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_HEADER_VERSION_FILE_HEADER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
 		let file_number = u64::decode_directly(&mut cursor)?;
 		
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
-		let algorithm = encryption_header.algorithm();
-		let decrypted_data = Encryption::decrypt_file_header(key, encrypted_data, file_number, algorithm)?;
+		let algorithm = &encryption_information.borrow().algorithm;
+		let decrypted_data = Encryption::decrypt_file_header(
+			&encryption_information.borrow().encryption_key, 
+			encrypted_data, 
+			file_number, 
+			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (file_type,
 			filename,
 			parent_file_number,
 			metadata_ext) = Self::decode_inner_content(&mut cursor)?;
 		let file_header = Self::new(
-			header_version,
 			file_number,
 			file_type,
 			filename,
@@ -233,12 +236,12 @@ impl HeaderCoding for FileHeader {
 	}
 
 	fn version(&self) -> u8 {
-		self.version
+		DEFAULT_HEADER_VERSION_FILE_HEADER
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut self.version().encode_directly());
 		vec.append(&mut self.file_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
@@ -247,9 +250,12 @@ impl HeaderCoding for FileHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<FileHeader> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_HEADER_VERSION_FILE_HEADER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (file_type, filename, parent_file_number, metadata_ext) = Self::decode_inner_content(&mut cursor)?;
-		Ok(FileHeader::new(header_version, file_number, file_type, filename, parent_file_number, metadata_ext))
+		Ok(FileHeader::new(file_number, file_type, filename, parent_file_number, metadata_ext))
 	}
 }
