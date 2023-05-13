@@ -438,7 +438,7 @@ impl ValueDecoder for str {
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<String> {
 		let length = u64::decode_directly(data)? as usize;
-		let mut buffer = vec![0u8; length as usize];
+		let mut buffer = vec![0u8; length];
 		data.read_exact(&mut buffer)?;
 		Ok(String::from_utf8(buffer)?)
 	}
@@ -449,7 +449,7 @@ impl ValueDecoder for Vec<u8> {
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u8>> {
 		let length = u64::decode_directly(data)? as usize;
-		let mut buffer = vec![0u8; length as usize];
+		let mut buffer = vec![0u8; length];
 		data.read_exact(&mut buffer)?;
 		Ok(buffer)
 	}

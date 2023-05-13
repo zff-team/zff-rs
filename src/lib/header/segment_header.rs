@@ -18,14 +18,14 @@ use crate::{
 #[derive(Debug,Clone,Eq)]
 pub struct SegmentHeader {
 	version: u8,
-	unique_identifier: i64,
+	unique_identifier: u64,
 	segment_number: u64,
 	chunkmap_size: u64,
 }
 
 impl SegmentHeader {
 	/// returns a new [SegmentHeader] with the given values.
-	pub fn new(version: u8, unique_identifier: i64, segment_number: u64, chunkmap_size: u64) -> SegmentHeader {
+	pub fn new(version: u8, unique_identifier: u64, segment_number: u64, chunkmap_size: u64) -> SegmentHeader {
 		Self {
 			version,
 			unique_identifier,
@@ -35,7 +35,7 @@ impl SegmentHeader {
 	}
 
 	/// returns the unique identifier of the zff container (each segment should have the same identifier).
-	pub fn unique_identifier(&self) -> i64 {
+	pub fn unique_identifier(&self) -> u64 {
 		self.unique_identifier
 	}
 
@@ -81,7 +81,7 @@ impl HeaderCoding for SegmentHeader {
 		let mut cursor = Cursor::new(data);
 
 		let version = u8::decode_directly(&mut cursor)?;
-		let unique_identifier = i64::decode_directly(&mut cursor)?;
+		let unique_identifier = u64::decode_directly(&mut cursor)?;
 		let segment_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap_size = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentHeader::new(version, unique_identifier, segment_number, chunkmap_size))

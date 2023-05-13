@@ -54,15 +54,21 @@ use time::{OffsetDateTime};
 struct ObjectEncoderInformation<R: Read> {
 	pub object_encoder: ObjectEncoder<R>,
 	pub written_object_header: bool,
-	pub unaccessable_files: Vec<String>,
 }
 
 impl<R: Read> ObjectEncoderInformation<R> {
-	fn with_data(object_encoder: ObjectEncoder<R>, written_object_header: bool, unaccessable_files: Vec<String>) -> ObjectEncoderInformation<R> {
+	fn with_data(object_encoder: ObjectEncoder<R>, written_object_header: bool) -> ObjectEncoderInformation<R> {
 		Self {
 			object_encoder,
 			written_object_header,
-			unaccessable_files
+		}
+	}
+
+	/// returns a reference of the appropriate [ObjectHeader].
+	fn get_obj_header(&mut self) -> &ObjectHeader {
+		match self.object_encoder {
+			ObjectEncoder::Physical(obj) => &obj.obj_header,
+			ObjectEncoder::Logical(obj) => &obj.obj_header,
 		}
 	}
 }

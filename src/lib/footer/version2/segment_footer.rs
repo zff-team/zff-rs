@@ -27,7 +27,7 @@ pub struct SegmentFooter {
 	pub length_of_segment: u64,
 	pub object_header_offsets: HashMap<u64, u64>, //<object number, offset>,
 	pub object_footer_offsets: HashMap<u64, u64>, //<object number, offset>,
-	pub chunk_map_table: BTreeMap<u64, u64>, //<chunk number, offset>
+	pub chunk_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
 	pub first_chunk_number: u64,
 	/// The offset where the footer starts.
 	pub footer_offset: u64,

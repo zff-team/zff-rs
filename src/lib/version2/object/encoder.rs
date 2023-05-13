@@ -27,9 +27,18 @@ use crate::{
 };
 
 use crate::{
-	header::{ObjectHeader, HashHeader, ChunkHeader, HashValue, FileHeader, EncryptionInformation},
+	header::{
+		ObjectHeader, 
+		HashHeader, 
+		ChunkHeader, 
+		HashValue, 
+		FileHeader, 
+		EncryptionInformation,
+		DeduplicationChunkMap,
+	},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
-	FileEncoder, 
+	FileEncoder,
+	io::check_same_byte,
 };
 
 // - external
@@ -62,6 +71,14 @@ impl<R: Read> ObjectEncoder<R> {
 		}
 	}
 
+	/// returns a reference of the appropriate [ObjectHeader].
+	pub fn get_obj_header(&mut self) -> &ObjectHeader {
+		match self {
+			ObjectEncoder::Physical(obj) => &obj.obj_header,
+			ObjectEncoder::Logical(obj) => &obj.obj_header,
+		}
+	}
+
 	/// returns the appropriate encoded [ObjectHeader].
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		match self {
@@ -87,13 +104,17 @@ impl<R: Read> ObjectEncoder<R> {
 	}
 
 	/// returns the next data.
-	pub fn get_next_data(&mut self, current_offset: u64, current_segment_no: u64) -> Result<Vec<u8>> {
+	pub fn get_next_data(
+		&mut self, 
+		current_offset: u64, 
+		current_segment_no: u64, 
+		deduplication_map: Option<&mut DeduplicationChunkMap>
+		) -> Result<Vec<u8>> {
 		match self {
-			ObjectEncoder::Physical(obj) => obj.get_next_chunk(),
-			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no),
+			ObjectEncoder::Physical(obj) => obj.get_next_chunk(deduplication_map),
+			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),
 		}
 	}
-
 }
 
 /// The [PhysicalObjectEncoder] can be used to encode a physical object.
@@ -167,6 +188,11 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		})
 	}
 
+	/// Returns the current chunk number.
+	pub fn object_header(&self) -> &ObjectHeader {
+		&self.obj_header
+	}
+
 	fn update_hasher(&mut self, buffer: &[u8]) {
 		for hasher in self.hasher_map.values_mut() {
 			hasher.update(buffer);
@@ -193,12 +219,15 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 
 	/// Returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
-	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
+	pub fn get_next_chunk(
+		&mut self,
+		deduplication_map: Option<&mut DeduplicationChunkMap>,
+		) -> Result<Vec<u8>> {
 		let mut chunk = Vec::new();
 
 		// prepare chunked data:
 	    let chunk_size = self.obj_header.chunk_size as usize;
-	    let (buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size)?;
+	    let (mut buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size)?;
 	    self.read_bytes_underlying_data += read_bytes;
 	    if buf.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
@@ -207,11 +236,27 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    let crc32 = calculate_crc32(&buf);
 	    let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
 
+	    // create chunk header
+	    let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
+
+	    // check same byte
+	    if check_same_byte(&buf) {
+	    	chunk_header.flags.same_bytes = true;
+	    	buf = vec![buf[0]]
+	    } else if let Some(deduplication_map) = deduplication_map {
+	    	let b3h = blake3::hash(&buf);
+	    	if let Some(chunk_no) = deduplication_map.get_chunk_number(b3h) {
+	    		buf = chunk_no.to_le_bytes().to_vec();
+	    	} else {
+	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;
+	    	}
+	    	chunk_header.flags.duplicate = true;
+	    }
+
 	    let (chunked_data, compression_flag) = compress_buffer(buf, self.obj_header.chunk_size as usize, &self.obj_header.compression_header)?;
 
 	    // prepare chunk header:
-	    let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);  
-	    chunk_header.crc32= crc32;
+	    chunk_header.crc32 = crc32;
 	    chunk_header.ed25519_signature = signature;
 	    if compression_flag {
 			chunk_header.flags.compression = true;
@@ -233,7 +278,18 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		};
 		
 		chunk_header.chunk_size = chunked_data.len() as u64;
-		chunk.append(&mut chunk_header.encode_directly());
+
+		let mut encoded_header = if let Some(enc_header) = &self.obj_header.encryption_header {
+			let key = match enc_header.get_encryption_key_ref() {
+				Some(key) => key,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
+			};
+			chunk_header.encrypt_and_consume(key, enc_header.algorithm())?.encode_directly()
+		} else {
+			chunk_header.encode_directly()
+		};
+
+		chunk.append(&mut encoded_header);
 		chunk.append(&mut chunked_data);
 		self.current_chunk_number += 1;
 	    Ok(chunk)
@@ -288,7 +344,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	}
 }
 
-/// This implement Read for [PhysicalObjectEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
+/*/// This implement Read for [PhysicalObjectEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
 impl<D: Read> Read for PhysicalObjectEncoder<D> {
 	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		let mut read_bytes = 0;
@@ -348,7 +404,7 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
         }
         Ok(read_bytes)
 	}
-}
+}*/
 
 /// The [LogicalObjectEncoder] can be used to encode a logical object.
 pub struct LogicalObjectEncoder {
@@ -384,6 +440,12 @@ impl LogicalObjectEncoder {
 	    	Ok(self.object_footer.encode_directly())
 	    }
 	}
+
+	/// Returns the current chunk number.
+	pub fn object_header(&self) -> &ObjectHeader {
+		&self.obj_header
+	}
+
 
 	pub fn add_unaccessable_file<F>(&mut self, file_path: F)
 	where
@@ -515,7 +577,11 @@ impl LogicalObjectEncoder {
 
 	/// Returns the next encoded data - an encoded [FileHeader], an encoded file chunk or an encoded [FileFooter].
 	/// This method will increment the self.current_chunk_number automatically.
-	pub fn get_next_data(&mut self, current_offset: u64, current_segment_no: u64) -> Result<Vec<u8>> {
+	pub fn get_next_data(
+		&mut self, 
+		current_offset: u64, 
+		current_segment_no: u64,
+		deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<Vec<u8>> {
 		match self.current_file_encoder {
 			Some(ref mut file_encoder) => {
 				// return file header
@@ -528,7 +594,7 @@ impl LogicalObjectEncoder {
 				}
 
 				// return next chunk
-				match file_encoder.get_next_chunk() {
+				match file_encoder.get_next_chunk(deduplication_map) {
 					Ok(data) => {
 						self.current_chunk_number += 1;
 						return Ok(data);

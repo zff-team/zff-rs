@@ -16,7 +16,7 @@ use std::os::windows::fs::MetadataExt;
 // - internal
 use crate::{
     Result,
-    header::{FileHeader, FileType, CompressionHeader},
+    header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationChunkMap},
     ZffError,
     ZffErrorKind,
     ObjectEncoder,
@@ -135,6 +135,58 @@ impl<R: Read> ObjectEncoderInformation<R> {
         Self {
             object_encoder,
             written_object_header,
+        }
+    }
+
+    /// returns a reference of the appropriate [ObjectHeader].
+    fn get_obj_header(&mut self) -> &ObjectHeader {
+        match &self.object_encoder {
+            ObjectEncoder::Physical(obj) => obj.object_header(),
+            ObjectEncoder::Logical(obj) => obj.object_header(),
+        }
+    }
+
+    /// returns the appropriate encoded [ObjectHeader].
+    fn get_encoded_header(&mut self) -> Vec<u8> {
+        match self.object_encoder {
+            ObjectEncoder::Physical(ref mut obj) => obj.get_encoded_header(),
+            ObjectEncoder::Logical(ref mut obj) => obj.get_encoded_header(),
+        }
+    }
+
+    /// returns the appropriate object footer.
+    pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
+        match self.object_encoder {
+            ObjectEncoder::Physical(ref mut obj) => obj.get_encoded_footer(),
+            ObjectEncoder::Logical(ref mut obj) => obj.get_encoded_footer(),
+        }
+    }
+
+    /// returns the appropriate object number.
+    fn obj_number(&self) -> u64 {
+        match &self.object_encoder {
+            ObjectEncoder::Physical(obj) => obj.obj_number(),
+            ObjectEncoder::Logical(obj) => obj.obj_number(),
+        }
+    }
+
+    /// returns the next data.
+    fn get_next_data(
+        &mut self, 
+        current_offset: u64, 
+        current_segment_no: u64,
+        deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<Vec<u8>> {
+        match self.object_encoder {
+            ObjectEncoder::Physical(ref mut obj) => obj.get_next_chunk(deduplication_map),
+            ObjectEncoder::Logical(ref mut obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),
+        }
+    }
+
+    /// returns the current chunk number.
+    fn current_chunk_number(&self) -> u64 {
+        match &self.object_encoder {
+            ObjectEncoder::Physical(obj) => obj.current_chunk_number(),
+            ObjectEncoder::Logical(obj) => obj.current_chunk_number(),
         }
     }
 }
@@ -263,4 +315,17 @@ fn add_to_hardlink_map(hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>, metad
         }
     }
     None
+}
+
+pub(crate) fn check_same_byte(vec: &[u8]) -> bool {
+    if let Some(&first) = vec.first() {
+        for &byte in vec.iter().skip(1) {
+            if byte != first {
+                return false;
+            }
+        }
+        true
+    } else {
+        true // Empty vector is considered to have the same byte on every position
+    }
 }

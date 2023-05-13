@@ -1,5 +1,5 @@
 // - STD
-use std::path::Path;
+use std::collections::BTreeMap;
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 use std::path::{PathBuf};
 use std::fs::{File, OpenOptions, remove_file, read_link, read_dir};
@@ -18,13 +18,22 @@ use crate::{
 	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
 	DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
-	FILE_EXTENSION_FIRST_VALUE,
+	DEFAULT_CHUNKMAP_SIZE,
+	FILE_EXTENSION_INITIALIZER,
+	ERROR_MISMATCH_ZFF_VERSION,
+	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
+	ERROR_INVALID_OPTION_ZFFEXTEND,
+	ERROR_INVALID_OPTION_ZFFCREATE,
 };
 use crate::{
-	header::{ObjectHeader, FileHeader},
+	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap},
+	footer::{MainFooter, SegmentFooter},
 	ObjectEncoder,
 	PhysicalObjectEncoder,
 	LogicalObjectEncoder,
+	ValueDecoder,
+	ValueEncoder,
+	Segment,
 };
 
 use super::{
@@ -41,7 +50,7 @@ use ed25519_dalek::{Keypair};
 
 pub enum ZffWriterOutput {
 	NewContainer(PathBuf),
-	ExtendContainer(PathBuf),
+	ExtendContainer(Vec<PathBuf>),
 }
 
 /// struct contains optional, additional parameter.
@@ -50,21 +59,44 @@ pub struct ZffWriterOptionalParameter {
 	pub signature_key: Option<Keypair>,
 	pub target_segment_size: Option<u64>, //if None, the container will not be segmentized.
 	pub description_notes: Option<String>,
-	pub deduplicate_chunks: bool,
+	pub chunkmap_size: Option<u64>, //default is 32k
+	pub deduplication_chunkmap: Option<DeduplicationChunkMap>,
+	pub unique_identifier: u64 // TODO: set a random number, if zero?
 }
 
+pub struct ZffExtenderParameter {
+	pub main_footer: MainFooter,
+	pub current_segment: PathBuf,
+	pub next_object_no: u64,
+	pub initial_chunk_number: u64,
+}
 
+impl ZffExtenderParameter {
+	pub fn with_data(
+		main_footer: MainFooter,
+		current_segment: PathBuf,
+		next_object_no: u64,
+		initial_chunk_number: u64,
+		) -> Self {
+		Self {
+			main_footer,
+			current_segment,
+			next_object_no,
+			initial_chunk_number,
+		}
+	}
+}
 
 /// The ZffCreator can be used to create a new zff container by the given files/values.
 pub struct ZffWriter<R: Read> {
 	object_encoder: Vec<ObjectEncoderInformation<R>>,
 	current_object_encoder: ObjectEncoderInformation<R>, //the current object encoder
-	output_filenpath: PathBuf,
+	output: ZffWriterOutput, // Could be also a ZffWriterOutput to identify the "next segment to write" by using extender?
 	current_segment_no: u64,
-	last_accepted_segment_filepath: PathBuf,
-	object_header_segment_numbers: HashMap<u64, u64>, //<object_number, segment_no>
-	object_footer_segment_numbers: HashMap<u64, u64>, //<object_number, segment_no>
+	object_header_segment_numbers: BTreeMap<u64, u64>, //<object_number, segment_no>
+	object_footer_segment_numbers: BTreeMap<u64, u64>, //<object_number, segment_no>
 	optional_parameter: ZffWriterOptionalParameter,
+	extender_parameter: Option<ZffExtenderParameter>,
 }
 
 impl<R: Read> ZffWriter<R> {
@@ -82,17 +114,77 @@ impl<R: Read> ZffWriter<R> {
 												hash_types,
 												output,
 												params),
-			_ => unimplemented!()
+			ZffWriterOutput::ExtendContainer(_) => Self::extend_container(
+												physical_objects,
+												logical_objects,
+												hash_types,
+												output,
+												params),
 		}
 	}
 
-	fn setup_new_container(
-	physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
+	fn extend_container(
+		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
 		hash_types: Vec<HashType>,
 		output: ZffWriterOutput,
 		params: ZffWriterOptionalParameter) -> Result<ZffWriter<R>> {
+		let files_to_extend = match output {
+			ZffWriterOutput::NewContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFCREATE)), //TODO,
+			ZffWriterOutput::ExtendContainer(ref files_to_extend) => files_to_extend.clone()
+		};
+		for ext_file in &files_to_extend {
+			let mut raw_segment = File::open(ext_file)?;
+			if let Ok(mf) = decode_main_footer(&mut raw_segment) {
+				let current_segment = ext_file.to_path_buf();
+				
+				// checks if the correct header version is set
+				let segment = Segment::new_from_reader(&raw_segment)?;
+				match segment.header().version() {
+					DEFAULT_HEADER_VERSION_SEGMENT_HEADER => (),
+					_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
+				}
+				let current_segment_no = segment.header().segment_number();
+				let initial_chunk_number = match segment.footer().chunk_map_table.keys().max() {
+					Some(x) => *x + 1,
+					None => return Err(ZffError::new(ZffErrorKind::NoChunksLeft, ""))
+				};
+				let next_object_no = match mf.object_footer().keys().max() {
+					Some(x) => *x + 1,
+					None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
+				};
+				//TODO: Overwrite the old main footer offset with zeros...or the full main footer?
+				let extension_parameter = ZffExtenderParameter::with_data(
+					mf,
+					current_segment,
+					next_object_no,
+					initial_chunk_number);
+				return Self::setup_container(
+					physical_objects,
+					logical_objects,
+					hash_types,
+					output,
+					current_segment_no,
+					params,
+					Some(extension_parameter));
+			}
+			let segment = Segment::new_from_reader(raw_segment)?;
+			match segment.header().version() {
+				3 => (),
+				_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
+			}
+		}
+		Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER))
+	}
 
+	fn setup_container(
+		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
+		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
+		hash_types: Vec<HashType>,
+		output: ZffWriterOutput,
+		current_segment_no: u64,
+		params: ZffWriterOptionalParameter,
+		extender_parameter: Option<ZffExtenderParameter>) -> Result<ZffWriter<R>> {
 		let output_path = match output {
 			ZffWriterOutput::NewContainer(path) => path,
 			_ => return Err(ZffError::new(ZffErrorKind::InvalidOption, ""))//TODO
@@ -142,13 +234,29 @@ impl<R: Read> ZffWriter<R> {
 		Ok(Self {
 			object_encoder,
 			current_object_encoder, //the current object encoder
-			output_filenpath: output_path,
-			current_segment_no: 1, //initial segment number should always be 1.
-			last_accepted_segment_filepath: PathBuf::new(),
-			object_header_segment_numbers: HashMap::new(), //<object_number, segment_no>
-			object_footer_segment_numbers: HashMap::new(), //<object_number, segment_no>
+			output: ZffWriterOutput::NewContainer(output_path),
+			current_segment_no,
+			object_header_segment_numbers: BTreeMap::new(), //<object_number, segment_no>
+			object_footer_segment_numbers: BTreeMap::new(), //<object_number, segment_no>
 			optional_parameter: params,
+			extender_parameter,
 		})
+	}
+
+	fn setup_new_container(
+		physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
+		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
+		hash_types: Vec<HashType>,
+		output: ZffWriterOutput,
+		params: ZffWriterOptionalParameter) -> Result<ZffWriter<R>> {
+		Self::setup_container(
+			physical_objects, 
+			logical_objects,
+			hash_types,
+			output,
+			1, //initial segment number should always be 1.
+			params,
+			None)
 	}
 
 	fn setup_physical_object_encoder(
@@ -360,5 +468,206 @@ impl<R: Read> ZffWriter<R> {
 			log_obj.add_unaccessable_file(file);
 		}
 		Ok(log_obj)
+	}
+
+	fn write_next_segment<W: Write + Seek>(
+		&mut self,
+		output: &mut W,
+		seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
+		main_footer_chunk_map: &mut BTreeMap<u64, u64>,
+		) -> Result<u64> {
+
+		let mut eof = false; //true, if EOF of input stream is reached.
+		output.seek(SeekFrom::Start(seek_value))?;
+		let mut written_bytes: u64 = 0;
+		let target_chunk_size = self.current_object_encoder.get_obj_header().chunk_size as usize;
+		let target_segment_size = self.optional_parameter.target_segment_size.unwrap_or(u64::MAX);
+		let chunkmap_size = self.optional_parameter.chunkmap_size.unwrap_or(DEFAULT_CHUNKMAP_SIZE);
+
+		//prepare segment header
+		let segment_header = SegmentHeader::new(
+			DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
+			self.optional_parameter.unique_identifier,
+			self.current_segment_no,
+			chunkmap_size);
+
+		//prepare segment footer
+		let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
+
+		//check if the segment size is to small
+		if (seek_value as usize +
+			segment_header.encode_directly().len() +
+			self.current_object_encoder.get_encoded_header().len() +
+			segment_footer.encode_directly().len() +
+			target_chunk_size) > target_segment_size as usize {
+	        
+	        return Err(ZffError::new(ZffErrorKind::SegmentSizeToSmall, ""));
+	    };
+
+		//write segment header
+		written_bytes += output.write(&segment_header.encode_directly())? as u64;	
+		
+		//write the object header
+		if !self.current_object_encoder.written_object_header {
+			self.object_header_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
+			segment_footer.add_object_header_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
+			written_bytes += output.write(&self.current_object_encoder.get_encoded_header())? as u64;
+			self.current_object_encoder.written_object_header = true;
+		};
+
+
+		let mut chunkmap = ChunkMap::new_empty();
+		chunkmap.set_target_size(chunkmap_size as usize);
+
+		// read chunks and write them into the Writer.
+		let segment_footer_len = segment_footer.encode_directly().len() as u64;
+		loop {
+			if (written_bytes +
+				segment_footer_len +
+				target_chunk_size as u64) > target_segment_size-seek_value {
+				
+				if written_bytes == segment_header.encode_directly().len() as u64 {
+					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+				} else {
+					break;
+				}
+			};
+			let current_offset = seek_value + written_bytes;
+			let current_chunk_number = self.current_object_encoder.current_chunk_number();
+			let data = match self.current_object_encoder.get_next_data(
+				current_offset, 
+				self.current_segment_no,
+				self.optional_parameter.deduplication_chunkmap.as_mut()) {
+				Ok(data) => data,
+				Err(e) => match e.get_kind() {
+					ZffErrorKind::ReadEOF => {
+						if written_bytes == segment_header.encode_directly().len() as u64 {
+							return Err(e);
+						} else {
+							//write the appropriate object footer and break the loop
+							self.object_footer_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
+							segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
+							written_bytes += output.write(&self.current_object_encoder.get_encoded_footer()?)? as u64;
+							eof = true;
+							break;
+						}
+					},
+					ZffErrorKind::InterruptedInputStream => {
+						break;
+					},
+					_ => return Err(e),
+				},
+			};
+			written_bytes += output.write(&data)? as u64;
+			let mut data_cursor = Cursor::new(&data);
+			if ChunkHeader::check_identifier(&mut data_cursor) && 
+			!chunkmap.add_chunk_entry(current_chunk_number, written_bytes) {
+					let inner_map = chunkmap.flush();
+   					for chunk_no in inner_map.keys() {
+   						main_footer_chunk_map.insert(
+   							*chunk_no, self.current_segment_no);
+   					}
+   					written_bytes += output.write(&inner_map.encode_directly())? as u64;
+   				};
+		}
+
+		// finish the segment footer and write the encoded footer into the Writer.
+		segment_footer.set_footer_offset(seek_value + written_bytes);
+		if eof {
+			let main_footer = MainFooter::new(
+				DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
+				self.current_segment_no, 
+				self.object_header_segment_numbers.clone(), 
+				self.object_footer_segment_numbers.clone(), 
+				main_footer_chunk_map.clone(),
+				self.optional_parameter.description_notes.clone(), 
+				0);
+			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64 + main_footer.encode_directly().len() as u64);
+		} else {
+			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
+		}
+			
+		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
+		Ok(written_bytes)
+	}
+
+	/// generates the appropriate .zXX files.
+	pub fn generate_files(&mut self) -> Result<()> {
+	    let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
+	    
+	    let mut current_offset = 0;
+	    let mut seek_value = 0;
+	    self.current_segment_no -= 1;
+	    let mut chunk_map = BTreeMap::new();
+
+	    loop {
+	    	self.current_segment_no += 1;
+	    	file_extension = file_extension_next_value(&file_extension)?;
+	    	let mut segment_filename = match &self.output {
+				ZffWriterOutput::NewContainer(path) => path.clone(),
+				ZffWriterOutput::ExtendContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFEXTEND))
+			};
+	    	segment_filename.set_extension(&file_extension);
+	    	let mut output_file = File::create(&segment_filename)?;
+
+	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map) {
+	    		Ok(written_bytes) => {
+	    			seek_value = 0;
+	    			written_bytes
+	    		},
+	    		Err(e) => match e.get_kind() {
+	    			ZffErrorKind::ReadEOF => {
+	    				remove_file(&segment_filename)?;
+	    				match self.object_encoder.pop() {
+	    					Some(creator_obj_encoder) => self.current_object_encoder = creator_obj_encoder,
+	    					None => break,
+	    				};
+	    				self.current_segment_no -=1;
+	    				file_extension = file_extension_previous_value(&file_extension)?;
+	    				seek_value = current_offset;
+	    				current_offset
+	    			},
+	    			_ => return Err(e),
+	    		},
+	    	};
+	    }
+
+	    let main_footer = MainFooter::new(
+	    	DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
+	    	self.current_segment_no-1, 
+	    	self.object_header_segment_numbers.clone(), 
+	    	self.object_footer_segment_numbers.clone(),
+	    	chunk_map,
+	    	self.optional_parameter.description_notes.clone(), 
+	    	current_offset);
+	    file_extension = file_extension_previous_value(&file_extension)?;
+	    let mut segment_filename = match &self.output {
+			ZffWriterOutput::NewContainer(path) => path.clone(),
+			ZffWriterOutput::ExtendContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFEXTEND))
+		};
+		segment_filename.set_extension(&file_extension);
+	    let mut output_file = OpenOptions::new().write(true).append(true).open(&segment_filename)?;
+	    output_file.write_all(&main_footer.encode_directly())?;
+
+	    Ok(())
+	}
+}
+
+fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter> {
+	raw_segment.seek(SeekFrom::End(-8))?;
+	let footer_offset = u64::decode_directly(raw_segment)?;
+	raw_segment.seek(SeekFrom::Start(footer_offset))?;
+	match MainFooter::decode_directly(raw_segment) {
+		Ok(mf) => {
+			raw_segment.rewind()?;
+			Ok(mf)
+		},
+		Err(e) => match e.get_kind() {
+			ZffErrorKind::HeaderDecodeMismatchIdentifier => {
+				raw_segment.rewind()?;
+				Err(e)
+			},
+			_ => Err(e)
+		}
 	}
 }

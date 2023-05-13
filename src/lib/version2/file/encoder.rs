@@ -7,12 +7,12 @@ use std::time::{SystemTime};
 
 // - internal
 use crate::{
-	header::{FileHeader, FileType, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader},
+	header::{FileHeader, FileType, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
 	footer::{FileFooter},
 };
 use crate::{
 	Result,
-	io::{buffer_chunk, calculate_crc32, compress_buffer},
+	io::{buffer_chunk, calculate_crc32, compress_buffer, check_same_byte},
 	HeaderCoding,
 	ValueEncoder,
 	HashType,
@@ -145,11 +145,14 @@ impl FileEncoder {
 	}
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
-	pub fn get_next_chunk(&mut self) -> Result<Vec<u8>> {
+	pub fn get_next_chunk(
+		&mut self, 
+		deduplication_map: Option<&mut DeduplicationChunkMap>,
+		) -> Result<Vec<u8>> {
 		let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 		let chunk_size = self.object_header.chunk_size as usize;
 
-		let buf = match self.file_type {
+		let mut buf = match self.file_type {
 			FileType::Directory => {
 				let mut cursor = Cursor::new(&self.encoded_directory_children);
 				cursor.set_position(self.read_bytes_underlying_data);
@@ -196,9 +199,22 @@ impl FileEncoder {
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 		};
 		self.update_hasher(&buf);
+	    let crc32 = calculate_crc32(&buf);
+	    let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
 
-		let crc32 = calculate_crc32(&buf);
-		let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
+	    // check same byte
+	    if check_same_byte(&buf) {
+	    	chunk_header.flags.same_bytes = true;
+	    	buf = vec![buf[0]]
+	    } else if let Some(deduplication_map) = deduplication_map {
+	    	let b3h = blake3::hash(&buf);
+	    	if let Some(chunk_no) = deduplication_map.get_chunk_number(b3h) {
+	    		buf = chunk_no.to_le_bytes().to_vec();
+	    	} else {
+	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;
+	    	}
+	    	chunk_header.flags.duplicate = true;
+	    }
 
 		let (compressed_data, inner_compression_flag) = compress_buffer(
 			buf, 
@@ -227,7 +243,17 @@ impl FileEncoder {
 			chunk_header.flags.compression = true;
 		}
 
-		chunk.append(&mut chunk_header.encode_directly());
+		let mut encoded_header = if let Some(enc_header) = &self.object_header.encryption_header {
+			let key = match enc_header.get_encryption_key_ref() {
+				Some(key) => key,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
+			};
+			chunk_header.encrypt_and_consume(key, enc_header.algorithm())?.encode_directly()
+		} else {
+			chunk_header.encode_directly()
+		};
+
+		chunk.append(&mut encoded_header);
 		chunk.append(&mut chunk_data);
 		self.current_chunk_number += 1;
 	    Ok(chunk)
@@ -263,7 +289,7 @@ impl FileEncoder {
 	}
 }
 
-/// this implement Read for [FileEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
+/*/// this implement Read for [FileEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
 /// State: completly untested.
 impl Read for FileEncoder {
 	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
@@ -325,4 +351,4 @@ impl Read for FileEncoder {
         }
         Ok(read_bytes)
 	}
-}
+}*/

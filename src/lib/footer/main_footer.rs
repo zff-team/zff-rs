@@ -1,6 +1,6 @@
 // - STD
 use std::io::Cursor;
-use std::collections::HashMap;
+use std::collections::{BTreeMap};
 
 // - internal
 use crate::{
@@ -19,9 +19,9 @@ use crate::{
 pub struct MainFooter {
 	version: u8,
 	number_of_segments: u64,
-	object_header: HashMap<u64, u64>, // <object number, segment number>
-	object_footer: HashMap<u64, u64>, // <object number, segment number>
-	chunk_maps: HashMap<u64, u64>, //<highest chunk number, map offset>
+	object_header: BTreeMap<u64, u64>, // <object number, segment number>
+	object_footer: BTreeMap<u64, u64>, // <object number, segment number>
+	chunk_maps: BTreeMap<u64, u64>, //<highest chunk number, map offset>
 	description_notes: Option<String>,
 	/// offset in the current segment, where the footer starts.
 	footer_offset: u64,
@@ -32,9 +32,9 @@ impl MainFooter {
 	pub fn new(
 		version: u8,
 		number_of_segments: u64,
-		object_header: HashMap<u64, u64>,
-		object_footer: HashMap<u64, u64>,
-		chunk_maps: HashMap<u64, u64>,
+		object_header: BTreeMap<u64, u64>,
+		object_footer: BTreeMap<u64, u64>,
+		chunk_maps: BTreeMap<u64, u64>,
 		description_notes: Option<String>,
 		footer_offset: u64) -> MainFooter {
 		Self {
@@ -64,7 +64,7 @@ impl MainFooter {
 	}
 
 	/// returns the inner hashmap of object-header.
-	pub fn object_header(&self) -> &HashMap<u64, u64> {
+	pub fn object_header(&self) -> &BTreeMap<u64, u64> {
 		&self.object_header
 	}
 
@@ -74,7 +74,7 @@ impl MainFooter {
 	}
 
 	/// returns the inner hashmap of object-footer.
-	pub fn object_footer(&self) -> &HashMap<u64, u64> {
+	pub fn object_footer(&self) -> &BTreeMap<u64, u64> {
 		&self.object_footer
 	}
 
@@ -124,9 +124,9 @@ impl HeaderCoding for MainFooter {
 
 		let footer_version = u8::decode_directly(&mut cursor)?;
 		let number_of_segments = u64::decode_directly(&mut cursor)?;
-		let object_header = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let object_footer = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_maps = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let object_header = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let object_footer = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let position = cursor.position();
 		let description_notes = match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
 			Ok(value) => Some(value),

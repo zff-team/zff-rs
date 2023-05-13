@@ -42,6 +42,8 @@ pub enum ZffErrorKind {
 	Ed25519Error,
 	/// contains a base64::DecodeError.
 	Base64DecodingError,
+	/// contains a rusqlite::Error.
+	RusqliteError,
 	/// contains a time::error::ComponentRange.
 	ComponentRangeError,
 	/// If the signature key length is != 64.
@@ -185,6 +187,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::UnsupportedVersion => "UnsupportedVersion",
 			ZffErrorKind::NoEncryptionDetected => "NoEncryptionDetected",
 			ZffErrorKind::InvalidOption => "InvalidOption",
+			ZffErrorKind::RusqliteError => "RusqliteError",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -293,6 +296,13 @@ impl ZffError {
 	/// }
 	pub fn unwrap_kind(self) -> ZffErrorKind {
 		self.kind
+	}
+}
+
+impl From<rusqlite::Error> for ZffError {
+	fn from(e: rusqlite::Error) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::RusqliteError, err_msg)
 	}
 }
 

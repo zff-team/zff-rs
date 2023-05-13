@@ -68,15 +68,13 @@ pub(crate) const ERROR_HEADER_DECODER_HEADER_LENGTH: &str = "Unable to read head
 pub(crate) const ERROR_HEADER_DECODER_KEY_POSITION: &str = "Key not in position.";
 pub(crate) const ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM: &str = "unknown compression algorithm value";
 pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER: &str = "The read identifier does not match the header identifier.";
-pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_ENCRYPTED: &str = "The main header is encrypted.";
-pub(crate) const ERROR_HEADER_DECODER_MAIN_HEADER_NOT_ENCRYPTED: &str = "The main header is not encrypted.";
-pub(crate) const ERROR_MISSING_SEGMENT_MAIN_HEADER: &str = "A segment with a valid zff main header is missing.";
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &str = "A segment with a valid zff main footer is missing.";
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str = "Missing object header in segment with following object number: ";
 pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object footer in segment with following object number: ";
 pub(crate) const ERROR_MISMATCH_ZFF_VERSION: &str = "mismatch zff version";
-pub(crate) const ERROR_INVALID_SIGNATURE_FLAG_VALUE: &str = "Invalid signature flag value:";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
+pub(crate) const ERROR_INVALID_OPTION_ZFFEXTEND: &str = "Extend container";
+pub(crate) const ERROR_INVALID_OPTION_ZFFCREATE: &str = "Create new container";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 
@@ -105,7 +103,7 @@ pub const ED25519_DALEK_SIGNATURE_LEN: usize = SIGNATURE_LENGTH;
 /// the start value for file extensions. a file-extension always starts with a 'z', followed by the segment number (e.g. "z01", "z02", ..., "z99", "z100", ...).
 pub const FILE_EXTENSION_START: char = 'z';
 /// the file extension for the first segment (which contains the main header also).
-pub const FILE_EXTENSION_FIRST_VALUE: &str = "z01";
+pub const FILE_EXTENSION_INITIALIZER: &str = "z00";
 
 // default versions
 /// current header version for the [ChunkHeader](crate::header::ChunkHeader).
@@ -150,6 +148,8 @@ pub const HEADER_SIGNATURE_LENGTH: usize = 4;
 pub const HEADER_LENGTH_LENGTH: usize = 8;
 /// The default size of the field "header version".
 pub const HEADER_VERSION_LENGTH: usize = 1;
+/// The default chunkmap size
+pub const DEFAULT_CHUNKMAP_SIZE: u64 = 32768;
 
 
 // file metadata extended values
@@ -170,3 +170,11 @@ pub(crate) const METADATA_ATIME: &str = "atime";
 pub(crate) const METADATA_MTIME: &str = "mtime";
 pub(crate) const METADATA_CTIME: &str = "ctime";
 pub(crate) const METADATA_BTIME: &str = "btime";
+
+
+// - ChunkMap
+pub(crate) const CHUNKMAP_SQLITE_CREATE_TABLE_IFNOTEXISTS: &str = "CREATE TABLE IF NOT EXISTS map (chunk_no INTEGER PRIMARY KEY, b3h TEXT)";
+pub(crate) const CHUNKMAP_SQLITE_INSERT_INTO_MAP: &str = "INSERT INTO map VALUES($CHUNK_NO, $B3HASH)";
+pub(crate) const CHUNKMAP_SQLITE_SELECT_BY_B3HASH: &str = "SELECT chunk_no FROM map WHERE b3h = $B3HASH";
+pub(crate) const CHUNKMAP_SQLITE_CHUNK_NO_IDENTIFIER: &str = "$CHUNK_NO";
+pub(crate) const CHUNKMAP_SQLITE_B3HASH_IDENTIFIER: &str = "$B3HASH";
