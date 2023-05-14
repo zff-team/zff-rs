@@ -23,10 +23,6 @@ use crate::{
     CompressionAlgorithm
 };
 
-use crate::{
-    DEFAULT_HEADER_VERSION_FILE_HEADER,
-};
-
 #[cfg(target_family = "unix")]
 use crate::{
     METADATA_EXT_KEY_GID,

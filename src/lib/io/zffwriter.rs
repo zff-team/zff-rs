@@ -4,7 +4,8 @@ use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 use std::path::{PathBuf};
 use std::fs::{File, OpenOptions, remove_file, read_link, read_dir};
 use std::collections::{HashMap, VecDeque};
-
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::MetadataExt;
 
 // - internal
 use crate::{
@@ -26,7 +27,7 @@ use crate::{
 	ERROR_INVALID_OPTION_ZFFCREATE,
 };
 use crate::{
-	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap},
+	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap, FileHeader},
 	footer::{MainFooter, SegmentFooter},
 	ObjectEncoder,
 	PhysicalObjectEncoder,
@@ -91,7 +92,7 @@ impl ZffExtenderParameter {
 pub struct ZffWriter<R: Read> {
 	object_encoder: Vec<ObjectEncoderInformation<R>>,
 	current_object_encoder: ObjectEncoderInformation<R>, //the current object encoder
-	output: ZffWriterOutput, // Could be also a ZffWriterOutput to identify the "next segment to write" by using extender?
+	output: ZffWriterOutput,
 	current_segment_no: u64,
 	object_header_segment_numbers: BTreeMap<u64, u64>, //<object_number, segment_no>
 	object_footer_segment_numbers: BTreeMap<u64, u64>, //<object_number, segment_no>
@@ -305,6 +306,7 @@ impl<R: Read> ZffWriter<R> {
 		hash_types: &Vec<HashType>,
 		signature_key_bytes: &Option<Vec<u8>>,
 		chunk_number: u64) -> Result<LogicalObjectEncoder> {
+
 		let mut current_file_number = 0;
 		let mut parent_file_number = 0;
 		let mut hardlink_map = HashMap::new();
@@ -325,6 +327,7 @@ impl<R: Read> ZffWriter<R> {
 					continue;
 				},
 			};
+
 			//test if file is readable and exists.
 			match File::open(&path) {
 				Ok(_) => (),
@@ -335,6 +338,7 @@ impl<R: Read> ZffWriter<R> {
 					continue;
 				},
 			};
+
 			root_dir_filenumbers.push(current_file_number);
 			if metadata.file_type().is_dir() {
 				directories_to_traversal.push_back((path, parent_file_number, current_file_number));
@@ -453,14 +457,33 @@ impl<R: Read> ZffWriter<R> {
 			}
 		}
 
+		let mut inner_hardlink_map = HashMap::new();
+		let files: Result<Vec<(Box<dyn Read>, FileHeader)>> = files.into_iter()
+        .map(|(path, mut file_header)| {
+            let file = File::open(path)?;
+            let metadata = file.metadata()?;
+		    #[cfg(target_family = "unix")]
+		    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
+	    		if let Some(fno) = inner_map.get(&metadata.ino()) {
+					if *fno != file_header.file_number {
+						file_header.transform_to_hardlink();
+						inner_hardlink_map.insert(file_header.file_number, *fno);
+					};
+		    	}
+	     	}
+            let file_read: Box<dyn Read> = Box::new(file);
+            Ok((file_read, file_header))
+        })
+        .collect();
+
 		let mut log_obj = LogicalObjectEncoder::new(
 			logical_object_header,
-			files,
+			files?,
 			root_dir_filenumbers,
 			hash_types.to_owned(),
 			signature_key_bytes.clone(),
 			symlink_real_paths,
-			hardlink_map,
+			inner_hardlink_map,
 			directory_children,
 			chunk_number)?;
 

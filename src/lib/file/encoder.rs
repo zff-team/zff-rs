@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read, Seek, SeekFrom, Cursor};
+use std::io::{Read, Cursor};
 use std::path::PathBuf;
 use std::fs::{File};
 use std::collections::{HashMap};
@@ -40,7 +40,7 @@ pub struct FileEncoder {
 	/// The appropriate [ObjectHeader].
 	object_header: ObjectHeader,
 	/// The underlying [File](std::fs::File) object to read from.
-	underlying_file: File,
+	underlying_file: Box<dyn Read>,
 	/// optinal signature key, to sign the data with the given keypair
 	signature_key: Option<Keypair>,
 	/// optional encryption information, to encrypt the data with the given key and algorithm
@@ -75,7 +75,7 @@ impl FileEncoder {
 	pub fn new(
 		file_header: FileHeader,
 		object_header: ObjectHeader,
-		file: File,
+		file: Box<dyn Read>,
 		hash_types: Vec<HashType>,
 		encryption_information: Option<EncryptionInformation>,
 		signature_key: Option<Keypair>,
@@ -105,7 +105,7 @@ impl FileEncoder {
 			encoded_header_remaining_bytes: encoded_header.len(),
 			file_header,
 			object_header,
-			underlying_file: file,
+			underlying_file: Box::new(file),
 			hasher_map,
 			encryption_information,
 			signature_key,

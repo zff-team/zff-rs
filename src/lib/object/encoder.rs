@@ -406,12 +406,23 @@ impl<D: Read> Read for PhysicalObjectEncoder<D> {
 	}
 }*/
 
+pub enum FileRessource {
+	ByPath(PathBuf),
+	ByReader(Box<dyn Read>)
+}
+
+impl From<PathBuf> for FileRessource {
+	fn from(path: PathBuf) -> Self {
+		FileRessource::ByPath(path)
+	}
+}
+
 /// The [LogicalObjectEncoder] can be used to encode a logical object.
 pub struct LogicalObjectEncoder {
 	/// The appropriate original object header
 	obj_header: ObjectHeader,
 	//encoded_header_remaining_bytes: usize,
-	files: Vec<(PathBuf, FileHeader)>,
+	files: Vec<(Box<dyn Read>, FileHeader)>,
 	current_file_encoder: Option<FileEncoder>,
 	current_file_header_read: bool,
 	current_file_number: u64,
@@ -420,7 +431,7 @@ pub struct LogicalObjectEncoder {
 	signature_key_bytes: Option<Vec<u8>>,
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
-	hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
+	hardlink_map: HashMap<u64, u64>, //<filenumber, filenumber of hardlink>
 	directory_children: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
 	unaccessable_files: Vec<PathBuf>
@@ -458,12 +469,12 @@ impl LogicalObjectEncoder {
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		obj_header: ObjectHeader,
-		files: Vec<(PathBuf, FileHeader)>,
+		files: Vec<(Box<dyn Read>, FileHeader)>,
 		root_dir_filenumbers: Vec<u64>,
 		hash_types: Vec<HashType>,
 		signature_key_bytes: Option<Vec<u8>>,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
-		hardlink_map: HashMap<u64, HashMap<u64, u64>>, // <dev_id, <inode, file number>>
+		hardlink_map: HashMap<u64, u64>, // <filenumber, filenumber of hardlink>
 		directory_children: HashMap<u64, Vec<u64>>,
 		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
 
@@ -477,12 +488,12 @@ impl LogicalObjectEncoder {
 	    	(obj_header.encode_directly(), None)
 	    };
 
-		let mut files = files;
-		let (current_path, mut current_file_header) = match files.pop() {
+		let mut files = files; //TODO: ????
+		let (reader, current_file_header) = match files.pop() {
 			Some((file, header)) => (file, header),
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
-		let current_file = File::open(&current_path)?;
+
 		let current_file_number = current_file_header.file_number;
 		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
 		let current_directory_children = match directory_children.get(&current_file_number) {
@@ -493,18 +504,7 @@ impl LogicalObjectEncoder {
 	    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
 	    	None => None
 	    };
-	    let metadata = current_file.metadata()?;
-
-	    let mut hardlink_filenumber = None;
-	    #[cfg(target_family = "unix")]
-	    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
-    		if let Some(fno) = inner_map.get(&metadata.ino()) {
-				if *fno != current_file_header.file_number {
-					current_file_header.transform_to_hardlink();
-					hardlink_filenumber = Some(*fno);
-				};
-	    	}
-     	}
+			    
 
      	let encryption_information = if let Some(encryption_key) = &encryption_key {
      		obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
@@ -512,10 +512,12 @@ impl LogicalObjectEncoder {
      		None
      	};
 
+     	let hardlink_filenumber = hardlink_map.get(&current_file_number).copied();
+
 		let first_file_encoder = Some(FileEncoder::new(
 			current_file_header,
 			obj_header.clone(),
-			current_file, 
+			reader, 
 			hash_types.clone(), 
 			encryption_information, 
 			signature_key, 
@@ -610,14 +612,13 @@ impl LogicalObjectEncoder {
 				let file_footer = file_encoder.get_encoded_footer()?;
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
-				let (current_path, mut current_file_header) = match self.files.pop() {
+				
+				let (reader, current_file_header) = match self.files.pop() {
 					Some((file, header)) => (file, header),
-					None => {
-						self.current_file_encoder = None;
-						return Ok(file_footer)
-					},
-				};
-				let current_file = File::open(current_path)?;
+					None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
+				};	    
+		     	let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).copied();
+
 				self.current_file_number = current_file_header.file_number;
 				let symlink_real_path = self.symlink_real_paths.get(&self.current_file_number).cloned();
 				let current_directory_children = match self.directory_children.get(&self.current_file_number) {
@@ -629,20 +630,6 @@ impl LogicalObjectEncoder {
 			    	None => None
 			    };
 
-			    let metadata = current_file.metadata()?;
-
-			    // transform the next header to hardlink, if the file is one.
-			    let mut hardlink_filenumber = None;
-			    #[cfg(target_family = "unix")]
-			    if let Some(inner_map) = self.hardlink_map.get(&metadata.dev()) {
-		    		if let Some(fno) = inner_map.get(&metadata.ino()) {
-	    				if *fno != current_file_header.file_number {
-	    					current_file_header.transform_to_hardlink();
-	    					hardlink_filenumber = Some(*fno);
-	    				};
-    			    }
-       			}
-
        			let encryption_information = if let Some(encryption_key) = &self.encryption_key {
 		     		self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
 		     	} else {
@@ -653,7 +640,7 @@ impl LogicalObjectEncoder {
 				self.current_file_encoder = Some(FileEncoder::new(
 					current_file_header, 
 					self.obj_header.clone(),
-					current_file, 
+					reader, 
 					self.hash_types.clone(), 
 					encryption_information, 
 					signature_key, 
