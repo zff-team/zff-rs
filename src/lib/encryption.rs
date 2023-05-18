@@ -6,14 +6,16 @@ use crate::{
 	Result,
 	ZffError,
 	ZffErrorKind,
+	SCRYPT_DERIVED_KEY_LENGTH_AES_128,
+	SCRYPT_DERIVED_KEY_LENGTH_AES_256
 };
 
 // - external
 use pkcs5::{
 	EncryptionScheme,
 	pbes2::Parameters as PBES2Parameters,
+	scrypt::Params as ScryptParams
 };
-use scrypt::Params as ScryptParams;
 use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
 	aead::{Aead},
@@ -157,7 +159,7 @@ impl Encryption {
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
@@ -174,7 +176,7 @@ impl Encryption {
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
@@ -191,7 +193,7 @@ impl Encryption {
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.decrypt(password, plaintext)?)
 	}
@@ -208,7 +210,7 @@ impl Encryption {
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
+		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.decrypt(password, plaintext)?)
 	}

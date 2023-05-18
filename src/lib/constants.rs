@@ -178,3 +178,7 @@ pub(crate) const CHUNKMAP_SQLITE_INSERT_INTO_MAP: &str = "INSERT INTO map VALUES
 pub(crate) const CHUNKMAP_SQLITE_SELECT_BY_B3HASH: &str = "SELECT chunk_no FROM map WHERE b3h = $B3HASH";
 pub(crate) const CHUNKMAP_SQLITE_CHUNK_NO_IDENTIFIER: &str = "$CHUNK_NO";
 pub(crate) const CHUNKMAP_SQLITE_B3HASH_IDENTIFIER: &str = "$B3HASH";
+
+// - Encryption parameters
+pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes
+pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_256: usize = 32; // in bytes

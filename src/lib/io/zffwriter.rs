@@ -415,14 +415,14 @@ impl<R: Read> ZffWriter<R> {
 					}
 				};
 
-				let metadata = match std::fs::symlink_metadata(&inner_element.path()) {
+				let metadata = match std::fs::symlink_metadata(inner_element.path()) {
 					Ok(metadata) => metadata,
 					Err(_) => {
 						unaccessable_files.push(current_dir.to_string_lossy().to_string());
 						continue;
 					},
 				};
-				match File::open(&inner_element.path()) {
+				match File::open(inner_element.path()) {
 					Ok(_) => (),
 					Err(_) => {
 						unaccessable_files.push(inner_element.path().to_string_lossy().to_string());
@@ -584,13 +584,13 @@ impl<R: Read> ZffWriter<R> {
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) && 
 			!chunkmap.add_chunk_entry(current_chunk_number, written_bytes) {
-					let inner_map = chunkmap.flush();
-   					for chunk_no in inner_map.keys() {
-   						main_footer_chunk_map.insert(
-   							*chunk_no, self.current_segment_no);
-   					}
-   					written_bytes += output.write(&inner_map.encode_directly())? as u64;
-   				};
+				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
+					segment_footer.chunk_map_table.insert(*chunk_no, written_bytes);
+				}
+				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
+				chunkmap.flush();
+   			};
 		}
 
 		// finish the segment footer and write the encoded footer into the Writer.
@@ -612,7 +612,6 @@ impl<R: Read> ZffWriter<R> {
 		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
 	}
-
 	/// generates the appropriate .zXX files.
 	pub fn generate_files(&mut self) -> Result<()> {
 	    let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);

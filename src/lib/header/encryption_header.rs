@@ -19,6 +19,7 @@ use crate::{
 use crate::{
 	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
 	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
+	DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER,
 };
 
 /// This struct could be used to manage the encryption information while creating a zff container
@@ -44,7 +45,6 @@ impl EncryptionInformation {
 /// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct EncryptionHeader {
-	version: u8,
 	pbe_header: PBEHeader,
 	algorithm: EncryptionAlgorithm,
 	encrypted_encryption_key: Vec<u8>,
@@ -54,13 +54,11 @@ pub struct EncryptionHeader {
 impl EncryptionHeader {
 	/// creates a new encryption header by the given values.
 	pub fn new(
-		version: u8,
 		pbe_header: PBEHeader,
 		algorithm: EncryptionAlgorithm,
 		encrypted_encryption_key: Vec<u8>, //encrypted with set password
 		) -> EncryptionHeader {
 		Self {
-			version,
 			pbe_header,
 			algorithm,
 			encrypted_encryption_key,
@@ -160,11 +158,11 @@ impl HeaderCoding for EncryptionHeader {
 	}
 
 	fn version(&self) -> u8 {
-		self.version
+		DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![self.version()];
 		vec.append(&mut self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
 		vec.append(&mut self.encrypted_encryption_key.encode_directly());
@@ -173,16 +171,20 @@ impl HeaderCoding for EncryptionHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<EncryptionHeader> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
 		let pbe_header = PBEHeader::decode_directly(&mut cursor)?;
 		let encryption_algorithm = match u8::decode_directly(&mut cursor)? {
 			0 => EncryptionAlgorithm::AES128GCM,
 			1 => EncryptionAlgorithm::AES256GCM,
+			2 => EncryptionAlgorithm::CHACHA20POLY1305,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
 		};
 		let key_length = u64::decode_directly(&mut cursor)? as usize;
 		let mut encryption_key = vec![0u8; key_length];
 		cursor.read_exact(&mut encryption_key)?;
-		Ok(EncryptionHeader::new(header_version, pbe_header, encryption_algorithm, encryption_key))
+		Ok(EncryptionHeader::new(pbe_header, encryption_algorithm, encryption_key))
 	}
 }

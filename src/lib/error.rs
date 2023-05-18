@@ -8,7 +8,7 @@ use std::collections::TryReserveError;
 
 // - external
 use pkcs5::Error as PKCS5CryptoError;
-use scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
+use pkcs5::scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
 use aes_gcm::aead::Error as EncryptionError;
 use digest::InvalidLength;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
