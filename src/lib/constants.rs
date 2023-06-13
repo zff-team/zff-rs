@@ -54,8 +54,7 @@ pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1<<4;
 // object header flags
 pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1<<0;
 pub(crate) const SIGN_HASH_FLAG_VALUE: u8 = 1<<1;
-pub(crate) const SIGN_CHUNKS_FLAG_VALUE: u8 = 1<<2;
-pub(crate) const PASSIVE_OBJECT_FLAG_VALUE: u8 = 1<<3;
+pub(crate) const PASSIVE_OBJECT_FLAG_VALUE: u8 = 1<<2;
 
 // - Error messages
 pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE: &str = "Unknown hash type value.";
@@ -84,8 +83,6 @@ pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number i
 pub(crate) const ERROR_ZFFREADER_MISSING_FILE: &str = "Missing file number in zffreader: ";
 
 // Default values
-/// the default chunk size as 2^x. This value is 15, so the default chunk size is 2^15 = 32768 bytes.
-pub const DEFAULT_CHUNK_SIZE: u8 = 15;
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
 /// The number of the first object in a zff container.

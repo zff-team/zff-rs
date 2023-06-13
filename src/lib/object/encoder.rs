@@ -1,10 +1,6 @@
 // - STD
 use std::path::Path;
-#[cfg(target_family = "unix")]
-use std::os::unix::fs::MetadataExt;
-
-use std::io::{Read, Cursor, Seek, SeekFrom};
-use std::fs::{File};
+use std::io::{Read};
 use std::path::{PathBuf};
 use std::collections::{HashMap};
 use std::time::{SystemTime};
@@ -234,7 +230,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    };
 	    self.update_hasher(&buf);
 	    let crc32 = calculate_crc32(&buf);
-	    let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
 
 	    // create chunk header
 	    let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
@@ -257,7 +252,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 	    // prepare chunk header:
 	    chunk_header.crc32 = crc32;
-	    chunk_header.ed25519_signature = signature;
 	    if compression_flag {
 			chunk_header.flags.compression = true;
 		}

@@ -1,7 +1,7 @@
 // - STD
 use std::io::{Read, Cursor};
 use std::path::PathBuf;
-use std::fs::{File};
+
 use std::collections::{HashMap};
 use std::time::{SystemTime};
 
@@ -17,7 +17,6 @@ use crate::{
 	ValueEncoder,
 	HashType,
 	Hash,
-	Signature,
 	Encryption,
 	ZffError,
 	ZffErrorKind,
@@ -200,7 +199,6 @@ impl FileEncoder {
 		};
 		self.update_hasher(&buf);
 	    let crc32 = calculate_crc32(&buf);
-	    let signature = Signature::calculate_signature(self.signature_key.as_ref(), &buf);
 
 	    // check same byte
 	    if check_same_byte(&buf) {
@@ -238,7 +236,6 @@ impl FileEncoder {
 	    // prepare chunk header:
 		chunk_header.chunk_size = chunk_data.len() as u64; 
 		chunk_header.crc32 = crc32;
-		chunk_header.ed25519_signature = signature;
 		if compression_flag {
 			chunk_header.flags.compression = true;
 		}

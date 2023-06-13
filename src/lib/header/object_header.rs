@@ -24,7 +24,6 @@ use crate::{
 	ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE,
 	ENCRYPT_OBJECT_FLAG_VALUE,
 	SIGN_HASH_FLAG_VALUE,
-	SIGN_CHUNKS_FLAG_VALUE,
 	PASSIVE_OBJECT_FLAG_VALUE,
 };
 
@@ -37,13 +36,11 @@ use crate::header::{
 /// Holds the appropriate object flags:
 /// - the encryption flag, if the appropriate object is encrypted.
 /// - the sign hash flag, if the appropriate calculated hash value was signed.
-/// - the sign chunks flag, if the appropriate chunks are signed.
 /// - the passive object flag, if this object should not handled as an active object
 #[derive(Debug,Clone,Default)]
 pub struct ObjectFlags {
 	pub encryption: bool,
 	pub sign_hash: bool,
-	pub sign_chunks: bool,
 	pub passive_object: bool,
 }
 
@@ -53,7 +50,6 @@ impl From<u8> for ObjectFlags {
 
 			encryption: flag_values & ENCRYPT_OBJECT_FLAG_VALUE != 0,
 			sign_hash: flag_values & SIGN_HASH_FLAG_VALUE != 0,
-			sign_chunks: flag_values & SIGN_CHUNKS_FLAG_VALUE != 0,
 			passive_object: flag_values & PASSIVE_OBJECT_FLAG_VALUE != 0,
 		}
 	}
@@ -99,11 +95,6 @@ impl ObjectHeader {
 		}
 	}
 
-	/// returns, if the chunks has a ed25519 signature or not.
-	pub fn has_per_chunk_signatures(&self) -> bool {
-		self.flags.sign_chunks
-	}
-
 	/// checks if a signature method was used. Returns true if and false if not.
 	pub fn has_hash_signatures(&self) -> bool {
 		self.flags.sign_hash
@@ -147,9 +138,6 @@ impl ObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		if self.flags.sign_chunks {
-			flags += SIGN_CHUNKS_FLAG_VALUE;
-		}
 		if self.flags.passive_object {
 			flags += PASSIVE_OBJECT_FLAG_VALUE;
 		}
@@ -295,9 +283,6 @@ impl HeaderCoding for ObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		if self.flags.sign_chunks {
-			flags += SIGN_CHUNKS_FLAG_VALUE;
-		}
 		if self.flags.passive_object {
 			flags += PASSIVE_OBJECT_FLAG_VALUE;
 		}

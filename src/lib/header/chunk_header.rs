@@ -1,9 +1,6 @@
 // - STD
 use std::borrow::Borrow;
-use std::io::{Cursor,Read};
-
-// - external
-use ed25519_dalek::{SIGNATURE_LENGTH};
+use std::io::{Cursor};
 
 // - internal
 use crate::{
@@ -53,7 +50,6 @@ pub struct ChunkHeader {
 	pub chunk_size: u64,
 	pub flags: ChunkHeaderFlags,
 	pub crc32: u32,
-	pub ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,
 }
 
 impl ChunkHeader {
@@ -65,7 +61,6 @@ impl ChunkHeader {
 			chunk_size: 0,
 			flags: ChunkHeaderFlags::default(),
 			crc32: 0,
-			ed25519_signature: None,
 		}
 	}
 
@@ -74,15 +69,13 @@ impl ChunkHeader {
 		chunk_number: u64,
 		chunk_size: u64,
 		flags:ChunkHeaderFlags,
-		crc32: u32,
-		ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>) -> ChunkHeader {
+		crc32: u32) -> ChunkHeader {
 		Self {
 			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size,
 			flags,
 			crc32,
-			ed25519_signature
 		}
 	}
 
@@ -93,11 +86,7 @@ impl ChunkHeader {
 		K: AsRef<[u8]>,
 	{
 		let crc32 = Encryption::encrypt_chunk_header_crc32(&key, self.crc32.to_le_bytes(), self.chunk_number, algorithm.borrow())?;
-		let ed25519_signature = match &self.ed25519_signature {
-			None => None,
-			Some(cipher) => Some(Encryption::encrypt_chunk_header_ed25519_signature(key, cipher, self.chunk_number, algorithm)?),
-		};
-		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags.clone(), crc32, ed25519_signature))
+		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags.clone(), crc32))
 	}
 
 	/// tries to encrypt the ChunkHeader. Consumes theunencrypted ChunkHeader, regardless of whether an error occurs or not.
@@ -107,11 +96,7 @@ impl ChunkHeader {
 		K: AsRef<[u8]>,
 	{
 		let crc32 = Encryption::encrypt_chunk_header_crc32(&key, self.crc32.to_le_bytes(), self.chunk_number, algorithm.borrow())?;
-		let ed25519_signature = match &self.ed25519_signature {
-			None => None,
-			Some(cipher) => Some(Encryption::encrypt_chunk_header_ed25519_signature(key, cipher, self.chunk_number, algorithm)?),
-		};
-		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags, crc32, ed25519_signature))
+		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags, crc32))
 	}
 }
 
@@ -149,10 +134,6 @@ impl HeaderCoding for ChunkHeader {
 		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
-		match self.ed25519_signature {
-			None => (),
-			Some(signature) => vec.append(&mut signature.encode_directly()),
-		};
 		
 		vec
 	}
@@ -168,14 +149,8 @@ impl HeaderCoding for ChunkHeader {
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let flags = ChunkHeaderFlags::from(u8::decode_directly(&mut cursor)?);
 		let crc32 = u32::decode_directly(&mut cursor)?;
-		let mut ed25519_signature = None;
-		if cursor.position() < (data.len() as u64 - 1) {
-			let mut buffer = [0; SIGNATURE_LENGTH];
-			cursor.read_exact(&mut buffer)?;
-			ed25519_signature = Some(buffer);
-		}
 
-		Ok(ChunkHeader::new(chunk_number, chunk_size, flags, crc32, ed25519_signature))
+		Ok(ChunkHeader::new(chunk_number, chunk_size, flags, crc32))
 	}
 }
 
@@ -187,7 +162,6 @@ pub struct EncryptedChunkHeader {
 	pub chunk_size: u64,
 	pub flags: ChunkHeaderFlags,
 	pub crc32: Vec<u8>,
-	pub ed25519_signature: Option<Vec<u8>>,
 }
 
 impl EncryptedChunkHeader {
@@ -199,7 +173,6 @@ impl EncryptedChunkHeader {
 			chunk_size: 0,
 			flags: ChunkHeaderFlags::default(),
 			crc32: Vec::new(),
-			ed25519_signature: None,
 		}
 	}
 
@@ -208,15 +181,13 @@ impl EncryptedChunkHeader {
 		chunk_number: u64, 
 		chunk_size: u64, 
 		flags:ChunkHeaderFlags, 
-		crc32: Vec<u8>, 
-		ed25519_signature: Option<Vec<u8>>) -> EncryptedChunkHeader {
+		crc32: Vec<u8>) -> EncryptedChunkHeader {
 		Self {
 			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size,
 			flags,
 			crc32,
-			ed25519_signature
 		}
 	}
 
@@ -227,11 +198,7 @@ impl EncryptedChunkHeader {
 		K: AsRef<[u8]>,
 	{
 		let crc32: u32 = Encryption::decrypt_chunk_header_crc32(&key, &self.crc32, self.chunk_number, algorithm.borrow())?;
-		let ed25519_signature = match &self.ed25519_signature {
-			None => None,
-			Some(cipher) => Some(Encryption::decrypt_chunk_header_ed25519_signature(key, cipher, self.chunk_number, algorithm)?),
-		};
-		Ok(ChunkHeader::new(self.chunk_number, self.chunk_size, self.flags.clone(), crc32, ed25519_signature))
+		Ok(ChunkHeader::new(self.chunk_number, self.chunk_size, self.flags.clone(), crc32))
 	}
 
 	/// tries to decrypt the ChunkHeader. Consumes the EncryptedChunkHeader, regardless of whether an error occurs or not.
@@ -241,11 +208,7 @@ impl EncryptedChunkHeader {
 		K: AsRef<[u8]>,
 	{
 		let crc32: u32 = Encryption::decrypt_chunk_header_crc32(&key, &self.crc32, self.chunk_number, algorithm.borrow())?;
-		let ed25519_signature = match &self.ed25519_signature {
-			None => None,
-			Some(cipher) => Some(Encryption::decrypt_chunk_header_ed25519_signature(key, cipher, self.chunk_number, algorithm)?),
-		};
-		Ok(ChunkHeader::new(self.chunk_number, self.chunk_size, self.flags, crc32, ed25519_signature))
+		Ok(ChunkHeader::new(self.chunk_number, self.chunk_size, self.flags, crc32))
 	}
 }
 
@@ -283,10 +246,6 @@ impl HeaderCoding for EncryptedChunkHeader {
 		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
-		match &self.ed25519_signature {
-			None => (),
-			Some(signature) => vec.append(&mut signature.encode_directly()),
-		};
 		
 		vec
 	}
@@ -302,11 +261,7 @@ impl HeaderCoding for EncryptedChunkHeader {
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let flags = ChunkHeaderFlags::from(u8::decode_directly(&mut cursor)?);
 		let crc32 = Vec::<u8>::decode_directly(&mut cursor)?;
-		let mut ed25519_signature = None;
-		if cursor.position() < (data.len() as u64 - 1) {
-			ed25519_signature = Some(Vec::<u8>::decode_directly(&mut cursor)?);
-		}
 
-		Ok(EncryptedChunkHeader::new(chunk_number, chunk_size, flags, crc32, ed25519_signature))
+		Ok(EncryptedChunkHeader::new(chunk_number, chunk_size, flags, crc32))
 	}
 }
