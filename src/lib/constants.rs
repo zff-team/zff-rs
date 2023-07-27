@@ -1,3 +1,5 @@
+use redb::TableDefinition;
+
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 // identifier: magic bytes
@@ -170,11 +172,7 @@ pub(crate) const METADATA_BTIME: &str = "btime";
 
 
 // - ChunkMap
-pub(crate) const CHUNKMAP_SQLITE_CREATE_TABLE_IFNOTEXISTS: &str = "CREATE TABLE IF NOT EXISTS map (chunk_no INTEGER PRIMARY KEY, b3h TEXT)";
-pub(crate) const CHUNKMAP_SQLITE_INSERT_INTO_MAP: &str = "INSERT INTO map VALUES($CHUNK_NO, $B3HASH)";
-pub(crate) const CHUNKMAP_SQLITE_SELECT_BY_B3HASH: &str = "SELECT chunk_no FROM map WHERE b3h = $B3HASH";
-pub(crate) const CHUNKMAP_SQLITE_CHUNK_NO_IDENTIFIER: &str = "$CHUNK_NO";
-pub(crate) const CHUNKMAP_SQLITE_B3HASH_IDENTIFIER: &str = "$B3HASH";
+pub const CHUNK_MAP_TABLE: TableDefinition<&[u8; 32], u64> = TableDefinition::new("map");
 
 // - Encryption parameters
 pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes

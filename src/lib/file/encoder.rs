@@ -206,7 +206,7 @@ impl FileEncoder {
 	    	buf = vec![buf[0]]
 	    } else if let Some(deduplication_map) = deduplication_map {
 	    	let b3h = blake3::hash(&buf);
-	    	if let Some(chunk_no) = deduplication_map.get_chunk_number(b3h) {
+	    	if let Ok(chunk_no) = deduplication_map.get_chunk_number(b3h) {
 	    		buf = chunk_no.to_le_bytes().to_vec();
 	    	} else {
 	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;

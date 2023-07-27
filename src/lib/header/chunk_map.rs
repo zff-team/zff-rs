@@ -15,15 +15,11 @@ use crate::{
 	ZffErrorKind,
 	HEADER_IDENTIFIER_CHUNK_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_MAP,
-	CHUNKMAP_SQLITE_CREATE_TABLE_IFNOTEXISTS,
-	CHUNKMAP_SQLITE_INSERT_INTO_MAP,
-	CHUNKMAP_SQLITE_SELECT_BY_B3HASH,
-	CHUNKMAP_SQLITE_CHUNK_NO_IDENTIFIER,
-	CHUNKMAP_SQLITE_B3HASH_IDENTIFIER,
+	CHUNK_MAP_TABLE,
 };
 
 // - external
-use rusqlite::Connection as SqliteConnection;
+use redb::{Database, ReadableTable};
 use blake3::Hash as Blake3Hash;
 
 #[derive(Debug,Clone,PartialEq,Eq)]
@@ -99,7 +95,7 @@ impl HeaderCoding for ChunkMap {
 
 pub enum DeduplicationChunkMap {
 	InMemory(HashMap<Blake3Hash, u64>), //<blake3-hash, the appropriate chunk number with the original data>
-	TempSqlite(SqliteConnection),
+	Redb(Database),
 }
 
 impl Default for DeduplicationChunkMap {
@@ -110,14 +106,12 @@ impl Default for DeduplicationChunkMap {
 
 impl DeduplicationChunkMap {
 	pub fn new_from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
-		let db_conn = SqliteConnection::open(
-			path.as_ref())?;
-		db_conn.execute(CHUNKMAP_SQLITE_CREATE_TABLE_IFNOTEXISTS, ())?;
-        Ok(Self::TempSqlite(db_conn))
+		let db = Database::create(path.as_ref())?;
+        Ok(Self::Redb(db))
 	}
 
-	pub fn new_from_sqlite_connection(connection: SqliteConnection) -> Self {
-		Self::TempSqlite(connection)
+	pub fn new_from_db(database: Database) -> Self {
+		Self::Redb(database)
 	}
 
 	pub fn new_in_memory_map() -> Self {
@@ -133,32 +127,32 @@ impl DeduplicationChunkMap {
 				}
 				Ok(())
 			},
-			DeduplicationChunkMap::TempSqlite(conn) => {
-				let statement = String::from(CHUNKMAP_SQLITE_INSERT_INTO_MAP)
-								.replace(CHUNKMAP_SQLITE_CHUNK_NO_IDENTIFIER, &chunk_no.to_string())
-				 				.replace(CHUNKMAP_SQLITE_B3HASH_IDENTIFIER, &blak3_hash.to_hex());
-				conn.execute(&statement, ())?;
+			DeduplicationChunkMap::Redb(db) => {
+				let write_txn = db.begin_write()?;
+			    {
+			        let mut table = write_txn.open_table(CHUNK_MAP_TABLE)?;
+			        table.insert(blak3_hash.as_bytes(), chunk_no)?;
+			    }
+			    write_txn.commit()?;
 				Ok(())
 			}
 		}
 	}
 
 	#[allow(clippy::let_and_return)]
-	pub fn get_chunk_number<B>(&mut self, blak3_hash: B) -> Option<u64>
+	pub fn get_chunk_number<B>(&mut self, blak3_hash: B) -> Result<u64>
 	where
 		B: Borrow<Blake3Hash>
 	{ //returns the appropriate Chunk no.
 		match self {
 			DeduplicationChunkMap::InMemory(map) => {
-				map.get(blak3_hash.borrow()).copied()
+				map.get(blak3_hash.borrow()).copied().ok_or(ZffError::new_not_in_map_error())
 			},
-			DeduplicationChunkMap::TempSqlite(conn) => {
-				let number: u64 = conn.query_row(&String::from(CHUNKMAP_SQLITE_SELECT_BY_B3HASH)
-												.replace(CHUNKMAP_SQLITE_B3HASH_IDENTIFIER, 
-													&blak3_hash.borrow().to_hex()), 
-												[],
-												|row| row.get(0)).ok()?;
-				Some(number)
+			DeduplicationChunkMap::Redb(db) => {
+			let read_txn = db.begin_read()?;
+    		let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
+    		let value = table.get(blak3_hash.borrow().as_bytes())?.ok_or(ZffError::new_not_in_map_error())?.value();
+    		Ok(value)
 			}
 		}
 	}

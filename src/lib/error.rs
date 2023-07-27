@@ -15,12 +15,19 @@ use ed25519_dalek::ed25519::Error as Ed25519Error;
 use base64::DecodeError as Base64DecodingError;
 use lz4_flex::frame::Error as Lz4Error;
 use time::error::ComponentRange as ComponentRangeError;
+use redb::{
+	DatabaseError as RedbError, 
+	TransactionError as RedbTransactionError, 
+	TableError as RedbTableError, 
+	StorageError as RedbStorageError,
+	CommitError as RedbCommitError
+	};
 
 /// The main error-type of this crate.
 #[derive(Debug)]
 pub struct ZffError {
-	details: String,
-	kind: ZffErrorKind,
+	pub details: String,
+	pub kind: ZffErrorKind,
 }
 
 /// Contains the variants/kinds of errors, which could be find in this crate.
@@ -28,6 +35,8 @@ pub struct ZffError {
 pub enum ZffErrorKind {
 	/// contains a std::io::Error.
 	IoError(io::Error),
+	/// contains a redb::*Error.
+	RedbError,
 	/// contains a pkcs5::CryptoError.
 	PKCS5CryptoError,
 	/// contains a scrypt::errors::InvalidParams.
@@ -42,8 +51,6 @@ pub enum ZffErrorKind {
 	Ed25519Error,
 	/// contains a base64::DecodeError.
 	Base64DecodingError,
-	/// contains a rusqlite::Error.
-	RusqliteError,
 	/// contains a time::error::ComponentRange.
 	ComponentRangeError,
 	/// If the signature key length is != 64.
@@ -123,6 +130,8 @@ pub enum ZffErrorKind {
 	NoChunksLeft,
 	/// Error for Seek.
 	Seek,
+	/// Error will be returned, if a specific element is not in map.
+	ValueNotInMap,
 	/// Error will be returned, if the operation is not possible because of missing memory capacity.
 	OutOfMemory,
 	/// Error will be returned, if the version of this header or footer is unsupported by this library version.
@@ -138,6 +147,7 @@ impl fmt::Display for ZffErrorKind {
 		let err_msg = match self {
 			ZffErrorKind::IoError(_) => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
+			ZffErrorKind::ValueNotInMap => "ValueNotInMap",
 			ZffErrorKind::ScryptErrorInvalidParams => "ScryptErrorInvalidParams",
 			ZffErrorKind::Custom => "Custom",
 			ZffErrorKind::MissingHardlinkFilenumber => "MissingHardlinkFilenumber",
@@ -187,7 +197,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::UnsupportedVersion => "UnsupportedVersion",
 			ZffErrorKind::NoEncryptionDetected => "NoEncryptionDetected",
 			ZffErrorKind::InvalidOption => "InvalidOption",
-			ZffErrorKind::RusqliteError => "RusqliteError",
+			ZffErrorKind::RedbError => "RedbError",
 		};
 	write!(f, "{}", err_msg)
 	}
@@ -258,6 +268,13 @@ impl ZffError {
 		}
 	}
 
+	pub fn new_not_in_map_error() -> ZffError {
+		ZffError {
+			kind: ZffErrorKind::ValueNotInMap,
+			details: String::from("Value not in map")
+		}
+	}
+
 	/// Returns a reference to the kind.
 	/// # Example
 	/// ```
@@ -299,10 +316,38 @@ impl ZffError {
 	}
 }
 
-impl From<rusqlite::Error> for ZffError {
-	fn from(e: rusqlite::Error) -> ZffError {
+impl From<RedbCommitError> for ZffError {
+	fn from(e: RedbCommitError) -> ZffError {
 		let err_msg = e.to_string();
-		ZffError::new(ZffErrorKind::RusqliteError, err_msg)
+		ZffError::new(ZffErrorKind::RedbError, err_msg)
+	}
+}
+
+impl From<RedbStorageError> for ZffError {
+	fn from(e: RedbStorageError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::RedbError, err_msg)
+	}
+}
+
+impl From<RedbTableError> for ZffError {
+	fn from(e: RedbTableError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::RedbError, err_msg)
+	}
+}
+
+impl From<RedbTransactionError> for ZffError {
+	fn from(e: RedbTransactionError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::RedbError, err_msg)
+	}
+}
+
+impl From<RedbError> for ZffError {
+	fn from(e: RedbError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::RedbError, err_msg)
 	}
 }
 

@@ -47,7 +47,6 @@ pub struct ObjectFlags {
 impl From<u8> for ObjectFlags {
 	fn from(flag_values: u8) -> Self {
 		Self {
-
 			encryption: flag_values & ENCRYPT_OBJECT_FLAG_VALUE != 0,
 			sign_hash: flag_values & SIGN_HASH_FLAG_VALUE != 0,
 			passive_object: flag_values & PASSIVE_OBJECT_FLAG_VALUE != 0,
