@@ -17,6 +17,7 @@ use crate::{
 	HEADER_IDENTIFIER_PBE_HEADER,
 	PBE_KDF_PARAMETERS_PBKDF2,
 	PBE_KDF_PARAMETERS_SCRYPT,
+	PBE_KDF_PARAMETERS_ARGON2ID,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF,
 	ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME,
 	ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME,
@@ -124,7 +125,9 @@ pub enum KDFParameters {
 	/// stores a struct [PBKDF2SHA256Parameters].
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
 	/// stores a struct [ScryptParameters].
-	ScryptParameters(ScryptParameters)
+	ScryptParameters(ScryptParameters),
+	/// stores a struct [Argon2idParameters].
+	Argon2idParameters(Argon2idParameters),
 }
 
 impl ValueEncoder for KDFParameters {
@@ -132,6 +135,7 @@ impl ValueEncoder for KDFParameters {
 		match self {
 			KDFParameters::PBKDF2SHA256Parameters(params) => params.encode_directly(),
 			KDFParameters::ScryptParameters(params) => params.encode_directly(),
+			KDFParameters::Argon2idParameters(params) => params.encode_directly(),
 		}
 	}
 	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
@@ -301,6 +305,58 @@ impl HeaderCoding for ScryptParameters {
 		let mut salt = [0; 32];
 		cursor.read_exact(&mut salt)?;
 		let parameters = ScryptParameters::new(logn, r, p, salt);
+		Ok(parameters)
+	}
+
+}
+
+
+/// struct to store the parameters for the KDF Scrypt.
+#[derive(Debug,Clone,Eq,PartialEq)]
+pub struct Argon2idParameters {
+	pub mem_cost: u32,
+	pub lanes: u32,
+	pub salt: [u8; 32],
+}
+
+impl Argon2idParameters {
+	/// returns a new [ScryptParameters] with the given values.
+	pub fn new(mem_cost: u32, lanes: u32, salt: [u8; 32]) -> Argon2idParameters {
+		Self {
+			mem_cost,
+			lanes,
+			salt,
+		}
+	}
+}
+
+impl HeaderCoding for Argon2idParameters {
+	type Item = Argon2idParameters;
+
+	fn identifier() -> u32 {
+		PBE_KDF_PARAMETERS_ARGON2ID
+	}
+
+	fn version(&self) -> u8 {
+		0
+	}
+
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut self.mem_cost.encode_directly());
+		vec.append(&mut self.lanes.encode_directly());
+		vec.append(&mut self.salt.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<Argon2idParameters> {
+		let mut cursor = Cursor::new(data);
+
+		let mem_cost = u32::decode_directly(&mut cursor)?;
+		let lanes = u32::decode_directly(&mut cursor)?;
+		let mut salt = [0; 32];
+		cursor.read_exact(&mut salt)?;
+		let parameters = Argon2idParameters::new(mem_cost, lanes, salt);
 		Ok(parameters)
 	}
 

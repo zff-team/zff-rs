@@ -36,6 +36,7 @@ pub(crate) const FOOTER_IDENTIFIER_FILE_FOOTER: u32 = 0x7A666649;
 
 pub(crate) const PBE_KDF_PARAMETERS_PBKDF2: u32 = 0x6B646670;
 pub(crate) const PBE_KDF_PARAMETERS_SCRYPT: u32 = 0x6b646673;
+pub(crate) const PBE_KDF_PARAMETERS_ARGON2ID: u32 = 0x6b646661;
 
 // Encoding keys
 pub(crate) const ENCODING_KEY_CASE_NUMBER: &str = "cn";

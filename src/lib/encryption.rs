@@ -1,6 +1,6 @@
 // - STD
 use std::borrow::Borrow;
-
+use std::fmt;
 // - internal
 use crate::{
 	Result,
@@ -16,6 +16,8 @@ use pkcs5::{
 	pbes2::Parameters as PBES2Parameters,
 	scrypt::Params as ScryptParams
 };
+use argon2::{self, Config, ThreadMode, Variant, Version};
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
 	aead::{Aead},
@@ -46,6 +48,17 @@ pub enum EncryptionAlgorithm {
 	CHACHA20POLY1305 = 2,
 }
 
+impl fmt::Display for EncryptionAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    	let value = match self {
+    		EncryptionAlgorithm::AES128GCM => "AES128GCM",
+    		EncryptionAlgorithm::AES256GCM => "AES256GCM",
+    		EncryptionAlgorithm::CHACHA20POLY1305 => "CHACHA20POLY1305",
+    	};
+        write!(f, "{value}")
+    }
+}
+
 /// Defines all KDF schemes, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
@@ -55,6 +68,19 @@ pub enum KDFScheme {
 	PBKDF2SHA256 = 0,
 	/// KDF scheme scrypt, with encoding value 1.
 	Scrypt = 1,
+	/// KDF scheme Argon2(id), with encoding value 2.
+	Argon2id = 2,
+}
+
+impl fmt::Display for KDFScheme {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    	let value = match self {
+    		KDFScheme::PBKDF2SHA256 => "PBKDF2-SHA256",
+    		KDFScheme::Scrypt => "Scrypt",
+    		KDFScheme::Argon2id => "Argon2id",
+    	};
+        write!(f, "{value}")
+    }
 }
 
 /// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
@@ -66,6 +92,16 @@ pub enum PBEScheme {
 	AES128CBC = 0,
 	/// AES128-CBC encryption scheme used in pbe with the encoding value 1.
 	AES256CBC = 1,
+}
+
+impl fmt::Display for PBEScheme {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    	let value = match self {
+    		PBEScheme::AES128CBC => "AES128CBC",
+    		PBEScheme::AES256CBC => "AES256CBC",
+    	};
+        write!(f, "{value}")
+    }
 }
 
 /// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
@@ -213,6 +249,70 @@ impl Encryption {
 		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
 		let encryption_scheme = EncryptionScheme::Pbes2(params);
 		Ok(encryption_scheme.decrypt(password, plaintext)?)
+	}
+
+	/// encrypts the given plaintext with the given values with Argon2id-AES128CBC.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
+	pub fn encrypt_argon2_aes128cbc(
+		mem_cost: u32,
+		lanes: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let scheme = PBEScheme::AES128CBC;
+		let password = &String::from_utf8(password.as_ref().to_vec())?;
+		encrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+	}
+
+	/// encrypts the given plaintext with the given values with Argon2id-AES256CBC.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the encryption fails, or the given parameters are false.
+	pub fn encrypt_argon2_aes256cbc(
+		mem_cost: u32,
+		lanes: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let scheme = PBEScheme::AES256CBC;
+		let password = &String::from_utf8(password.as_ref().to_vec())?;
+		encrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+	}
+
+	/// decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the decryption fails, or the given parameters are false.
+	pub fn decrypt_argon2_aes128cbc(
+		mem_cost: u32,
+		lanes: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let scheme = PBEScheme::AES128CBC;
+		let password = &String::from_utf8(password.as_ref().to_vec())?;
+		decrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+	}
+
+	/// decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
+	/// Returns the ciphertext as ```Vec<u8>```.
+	/// # Error
+	/// if the decryption fails, or the given parameters are false.
+	pub fn decrypt_argon2_aes256cbc(
+		mem_cost: u32,
+		lanes: u32,
+		salt: &[u8; 32],
+		aes_iv: &[u8; 16],
+		password: impl AsRef<[u8]>,
+		plaintext: &[u8]) -> Result<Vec<u8>> {
+		let scheme = PBEScheme::AES256CBC;
+		let password = &String::from_utf8(password.as_ref().to_vec())?;
+		decrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
 	}
 
 	/// method to encrypt a chunk content with a key and and the given chunk number. This method should primary used to encrypt
@@ -600,5 +700,83 @@ impl Encryption {
 		let buffer_len = buffer.len();
 		buffer[buffer_len - 1] |= 0b00100000;
 		Ok(*Nonce::from_slice(&buffer))
+	}
+}
+
+// hash_length is 16 for aes128cbc and 32 for aes256cbc
+fn hash_password_argon2(password: &str, salt: &[u8; 32], mem_cost: u32, lanes: u32, hash_length: u32) -> Result<Vec<u8>> {
+    let config = Config {
+	    variant: Variant::Argon2id,
+	    version: Version::Version13,
+	    mem_cost,
+	    time_cost: 10,
+	    lanes,
+	    thread_mode: ThreadMode::Sequential,
+	    secret: &[],
+	    ad: &[],
+	    hash_length
+	};
+    Ok(argon2::hash_raw(password.as_bytes(), salt, &config)?)
+}
+
+fn encrypt_argon2_aes<P>(
+	password: &str, 
+	salt: &[u8; 32], 
+	mem_cost: u32, 
+	lanes: u32, 
+	scheme: PBEScheme,
+	aes_iv: &[u8; 16],
+	plaintext: P) -> Result<Vec<u8>>
+where
+	P: AsRef<[u8]>,
+{
+	type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+	type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+
+	let hash = match scheme {
+		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, 16)?,
+		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, 32)?,
+	};
+
+	match scheme {
+		PBEScheme::AES128CBC => {
+			let key = &hash[0..16];
+			Ok(Aes128CbcEnc::new(key.into(), aes_iv.into()).encrypt_padded_vec_mut::<Pkcs7>(plaintext.as_ref()))
+		},
+		PBEScheme::AES256CBC => {
+			let key = &hash[0..32];
+			Ok(Aes256CbcEnc::new(key.into(), aes_iv.into()).encrypt_padded_vec_mut::<Pkcs7>(plaintext.as_ref()))
+		},
+	}
+}
+
+fn decrypt_argon2_aes<C>(
+	password: &str, 
+	salt: &[u8; 32], 
+	mem_cost: u32, 
+	lanes: u32,
+	scheme: PBEScheme,
+	aes_iv: &[u8; 16], 
+	ciphertext: C) -> Result<Vec<u8>>
+where
+	C: AsRef<[u8]>,
+{
+	type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+	type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
+
+	let hash = match scheme {
+		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, 16)?,
+		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, 32)?,
+	};
+
+	match scheme {
+		PBEScheme::AES128CBC => {
+			let key = &hash[0..16];
+			Ok(Aes128CbcDec::new(key.into(), aes_iv.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphertext.as_ref())?)
+		},
+		PBEScheme::AES256CBC => {
+			let key = &hash[0..32];
+			Ok(Aes256CbcDec::new(key.into(), aes_iv.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphertext.as_ref())?)
+		},
 	}
 }

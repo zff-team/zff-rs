@@ -143,7 +143,33 @@ impl EncryptionHeader {
 					}
 				},
 				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
-			}
+			},
+			KDFScheme::Argon2id => match self.pbe_header.kdf_parameters() {
+				KDFParameters::Argon2idParameters(parameters) => {
+					let mem_cost = parameters.mem_cost;
+					let lanes = parameters.lanes;
+					let salt = parameters.salt;
+					match self.pbe_header.encryption_scheme() {
+						PBEScheme::AES128CBC => Encryption::decrypt_argon2_aes128cbc(
+							mem_cost,
+							lanes,
+							&salt,
+							self.pbe_header.nonce(),
+							&password,
+							&self.encrypted_encryption_key
+							),
+						PBEScheme::AES256CBC => Encryption::decrypt_argon2_aes256cbc(
+							mem_cost,
+							lanes,
+							&salt,
+							self.pbe_header.nonce(),
+							&password,
+							&self.encrypted_encryption_key
+							),
+					}
+				},
+				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
+			},
 		}?;
 		self.decrypted_encryption_key = Some(decryption_key.clone());
 		Ok(decryption_key)

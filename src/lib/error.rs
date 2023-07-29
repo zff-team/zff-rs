@@ -22,6 +22,8 @@ use redb::{
 	StorageError as RedbStorageError,
 	CommitError as RedbCommitError
 	};
+use argon2::Error as Argon2Error;
+use cbc::cipher::block_padding::UnpadError as AesCbcError;
 
 /// The main error-type of this crate.
 #[derive(Debug)]
@@ -35,8 +37,12 @@ pub struct ZffError {
 pub enum ZffErrorKind {
 	/// contains a std::io::Error.
 	IoError(io::Error),
+	/// contains a cbc-cipher error.
+	AesCbcError,
 	/// contains a redb::*Error.
 	RedbError,
+	/// contains a argon2::Error.
+	Argon2Error,
 	/// contains a pkcs5::CryptoError.
 	PKCS5CryptoError,
 	/// contains a scrypt::errors::InvalidParams.
@@ -147,6 +153,8 @@ impl fmt::Display for ZffErrorKind {
 		let err_msg = match self {
 			ZffErrorKind::IoError(_) => "IoError",
 			ZffErrorKind::PKCS5CryptoError => "PKCS5CryptoError",
+			ZffErrorKind::AesCbcError => "AesCbcError",
+			ZffErrorKind::Argon2Error => "Argon2Error",
 			ZffErrorKind::ValueNotInMap => "ValueNotInMap",
 			ZffErrorKind::ScryptErrorInvalidParams => "ScryptErrorInvalidParams",
 			ZffErrorKind::Custom => "Custom",
@@ -313,6 +321,22 @@ impl ZffError {
 	/// }
 	pub fn unwrap_kind(self) -> ZffErrorKind {
 		self.kind
+	}
+}
+
+
+
+impl From<AesCbcError> for ZffError {
+	fn from(e: AesCbcError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::AesCbcError, err_msg)
+	}
+}
+
+impl From<Argon2Error> for ZffError {
+	fn from(e: Argon2Error) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::Argon2Error, err_msg)
 	}
 }
 
