@@ -258,13 +258,14 @@ impl Encryption {
 	pub fn encrypt_argon2_aes128cbc(
 		mem_cost: u32,
 		lanes: u32,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
 		let scheme = PBEScheme::AES128CBC;
 		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		encrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+		encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
 	/// encrypts the given plaintext with the given values with Argon2id-AES256CBC.
@@ -274,13 +275,14 @@ impl Encryption {
 	pub fn encrypt_argon2_aes256cbc(
 		mem_cost: u32,
 		lanes: u32,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
 		let scheme = PBEScheme::AES256CBC;
 		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		encrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+		encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
 	/// decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
@@ -290,13 +292,14 @@ impl Encryption {
 	pub fn decrypt_argon2_aes128cbc(
 		mem_cost: u32,
 		lanes: u32,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
 		let scheme = PBEScheme::AES128CBC;
 		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		decrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+		decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
 	/// decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
@@ -306,13 +309,14 @@ impl Encryption {
 	pub fn decrypt_argon2_aes256cbc(
 		mem_cost: u32,
 		lanes: u32,
+		iterations: u32,
 		salt: &[u8; 32],
 		aes_iv: &[u8; 16],
 		password: impl AsRef<[u8]>,
 		plaintext: &[u8]) -> Result<Vec<u8>> {
 		let scheme = PBEScheme::AES256CBC;
 		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		decrypt_argon2_aes(password, salt, mem_cost, lanes, scheme, aes_iv, plaintext)
+		decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
 	/// method to encrypt a chunk content with a key and and the given chunk number. This method should primary used to encrypt
@@ -704,14 +708,14 @@ impl Encryption {
 }
 
 // hash_length is 16 for aes128cbc and 32 for aes256cbc
-fn hash_password_argon2(password: &str, salt: &[u8; 32], mem_cost: u32, lanes: u32, hash_length: u32) -> Result<Vec<u8>> {
+fn hash_password_argon2(password: &str, salt: &[u8; 32], mem_cost: u32, lanes: u32, iterations: u32, hash_length: u32) -> Result<Vec<u8>> {
     let config = Config {
 	    variant: Variant::Argon2id,
 	    version: Version::Version13,
 	    mem_cost,
-	    time_cost: 10,
+	    time_cost: iterations,
 	    lanes,
-	    thread_mode: ThreadMode::Sequential,
+	    thread_mode: ThreadMode::Parallel,
 	    secret: &[],
 	    ad: &[],
 	    hash_length
@@ -719,11 +723,13 @@ fn hash_password_argon2(password: &str, salt: &[u8; 32], mem_cost: u32, lanes: u
     Ok(argon2::hash_raw(password.as_bytes(), salt, &config)?)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn encrypt_argon2_aes<P>(
 	password: &str, 
 	salt: &[u8; 32], 
 	mem_cost: u32, 
 	lanes: u32, 
+	iterations: u32,
 	scheme: PBEScheme,
 	aes_iv: &[u8; 16],
 	plaintext: P) -> Result<Vec<u8>>
@@ -734,8 +740,8 @@ where
 	type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
 	let hash = match scheme {
-		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, 16)?,
-		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, 32)?,
+		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 16)?,
+		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 32)?,
 	};
 
 	match scheme {
@@ -755,6 +761,7 @@ fn decrypt_argon2_aes<C>(
 	salt: &[u8; 32], 
 	mem_cost: u32, 
 	lanes: u32,
+	iterations: u32,
 	scheme: PBEScheme,
 	aes_iv: &[u8; 16], 
 	ciphertext: C) -> Result<Vec<u8>>
@@ -765,8 +772,8 @@ where
 	type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 	let hash = match scheme {
-		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, 16)?,
-		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, 32)?,
+		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 16)?,
+		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 32)?,
 	};
 
 	match scheme {

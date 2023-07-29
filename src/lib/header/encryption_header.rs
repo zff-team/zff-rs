@@ -148,11 +148,13 @@ impl EncryptionHeader {
 				KDFParameters::Argon2idParameters(parameters) => {
 					let mem_cost = parameters.mem_cost;
 					let lanes = parameters.lanes;
+					let iterations = parameters.iterations;
 					let salt = parameters.salt;
 					match self.pbe_header.encryption_scheme() {
 						PBEScheme::AES128CBC => Encryption::decrypt_argon2_aes128cbc(
 							mem_cost,
 							lanes,
+							iterations,
 							&salt,
 							self.pbe_header.nonce(),
 							&password,
@@ -161,6 +163,7 @@ impl EncryptionHeader {
 						PBEScheme::AES256CBC => Encryption::decrypt_argon2_aes256cbc(
 							mem_cost,
 							lanes,
+							iterations,
 							&salt,
 							self.pbe_header.nonce(),
 							&password,

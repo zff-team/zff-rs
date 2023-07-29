@@ -316,15 +316,17 @@ impl HeaderCoding for ScryptParameters {
 pub struct Argon2idParameters {
 	pub mem_cost: u32,
 	pub lanes: u32,
+	pub iterations: u32,
 	pub salt: [u8; 32],
 }
 
 impl Argon2idParameters {
 	/// returns a new [ScryptParameters] with the given values.
-	pub fn new(mem_cost: u32, lanes: u32, salt: [u8; 32]) -> Argon2idParameters {
+	pub fn new(mem_cost: u32, lanes: u32, iterations: u32, salt: [u8; 32]) -> Argon2idParameters {
 		Self {
 			mem_cost,
 			lanes,
+			iterations,
 			salt,
 		}
 	}
@@ -345,18 +347,19 @@ impl HeaderCoding for Argon2idParameters {
 		let mut vec = Vec::new();
 		vec.append(&mut self.mem_cost.encode_directly());
 		vec.append(&mut self.lanes.encode_directly());
+		vec.append(&mut self.iterations.encode_directly());
 		vec.append(&mut self.salt.encode_directly());
 		vec
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<Argon2idParameters> {
 		let mut cursor = Cursor::new(data);
-
 		let mem_cost = u32::decode_directly(&mut cursor)?;
 		let lanes = u32::decode_directly(&mut cursor)?;
+		let iterations = u32::decode_directly(&mut cursor)?;
 		let mut salt = [0; 32];
 		cursor.read_exact(&mut salt)?;
-		let parameters = Argon2idParameters::new(mem_cost, lanes, salt);
+		let parameters = Argon2idParameters::new(mem_cost, lanes, iterations, salt);
 		Ok(parameters)
 	}
 
