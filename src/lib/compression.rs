@@ -64,3 +64,21 @@ where
     	}
     }
 }
+
+pub fn decompress_reader<C, R>(input: &mut R, compression_algorithm: C) -> Result<Box<dyn Read + Send + '_>>
+where
+	C: Borrow<CompressionAlgorithm>,
+	R: Read + std::marker::Send + 'static,
+{
+	match compression_algorithm.borrow() {
+		CompressionAlgorithm::None => Ok(Box::new(input)),
+		CompressionAlgorithm::Zstd => {
+			let decoder = zstd::stream::read::Decoder::new(input)?;
+			Ok(Box::new(decoder))
+		},
+		CompressionAlgorithm::Lz4 => {
+			let decompressor = lz4_flex::frame::FrameDecoder::new(input);
+			Ok(Box::new(decompressor))
+		},
+	}
+}
