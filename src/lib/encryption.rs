@@ -454,6 +454,15 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
 	}
 
+	pub fn decrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileFooter)
+	}
+
 	pub fn decrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -756,6 +765,7 @@ where
 	}
 }
 
+#[allow(clippy::too_many_arguments)]
 fn decrypt_argon2_aes<C>(
 	password: &str, 
 	salt: &[u8; 32], 
