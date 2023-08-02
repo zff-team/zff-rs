@@ -104,7 +104,7 @@ impl<R: Read + Seek> Segment<R> {
 	}
 
 	/// Returns the chunked data, uncompressed and unencrypted
-	pub fn chunk_data<E, C>(&mut self, chunk_number: u64, encryption_information: Option<E>, compression_algorithm: C) -> Result<Vec<u8>>
+	pub fn chunk_data<E, C>(&mut self, chunk_number: u64, encryption_information: &Option<E>, compression_algorithm: C) -> Result<ChunkContent>
 	where
 		E: Borrow<EncryptionInformation>,
 		C: Borrow<CompressionAlgorithm>,
@@ -112,22 +112,26 @@ impl<R: Read + Seek> Segment<R> {
 		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
 
-		let (compression_flag, chunk_size) = if encryption_information.is_some() {
+		let (compression_flag, chunk_size, same_bytes, deduplication) = if encryption_information.is_some() {
 			let chunk_header = EncryptedChunkHeader::decode_directly(&mut self.data)?;
 			let compression_flag = chunk_header.flags.compression;
+			let same_bytes = chunk_header.flags.same_bytes;
+			let deduplication = chunk_header.flags.duplicate;
 			let chunk_size = chunk_header.chunk_size;
 			self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-			(compression_flag, chunk_size)
+			(compression_flag, chunk_size, same_bytes, deduplication)
 		} else {
 			let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
 			let compression_flag = chunk_header.flags.compression;
+			let same_bytes = chunk_header.flags.same_bytes;
+			let deduplication = chunk_header.flags.duplicate;
 			let chunk_size = chunk_header.chunk_size;
 			self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-			(compression_flag, chunk_size)
+			(compression_flag, chunk_size, same_bytes, deduplication)
 		};
 		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
 		self.data.read_exact(&mut raw_data_buffer)?;
-		
+
 		if let Some(enc_info) = encryption_information {
 			let enc_info = enc_info.borrow();
 			raw_data_buffer = Encryption::decrypt_chunk_content(
@@ -136,10 +140,24 @@ impl<R: Read + Seek> Segment<R> {
 				chunk_number, 
 				&enc_info.algorithm)?;
 		}
-		if compression_flag {
-			decompress_buffer(&raw_data_buffer, compression_algorithm.borrow())
+		let chunk_content = if compression_flag {
+			decompress_buffer(&raw_data_buffer, compression_algorithm.borrow())?
 		} else {
-			Ok(raw_data_buffer)
+			raw_data_buffer
+		};
+
+		if same_bytes {
+			let single_byte = match chunk_content.first() {
+				Some(data) => data,
+				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+			};
+			Ok(ChunkContent::SameBytes(*single_byte))
+		} else if deduplication {
+			let mut arr: [u8; 8] = Default::default();
+			arr.copy_from_slice(&chunk_content);
+			Ok(ChunkContent::Duplicate(u64::from_le_bytes(arr)))
+		} else {
+			Ok(ChunkContent::Raw(chunk_content))
 		}
 	}
 
@@ -216,4 +234,11 @@ impl<R: Read + Seek> Seek for Segment<R> {
 		self.raw_reader_position = self.data.stream_position()?;
 		Ok(position)
 	}
+}
+
+
+pub enum ChunkContent {
+		Raw(Vec<u8>), // contains original data,
+		SameBytes(u8), // contains the appropriate byte,
+		Duplicate(u64), //contains the appropriate chunk with the original data
 }

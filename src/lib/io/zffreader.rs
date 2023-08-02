@@ -20,6 +20,7 @@ use crate::{
 	},
 	header::{HashHeader, EncryptionInformation, SegmentHeader},
 	Object,
+	ChunkContent,
 };
 
 use crate::{
@@ -134,13 +135,8 @@ impl ZffObjectReaderPhysical {
 				None => break,
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
-			let chunk_data = match segment.chunk_data(current_chunk_number, enc_information, compression_algorithm) {
-				Ok(data) => data,
-				Err(e) => match e.unwrap_kind() {
-					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
-				},
-			};
+			let chunk_data = get_chunk_data(segment, current_chunk_number, &enc_information, compression_algorithm, chunk_size)?;
+
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
@@ -151,7 +147,6 @@ impl ZffObjectReaderPhysical {
 		Ok(read_bytes)
 	}
 }
-
 
 impl Seek for ZffObjectReaderPhysical {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
@@ -329,13 +324,7 @@ impl ZffObjectReaderLogical {
 				None => break,
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
-			let chunk_data = match segment.chunk_data(current_chunk_number, enc_information, compression_algorithm) {
-				Ok(data) => data,
-				Err(e) => match e.unwrap_kind() {
-					ZffErrorKind::IoError(io_error) => return Err(io_error),
-					error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
-				},
-			};
+			let chunk_data = get_chunk_data(segment, current_chunk_number, &enc_information, compression_algorithm, chunk_size)?;
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
@@ -542,13 +531,40 @@ fn try_find_footer<R: Read + Seek>(reader: &mut R) -> Result<Footer> {
 		reader.seek(SeekFrom::Start(footer_offset))?;
 		if let Ok(segment_footer) = SegmentFooter::decode_directly(reader) {
 			reader.seek(SeekFrom::Start(position))?;
-			return Ok(Footer::MainAndSegment((main_footer, segment_footer)));
+			Ok(Footer::MainAndSegment((main_footer, segment_footer)))
 		} else {
 			reader.seek(SeekFrom::Start(position))?;
-			return Err(ZffError::new(ZffErrorKind::MalformedSegment, ""));
+			Err(ZffError::new(ZffErrorKind::MalformedSegment, ""))
 		}
 	} else {
 		reader.seek(SeekFrom::Start(position))?;
-		return Err(ZffError::new(ZffErrorKind::MalformedSegment, ""));
+		Err(ZffError::new(ZffErrorKind::MalformedSegment, ""))
+	}
+}
+
+fn get_chunk_data<C, R>(
+	segment: &mut Segment<R>, 
+	current_chunk_number: u64, 
+	enc_information: &Option<EncryptionInformation>,
+	compression_algorithm: C,
+	chunk_size: u64,
+	) -> std::result::Result<Vec<u8>, std::io::Error>
+where
+	C: Borrow<CompressionAlgorithm> + std::marker::Copy,
+	R: Read + Seek
+{
+	let chunk_content = match segment.chunk_data(current_chunk_number, enc_information, compression_algorithm) {
+		Ok(data) => data,
+		Err(e) => match e.unwrap_kind() {
+			ZffErrorKind::IoError(io_error) => return Err(io_error),
+			error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+		},
+	};
+	match chunk_content {
+		ChunkContent::Raw(data) => Ok(data),
+		ChunkContent::SameBytes(single_byte) => Ok(vec![single_byte; chunk_size as usize]),
+		ChunkContent::Duplicate(dup_chunk_no) => {
+			get_chunk_data(segment, dup_chunk_no, enc_information, compression_algorithm, chunk_size)
+		}
 	}
 }

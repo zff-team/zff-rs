@@ -234,8 +234,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    // create chunk header
 	    let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 
-	    // check same byte
-	    if check_same_byte(&buf) {
+	    // check same byte (but only if length of the buf is == chunk size)
+	    if read_bytes == chunk_size as u64 && check_same_byte(&buf) {
 	    	chunk_header.flags.same_bytes = true;
 	    	buf = vec![buf[0]]
 	    } else if let Some(deduplication_map) = deduplication_map {
