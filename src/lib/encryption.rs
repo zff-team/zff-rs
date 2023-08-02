@@ -332,9 +332,9 @@ impl Encryption {
 	///        let chunk_no = 1; // 12Byte/96Bit Key
 	///        let message = "My message";
 	/// 
-	///        let ciphertext = Encryption::encrypt_message(key, message, chunk_no, EncryptionAlgorithm::AES256GCMSIV)?;
+	///        let ciphertext = Encryption::encrypt_chunk_content(key, message, chunk_no, EncryptionAlgorithm::AES256GCM)?;
 	/// 
-	///        assert_eq!(ciphertext.encode_hex::<String>(), "32f1c2f8ff6594a07eda5a4eca6d198f4cda8935f171d2345888".to_string());
+	///        assert_eq!(ciphertext.encode_hex::<String>(), "3f1879c7e3373af75b5b4e857cd88ab7c6db604cef2e60c5df42".to_string());
 	///        Ok(())
 	/// }
 	/// ```
