@@ -8,7 +8,7 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
-	header::{PBEHeader, KDFParameters},
+	header::{PBEHeader, KDFParameters, ObjectHeader},
 	ZffError,
 	ZffErrorKind,
 	KDFScheme,
@@ -33,6 +33,42 @@ impl EncryptionInformation {
 		Self {
 			encryption_key: key,
 			algorithm
+		}
+	}
+}
+
+impl TryFrom<ObjectHeader> for EncryptionInformation {
+	type Error = ZffError;
+	fn try_from(obj_header: ObjectHeader) -> Result<Self> {
+		match obj_header.encryption_header {
+			None => Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+			Some(enc_header) => {
+				match enc_header.get_encryption_key() {
+					None => Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+					Some(key) => Ok(EncryptionInformation {
+						encryption_key: key,
+						algorithm: enc_header.algorithm().clone()
+					}),
+				}
+			}
+		}
+	}
+}
+
+impl TryFrom<&ObjectHeader> for EncryptionInformation {
+	type Error = ZffError;
+	fn try_from(obj_header: &ObjectHeader) -> Result<Self> {
+		match obj_header.encryption_header {
+			None => Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+			Some(ref enc_header) => {
+				match enc_header.get_encryption_key() {
+					None => Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+					Some(key) => Ok(EncryptionInformation {
+						encryption_key: key,
+						algorithm: enc_header.algorithm().clone()
+					}),
+				}
+			}
 		}
 	}
 }
