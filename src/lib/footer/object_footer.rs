@@ -304,14 +304,14 @@ impl HeaderCoding for EncryptedObjectFooterPhysical {
 /// - a hash header with the appropriate hash values of the underlying physical dump
 #[derive(Debug,Clone)]
 pub struct ObjectFooterPhysical {
-	version: u8,
-	object_number: u64,
-	acquisition_start: u64,
-	acquisition_end: u64,
-	length_of_data: u64,
-	first_chunk_number: u64,
-	number_of_chunks: u64,
-	hash_header: HashHeader,
+	pub version: u8,
+	pub object_number: u64,
+	pub acquisition_start: u64,
+	pub acquisition_end: u64,
+	pub length_of_data: u64,
+	pub first_chunk_number: u64,
+	pub number_of_chunks: u64,
+	pub hash_header: HashHeader,
 }
 
 impl ObjectFooterPhysical {
@@ -335,36 +335,6 @@ impl ObjectFooterPhysical {
 			number_of_chunks,
 			hash_header,
 		}
-	}
-
-	/// returns the appropriate acquisition start time.
-	pub fn acquisition_start(&self) -> u64 {
-		self.acquisition_start
-	}
-
-	/// returns the appropriate acquisition start time.
-	pub fn acquisition_end(&self) -> u64 {
-		self.acquisition_end
-	}
-
-	/// returns the first chunk number, which is used for this physical dump.
-	pub fn first_chunk_number(&self) -> u64 {
-		self.first_chunk_number
-	}
-
-	/// returns the total number of chunks, used for this physical dump.
-	pub fn number_of_chunks(&self) -> u64 {
-		self.number_of_chunks
-	}
-
-	/// returns the size of the (uncompressed and unencrypted) underlying data.
-	pub fn length_of_data(&self) -> u64 {
-		self.length_of_data
-	}
-
-	/// returns a hash header with the appropriate hash values of the underlying physical dump.
-	pub fn hash_header(&self) -> &HashHeader {
-		&self.hash_header
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
