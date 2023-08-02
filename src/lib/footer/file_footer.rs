@@ -1,6 +1,6 @@
 // - STD
 use core::borrow::Borrow;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 // - internal
 use crate::{
@@ -9,9 +9,13 @@ use crate::{
 	ValueDecoder,
 	ValueEncoder,
 	Encryption,
+	ZffError,
+	ZffErrorKind,
 	FOOTER_IDENTIFIER_FILE_FOOTER,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
+	DEFAULT_FOOTER_VERSION_FILE_FOOTER,
+	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
 };
 use crate::header::{
 	HashHeader,
@@ -128,6 +132,64 @@ impl FileFooter {
 
 		Ok(vec)
 	}
+
+	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader].
+	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader].
+	pub fn decode_encrypted_footer_with_key<R, E>(data: &mut R, encryption_information: E) -> Result<Self>
+	where
+		R: Read,
+		E: Borrow<EncryptionInformation>
+	{
+		if !Self::check_identifier(data) {
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+		};
+		let header_length = Self::decode_header_length(data)? as usize;
+		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		data.read_exact(&mut header_content)?;
+		let mut cursor = Cursor::new(header_content);
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_FOOTER_VERSION_FILE_FOOTER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
+		let file_number = u64::decode_directly(&mut cursor)?;
+		
+		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
+		let algorithm = &encryption_information.borrow().algorithm;
+		let decrypted_data = Encryption::decrypt_file_footer(
+			&encryption_information.borrow().encryption_key, 
+			encrypted_data, 
+			file_number, 
+			algorithm)?;
+		let mut cursor = Cursor::new(decrypted_data);
+		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
+		Ok(FileFooter::new(version, file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
+	}
+
+	#[allow(clippy::type_complexity)]
+	fn decode_inner_content<R: Read>(inner_content: &mut R) -> Result<(
+		u64, //acquisition_start
+		u64, //acquisition_end
+		HashHeader, //HashHeader
+		u64, //first_chunk_number
+		u64, // number_of_chunks,
+		u64, // length_of_data
+		)> {
+		let acquisition_start = u64::decode_directly(inner_content)?;
+		let acquisition_end = u64::decode_directly(inner_content)?;
+		let hash_header = HashHeader::decode_directly(inner_content)?;
+		let first_chunk_number = u64::decode_directly(inner_content)?;
+		let number_of_chunks = u64::decode_directly(inner_content)?;
+		let length_of_data = u64::decode_directly(inner_content)?;
+
+		let inner_content = (
+			acquisition_start,
+			acquisition_end,
+			hash_header,
+			first_chunk_number,
+			number_of_chunks,
+			length_of_data);
+		Ok(inner_content)
+	}
 }
 
 impl HeaderCoding for FileFooter {
@@ -146,14 +208,12 @@ impl HeaderCoding for FileFooter {
 	}
 	fn decode_content(data: Vec<u8>) -> Result<FileFooter> {
 		let mut cursor = Cursor::new(data);
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		let version = u8::decode_directly(&mut cursor)?;
+		if version != DEFAULT_FOOTER_VERSION_FILE_FOOTER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+		};
 		let file_number = u64::decode_directly(&mut cursor)?;
-		let acquisition_start = u64::decode_directly(&mut cursor)?;
-		let acquisition_end = u64::decode_directly(&mut cursor)?;
-		let hash_header = HashHeader::decode_directly(&mut cursor)?;
-		let first_chunk_number = u64::decode_directly(&mut cursor)?;
-		let number_of_chunks = u64::decode_directly(&mut cursor)?;
-		let length_of_data = u64::decode_directly(&mut cursor)?;
-		Ok(FileFooter::new(footer_version, file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
+		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
+		Ok(FileFooter::new(version, file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
 	}
 }
