@@ -33,7 +33,7 @@ pub struct Segment<R: Read + Seek> {
 
 impl<R: Read + Seek> Segment<R> {
 	/// creates a new [Segment] by the given values.
-	fn new(header: SegmentHeader, data: R, footer: SegmentFooter) -> Segment<R> {
+	pub fn with_header_and_data(header: SegmentHeader, data: R, footer: SegmentFooter) -> Segment<R> {
 		Self {
 			header,
 			data,
@@ -60,7 +60,7 @@ impl<R: Read + Seek> Segment<R> {
 			},
 		};
 
-		Ok(Self::new(segment_header, data, segment_footer))
+		Ok(Self::with_header_and_data(segment_header, data, segment_footer))
 	}
 
 	/// Returns a reference to the underlying [crate::header::SegmentHeader].

@@ -96,7 +96,7 @@ impl Object {
 	/// Returns the acquisition start time of the object.
 	pub fn acquisition_start(&self) -> u64 {
 		match self {
-			Object::Physical(obj) => obj.footer.acquisition_start(),
+			Object::Physical(obj) => obj.footer.acquisition_start,
 			Object::Logical(obj) => obj.footer.acquisition_start(),
 		}
 	}
@@ -104,7 +104,7 @@ impl Object {
 	/// Returns the acquisition end time of the object.
 	pub fn acquisition_end(&self) -> u64 {
 		match self {
-			Object::Physical(obj) => obj.footer.acquisition_end(),
+			Object::Physical(obj) => obj.footer.acquisition_end,
 			Object::Logical(obj) => obj.footer.acquisition_end(),
 		}
 	}

@@ -88,7 +88,7 @@ impl ZffExtenderParameter {
 	}
 }
 
-/// The ZffCreator can be used to create a new zff container by the given files/values.
+/// The ZffWriter can be used to create a new zff container by the given files/values.
 pub struct ZffWriter<R: Read> {
 	object_encoder: Vec<ObjectEncoderInformation<R>>,
 	current_object_encoder: ObjectEncoderInformation<R>, //the current object encoder
@@ -612,6 +612,7 @@ impl<R: Read> ZffWriter<R> {
 		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
 		Ok(written_bytes)
 	}
+	
 	/// generates the appropriate .zXX files.
 	pub fn generate_files(&mut self) -> Result<()> {
 	    let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
