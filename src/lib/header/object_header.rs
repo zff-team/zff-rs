@@ -1,4 +1,5 @@
 // - STD
+
 use std::io::{Cursor, Read};
 use std::fmt;
 use std::cmp::{PartialEq,Eq};
@@ -18,6 +19,7 @@ use crate::{
 use crate::{
 	DEFAULT_HEADER_VERSION_OBJECT_HEADER,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
+	ERROR_HEADER_DECODER_HEADER_LENGTH,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	HEADER_IDENTIFIER_OBJECT_HEADER,
@@ -32,6 +34,9 @@ use crate::header::{
 	CompressionHeader,
 	DescriptionHeader,
 };
+
+// - external
+use byteorder::{ReadBytesExt, LittleEndian};
 
 /// Holds the appropriate object flags:
 /// - the encryption flag, if the appropriate object is encrypted.
@@ -302,11 +307,9 @@ impl HeaderCoding for ObjectHeader {
 		};
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
-		let encryption_header = if flags.encryption {
-			Some(EncryptionHeader::decode_directly(&mut cursor)?)
-		} else {
-			None
-		};
+		if flags.encryption {
+			return Err(ZffError::new(ZffErrorKind::MissingPassword, ""));
+		}
 		let (chunk_size,
 			compression_header,
 			description_header,
@@ -314,7 +317,7 @@ impl HeaderCoding for ObjectHeader {
 
 		let object_header = Self::new(
 			object_number,
-			encryption_header,
+			None,
 			chunk_size,
 			compression_header,
 			description_header,
@@ -336,4 +339,135 @@ impl Hash for ObjectHeader {
 	fn hash<H: Hasher>(&self, state: &mut H) {
         self.object_number.hash(state);
     }
+}
+
+
+#[derive(Debug,Clone)]
+pub struct EncryptedObjectHeader {
+	pub object_number: u64,
+	pub flags: ObjectFlags,
+	pub encryption_header: EncryptionHeader,
+	pub encrypted_content: Vec<u8>
+}
+
+impl EncryptedObjectHeader {
+	/// creates a new encrypted object header with the given values.
+	pub fn new(
+		object_number: u64,
+		flags: ObjectFlags,
+		encryption_header: EncryptionHeader,
+		encrypted_content: Vec<u8>
+		) -> Self {
+		Self {
+			object_number,
+			flags,
+			encryption_header,
+			encrypted_content,
+		}
+	}
+
+	/// decodes the length of the header.
+	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
+		match data.read_u64::<LittleEndian>() {
+			Ok(value) => Ok(value),
+			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+		}
+	}
+
+	/// decodes the encrypted header with the given password.
+	pub fn decrypt_with_password<P>(&mut self, password: P) -> Result<ObjectHeader>
+	where
+		P: AsRef<[u8]>,
+	{
+		let encryption_key = self.encryption_header.decrypt_encryption_key(password)?;
+		let algorithm = self.encryption_header.algorithm();
+		let decrypted_data = Encryption::decrypt_object_header(encryption_key, &self.encrypted_content, self.object_number, algorithm)?;
+		let mut cursor = Cursor::new(decrypted_data);
+		let (chunk_size,
+			compression_header,
+			description_header,
+			object_type) = ObjectHeader::decode_inner_content(&mut cursor)?;
+		let object_header = ObjectHeader::new(
+			self.object_number,
+			Some(self.encryption_header.clone()),
+			chunk_size,
+			compression_header,
+			description_header,
+			object_type,
+			self.flags.clone());
+		Ok(object_header)
+	}
+
+	/// tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
+	pub fn decrypt_and_consume_with_password<P>(mut self, password: P) -> Result<ObjectHeader>
+	where
+		P: AsRef<[u8]>,
+	{
+		let encryption_key = self.encryption_header.decrypt_encryption_key(password)?;
+		let algorithm = self.encryption_header.algorithm();
+		let decrypted_data = Encryption::decrypt_object_header(encryption_key, self.encrypted_content, self.object_number, algorithm)?;
+		let mut cursor = Cursor::new(decrypted_data);
+		let (chunk_size,
+			compression_header,
+			description_header,
+			object_type) = ObjectHeader::decode_inner_content(&mut cursor)?;
+		let object_header = ObjectHeader::new(
+			self.object_number,
+			Some(self.encryption_header),
+			chunk_size,
+			compression_header,
+			description_header,
+			object_type,
+			self.flags);
+		Ok(object_header)
+	}
+}
+
+impl HeaderCoding for EncryptedObjectHeader {
+	type Item = EncryptedObjectHeader;
+	
+	fn identifier() -> u32 {
+		HEADER_IDENTIFIER_OBJECT_HEADER
+	}
+
+	fn version(&self) -> u8 {
+		DEFAULT_HEADER_VERSION_OBJECT_HEADER
+	}
+
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = vec![self.version()];
+		vec.append(&mut self.object_number.encode_directly());
+		let mut flags: u8 = 0;
+		flags += ENCRYPT_OBJECT_FLAG_VALUE;
+		if self.flags.sign_hash {
+			flags += SIGN_HASH_FLAG_VALUE;
+		};
+		if self.flags.passive_object {
+			flags += PASSIVE_OBJECT_FLAG_VALUE;
+		}
+		vec.append(&mut flags.encode_directly());
+		vec.append(&mut self.encryption_header.encode_directly());
+		vec.append(&mut self.encrypted_content.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<Self> {
+		let mut cursor = Cursor::new(data);
+		let header_version = u8::decode_directly(&mut cursor)?;
+		if header_version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, header_version.to_string()))
+		};
+		let object_number = u64::decode_directly(&mut cursor)?;
+		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
+		if !flags.encryption {
+			return Err(ZffError::new(ZffErrorKind::HeaderDecodeError, ""));
+		}
+		let encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
+		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
+		Ok(Self::new(
+			object_number,
+			flags,
+			encryption_header,
+			encrypted_data))
+	}
 }

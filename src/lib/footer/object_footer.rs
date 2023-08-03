@@ -163,7 +163,7 @@ impl EncryptedObjectFooter {
 		}
 	}
 
-	/// tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterPhysical is still available.
+	/// tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooter is still available.
 	pub fn decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooter>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -181,7 +181,7 @@ impl EncryptedObjectFooter {
 		}
 	}
 
-	/// tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
+	/// tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooter, regardless of whether an error occurs or not.
 	pub fn decrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<ObjectFooter>
 	where
 		A: Borrow<EncryptionAlgorithm>,

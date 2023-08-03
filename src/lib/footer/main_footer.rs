@@ -92,6 +92,10 @@ impl MainFooter {
 	pub fn description_notes(&self) -> Option<&str> {
 		Some(self.description_notes.as_ref()?)
 	}
+
+	pub fn chunk_maps(&self) -> &BTreeMap<u64, u64> {
+		&self.chunk_maps
+	}
 }
 
 impl HeaderCoding for MainFooter {

@@ -13,7 +13,7 @@ use crate::{
 	Encryption,
 	CompressionAlgorithm,
 	decompress_buffer,
-	header::{SegmentHeader, ObjectHeader, ChunkHeader, EncryptedChunkHeader, EncryptionInformation},
+	header::{SegmentHeader, ObjectHeader, ChunkHeader, EncryptedChunkHeader, EncryptionInformation, EncryptedObjectHeader},
 	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
 	ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT,
 	ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT,
@@ -172,10 +172,20 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(object_header)
 	}
 
+	pub fn read_encrypted_object_header(&mut self, object_number: u64) -> Result<EncryptedObjectHeader> {
+		let offset = match self.footer.object_header_offsets().get(&object_number) {
+				Some(value) => value,
+				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
+		};
+		self.data.seek(SeekFrom::Start(*offset))?;
+		let object_header = EncryptedObjectHeader::decode_directly(&mut self.data)?;
+		Ok(object_header)
+	}
+
 	/// Returns the [crate::header::ObjectHeader] of the given object number (decrypts the encrypted object header on-the-fly with the given decryption password).
 	/// # Error
 	/// Fails if the [crate::header::ObjectHeader] could not be found in this [Segment] or/and if the decryption password is wrong.
-	pub fn read_encrypted_object_header<P>(&mut self, object_number: u64, decryption_password: P) -> Result<ObjectHeader>
+	pub fn read_and_decrypt_object_header<P>(&mut self, object_number: u64, decryption_password: P) -> Result<ObjectHeader>
 	where
 		P: AsRef<[u8]>,
 	{
@@ -198,10 +208,20 @@ impl<R: Read + Seek> Segment<R> {
 		ObjectFooter::decode_directly(&mut self.data)
 	}
 
+	pub fn read_encrypted_object_footer(&mut self, object_number: u64) -> Result<EncryptedObjectFooter> {
+		let offset = match self.footer.object_footer_offsets().get(&object_number) {
+				Some(value) => value,
+				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
+		};
+		self.data.seek(SeekFrom::Start(*offset))?;
+		let encrypted_object_footer = EncryptedObjectFooter::decode_directly(&mut self.data)?;
+		Ok(encrypted_object_footer)
+	}
+
 	/// Returns the [crate::header::ObjectFooter] of the given object number (decrypts the encrypted object footer on-the-fly with the given decryption password).
 	/// # Error
 	/// Fails if the [crate::header::ObjectFooter] could not be found in this [Segment] or/and if the decryption password is wrong.
-	pub fn read_encrypted_object_footer<E>(&mut self, object_number: u64, encryption_information: E) -> Result<ObjectFooter>
+	pub fn read_and_decrypt_object_footer<E>(&mut self, object_number: u64, encryption_information: E) -> Result<ObjectFooter>
 	where
 		E: Borrow<EncryptionInformation>,
 	{
