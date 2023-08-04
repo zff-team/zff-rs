@@ -25,9 +25,10 @@ use crate::{
 };
 
 use crate::{
+	PRELOADED_CHUNK_MAP_TABLE,
 	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
 	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
-	ERROR_MISMATCH_ZFF_VERSION,
+	ERROR_LAST_GREATER_FIRST,
 	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
 	ERROR_MISSING_FILE_NUMBER,
 };
@@ -35,7 +36,7 @@ use crate::{
 use super::*;
 
 // - external
-use redb::{Database};
+use redb::{Database, ReadableTable};
 
 enum PreloadedChunkMap {
 	None,
@@ -95,18 +96,82 @@ impl<R: Read + Seek> ZffReader<R> {
 		*chunk_number
 	}
 
-	//TODO: set_preload_chunkmap_in_memory() //and convert from Redb, if exists
-	pub fn set_preload_chunkmap_mode_in_memory(&mut self) {
-		match &self.chunk_map {
+
+	pub fn set_preload_chunkmap_mode_in_memory(&mut self) -> Result<()> {
+		match &mut self.chunk_map {
 			PreloadedChunkMap::None => self.chunk_map = PreloadedChunkMap::InMemory(HashMap::new()),
 			PreloadedChunkMap::InMemory(_) => (),
-			PreloadedChunkMap::Redb(_db) => todo!(),
+			PreloadedChunkMap::Redb(ref mut db) => self.chunk_map = PreloadedChunkMap::InMemory(extract_redb_map(db)?),
 		}
+		Ok(())
 	}
-	//TODO: set_preload_chunkmap_redb(Redb connection) // and convert from in-memory, if exists
-	//TODO: preload_chunkmap(first: u64, last: u64), //if PreloadChunkMap::None is set, InMemory will be used automatically.
-	//TODO: preload_chunkmap_full() //if PreloadChunkMap::None is set, InMemory will be used automatically.
+
+	pub fn set_preload_chunkmap_mode_redb(&mut self, mut db: Database) -> Result<()> {
+		match &self.chunk_map {
+			PreloadedChunkMap::Redb(_) => return Ok(()),
+			PreloadedChunkMap::None => initialize_redb_chunkmap(&mut db, &HashMap::new())?,
+			PreloadedChunkMap::InMemory(map) => initialize_redb_chunkmap(&mut db, map)?,
+		}
+		self.chunk_map = PreloadedChunkMap::Redb(db);
+		Ok(())
+	}
+	
+	pub fn preload_chunkmap(&mut self, first: u64, last: u64) -> Result<()> {
+		// check if chunk numbers are valid.
+		if first == 0 {
+			return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, first.to_string()));
+		} else if first > last {
+			return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, ERROR_LAST_GREATER_FIRST));
+		} else if last > self.number_of_chunks() {
+			return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, last.to_string()));	
+		}
+
+		//try to reserve the additional size, if PreloadedChunkMap::InMemory is used.
+		let mut size = last - first;
+		match &mut self.chunk_map {
+			PreloadedChunkMap::None => {
+				let mut map = HashMap::new();
+				map.try_reserve(size as usize)?;
+				self.chunk_map = PreloadedChunkMap::InMemory(map)
+			},
+			PreloadedChunkMap::Redb(_) => (),
+			PreloadedChunkMap::InMemory(map) => {
+				for chunk_no in first..=last {
+					if map.contains_key(&chunk_no) {
+						size -= 1;
+					}
+				}
+				map.try_reserve(size as usize)?;
+			}
+		}
+
+		for chunk_no in first..=last {
+			let segment = match get_segment_of_chunk_no(chunk_no, self.main_footer.chunk_maps()) {
+				Some(segment_no) => match self.segments.get_mut(&segment_no) {
+					Some(segment) => segment,
+					None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+				},
+				None => return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, chunk_no.to_string())),
+			};
+			let offset = segment.get_chunk_offset(&chunk_no)?;
+			match &mut self.chunk_map {
+				PreloadedChunkMap::None => unreachable!(),
+				PreloadedChunkMap::InMemory(map) => { map.insert(chunk_no, offset); },
+				PreloadedChunkMap::Redb(db) => preloaded_redb_chunkmap_add_entry(db, chunk_no, offset)?,
+			};
+		}
+
+		if let PreloadedChunkMap::InMemory(map) = &mut self.chunk_map { map.shrink_to_fit() }
+		Ok(())
+	}
+
+	pub fn preload_chunkmap_full(&mut self) -> Result<()> {
+		let first = 1;
+		let last = self.number_of_chunks();
+		self.preload_chunkmap(first, last)
+	}
 }
+
 
 pub(crate) enum ZffObjectReader {
 	Physical(Box<ZffObjectReaderPhysical>),
@@ -691,4 +756,38 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 
 	let obj_reader = ZffObjectReader::Encrypted(Box::new(ZffObjectReaderEncrypted::with_data(header, footer)));
 	Ok(obj_reader)
+}
+
+fn extract_redb_map(db: &mut Database) -> Result<HashMap<u64, u64>> {
+	 let mut new_map = HashMap::new();
+	 let read_txn = db.begin_read()?;
+	 let table = read_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
+	 let mut table_iterator = table.iter()?;
+	 while let Some(data) = table_iterator.next_back() {
+	 	let (key, value) = data?;
+	 	new_map.insert(key.value(), value.value());
+	 }
+	 Ok(new_map)
+}
+
+fn initialize_redb_chunkmap(db: &mut Database, map: &HashMap<u64, u64>) -> Result<()> {
+	let write_txn = db.begin_write()?;
+	{
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
+		for (key, value) in map {
+			table.insert(key, value)?;
+		}
+	}
+	write_txn.commit()?;
+	Ok(())
+}
+
+fn preloaded_redb_chunkmap_add_entry(db: &mut Database, chunk_no: u64, offset: u64) -> Result<()> {
+	let write_txn = db.begin_write()?;
+	{
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
+		table.insert(chunk_no, offset)?;
+	}
+	write_txn.commit()?;
+	Ok(())
 }

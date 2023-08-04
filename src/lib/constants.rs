@@ -78,6 +78,7 @@ pub(crate) const ERROR_MISMATCH_ZFF_VERSION: &str = "mismatch zff version";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
 pub(crate) const ERROR_INVALID_OPTION_ZFFEXTEND: &str = "Extend container";
 pub(crate) const ERROR_INVALID_OPTION_ZFFCREATE: &str = "Create new container";
+pub(crate) const ERROR_LAST_GREATER_FIRST: &str = "First chunk number is greater than last chunk number. This is invalid.";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 
@@ -175,6 +176,7 @@ pub(crate) const METADATA_BTIME: &str = "btime";
 
 // - ChunkMap
 pub const CHUNK_MAP_TABLE: TableDefinition<&[u8; 32], u64> = TableDefinition::new("map");
+pub const PRELOADED_CHUNK_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_map");
 
 // - Encryption parameters
 pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes
