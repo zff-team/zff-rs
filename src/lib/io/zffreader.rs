@@ -31,6 +31,9 @@ use crate::{
 	ERROR_LAST_GREATER_FIRST,
 	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
 	ERROR_MISSING_FILE_NUMBER,
+	ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT,
+	ERROR_ZFFREADER_MISSING_OBJECT,
+	ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT,
 };
 
 use super::*;
@@ -103,7 +106,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	}
 
 	pub fn set_active_file(&mut self, filenumber: u64) -> Result<()> {
-		if let Some(object_reader) = self.object_reader.get(&self.active_object) {
+		if let Some(object_reader) = self.object_reader.get_mut(&self.active_object) {
 			match object_reader {
 				ZffObjectReader::Logical(reader) => reader.set_active_file(filenumber),
 				_ => Err(ZffError::new(ZffErrorKind::MismatchObjectType, self.active_object.to_string())) //TODO: return object type instead of object_number,
@@ -217,6 +220,42 @@ impl<R: Read + Seek> ZffReader<R> {
 		let last = self.number_of_chunks();
 		self.preload_chunkmap(first, last)
 	}
+
+	pub fn current_filemetadata(&self) -> Result<&FileMetadata> {
+		match self.object_reader.get(&self.active_object) {
+			Some(ZffObjectReader::Logical(reader)) => {
+				reader.filemetadata()
+			},
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+		}
+	}
+}
+
+impl<R: Read + Seek> Read for ZffReader<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+		let object_reader = match self.object_reader.get_mut(&self.active_object) {
+			Some(object_reader) => object_reader,
+			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
+		};
+		match object_reader {
+			ZffObjectReader::Physical(reader) => reader.read_with_segments(buffer, &mut self.segments),
+			ZffObjectReader::Logical(reader) => reader.read_with_segments(buffer, &mut self.segments),
+			ZffObjectReader::Encrypted(_) => Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+		}
+	}
+}
+
+
+impl<R: Read + Seek> Seek for ZffReader<R> {
+	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
+		let object_reader = match self.object_reader.get_mut(&self.active_object) {
+			Some(object_reader) => object_reader,
+			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
+		};
+		object_reader.seek(seek_from)
+	}
 }
 
 
@@ -224,6 +263,16 @@ pub(crate) enum ZffObjectReader {
 	Physical(Box<ZffObjectReaderPhysical>),
 	Logical(Box<ZffObjectReaderLogical>),
 	Encrypted(Box<ZffObjectReaderEncrypted>),
+}
+
+impl Seek for ZffObjectReader {
+	fn seek(&mut self, seek_from: std::io::SeekFrom) -> std::result::Result<u64, std::io::Error> {
+		match self {
+			ZffObjectReader::Physical(reader) => reader.seek(seek_from),
+			ZffObjectReader::Logical(reader) => reader.seek(seek_from),
+			ZffObjectReader::Encrypted(_) => Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+		}
+	}
 }
 
 pub(crate) struct ZffObjectReaderPhysical {
@@ -421,10 +470,18 @@ impl ZffObjectReaderLogical {
 
 	/// # Error
 	/// fails if no appropriate file for the given filenumber exists.
-	pub fn set_active_file(&self, filenumber: u64) -> Result<()> {
+	pub fn set_active_file(&mut self, filenumber: u64) -> Result<()> {
 		match self.files.get(&filenumber) {
-			Some(_) => Ok(()),
-			None => Err(ZffError::new(ZffErrorKind::MissingFileNumber, filenumber.to_string()))
+			Some(_) => self.active_file = filenumber,
+			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, filenumber.to_string()))
+		}
+		Ok(())
+	}
+
+	fn filemetadata(&self) -> Result<&FileMetadata> {
+		match self.files.get(&self.active_file) {
+			Some(metadata) => Ok(metadata),
+			None => Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
 		}
 	}
 
@@ -550,18 +607,18 @@ impl ZffObjectReaderEncrypted {
 	}
 }
 
-struct FileMetadata {
-	parent_file_number: u64,
-	length_of_data: u64,
-	first_chunk_number: u64,
-	number_of_chunks: u64,
-	position: u64,
-	file_type: Option<FileType>,
-	filename: Option<String>,
-	metadata_ext: HashMap<String, String>,
-	acquisition_start: Option<u64>,
-	acquisition_end: Option<u64>,
-	hash_header: Option<HashHeader>,
+pub struct FileMetadata {
+	pub parent_file_number: u64,
+	pub length_of_data: u64,
+	pub first_chunk_number: u64,
+	pub number_of_chunks: u64,
+	pub position: u64,
+	pub file_type: Option<FileType>,
+	pub filename: Option<String>,
+	pub metadata_ext: HashMap<String, String>,
+	pub acquisition_start: Option<u64>,
+	pub acquisition_end: Option<u64>,
+	pub hash_header: Option<HashHeader>,
 }
 
 impl FileMetadata {
@@ -770,8 +827,7 @@ fn initialize_object_reader<R: Read + Seek>(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
-								segments,
-								main_footer)
+								segments)
 						},
 	}
 }
@@ -808,7 +864,6 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 	header_segment_no: u64,
 	footer_segment_no: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
-	main_footer: &MainFooter,
 	) -> Result<ZffObjectReader> {
 
 
