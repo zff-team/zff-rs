@@ -49,6 +49,7 @@ pub struct ZffReader<R: Read + Seek> {
 	object_reader: HashMap<u64, ZffObjectReader>, //<object_number, ZffObjectReader>,
 	main_footer: MainFooter,
 	chunk_map: PreloadedChunkMap,
+	active_object: u64, //the number of the active object.
 }
 
 impl<R: Read + Seek> ZffReader<R> {
@@ -82,6 +83,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			object_reader: HashMap::new(),
 			main_footer,
 			chunk_map: PreloadedChunkMap::None,
+			active_object: 0,
 		})
 	}
 
@@ -91,9 +93,54 @@ impl<R: Read + Seek> ZffReader<R> {
 		self.main_footer.object_footer().clone()
 	}
 
+	pub fn set_active_object(&mut self, object_number: u64) -> Result<()> {
+		if self.object_reader.get(&object_number).is_some() {
+			self.active_object = object_number;
+			Ok(())
+		} else {
+			Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string()))
+		}
+	}
+
+	pub fn set_active_file(&mut self, filenumber: u64) -> Result<()> {
+		if let Some(object_reader) = self.object_reader.get(&self.active_object) {
+			match object_reader {
+				ZffObjectReader::Logical(reader) => reader.set_active_file(filenumber),
+				_ => Err(ZffError::new(ZffErrorKind::MismatchObjectType, self.active_object.to_string())) //TODO: return object type instead of object_number,
+			}
+		} else {
+			Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string()))
+		}
+	}
+
+	pub fn initialize_object(&mut self, object_number: u64) -> Result<()> {
+		let object_reader = initialize_object_reader(object_number, &mut self.segments, &self.main_footer)?;
+		self.object_reader.insert(object_number, object_reader);
+		Ok(())
+	}
+
+	pub fn initialize_objects_all(&mut self) -> Result<()> {
+		let object_reader_map = initialize_object_reader_all(&mut self.segments, &self.main_footer)?;
+		self.object_reader = object_reader_map;
+		Ok(())
+	}
+
 	pub fn number_of_chunks(&self) -> u64 {
 		let (chunk_number, _) = self.main_footer.chunk_maps().last_key_value().unwrap_or((&0, &0));
 		*chunk_number
+	}
+
+	pub fn decrypt_object<P: AsRef<[u8]>>(&mut self, object_number: u64, decryption_password: P) -> Result<()> {
+		let object_reader = match self.object_reader.get_mut(&object_number) {
+			Some(reader) => reader,
+			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+		};
+		let decrypted_reader = match object_reader {
+			ZffObjectReader::Encrypted(reader) => reader.decrypt_with_password(decryption_password, self.main_footer.chunk_maps(), &mut self.segments)?,
+			_ => return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, object_number.to_string()))
+		};
+		self.object_reader.insert(object_number, decrypted_reader);
+		Ok(())
 	}
 
 
@@ -331,7 +378,7 @@ impl ZffObjectReaderLogical {
 					Some(offset) => (segment_no, offset),
 				}
 			};
-			let fileheader = match segments.get_mut(&header_segment_number) {
+			let fileheader = match segments.get_mut(header_segment_number) {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
 				Some(segment) => {
 					segment.seek(SeekFrom::Start(*header_offset))?;
@@ -343,7 +390,7 @@ impl ZffObjectReaderLogical {
 					}
 				}
 			};
-			let filefooter = match segments.get_mut(&footer_segment_number) {
+			let filefooter = match segments.get_mut(footer_segment_number) {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
 				Some(segment) => {
 					segment.seek(SeekFrom::Start(*footer_offset))?;
@@ -466,7 +513,6 @@ enum PreloadDegree {
 	All,
 }
 
-/// to convert into an unencrypted Object...?
 pub(crate) struct ZffObjectReaderEncrypted {
 	encrypted_header: EncryptedObjectHeader,
 	encrypted_footer: EncryptedObjectFooter,
@@ -478,6 +524,29 @@ impl ZffObjectReaderEncrypted {
 			encrypted_header,
 			encrypted_footer,
 		}
+	}
+
+	fn decrypt_with_password<P, R>(&mut self, password: P, global_chunkmap: &BTreeMap<u64, u64>, segments: &mut HashMap<u64, Segment<R>>
+		) -> Result<ZffObjectReader> 
+	where
+		P: AsRef<[u8]>,
+		R: Read + Seek,
+	{
+		let decrypted_object_header = self.encrypted_header.decrypt_with_password(password)?;
+
+		let enc_info = EncryptionInformation::try_from(&decrypted_object_header)?;
+
+		let decrypted_footer = self.encrypted_footer.decrypt(enc_info.encryption_key, enc_info.algorithm)?;
+
+		let obj_reader = match decrypted_footer {
+			ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(
+				ZffObjectReaderPhysical::with_obj_metadata(decrypted_object_header, physical, global_chunkmap.clone()))),
+			ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(
+			ZffObjectReaderLogical::with_obj_metadata_recommended(decrypted_object_header, logical, segments, global_chunkmap.clone())?)), //TODO: use enum to provide also minimal and full.
+		};
+
+		Ok(obj_reader)
+
 	}
 }
 
