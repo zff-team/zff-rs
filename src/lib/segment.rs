@@ -23,7 +23,8 @@ use crate::{
 
 /// Represents a full [Segment], containing a [crate::header::SegmentHeader],
 /// a [crate::footer::SegmentFooter], a [Reader](std::io::Read) to the appropriate
-/// segmented data and a position marker for this [Reader](std::io::Read). 
+/// segmented data and a position marker for this [Reader](std::io::Read).
+#[derive(Debug)]
 pub struct Segment<R: Read + Seek> {
 	header: SegmentHeader,
 	data: R,
