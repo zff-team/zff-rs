@@ -88,6 +88,27 @@ impl ObjectFooter {
 			_ => Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
 	}
+
+	pub fn object_number(&self) -> u64 {
+		match self {
+			ObjectFooter::Physical(footer) => footer.object_number,
+			ObjectFooter::Logical(footer) => footer.object_number,
+		}
+	}
+
+	pub fn acquisition_start(&self) -> u64 {
+		match self {
+			ObjectFooter::Physical(footer) => footer.acquisition_start,
+			ObjectFooter::Logical(footer) => footer.acquisition_start,
+		}
+	}
+
+	pub fn acquisition_end(&self) -> u64 {
+		match self {
+			ObjectFooter::Physical(footer) => footer.acquisition_end,
+			ObjectFooter::Logical(footer) => footer.acquisition_end,
+		}
+	}
 }
 
 impl From<ObjectFooterPhysical> for ObjectFooter {
