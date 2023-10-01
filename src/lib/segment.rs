@@ -1,5 +1,6 @@
 // - STD
 use core::borrow::Borrow;
+use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom};
 
 // - internal
@@ -82,26 +83,25 @@ impl<R: Read + Seek> Segment<R> {
 	}
 
 	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
-		let first_map_chunk_number = self.footer.chunk_map_table
-								 .range(..chunk_number).next_back()
-								 .map(|(k, _)| *k + 1)
-								 .unwrap_or(self.footer.first_chunk_number);
-		let chunk_map_offset = match self.footer.chunk_map_table.range((chunk_number + 1)..).next().map(|(_, offset)| *offset) {
-			Some(offset) => offset,
-			None => return Err(ZffError::new(ZffErrorKind::DataDecodeChunkNumberNotInSegment, chunk_number.to_string())),
-		};
-		
+		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_map_table, *chunk_number)?;
+		//get the first chunk number of the specific chunk map
+		let first_chunk_number_of_map = get_first_chunknumber(
+			&self.footer.chunk_map_table, *chunk_number, self.footer.first_chunk_number)?;
+
 		// skips the chunk map header and the other chunk entries.
-		let seek_offset = DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + 
-						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 +
+		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
+					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
+						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
 						  1 + // skip the ChunkMap header version
-						  ((chunk_number - first_map_chunk_number) * 2 * 8) +
-						  chunk_map_offset +
+						  8 + // skip the length of the inner BTreeMap
+						  ((chunk_number - first_chunk_number_of_map) * 2 * 8) + //skip the other chunk entries
 						  8; // skip the chunk number itself and go directly to the appropiate offset;
 
 		//go to the appropriate chunk map.
 		self.data.seek(SeekFrom::Start(seek_offset))?;
-		u64::decode_directly(&mut self.data)
+		// read the appropriate offset
+		let offset = u64::decode_directly(&mut self.data)?;
+		Ok(offset)
 	}
 
 	/// Returns the chunked data, uncompressed and unencrypted
@@ -112,7 +112,6 @@ impl<R: Read + Seek> Segment<R> {
 	{
 		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
-
 		let (compression_flag, chunk_size, same_bytes, deduplication) = if encryption_information.is_some() {
 			let chunk_header = EncryptedChunkHeader::decode_directly(&mut self.data)?;
 			let compression_flag = chunk_header.flags.compression;
@@ -262,4 +261,26 @@ pub enum ChunkContent {
 		Raw(Vec<u8>), // contains original data,
 		SameBytes(u8), // contains the appropriate byte,
 		Duplicate(u64), //contains the appropriate chunk with the original data
+}
+
+
+
+fn get_chunkmap_offset(map: &BTreeMap<u64, u64>, chunk_number: u64) -> Result<u64> {
+    match map.range(chunk_number..).next() {
+        Some((_, &v)) => Ok(v),
+        None => Err(ZffError::new(ZffErrorKind::ValueNotInMap, chunk_number.to_string())),
+    }
+}
+
+
+fn get_first_chunknumber(map: &BTreeMap<u64, u64>, chunk_number: u64, first_segment_chunk_number: u64) -> Result<u64> {
+    let mut range = map.range(..chunk_number).rev();
+    match range.next() {
+        Some((&k, _)) => Ok(k + 1),
+        None => if chunk_number > first_segment_chunk_number {
+        	Ok(first_segment_chunk_number)
+        } else {
+        	Err(ZffError::new(ZffErrorKind::ValueNotInMap, chunk_number.to_string()))
+        },
+    }
 }
