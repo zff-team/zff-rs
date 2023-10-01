@@ -26,7 +26,7 @@ pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
 /// The identifier of the [FileHeader](crate::header::FileHeader).
 pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
 /// The identifier of the [ChunkMap](crate::header::ChunkMap).
-pub const HEADER_IDENTIFIER_CHUNK_MAP: u32 = 0x7a666678;
+pub const HEADER_IDENTIFIER_CHUNK_MAP: u32 = 0x7A666678;
 
 pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
