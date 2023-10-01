@@ -37,6 +37,10 @@ impl ChunkMap {
 		}
 	}
 
+	pub fn current_size(&self) -> usize {
+		self.chunkmap.len() * 16 + 8
+	}
+
 	/// returns a new, empty [ChunkMap] with the given values.
 	pub fn new_empty() -> Self {
 		Self {
@@ -50,7 +54,7 @@ impl ChunkMap {
 	}
 
 	pub fn add_chunk_entry(&mut self, chunk_no: u64, offset: u64) -> bool {
-		if self.target_size < self.chunkmap.len() + 24 { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
+		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
 			self.chunkmap.insert(chunk_no, offset);
