@@ -267,7 +267,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn current_filemetadata(&self) -> Result<&FileMetadata> {
 		match self.object_reader.get(&self.active_object) {
 			Some(ZffObjectReader::Logical(reader)) => {
-				reader.filemetadata()
+				Ok(reader.filemetadata()?)
 			},
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
@@ -275,7 +275,29 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	pub fn object_header_ref(&self) -> Result<&ObjectHeader> {
+	pub fn current_fileheader(&mut self) -> Result<FileHeader> {
+		match self.object_reader.get(&self.active_object) {
+			Some(ZffObjectReader::Logical(reader)) => {
+				reader.current_fileheader(&mut self.segments)
+			},
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+		}
+	}
+
+	pub fn current_filefooter(&mut self) -> Result<FileFooter> {
+		match self.object_reader.get(&self.active_object) {
+			Some(ZffObjectReader::Logical(reader)) => {
+				reader.current_filefooter(&mut self.segments)
+			},
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+		}
+	}
+
+	pub fn active_object_header_ref(&self) -> Result<&ObjectHeader> {
 		match self.get_active_reader()? {
 			ZffObjectReader::Physical(reader) => Ok(reader.object_header_ref()),
 			ZffObjectReader::Logical(reader) => Ok(reader.object_header_ref()),
@@ -283,7 +305,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	pub fn object_footer(&self) -> Result<ObjectFooter> {
+	pub fn active_object_footer(&self) -> Result<ObjectFooter> {
 		match self.get_active_reader()? {
 			ZffObjectReader::Physical(reader) => Ok(reader.object_footer()),
 			ZffObjectReader::Logical(reader) => Ok(reader.object_footer()),
@@ -295,6 +317,13 @@ impl<R: Read + Seek> ZffReader<R> {
 		match self.object_reader.get(&self.active_object) {
 			Some(reader) => Ok(reader),
 			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+		}
+	}
+
+	pub fn segment_mut_ref(&mut self, segment_number: u64) -> Result<&mut Segment<R>> {
+		match self.segments.get_mut(&segment_number) {
+			Some(segment) => Ok(segment),
+			None => Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string()))
 		}
 	}
 }
@@ -397,7 +426,6 @@ impl ZffObjectReaderPhysical {
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
 			let chunk_data = get_chunk_data(segment, current_chunk_number, &enc_information, compression_algorithm, chunk_size)?;
-
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
@@ -477,6 +505,70 @@ impl ZffObjectReaderLogical {
 
 	pub(crate) fn object_footer(&self) -> ObjectFooter {
 		ObjectFooter::Logical(self.object_footer.clone())
+	}
+
+	pub fn current_fileheader<R: Read + Seek>(&self, segments: &mut HashMap<u64, Segment<R>>) -> Result<FileHeader> {
+		let header_segment_number = match self.object_footer.file_header_segment_numbers().get(&self.active_file) {
+			Some(no) => no,
+			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+		};
+		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+		};
+		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
+			let key = match encryption_header.get_encryption_key() {
+				Some(key) => key,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+			};
+			Some(EncryptionInformation::new(key, encryption_header.algorithm().clone()))
+		} else {
+			None
+		};
+		match segments.get_mut(header_segment_number) {
+			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			Some(segment) => {
+				segment.seek(SeekFrom::Start(*header_offset))?;
+				//check encryption
+				if let Some(enc_info) = &enc_info {
+					Ok(FileHeader::decode_encrypted_header_with_key(segment, enc_info)?)
+				} else {
+					Ok(FileHeader::decode_directly(segment)?)
+				}
+			}
+		}
+	}
+
+	pub fn current_filefooter<R: Read + Seek>(&self, segments: &mut HashMap<u64, Segment<R>>) -> Result<FileFooter> {
+		let footer_segment_number = match self.object_footer.file_footer_segment_numbers().get(&self.active_file) {
+			Some(no) => no,
+			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+		};
+		let footer_offset = match self.object_footer.file_footer_offsets().get(&self.active_file) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+		};
+		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
+			let key = match encryption_header.get_encryption_key() {
+				Some(key) => key,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+			};
+			Some(EncryptionInformation::new(key, encryption_header.algorithm().clone()))
+		} else {
+			None
+		};
+		match segments.get_mut(footer_segment_number) {
+			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			Some(segment) => {
+				segment.seek(SeekFrom::Start(*footer_offset))?;
+				//check encryption
+				if let Some(enc_info) = &enc_info {
+					Ok(FileFooter::decode_encrypted_footer_with_key(segment, enc_info)?)
+				} else {
+					Ok(FileFooter::decode_directly(segment)?)
+				}
+			}
+		}
 	}
 
 	fn with_obj_metadata<R: Read + Seek>(
@@ -693,14 +785,14 @@ impl ZffObjectReaderEncrypted {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FileMetadata {
 	pub parent_file_number: u64,
 	pub length_of_data: u64,
 	pub first_chunk_number: u64,
 	pub number_of_chunks: u64,
 	pub position: u64,
-	pub file_type: Option<FileType>,
+	pub file_type: FileType,
 	pub filename: Option<String>,
 	pub metadata_ext: HashMap<String, String>,
 	pub acquisition_start: Option<u64>,
@@ -716,7 +808,7 @@ impl FileMetadata {
 			first_chunk_number: filefooter.first_chunk_number(),
 			number_of_chunks: filefooter.number_of_chunks(),
 			position: 0,
-			file_type: None,
+			file_type: fileheader.file_type.clone(),
 			filename: None,
 			metadata_ext: HashMap::new(),
 			acquisition_start: None,
@@ -732,7 +824,7 @@ impl FileMetadata {
 			first_chunk_number: filefooter.first_chunk_number(),
 			number_of_chunks: filefooter.number_of_chunks(),
 			position: 0,
-			file_type: Some(fileheader.file_type.clone()),
+			file_type: fileheader.file_type.clone(),
 			filename: Some(fileheader.filename.clone()),
 			metadata_ext: extract_recommended_metadata(fileheader),
 			acquisition_start: None,
@@ -748,9 +840,9 @@ impl FileMetadata {
 			first_chunk_number: filefooter.first_chunk_number(),
 			number_of_chunks: filefooter.number_of_chunks(),
 			position: 0,
-			file_type: Some(fileheader.file_type.clone()),
+			file_type: fileheader.file_type.clone(),
 			filename: Some(fileheader.filename.clone()),
-			metadata_ext: extract_recommended_metadata(fileheader),
+			metadata_ext: extract_all_metadata(fileheader),
 			acquisition_start: Some(filefooter.acquisition_start()),
 			acquisition_end: Some(filefooter.acquisition_end()),
 			hash_header: Some(filefooter.hash_header().clone()),
@@ -787,6 +879,10 @@ fn extract_recommended_metadata(fileheader: &FileHeader) -> HashMap<String, Stri
 	}
 
 	metadata
+}
+
+fn extract_all_metadata(fileheader: &FileHeader) -> HashMap<String, String> {
+	fileheader.metadata_ext.clone()
 }
 
 fn get_segment_of_chunk_no(chunk_no: u64, global_chunkmap: &BTreeMap<u64, u64>) -> Option<u64> {
