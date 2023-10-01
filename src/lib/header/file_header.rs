@@ -71,6 +71,30 @@ pub enum SpecialFileType {
 	Block = 2,
 }
 
+impl TryFrom<u8> for SpecialFileType {
+	type Error = ZffError;
+	fn try_from(byte: u8) -> Result<Self> {
+		match byte {
+			0 => Ok(SpecialFileType::Fifo),
+			1 => Ok(SpecialFileType::Char),
+			2 => Ok(SpecialFileType::Block),
+			_ => Err(ZffError::new(ZffErrorKind::UnknownFileType, byte.to_string())),
+		}
+	}
+}
+
+impl TryFrom<&u8> for SpecialFileType {
+	type Error = ZffError;
+	fn try_from(byte: &u8) -> Result<Self> {
+		match byte {
+			0 => Ok(SpecialFileType::Fifo),
+			1 => Ok(SpecialFileType::Char),
+			2 => Ok(SpecialFileType::Block),
+			_ => Err(ZffError::new(ZffErrorKind::UnknownFileType, byte.to_string())),
+		}
+	}
+}
+
 /// Each dumped file* contains a [FileHeader] containing several metadata.
 /// The following metadata are included in a [FileHeader]:
 /// - the internal file number of the appropriate file.
