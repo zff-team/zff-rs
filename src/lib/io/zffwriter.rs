@@ -546,11 +546,19 @@ impl<R: Read> ZffWriter<R> {
 		loop {
 			if (written_bytes +
 				segment_footer_len +
-				target_chunk_size as u64) > target_segment_size-seek_value {
+				target_chunk_size as u64 +
+				chunkmap.current_size() as u64) > target_segment_size-seek_value {
 				
 				if written_bytes == segment_header.encode_directly().len() as u64 {
 					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 				} else {
+					//finish segment chunkmap
+					if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+						main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
+						segment_footer.chunk_map_table.insert(*chunk_no, written_bytes);
+						written_bytes += output.write(&chunkmap.encode_directly())? as u64;
+						chunkmap.flush();
+					}
 					break;
 				}
 			};
@@ -566,6 +574,13 @@ impl<R: Read> ZffWriter<R> {
 						if written_bytes == segment_header.encode_directly().len() as u64 {
 							return Err(e);
 						} else {
+							//finish segment chunkmap
+							if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
+								segment_footer.chunk_map_table.insert(*chunk_no, written_bytes);
+								written_bytes += output.write(&chunkmap.encode_directly())? as u64;
+								chunkmap.flush();
+							}
 							//write the appropriate object footer and break the loop
 							self.object_footer_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
 							segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
@@ -575,12 +590,12 @@ impl<R: Read> ZffWriter<R> {
 						}
 					},
 					ZffErrorKind::InterruptedInputStream => {
+						//todo: should be handled in any way...
 						break;
 					},
 					_ => return Err(e),
 				},
 			};
-			written_bytes += output.write(&data)? as u64;
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) && 
 			!chunkmap.add_chunk_entry(current_chunk_number, written_bytes) {
@@ -590,7 +605,9 @@ impl<R: Read> ZffWriter<R> {
 				}
 				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 				chunkmap.flush();
+				chunkmap.add_chunk_entry(current_chunk_number, written_bytes);
    			};
+   			written_bytes += output.write(&data)? as u64;
 		}
 
 		// finish the segment footer and write the encoded footer into the Writer.
