@@ -3,6 +3,7 @@ use std::fmt;
 use std::string::FromUtf8Error;
 use std::io;
 use std::collections::TryReserveError;
+use std::num::ParseIntError;
 
 // - internal
 
@@ -49,6 +50,8 @@ pub enum ZffErrorKind {
 	ScryptErrorInvalidParams,
 	/// contains a STD FromUtf8Error.
 	FromUtf8Error,
+	/// contains a parse error.
+	ParseError,
 	/// Error which occurs when parsing the file extension.
 	FileExtensionParserError,
 	/// contains a aes_gcm_siv::aead::Error.
@@ -156,6 +159,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::AesCbcError => "AesCbcError",
 			ZffErrorKind::Argon2Error => "Argon2Error",
 			ZffErrorKind::ValueNotInMap => "ValueNotInMap",
+			ZffErrorKind::ParseError => "ParseError",
 			ZffErrorKind::ScryptErrorInvalidParams => "ScryptErrorInvalidParams",
 			ZffErrorKind::Custom => "Custom",
 			ZffErrorKind::MissingHardlinkFilenumber => "MissingHardlinkFilenumber",
@@ -325,6 +329,12 @@ impl ZffError {
 }
 
 
+impl From<ParseIntError> for ZffError {
+	fn from(e: ParseIntError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::ParseError, err_msg)
+	}
+}
 
 impl From<AesCbcError> for ZffError {
 	fn from(e: AesCbcError) -> ZffError {
