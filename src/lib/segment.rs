@@ -93,9 +93,7 @@ impl<R: Read + Seek> Segment<R> {
 					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
 						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
 						  1 + // skip the ChunkMap header version
-						  8 + // skip the length of the inner BTreeMap
-						  ((chunk_number - first_chunk_number_of_map) * 2 * 8) + //skip the other chunk entries
-						  8; // skip the chunk number itself and go directly to the appropiate offset;
+						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
 
 		//go to the appropriate chunk map.
 		self.data.seek(SeekFrom::Start(seek_offset))?;
