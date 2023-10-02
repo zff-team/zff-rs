@@ -193,7 +193,7 @@ impl<R: Read> ZffWriter<R> {
 
 		let initial_chunk_number = 1;
 
-		let signature_key_bytes = &params.signature_key.as_ref().map(|SigningKey| SigningKey.to_bytes().to_vec());
+		let signature_key_bytes = &params.signature_key.as_ref().map(|signing_key| signing_key.to_bytes().to_vec());
 		let mut object_encoder = Vec::with_capacity(physical_objects.len()+logical_objects.len());
 
 		//check if all EncryptionHeader are contain a decrypted encryption key.
