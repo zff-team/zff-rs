@@ -39,7 +39,7 @@ use crate::{
 
 // - external
 use digest::DynDigest;
-use ed25519_dalek::{Keypair};
+use ed25519_dalek::{SigningKey};
 use time::{OffsetDateTime};
 
 /// An encoder for each object. This is a wrapper Enum for [PhysicalObjectEncoder] and [LogicalObjectEncoder].
@@ -129,7 +129,7 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	encoded_footer: Vec<u8>,
 	encoded_footer_remaining_bytes: usize,
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
-	signature_key: Option<Keypair>,
+	signing_key: Option<SigningKey>,
 	has_hash_signatures: bool,
 	encryption_key: Option<Vec<u8>>,
 	acquisition_start: u64,
@@ -142,11 +142,11 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		obj_header: ObjectHeader,
 		reader: R,
 		hash_types: Vec<HashType>,
-		signature_key_bytes: Option<Vec<u8>>,
+		signing_key_bytes: Option<Vec<u8>>,
 		current_chunk_number: u64) -> Result<PhysicalObjectEncoder<R>> {
 		
-		let signature_key = match &signature_key_bytes {
-	    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
+		let signing_key = match &signing_key_bytes {
+	    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
 	    	None => None
 	    };
 
@@ -178,7 +178,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			encoded_footer_remaining_bytes: 0,
 			hasher_map,
 			encryption_key,
-			signature_key,
+			signing_key,
 			acquisition_start: 0,
 			acquisition_end: 0,
 		})
@@ -300,8 +300,10 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
 	        hash_value.set_hash(hash.to_vec());
 	        if self.has_hash_signatures {
-	        	let signature = Signature::calculate_signature(self.signature_key.as_ref(), &hash);
-	        	if let Some(sig) = signature { hash_value.set_ed25519_signature(sig) };
+	        	if let Some(signing_key) = &self.signing_key {
+	        		let signature = Signature::sign(signing_key, &hash);
+	        		hash_value.set_ed25519_signature(signature);
+	        	}
 	        };
 	        hash_values.push(hash_value);
 	    }
@@ -422,7 +424,7 @@ pub struct LogicalObjectEncoder {
 	current_file_number: u64,
 	hash_types: Vec<HashType>,
 	encryption_key: Option<Vec<u8>>,
-	signature_key_bytes: Option<Vec<u8>>,
+	signing_key_bytes: Option<Vec<u8>>,
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
 	hardlink_map: HashMap<u64, u64>, //<filenumber, filenumber of hardlink>
@@ -466,7 +468,7 @@ impl LogicalObjectEncoder {
 		files: Vec<(Box<dyn Read>, FileHeader)>,
 		root_dir_filenumbers: Vec<u64>,
 		hash_types: Vec<HashType>,
-		signature_key_bytes: Option<Vec<u8>>,
+		signing_key_bytes: Option<Vec<u8>>,
 		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
 		hardlink_map: HashMap<u64, u64>, // <filenumber, filenumber of hardlink>
 		directory_children: HashMap<u64, Vec<u64>>,
@@ -494,8 +496,8 @@ impl LogicalObjectEncoder {
 			Some(children) => children.to_owned(),
 			None => Vec::new()
 		};
-		let signature_key = match &signature_key_bytes {
-	    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
+		let signing_key = match &signing_key_bytes {
+	    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
 	    	None => None
 	    };
 			    
@@ -514,7 +516,7 @@ impl LogicalObjectEncoder {
 			reader, 
 			hash_types.clone(), 
 			encryption_information, 
-			signature_key, 
+			signing_key, 
 			current_chunk_number, 
 			symlink_real_path, 
 			hardlink_filenumber, 
@@ -533,7 +535,7 @@ impl LogicalObjectEncoder {
 			current_file_number,
 			hash_types,
 			encryption_key,
-			signature_key_bytes,
+			signing_key_bytes,
 			current_chunk_number,
 			symlink_real_paths,
 			hardlink_map,
@@ -554,9 +556,9 @@ impl LogicalObjectEncoder {
 	}
 
 	/// Returns the current signature key (if available).
-	pub fn signature_key(&self) -> Option<Keypair> {
-	    match &self.signature_key_bytes {
-	    	Some(bytes) => Keypair::from_bytes(bytes).ok(),
+	pub fn signing_key(&self) -> Option<SigningKey> {
+	    match &self.signing_key_bytes {
+	    	Some(bytes) => Signature::bytes_to_signingkey(bytes).ok(),
 	    	None => None
 	    }
 	}
@@ -619,8 +621,8 @@ impl LogicalObjectEncoder {
 					Some(children) => children.to_owned(),
 					None => Vec::new(),
 				};
-				let signature_key = match &self.signature_key_bytes {
-			    	Some(bytes) => Some(Keypair::from_bytes(bytes)?),
+				let signing_key = match &self.signing_key_bytes {
+			    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
 			    	None => None
 			    };
 
@@ -637,7 +639,7 @@ impl LogicalObjectEncoder {
 					reader, 
 					self.hash_types.clone(), 
 					encryption_information, 
-					signature_key, 
+					signing_key, 
 					self.current_chunk_number, 
 					symlink_real_path, 
 					hardlink_filenumber, 

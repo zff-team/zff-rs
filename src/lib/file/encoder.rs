@@ -27,7 +27,7 @@ use crate::{
 
 // - external
 use digest::DynDigest;
-use ed25519_dalek::{Keypair};
+use ed25519_dalek::{SigningKey};
 use time::{OffsetDateTime};
 
 /// The [FileEncoder] can be used to encode a [crate::file::File].
@@ -40,8 +40,8 @@ pub struct FileEncoder {
 	object_header: ObjectHeader,
 	/// The underlying [File](std::fs::File) object to read from.
 	underlying_file: Box<dyn Read>,
-	/// optinal signature key, to sign the data with the given keypair
-	signature_key: Option<Keypair>,
+	/// optinal signature key, to sign the data with the given SigningKey
+	signature_key: Option<SigningKey>,
 	/// optional encryption information, to encrypt the data with the given key and algorithm
 	encryption_information: Option<EncryptionInformation>,
 	/// HashMap for the Hasher objects to calculate the cryptographically hash values for this file. 
@@ -77,7 +77,7 @@ impl FileEncoder {
 		file: Box<dyn Read>,
 		hash_types: Vec<HashType>,
 		encryption_information: Option<EncryptionInformation>,
-		signature_key: Option<Keypair>,
+		signature_key: Option<SigningKey>,
 		current_chunk_number: u64,
 		symlink_real_path: Option<PathBuf>,
 		hard_link_filenumber: Option<u64>,

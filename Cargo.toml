@@ -46,7 +46,7 @@ sha2 = "0.10.6"
 sha3 = "0.10.8"
 crc32fast = "1.3.2"
 #signing
-ed25519-dalek = { version = "1.0.1", features = [ "rand" ] }
+ed25519-dalek = { version = "2.0", features = [ "rand_core", "digest" ] }
 #needed to handle memory efficient chunk deduplication
 redb = "1.0.5"
 
