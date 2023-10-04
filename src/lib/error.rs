@@ -75,6 +75,8 @@ pub enum ZffErrorKind {
 	/// This is not an error in the strict sense. If you read a source file and reach the EOF,
 	/// you will get this error kind to handle your next steps.
 	ReadEOF,
+	/// Same as ReadEOF, but contains a chunk header.
+	EmptyFile(Vec<u8>),
 	/// This error will be returned, if the input stream was interrupted. Interrupted operations can typically be retried.
 	InterruptedInputStream,
 	/// This error will be returned, if the output stream was interrupted. Interrupted operations can typically be retried.
@@ -176,6 +178,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::MissingEncryptionKey => "MissingEncryptionKey",
 			ZffErrorKind::DecryptionOfEncryptionKey => "DecryptionOfEncryptionKey",
 			ZffErrorKind::ReadEOF => "ReadEOF",
+			ZffErrorKind::EmptyFile(_) => "EmptyFile",
 			ZffErrorKind::InterruptedInputStream => "InterruptedInputStream",
 			ZffErrorKind::InterruptedOutputStream => "InterruptedOutputStream",
 			ZffErrorKind::HeaderDecodeError => "HeaderDecodeError",

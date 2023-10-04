@@ -681,7 +681,6 @@ impl ZffObjectReaderLogical {
 		let mut inner_position = (active_filemetadata.position % chunk_size) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
 		let compression_algorithm = self.object_header.compression_header.algorithm();
-
 		loop {
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
 				break;
@@ -694,6 +693,8 @@ impl ZffObjectReaderLogical {
 				None => break,
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
+			//TODO: Check if a bufreader implementation in zffmount is more sufficient by checking this println!.
+			//println!("DEBUG: active_filemetadata.position: {}", active_filemetadata.position);
 			let chunk_data = get_chunk_data(segment, current_chunk_number, &enc_information, compression_algorithm, chunk_size)?;
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;

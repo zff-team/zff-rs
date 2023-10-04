@@ -53,6 +53,7 @@ pub(crate) const COMPRESSION_FLAG_VALUE: u8 = 1<<1;
 pub(crate) const SAME_BYTES_FLAG_VALUE: u8 = 1<<2;
 pub(crate) const DUPLICATION_FLAG_VALUE: u8 = 1<<3;
 pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1<<4;
+pub(crate) const EMPTY_FILE_FLAG_VALUE: u8 = 1<<5;
 
 // object header flags
 pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1<<0;

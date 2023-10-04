@@ -17,6 +17,7 @@ use crate::{
 	SAME_BYTES_FLAG_VALUE,
 	DUPLICATION_FLAG_VALUE,
 	ENCRYPTION_FLAG_VALUE,
+	EMPTY_FILE_FLAG_VALUE,
 	DEFAULT_HEADER_VERSION_CHUNK_HEADER
 };
 
@@ -27,6 +28,7 @@ pub struct ChunkHeaderFlags {
 	pub same_bytes: bool,
 	pub duplicate: bool,
 	pub encryption: bool,
+	pub empty_file: bool,
 }
 
 impl From<u8> for ChunkHeaderFlags {
@@ -37,6 +39,7 @@ impl From<u8> for ChunkHeaderFlags {
 			same_bytes: flag_values & SAME_BYTES_FLAG_VALUE != 0,
 			duplicate: flag_values & DUPLICATION_FLAG_VALUE != 0,
 			encryption: flag_values & ENCRYPTION_FLAG_VALUE != 0,
+			empty_file: flag_values & EMPTY_FILE_FLAG_VALUE != 0,
 		}
 	}
 }

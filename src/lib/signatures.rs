@@ -57,7 +57,7 @@ impl Signature {
 		// check if the content is a keypair or a secret key
 		if key.len() == KEYPAIR_LENGTH {
 			let mut key_slice = [0u8; KEYPAIR_LENGTH];
-			key_slice.copy_from_slice(&key);
+			key_slice.copy_from_slice(key);
 			Ok(SigningKey::from_keypair_bytes(&key_slice)?)
 		} else if key.len() == SECRET_KEY_LENGTH {
 			let mut key_slice = [0u8; SECRET_KEY_LENGTH];
@@ -83,12 +83,12 @@ impl Signature {
 		// check if the content is a signing key, a secret key or a verifying key.
 		let verifying_key = if key.len() == KEYPAIR_LENGTH { // if the key is a signing key
 			let mut key_slice = [0u8; KEYPAIR_LENGTH];
-			key_slice.copy_from_slice(&key);
+			key_slice.copy_from_slice(key);
 			let sign_key = SigningKey::from_keypair_bytes(&key_slice)?;
 			sign_key.verifying_key()
 		} else if key.len() == PUBLIC_KEY_LENGTH {
 			let mut key_slice = [0u8; PUBLIC_KEY_LENGTH];
-			key_slice.copy_from_slice(&key);
+			key_slice.copy_from_slice(key);
 			VerifyingKey::from_bytes(&key_slice)?
 		} else {
 			return Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""));

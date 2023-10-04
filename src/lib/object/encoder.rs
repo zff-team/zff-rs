@@ -591,6 +591,10 @@ impl LogicalObjectEncoder {
 					return Ok(file_encoder.get_encoded_header());
 				}
 
+				//todo: find a more efficient way than copy the offset.
+				let mut current_offset = current_offset;
+
+				let mut data = Vec::new();
 				// return next chunk
 				match file_encoder.get_next_chunk(deduplication_map) {
 					Ok(data) => {
@@ -598,6 +602,14 @@ impl LogicalObjectEncoder {
 						return Ok(data);
 					},
 					Err(e) => match e.get_kind() {
+						ZffErrorKind::EmptyFile(empty_file_data) => {
+							// increment the current chunk number as we write a empty chunk as placeholder
+							self.current_chunk_number += 1;
+							// append "empty" placeholder chunk (header) to the bytes which will be returned
+							data.append(&mut empty_file_data.clone());
+							// re-calculate the "current_offset" (append the bytes from the placeholder chunk)
+							current_offset += data.len() as u64;
+						},
 						ZffErrorKind::ReadEOF => (),
 						ZffErrorKind::NotAvailableForFileType => (),
 						_ => return Err(e)
@@ -605,13 +617,20 @@ impl LogicalObjectEncoder {
 				};
 
 				//return file footer, set next file_encoder
-				let file_footer = file_encoder.get_encoded_footer()?;
+				data.append(&mut file_encoder.get_encoded_footer()?);
+
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
 				
 				let (reader, current_file_header) = match self.files.pop() {
 					Some((file, header)) => (file, header),
-					None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
+					None => {
+						// if no files left, the acquisition ends and the date will be written to the object footer.
+						// The appropriate file footer will be returned.
+						self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+						self.current_file_encoder = None;
+						return Ok(data);
+					}
 				};	    
 		     	let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).copied();
 
@@ -644,7 +663,7 @@ impl LogicalObjectEncoder {
 					symlink_real_path, 
 					hardlink_filenumber, 
 					current_directory_children)?);
-				Ok(file_footer)
+				Ok(data)
 			},
 			None => {
 				self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);

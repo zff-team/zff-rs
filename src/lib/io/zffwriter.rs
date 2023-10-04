@@ -33,7 +33,6 @@ use crate::{
 	PhysicalObjectEncoder,
 	LogicalObjectEncoder,
 	ValueDecoder,
-	ValueEncoder,
 	Segment,
 };
 

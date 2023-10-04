@@ -194,9 +194,31 @@ impl FileEncoder {
 				//TODO!
 			}
 		};
-		if buf.is_empty() {
+		if buf.is_empty() && self.read_bytes_underlying_data != 0 {
+			//this case is the normal "file reader reached EOF".
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+		} else if buf.is_empty() && self.read_bytes_underlying_data == 0 {
+			//this case ensures, that empty files will already get a chunk
+			chunk_header.flags.empty_file = true;
+			chunk_header.chunk_size = 0;
+			chunk_header.crc32 = 0;
+			let mut chunk = Vec::new();
+
+			let mut encoded_header = if let Some(enc_header) = &self.object_header.encryption_header {
+				let key = match enc_header.get_encryption_key_ref() {
+					Some(key) => key,
+					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
+				};
+				chunk_header.encrypt_and_consume(key, enc_header.algorithm())?.encode_directly()
+			} else {
+				chunk_header.encode_directly()
+			};
+
+			chunk.append(&mut encoded_header);
+			self.current_chunk_number += 1;
+	   	 	return Err(ZffError::new(ZffErrorKind::EmptyFile(chunk), (self.current_chunk_number-1).to_string()))
 		};
+
 		self.update_hasher(&buf);
 	    let crc32 = calculate_crc32(&buf);
 
