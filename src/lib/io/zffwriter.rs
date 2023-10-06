@@ -153,6 +153,7 @@ impl<R: Read> ZffWriter<R> {
 					Some(x) => *x + 1,
 					None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 				};
+
 				//TODO: Overwrite the old main footer offset with zeros...or the full main footer?
 				let extension_parameter = ZffExtenderParameter::with_data(
 					mf,
@@ -185,31 +186,62 @@ impl<R: Read> ZffWriter<R> {
 		current_segment_no: u64,
 		params: ZffWriterOptionalParameter,
 		extender_parameter: Option<ZffExtenderParameter>) -> Result<ZffWriter<R>> {
-		let output_path = match output {
-			ZffWriterOutput::NewContainer(path) => path,
-			_ => return Err(ZffError::new(ZffErrorKind::InvalidOption, ""))//TODO
+
+		let mut next_object_number = match &extender_parameter {
+			None => 1,
+			Some(params) => params.next_object_no,
 		};
 
-		let initial_chunk_number = 1;
+		let initial_chunk_number = match &extender_parameter {
+			None => 1,
+			Some(params) => params.initial_chunk_number
+		};
+
+		//TODO: This will double the needed memory. I should find a more elegant solution to handle this:
+		let mut modify_map_phy = HashMap::new();
+		// check if all necessary stuff is available in object header and modify them (if needed)
+		for (mut header, reader) in physical_objects {
+			// check if all EncryptionHeader are contain a decrypted encryption key.
+			if let Some(encryption_header) = &header.encryption_header {
+				if encryption_header.get_encryption_key_ref().is_none() {
+					return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, header.object_number.to_string()))
+				};
+			}
+			// check if this container should be extended - in that case, modify the apropriate object number
+			match &extender_parameter {
+				None => (), //TODO: check if the object number should be modified here too (in case of new containers).
+				Some(_) => {
+					header.object_number = next_object_number;
+					next_object_number += 1;
+				},
+			}
+			modify_map_phy.insert(header, reader);
+		}
+		let physical_objects = modify_map_phy;
+
+		//TODO: This will double the needed memory. I should find a more elegant solution to handle this:
+		let mut modify_map_log = HashMap::new();
+		for (mut header, input_files) in logical_objects {
+			//check if all EncryptionHeader are contain a decrypted encryption key.
+			if let Some(encryption_header) = &header.encryption_header {
+				if encryption_header.get_encryption_key_ref().is_none() {
+					return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, header.object_number.to_string()))
+				};
+			}
+			// check if this container should be extended - in that case, modify the apropriate object number
+			match &extender_parameter {
+				None => (), //TODO: check if the object number should be modified here too (in case of new containers).
+				Some(_) => {
+					header.object_number = next_object_number;
+					next_object_number += 1;
+				},
+			}
+			modify_map_log.insert(header, input_files);
+		}
+		let logical_objects = modify_map_log;
 
 		let signature_key_bytes = &params.signature_key.as_ref().map(|signing_key| signing_key.to_bytes().to_vec());
 		let mut object_encoder = Vec::with_capacity(physical_objects.len()+logical_objects.len());
-
-		//check if all EncryptionHeader are contain a decrypted encryption key.
-		for header in physical_objects.keys() {
-			if let Some(encryption_header) = &header.encryption_header {
-				if encryption_header.get_encryption_key_ref().is_none() {
-					return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, header.object_number.to_string()))
-				};
-			}
-		}
-		for header in logical_objects.keys() {
-			if let Some(encryption_header) = &header.encryption_header {
-				if encryption_header.get_encryption_key_ref().is_none() {
-					return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, header.object_number.to_string()))
-				};
-			}
-		}
 		
 		Self::setup_physical_object_encoder(
 			physical_objects,
@@ -231,13 +263,23 @@ impl<R: Read> ZffWriter<R> {
 			None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 		};
 
+		let object_header_segment_numbers = match &extender_parameter {
+			None => BTreeMap::new(),
+			Some(params) => params.main_footer.object_header().clone()
+		};
+
+		let object_footer_segment_numbers = match &extender_parameter {
+			None => BTreeMap::new(),
+			Some(params) => params.main_footer.object_footer().clone()
+		};
+
 		Ok(Self {
 			object_encoder,
 			current_object_encoder, //the current object encoder
-			output: ZffWriterOutput::NewContainer(output_path),
+			output,
 			current_segment_no,
-			object_header_segment_numbers: BTreeMap::new(), //<object_number, segment_no>
-			object_footer_segment_numbers: BTreeMap::new(), //<object_number, segment_no>
+			object_header_segment_numbers, //<object_number, segment_no>
+			object_footer_segment_numbers, //<object_number, segment_no>
 			optional_parameter: params,
 			extender_parameter,
 		})
@@ -492,28 +534,44 @@ impl<R: Read> ZffWriter<R> {
 		Ok(log_obj)
 	}
 
-	fn write_next_segment<W: Write + Seek>(
+	fn write_next_segment<O: Read + Write + Seek>(
 		&mut self,
-		output: &mut W,
+		output: &mut O,
 		seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
 		main_footer_chunk_map: &mut BTreeMap<u64, u64>,
+		extend: bool
 		) -> Result<u64> {
 
 		let mut eof = false; //true, if EOF of input stream is reached.
-		output.seek(SeekFrom::Start(seek_value))?;
 		let mut written_bytes: u64 = 0;
 		let target_chunk_size = self.current_object_encoder.get_obj_header().chunk_size as usize;
 		let target_segment_size = self.optional_parameter.target_segment_size.unwrap_or(u64::MAX);
 		let chunkmap_size = self.optional_parameter.chunkmap_size.unwrap_or(DEFAULT_CHUNKMAP_SIZE);
 
-		//prepare segment header
-		let segment_header = SegmentHeader::new(
-			self.optional_parameter.unique_identifier,
-			self.current_segment_no,
-			chunkmap_size);
+		// prepare segment header
+		// check if this is a new container (and create a new segment header) or an expansion of an existing container
+		// (and read the appropriate segment header to calculate size)
+		let segment_header = if extend {
+				// seek to the start position and read the segment header
+				output.seek(SeekFrom::Start(0))?;
+				SegmentHeader::decode_directly(output)?
+		} else {
+			SegmentHeader::new(self.optional_parameter.unique_identifier, self.current_segment_no, chunkmap_size)
+		};
 
 		//prepare segment footer
-		let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
+		let mut segment_footer = if extend {
+			//as we shrinked the file before, there should be no main footer present - but a segment footer.
+			output.seek(SeekFrom::End(-8))?;
+			let footer_offset = u64::decode_directly(output)?;
+			output.seek(SeekFrom::Start(footer_offset))?;
+			SegmentFooter::decode_directly(output)?
+		} else {
+			SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER)
+		};
+		
+		// prepare output
+		output.seek(SeekFrom::Start(seek_value))?;
 
 		//check if the segment size is to small
 		if (seek_value as usize +
@@ -526,7 +584,9 @@ impl<R: Read> ZffWriter<R> {
 	    };
 
 		//write segment header
-		written_bytes += output.write(&segment_header.encode_directly())? as u64;	
+		if !extend {
+			written_bytes += output.write(&segment_header.encode_directly())? as u64;
+		}
 		
 		//write the object header
 		if !self.current_object_encoder.written_object_header {
@@ -540,8 +600,9 @@ impl<R: Read> ZffWriter<R> {
 		let mut chunkmap = ChunkMap::new_empty();
 		chunkmap.set_target_size(chunkmap_size as usize);
 
-		// read chunks and write them into the Writer.
 		let segment_footer_len = segment_footer.encode_directly().len() as u64;
+
+		// read chunks and write them into the Writer.
 		loop {
 			if (written_bytes +
 				segment_footer_len +
@@ -554,7 +615,7 @@ impl<R: Read> ZffWriter<R> {
 					//finish segment chunkmap
 					if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 						main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-						segment_footer.chunk_map_table.insert(*chunk_no, written_bytes);
+						segment_footer.chunk_map_table.insert(*chunk_no, written_bytes + seek_value);
 						written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 						chunkmap.flush();
 					}
@@ -576,7 +637,7 @@ impl<R: Read> ZffWriter<R> {
 							//finish segment chunkmap
 							if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-								segment_footer.chunk_map_table.insert(*chunk_no, written_bytes);
+								segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
 								written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 								chunkmap.flush();
 							}
@@ -597,10 +658,10 @@ impl<R: Read> ZffWriter<R> {
 			};
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) && 
-			!chunkmap.add_chunk_entry(current_chunk_number, written_bytes) {
+			!chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes) {
 				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-					segment_footer.chunk_map_table.insert(*chunk_no, written_bytes);
+					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
 				}
 				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 				chunkmap.flush();
@@ -612,14 +673,30 @@ impl<R: Read> ZffWriter<R> {
 		// finish the segment footer and write the encoded footer into the Writer.
 		segment_footer.set_footer_offset(seek_value + written_bytes);
 		if eof {
-			let main_footer = MainFooter::new(
+			let main_footer = if extend {
+				if let Some(params) = &self.extender_parameter {
+					MainFooter::new(
+					DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
+					self.current_segment_no, 
+					self.object_header_segment_numbers.clone(), 
+					self.object_footer_segment_numbers.clone(), 
+					main_footer_chunk_map.clone(),
+					params.main_footer.description_notes().map(|s| s.to_string()), 
+					0)
+				} else {
+					//should never be reached, while the extender_paramter is used many times before.
+					unreachable!()
+				}
+			} else {
+				MainFooter::new(
 				DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
 				self.current_segment_no, 
 				self.object_header_segment_numbers.clone(), 
 				self.object_footer_segment_numbers.clone(), 
 				main_footer_chunk_map.clone(),
 				self.optional_parameter.description_notes.clone(), 
-				0);
+				0)
+			};
 			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64 + main_footer.encode_directly().len() as u64);
 		} else {
 			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
@@ -635,26 +712,55 @@ impl<R: Read> ZffWriter<R> {
 	    
 	    let mut current_offset = 0;
 	    let mut seek_value = 0;
+	    //prepare the current segment no for initial looping
 	    self.current_segment_no -= 1;
 	    let mut chunk_map = BTreeMap::new();
 
+	    let mut extend = self.extender_parameter.is_some();
+	    // TODO: this could be a while loop - a while loop could be more clear here.
 	    loop {
 	    	self.current_segment_no += 1;
 	    	file_extension = file_extension_next_value(&file_extension)?;
 	    	let mut segment_filename = match &self.output {
 				ZffWriterOutput::NewContainer(path) => path.clone(),
-				ZffWriterOutput::ExtendContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFEXTEND))
+				ZffWriterOutput::ExtendContainer(_) => {
+					match &self.extender_parameter {
+						None => unreachable!(),
+						Some(params) => params.current_segment.clone()
+					}
+				}
 			};
-	    	segment_filename.set_extension(&file_extension);
-	    	let mut output_file = File::create(&segment_filename)?;
 
-	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map) {
+			// set_extension should not affect the ExtendContainer paths.
+	    	segment_filename.set_extension(&file_extension);
+	    	let mut output_file = if extend {
+	    		match &self.extender_parameter {
+		    		None => File::create(&segment_filename)?,
+		    		Some(params) => {
+		    			let mut file = OpenOptions::new().append(true).write(true).read(true).open(&params.current_segment)?;
+		    			//delete the last main footer
+		    			file.seek(SeekFrom::End(-8))?;
+		    			let footer_offset = u64::decode_directly(&mut file)?;
+						file.seek(SeekFrom::Start(footer_offset))?;
+						let new_file_size = file.stream_position()?;
+						file.set_len(new_file_size)?;
+						seek_value = new_file_size; //sets the new seek value
+						file
+		    		},
+		    	}
+	    	} else {
+	    		File::create(&segment_filename)?
+	    	};
+
+	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map, extend) {
 	    		Ok(written_bytes) => {
+	    			extend = false;
 	    			seek_value = 0;
 	    			written_bytes
 	    		},
 	    		Err(e) => match e.get_kind() {
 	    			ZffErrorKind::ReadEOF => {
+	    				extend = false;
 	    				remove_file(&segment_filename)?;
 	    				match self.object_encoder.pop() {
 	    					Some(creator_obj_encoder) => self.current_object_encoder = creator_obj_encoder,
@@ -670,18 +776,34 @@ impl<R: Read> ZffWriter<R> {
 	    	};
 	    }
 
-	    let main_footer = MainFooter::new(
-	    	DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-	    	self.current_segment_no-1, 
-	    	self.object_header_segment_numbers.clone(), 
-	    	self.object_footer_segment_numbers.clone(),
-	    	chunk_map,
-	    	self.optional_parameter.description_notes.clone(), 
-	    	current_offset);
+	    let main_footer = if let Some(params) = &self.extender_parameter {
+			MainFooter::new(
+			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
+			self.current_segment_no-1, 
+			self.object_header_segment_numbers.clone(), 
+			self.object_footer_segment_numbers.clone(), 
+			chunk_map,
+			params.main_footer.description_notes().map(|s| s.to_string()), 
+			current_offset)
+		} else {
+			MainFooter::new(
+			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
+			self.current_segment_no-1, 
+			self.object_header_segment_numbers.clone(), 
+			self.object_footer_segment_numbers.clone(), 
+			chunk_map,
+			self.optional_parameter.description_notes.clone(), 
+			current_offset)
+		};
 	    file_extension = file_extension_previous_value(&file_extension)?;
 	    let mut segment_filename = match &self.output {
 			ZffWriterOutput::NewContainer(path) => path.clone(),
-			ZffWriterOutput::ExtendContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFEXTEND))
+			ZffWriterOutput::ExtendContainer(_) => {
+				match &self.extender_parameter {
+					None => unreachable!(),
+					Some(params) => params.current_segment.clone()
+				}
+			},
 		};
 		segment_filename.set_extension(&file_extension);
 	    let mut output_file = OpenOptions::new().write(true).append(true).open(&segment_filename)?;
