@@ -335,8 +335,8 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 		};
 		match object_reader {
-			ZffObjectReader::Physical(reader) => reader.read_with_segments(buffer, &mut self.segments),
-			ZffObjectReader::Logical(reader) => reader.read_with_segments(buffer, &mut self.segments),
+			ZffObjectReader::Physical(reader) => reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map),
+			ZffObjectReader::Logical(reader) => reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map),
 			ZffObjectReader::Encrypted(_) => Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 		}
 	}
@@ -403,7 +403,8 @@ impl ZffObjectReaderPhysical {
 	fn read_with_segments<R: Read + Seek>(
 		&mut self, 
 		buffer: &mut [u8], 
-		segments: &mut HashMap<u64, Segment<R>>
+		segments: &mut HashMap<u64, Segment<R>>,
+		preloaded_chunkmap: &PreloadedChunkMap,
 		) -> std::result::Result<usize, std::io::Error> {
 		let chunk_size = self.object_header.chunk_size;
 		let first_chunk_number = self.object_footer.first_chunk_number;
@@ -425,7 +426,13 @@ impl ZffObjectReaderPhysical {
 				None => break,
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
-			let chunk_data = get_chunk_data(segment, current_chunk_number, &enc_information, compression_algorithm, chunk_size)?;
+			let chunk_data = get_chunk_data(
+				segment, 
+				current_chunk_number, 
+				&enc_information, 
+				compression_algorithm, 
+				chunk_size,
+				extract_offset_from_preloaded_chunkmap(preloaded_chunkmap, current_chunk_number))?;
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
@@ -664,7 +671,8 @@ impl ZffObjectReaderLogical {
 	fn read_with_segments<R: Read + Seek>(
 		&mut self, 
 		buffer: &mut [u8], 
-		segments: &mut HashMap<u64, Segment<R>>
+		segments: &mut HashMap<u64, Segment<R>>,
+		preloaded_chunkmap: &PreloadedChunkMap,
 		) -> std::result::Result<usize, std::io::Error> {
 		let active_filemetadata = match self.files.get_mut(&self.active_file) {
 			Some(metadata) => metadata,
@@ -695,7 +703,13 @@ impl ZffObjectReaderLogical {
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
 			//TODO: Check if a bufreader implementation in zffmount is more sufficient by checking this println!.
 			//println!("DEBUG: active_filemetadata.position: {}", active_filemetadata.position);
-			let chunk_data = get_chunk_data(segment, current_chunk_number, &enc_information, compression_algorithm, chunk_size)?;
+			let chunk_data = get_chunk_data(
+				segment, 
+				current_chunk_number, 
+				&enc_information, 
+				compression_algorithm, 
+				chunk_size,
+				extract_offset_from_preloaded_chunkmap(preloaded_chunkmap, current_chunk_number))?;
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
@@ -948,12 +962,13 @@ fn get_chunk_data<C, R>(
 	enc_information: &Option<EncryptionInformation>,
 	compression_algorithm: C,
 	chunk_size: u64,
+	chunk_offset: Option<u64>,
 	) -> std::result::Result<Vec<u8>, std::io::Error>
 where
 	C: Borrow<CompressionAlgorithm> + std::marker::Copy,
 	R: Read + Seek
 {
-	let chunk_content = match segment.chunk_data(current_chunk_number, enc_information, compression_algorithm) {
+	let chunk_content = match segment.chunk_data(current_chunk_number, enc_information, compression_algorithm, chunk_offset) {
 		Ok(data) => data,
 		Err(e) => match e.unwrap_kind() {
 			ZffErrorKind::IoError(io_error) => return Err(io_error),
@@ -964,7 +979,7 @@ where
 		ChunkContent::Raw(data) => Ok(data),
 		ChunkContent::SameBytes(single_byte) => Ok(vec![single_byte; chunk_size as usize]),
 		ChunkContent::Duplicate(dup_chunk_no) => {
-			get_chunk_data(segment, dup_chunk_no, enc_information, compression_algorithm, chunk_size)
+			get_chunk_data(segment, dup_chunk_no, enc_information, compression_algorithm, chunk_size, chunk_offset)
 		}
 	}
 }
@@ -1098,4 +1113,19 @@ fn preloaded_redb_chunkmap_add_entry(db: &mut Database, chunk_no: u64, offset: u
 	}
 	write_txn.commit()?;
 	Ok(())
+}
+
+// tries to extract the appropriate offset of the given chunk number.
+// returns a None in case of error or if the chunkmap is a [PreloadedChunkmap::None].
+fn extract_offset_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMap, chunk_number: u64) -> Option<u64> {
+	match preloaded_chunkmap {
+		PreloadedChunkMap::None => None,
+		PreloadedChunkMap::InMemory(map) => map.get(&chunk_number).copied(),
+		PreloadedChunkMap::Redb(db) => {
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_MAP_TABLE).ok()?;
+    		let value = table.get(&chunk_number).ok()??.value();
+    		Some(value)
+		}
+	}
 }

@@ -103,12 +103,20 @@ impl<R: Read + Seek> Segment<R> {
 	}
 
 	/// Returns the chunked data, uncompressed and unencrypted
-	pub fn chunk_data<E, C>(&mut self, chunk_number: u64, encryption_information: &Option<E>, compression_algorithm: C) -> Result<ChunkContent>
+	/// The chunk offset could be optionally assigned directly, e.g. from a preloaded chunk map
+	pub fn chunk_data<E, C>(&mut self, 
+		chunk_number: u64, 
+		encryption_information: &Option<E>, 
+		compression_algorithm: C,
+		chunk_offset: Option<u64>) -> Result<ChunkContent>
 	where
 		E: Borrow<EncryptionInformation>,
 		C: Borrow<CompressionAlgorithm>,
 	{
-		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
+		let chunk_offset = match chunk_offset {
+			None => self.get_chunk_offset(&chunk_number)?,
+			Some(offset) => offset
+		};
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
 		let (compression_flag, chunk_size, same_bytes, deduplication) = if encryption_information.is_some() {
 			let chunk_header = EncryptedChunkHeader::decode_directly(&mut self.data)?;
