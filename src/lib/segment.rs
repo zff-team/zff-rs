@@ -93,6 +93,8 @@ impl<R: Read + Seek> Segment<R> {
 					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
 						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
 						  1 + // skip the ChunkMap header version
+						  8 + // skip the length of the map
+						  8 + // skip the chunk number itself
 						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
 
 		//go to the appropriate chunk map.
@@ -283,7 +285,7 @@ fn get_first_chunknumber(map: &BTreeMap<u64, u64>, chunk_number: u64, first_segm
     let mut range = map.range(..chunk_number).rev();
     match range.next() {
         Some((&k, _)) => Ok(k + 1),
-        None => if chunk_number > first_segment_chunk_number {
+        None => if chunk_number >= first_segment_chunk_number {
         	Ok(first_segment_chunk_number)
         } else {
         	Err(ZffError::new(ZffErrorKind::ValueNotInMap, chunk_number.to_string()))

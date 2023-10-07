@@ -23,7 +23,6 @@ use crate::{
 	FILE_EXTENSION_INITIALIZER,
 	ERROR_MISMATCH_ZFF_VERSION,
 	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
-	ERROR_INVALID_OPTION_ZFFEXTEND,
 	ERROR_INVALID_OPTION_ZFFCREATE,
 };
 use crate::{
@@ -565,9 +564,15 @@ impl<R: Read> ZffWriter<R> {
 			output.seek(SeekFrom::End(-8))?;
 			let footer_offset = u64::decode_directly(output)?;
 			output.seek(SeekFrom::Start(footer_offset))?;
-			SegmentFooter::decode_directly(output)?
+			let segment_footer = SegmentFooter::decode_directly(output)?;
+			//move the seek position to the footer start, to overwrite the old footer.
+			output.seek(SeekFrom::Start(footer_offset))?;
+			segment_footer
+
 		} else {
-			SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER)
+			let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
+			segment_footer.first_chunk_number = self.current_object_encoder.current_chunk_number();
+			segment_footer
 		};
 		
 		// prepare output
@@ -754,9 +759,11 @@ impl<R: Read> ZffWriter<R> {
 
 	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map, extend) {
 	    		Ok(written_bytes) => {
+	    			//adds the seek value to the written bytes
 	    			extend = false;
-	    			seek_value = 0;
-	    			written_bytes
+	    			current_offset = seek_value + written_bytes;
+	    			seek_value = current_offset;
+	    			current_offset
 	    		},
 	    		Err(e) => match e.get_kind() {
 	    			ZffErrorKind::ReadEOF => {
