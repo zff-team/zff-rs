@@ -639,19 +639,29 @@ impl<R: Read> ZffWriter<R> {
 						if written_bytes == segment_header.encode_directly().len() as u64 {
 							return Err(e);
 						} else {
-							//finish segment chunkmap
+							// flush the chunkmap 
 							if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 								segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
 								written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 								chunkmap.flush();
 							}
-							//write the appropriate object footer and break the loop
+							//write the appropriate object footer
 							self.object_footer_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
 							segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
 							written_bytes += output.write(&self.current_object_encoder.get_encoded_footer()?)? as u64;
-							eof = true;
-							break;
+							
+							//setup the next object to write down
+							match self.object_encoder.pop() {
+		    					Some(creator_obj_encoder) => {
+		    						self.current_object_encoder = creator_obj_encoder;
+		    						continue;
+		    					},
+		    					None => {
+									eof = true;
+									break;
+			    					},
+		    				};	
 						}
 					},
 					ZffErrorKind::InterruptedInputStream => {
@@ -767,26 +777,19 @@ impl<R: Read> ZffWriter<R> {
 	    		},
 	    		Err(e) => match e.get_kind() {
 	    			ZffErrorKind::ReadEOF => {
-	    				extend = false;
 	    				remove_file(&segment_filename)?;
-	    				match self.object_encoder.pop() {
-	    					Some(creator_obj_encoder) => self.current_object_encoder = creator_obj_encoder,
-	    					None => break,
-	    				};
 	    				self.current_segment_no -=1;
 	    				file_extension = file_extension_previous_value(&file_extension)?;
-	    				seek_value = current_offset;
-	    				current_offset
+	    				break;
 	    			},
 	    			_ => return Err(e),
 	    		},
 	    	};
 	    }
-
 	    let main_footer = if let Some(params) = &self.extender_parameter {
 			MainFooter::new(
 			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-			self.current_segment_no-1, 
+			self.current_segment_no, 
 			self.object_header_segment_numbers.clone(), 
 			self.object_footer_segment_numbers.clone(), 
 			chunk_map,
@@ -795,14 +798,13 @@ impl<R: Read> ZffWriter<R> {
 		} else {
 			MainFooter::new(
 			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-			self.current_segment_no-1, 
+			self.current_segment_no, 
 			self.object_header_segment_numbers.clone(), 
 			self.object_footer_segment_numbers.clone(), 
 			chunk_map,
 			self.optional_parameter.description_notes.clone(), 
 			current_offset)
 		};
-	    file_extension = file_extension_previous_value(&file_extension)?;
 	    let mut segment_filename = match &self.output {
 			ZffWriterOutput::NewContainer(path) => path.clone(),
 			ZffWriterOutput::ExtendContainer(_) => {
