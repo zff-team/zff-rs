@@ -584,7 +584,6 @@ impl<R: Read> ZffWriter<R> {
 			self.current_object_encoder.get_encoded_header().len() +
 			segment_footer.encode_directly().len() +
 			target_chunk_size) > target_segment_size as usize {
-	        
 	        return Err(ZffError::new(ZffErrorKind::SegmentSizeToSmall, ""));
 	    };
 
@@ -772,7 +771,6 @@ impl<R: Read> ZffWriter<R> {
 	    			//adds the seek value to the written bytes
 	    			extend = false;
 	    			current_offset = seek_value + written_bytes;
-	    			seek_value = current_offset;
 	    			current_offset
 	    		},
 	    		Err(e) => match e.get_kind() {
