@@ -230,10 +230,10 @@ impl FileEncoder {
 	    	let b3h = blake3::hash(&buf);
 	    	if let Ok(chunk_no) = deduplication_map.get_chunk_number(b3h) {
 	    		buf = chunk_no.to_le_bytes().to_vec();
+	    		chunk_header.flags.duplicate = true;
 	    	} else {
 	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;
 	    	}
-	    	chunk_header.flags.duplicate = true;
 	    }
 
 		let (compressed_data, inner_compression_flag) = compress_buffer(
