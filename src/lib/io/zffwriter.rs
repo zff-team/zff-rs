@@ -241,7 +241,7 @@ impl<R: Read> ZffWriter<R> {
 
 		let signature_key_bytes = &params.signature_key.as_ref().map(|signing_key| signing_key.to_bytes().to_vec());
 		let mut object_encoder = Vec::with_capacity(physical_objects.len()+logical_objects.len());
-		
+			
 		Self::setup_physical_object_encoder(
 			physical_objects,
 			&hash_types,
@@ -604,7 +604,7 @@ impl<R: Read> ZffWriter<R> {
 		let mut chunkmap = ChunkMap::new_empty();
 		chunkmap.set_target_size(chunkmap_size as usize);
 
-		let segment_footer_len = segment_footer.encode_directly().len() as u64;
+		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 
 		// read chunks and write them into the Writer.
 		loop {
@@ -642,12 +642,14 @@ impl<R: Read> ZffWriter<R> {
 							if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 								segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
+								segment_footer_len += 16; //append 16 bytes to segment footer len
 								written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 								chunkmap.flush();
 							}
 							//write the appropriate object footer
 							self.object_footer_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
 							segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
+							segment_footer_len += 16; //append 16 bytes to segment footer len
 							written_bytes += output.write(&self.current_object_encoder.get_encoded_footer()?)? as u64;
 							
 							//setup the next object to write down
@@ -676,6 +678,7 @@ impl<R: Read> ZffWriter<R> {
 				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
+					segment_footer_len += 16; //append 16 bytes to segment footer len
 				}
 				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
 				chunkmap.flush();
