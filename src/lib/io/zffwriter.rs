@@ -607,6 +607,7 @@ impl<R: Read> ZffWriter<R> {
 		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 
 		// read chunks and write them into the Writer.
+		// TODO: precalculate the len of the mainfooter chunkmap and check this also?
 		loop {
 			if (written_bytes +
 				segment_footer_len +
@@ -731,7 +732,7 @@ impl<R: Read> ZffWriter<R> {
 	    let mut seek_value = 0;
 	    //prepare the current segment no for initial looping
 	    self.current_segment_no -= 1;
-	    let mut chunk_map = BTreeMap::new();
+	    let mut chunk_map = BTreeMap::new(); //TODO: check if this main footer chunkmap is filled while you use the extend...
 
 	    let mut extend = self.extender_parameter.is_some();
 	    // TODO: this could be a while loop - a while loop could be more clear here.
