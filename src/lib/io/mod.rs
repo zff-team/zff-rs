@@ -1,6 +1,7 @@
 // - modules
 pub mod zffwriter;
 pub mod zffreader;
+pub mod zffstreamer;
 
 // - STD
 use std::io::{Read, copy as io_copy};
