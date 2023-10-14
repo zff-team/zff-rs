@@ -1065,18 +1065,14 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 	segments: &mut HashMap<u64, Segment<R>>,
 	) -> Result<ZffObjectReader> {
 
-
-
 	let header = match segments.get_mut(&header_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_encrypted_object_header(obj_number)?,
 	};
-
 	let footer = match segments.get_mut(&footer_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_encrypted_object_footer(obj_number)?,
 	};
-
 	let obj_reader = ZffObjectReader::Encrypted(Box::new(ZffObjectReaderEncrypted::with_data(header, footer)));
 	Ok(obj_reader)
 }

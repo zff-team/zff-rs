@@ -374,18 +374,23 @@ impl ObjectFooterPhysical {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let mut encrypted_content = Encryption::encrypt_object_footer(
+		let encrypted_content = Encryption::encrypt_object_footer(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
 			self.object_number, 
 			&encryption_information.borrow().algorithm)?;
 		let identifier = Self::identifier();
-		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encrypted_content.len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
+		let encoded_header_length = (
+			DEFAULT_LENGTH_HEADER_IDENTIFIER +
+			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
+			self.version.encode_directly().len() +
+			self.object_number.encode_directly().len() +
+			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
 		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut encrypted_content);
+		vec.append(&mut encrypted_content.encode_directly());
 
 		Ok(vec)
 	}
@@ -703,18 +708,23 @@ impl ObjectFooterLogical {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let mut encrypted_content = Encryption::encrypt_object_footer(
+		let encrypted_content = Encryption::encrypt_object_footer(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
 			self.object_number, 
 			&encryption_information.borrow().algorithm)?;
 		let identifier = Self::identifier();
-		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encrypted_content.len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
+		let encoded_header_length = (
+			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
+			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
+			self.version.encode_directly().len() +
+			self.object_number.encode_directly().len() +
+			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
 		vec.append(&mut self.version.encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut encrypted_content);
+		vec.append(&mut encrypted_content.encode_directly());
 
 		Ok(vec)
 	}
