@@ -1,8 +1,8 @@
 // - modules
-mod encoder; //TODO
+mod encoder;
 
 // - re-exports
-pub use encoder::*; //TODO
+pub use encoder::*;
 
 // - internal
 use crate::{

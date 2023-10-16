@@ -153,7 +153,6 @@ impl<R: Read> ZffWriter<R> {
 					None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 				};
 
-				//TODO: Overwrite the old main footer offset with zeros...or the full main footer?
 				let extension_parameter = ZffExtenderParameter::with_data(
 					mf,
 					current_segment,

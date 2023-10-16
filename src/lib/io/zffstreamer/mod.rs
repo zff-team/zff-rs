@@ -1,5 +1,5 @@
 // - modules
-mod zfflogicalstreamwriter;
+mod zfflogicalfilestreamwriter;
 
 // - re-exports
-pub use zfflogicalstreamwriter::*;
+pub use zfflogicalfilestreamwriter::*;

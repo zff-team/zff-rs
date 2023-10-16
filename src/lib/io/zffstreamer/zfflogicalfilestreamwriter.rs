@@ -2,10 +2,9 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 use std::path::{PathBuf};
-use std::fs::{File, OpenOptions, remove_file, read_link, read_dir};
-use std::collections::{HashMap, VecDeque};
-#[cfg(target_family = "unix")]
-use std::os::unix::fs::MetadataExt;
+use std::fs::{File, OpenOptions};
+
+
 
 // - internal
 use crate::{
@@ -15,46 +14,32 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	file_extension_next_value,
-	file_extension_previous_value,
-	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
 	DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
 	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL,
 	DEFAULT_CHUNKMAP_SIZE,
 	FILE_EXTENSION_INITIALIZER,
-	ERROR_MISMATCH_ZFF_VERSION,
-	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
 	ERROR_INVALID_OPTION_ZFFCREATE,
 };
 use crate::{
-	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap, FileHeader, EncryptionInformation},
+	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, FileHeader, EncryptionInformation},
 	footer::{MainFooter, SegmentFooter, ObjectFooterLogical},
 	FileEncoder,
-	ObjectEncoder,
-
-	PhysicalObjectEncoder,
-	LogicalObjectEncoder,
 	ValueDecoder,
-	Segment,
 	io::{
-		get_file_header, 
-		ObjectEncoderInformation,
 		zffwriter::{ZffWriterOutput, ZffWriterOptionalParameter, ZffExtenderParameter},
 	},
 };
-
-#[cfg(target_family = "unix")]
-use crate::io::{add_to_hardlink_map};
 
 // - external
 use ed25519_dalek::{SigningKey};
 use rand::Rng;
 
-/// The [ZffLogicalStreamWriter] can be used to create a new Zff container or extend an existing Zff container with   
+/// The [ZffLogicalFileStreamWriter] can be used to create a new Zff container or extend an existing Zff container with   
 /// a logical object - in a very manually way. You can add Files and folders by using a [Reader](std::io::Read) and   
 /// define each Fileheader manual. You should use this struct only if you know what you're doing. You can produce a container  
 /// which is not readable after creating (e.g. if file numbers mismatch or something similar).
-pub struct ZffLogicalStreamWriter {
+pub struct ZffLogicalFileStreamWriter {
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterLogical,
 	hash_types: Vec<HashType>,
@@ -73,8 +58,8 @@ pub struct ZffLogicalStreamWriter {
 	extender_parameter: Option<ZffExtenderParameter>,
 }
 
-impl ZffLogicalStreamWriter {
-	/// Creates a new [ZffLogicalStreamWriter] instance for the given values.
+impl ZffLogicalFileStreamWriter {
+	/// Creates a new [ZffLogicalFileStreamWriter] instance for the given values.
 	pub fn new(
 		logical_object_header: ObjectHeader,
 		hash_types: Vec<HashType>,
@@ -429,250 +414,12 @@ impl ZffLogicalStreamWriter {
 	}
 }
 
-impl Drop for ZffLogicalStreamWriter {
+impl Drop for ZffLogicalFileStreamWriter {
 	fn drop(&mut self) {
 		//TODO use the log module to log errors from drop.
 		let _ = self.finish_container();
 	}
 }
-
-/*
-	fn write_next_segment<O: Read + Write + Seek>(
-		&mut self,
-		output: &mut O,
-		seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
-		main_footer_chunk_map: &mut BTreeMap<u64, u64>,
-		extend: bool
-		) -> Result<u64> {
-
-		let mut eof = false; //true, if EOF of input stream is reached.
-		let mut written_bytes: u64 = 0;
-		let target_chunk_size = self.current_object_encoder.get_obj_header().chunk_size as usize;
-		let target_segment_size = self.optional_parameter.target_segment_size.unwrap_or(u64::MAX);
-		let chunkmap_size = self.optional_parameter.chunkmap_size.unwrap_or(DEFAULT_CHUNKMAP_SIZE);
-		
-		// prepare output
-		output.seek(SeekFrom::Start(seek_value))?;
-
-
-		let mut chunkmap = ChunkMap::new_empty();
-		chunkmap.set_target_size(chunkmap_size as usize);
-
-		let segment_footer_len = segment_footer.encode_directly().len() as u64;
-
-		// read chunks and write them into the Writer.
-		loop {
-			if (written_bytes +
-				segment_footer_len +
-				target_chunk_size as u64 +
-				chunkmap.current_size() as u64) > target_segment_size-seek_value {
-				
-				if written_bytes == segment_header.encode_directly().len() as u64 {
-					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
-				} else {
-					//finish segment chunkmap
-					if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
-						main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-						segment_footer.chunk_map_table.insert(*chunk_no, written_bytes + seek_value);
-						written_bytes += output.write(&chunkmap.encode_directly())? as u64;
-						chunkmap.flush();
-					}
-					break;
-				}
-			};
-			let current_offset = seek_value + written_bytes;
-			let current_chunk_number = self.current_object_encoder.current_chunk_number();
-			let data = match self.current_object_encoder.get_next_data(
-				current_offset, 
-				self.current_segment_no,
-				self.optional_parameter.deduplication_chunkmap.as_mut()) {
-				Ok(data) => data,
-				Err(e) => match e.get_kind() {
-					ZffErrorKind::ReadEOF => {
-						if written_bytes == segment_header.encode_directly().len() as u64 {
-							return Err(e);
-						} else {
-							// flush the chunkmap 
-							if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
-								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-								segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
-								written_bytes += output.write(&chunkmap.encode_directly())? as u64;
-								chunkmap.flush();
-							}
-							//write the appropriate object footer
-							self.object_footer_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
-							segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
-							written_bytes += output.write(&self.current_object_encoder.get_encoded_footer()?)? as u64;
-							
-							//setup the next object to write down
-							match self.object_encoder.pop() {
-		    					Some(creator_obj_encoder) => {
-		    						self.current_object_encoder = creator_obj_encoder;
-		    						continue;
-		    					},
-		    					None => {
-									eof = true;
-									break;
-			    					},
-		    				};	
-						}
-					},
-					ZffErrorKind::InterruptedInputStream => {
-						//todo: should be handled in any way...
-						break;
-					},
-					_ => return Err(e),
-				},
-			};
-			let mut data_cursor = Cursor::new(&data);
-			if ChunkHeader::check_identifier(&mut data_cursor) && 
-			!chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes) {
-				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
-					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
-				}
-				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
-				chunkmap.flush();
-				chunkmap.add_chunk_entry(current_chunk_number, written_bytes);
-   			};
-   			written_bytes += output.write(&data)? as u64;
-		}
-
-		// finish the segment footer and write the encoded footer into the Writer.
-		segment_footer.set_footer_offset(seek_value + written_bytes);
-		if eof {
-			let main_footer = if extend {
-				if let Some(params) = &self.extender_parameter {
-					MainFooter::new(
-					DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-					self.current_segment_no, 
-					self.object_header_segment_numbers.clone(), 
-					self.object_footer_segment_numbers.clone(), 
-					main_footer_chunk_map.clone(),
-					params.main_footer.description_notes().map(|s| s.to_string()), 
-					0)
-				} else {
-					//should never be reached, while the extender_paramter is used many times before.
-					unreachable!()
-				}
-			} else {
-				MainFooter::new(
-				DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-				self.current_segment_no, 
-				self.object_header_segment_numbers.clone(), 
-				self.object_footer_segment_numbers.clone(), 
-				main_footer_chunk_map.clone(),
-				self.optional_parameter.description_notes.clone(), 
-				0)
-			};
-			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64 + main_footer.encode_directly().len() as u64);
-		} else {
-			segment_footer.set_length_of_segment(seek_value + written_bytes + segment_footer.encode_directly().len() as u64);
-		}
-			
-		written_bytes += output.write(&segment_footer.encode_directly())? as u64;
-		Ok(written_bytes)
-	}
-	
-	/// generates the appropriate .zXX files.
-	pub fn generate_files(&mut self) -> Result<()> {
-	    let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
-	    
-	    let mut current_offset = 0;
-	    let mut seek_value = 0;
-	    //prepare the current segment no for initial looping
-	    self.current_segment_no -= 1;
-	    let mut chunk_map = BTreeMap::new();
-
-	    let mut extend = self.extender_parameter.is_some();
-	    // TODO: this could be a while loop - a while loop could be more clear here.
-	    loop {
-	    	self.current_segment_no += 1;
-	    	file_extension = file_extension_next_value(&file_extension)?;
-	    	let mut segment_filename = match &self.output {
-				ZffWriterOutput::NewContainer(path) => path.clone(),
-				ZffWriterOutput::ExtendContainer(_) => {
-					match &self.extender_parameter {
-						None => unreachable!(),
-						Some(params) => params.current_segment.clone()
-					}
-				}
-			};
-
-			// set_extension should not affect the ExtendContainer paths.
-	    	segment_filename.set_extension(&file_extension);
-	    	let mut output_file = if extend {
-	    		match &self.extender_parameter {
-		    		None => File::create(&segment_filename)?,
-		    		Some(params) => {
-		    			let mut file = OpenOptions::new().append(true).write(true).read(true).open(&params.current_segment)?;
-		    			//delete the last main footer
-		    			file.seek(SeekFrom::End(-8))?;
-		    			let footer_offset = u64::decode_directly(&mut file)?;
-						file.seek(SeekFrom::Start(footer_offset))?;
-						let new_file_size = file.stream_position()?;
-						file.set_len(new_file_size)?;
-						seek_value = new_file_size; //sets the new seek value
-						file
-		    		},
-		    	}
-	    	} else {
-	    		File::create(&segment_filename)?
-	    	};
-
-	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map, extend) {
-	    		Ok(written_bytes) => {
-	    			//adds the seek value to the written bytes
-	    			extend = false;
-	    			current_offset = seek_value + written_bytes;
-	    			current_offset
-	    		},
-	    		Err(e) => match e.get_kind() {
-	    			ZffErrorKind::ReadEOF => {
-	    				remove_file(&segment_filename)?;
-	    				self.current_segment_no -=1;
-	    				file_extension = file_extension_previous_value(&file_extension)?;
-	    				break;
-	    			},
-	    			_ => return Err(e),
-	    		},
-	    	};
-	    }
-	    let main_footer = if let Some(params) = &self.extender_parameter {
-			MainFooter::new(
-			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-			self.current_segment_no, 
-			self.object_header_segment_numbers.clone(), 
-			self.object_footer_segment_numbers.clone(), 
-			chunk_map,
-			params.main_footer.description_notes().map(|s| s.to_string()), 
-			current_offset)
-		} else {
-			MainFooter::new(
-			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
-			self.current_segment_no, 
-			self.object_header_segment_numbers.clone(), 
-			self.object_footer_segment_numbers.clone(), 
-			chunk_map,
-			self.optional_parameter.description_notes.clone(), 
-			current_offset)
-		};
-	    let mut segment_filename = match &self.output {
-			ZffWriterOutput::NewContainer(path) => path.clone(),
-			ZffWriterOutput::ExtendContainer(_) => {
-				match &self.extender_parameter {
-					None => unreachable!(),
-					Some(params) => params.current_segment.clone()
-				}
-			},
-		};
-		segment_filename.set_extension(&file_extension);
-	    let mut output_file = OpenOptions::new().write(true).append(true).open(&segment_filename)?;
-	    output_file.write_all(&main_footer.encode_directly())?;
-
-	    Ok(())
-	}
-*/
 
 fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter> {
 	raw_segment.seek(SeekFrom::End(-8))?;

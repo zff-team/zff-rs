@@ -43,8 +43,6 @@ pub(crate) const ENCODING_KEY_CASE_NUMBER: &str = "cn";
 pub(crate) const ENCODING_KEY_EVIDENCE_NUMBER: &str = "ev";
 pub(crate) const ENCODING_KEY_EXAMINER_NAME: &str = "ex";
 pub(crate) const ENCODING_KEY_NOTES: &str = "no";
-pub(crate) const ENCODING_KEY_ACQISITION_START: &str = "as";
-pub(crate) const ENCODING_KEY_ACQISITION_END: &str = "ae";
 pub(crate) const ENCODING_KEY_DESCRIPTION_NOTES: &str = "dn";
 
 // chunk header flags
@@ -77,7 +75,6 @@ pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object 
 pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
 pub(crate) const ERROR_MISMATCH_ZFF_VERSION: &str = "mismatch zff version";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
-pub(crate) const ERROR_INVALID_OPTION_ZFFEXTEND: &str = "Extend container";
 pub(crate) const ERROR_INVALID_OPTION_ZFFCREATE: &str = "Create new container";
 pub(crate) const ERROR_LAST_GREATER_FIRST: &str = "First chunk number is greater than last chunk number. This is invalid.";
 
@@ -88,7 +85,6 @@ pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation no
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
-pub(crate) const ERROR_ZFFREADER_MISSING_FILE: &str = "Missing file number in zffreader: ";
 
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
