@@ -7,11 +7,18 @@ use blake2::{Blake2b512};
 use sha2::{Sha256, Sha512};
 use sha3::{Sha3_256};
 use digest::{DynDigest, Digest};
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum HashType {
 	/// The Blake2b-512 algorithm with the encoding value 0.
 	Blake2b512 = 0,

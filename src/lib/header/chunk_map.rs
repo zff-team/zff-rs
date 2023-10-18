@@ -4,6 +4,7 @@ use std::path::Path;
 use std::cmp::{PartialEq};
 use std::collections::{HashMap, BTreeMap};
 use std::io::{Cursor};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -21,8 +22,18 @@ use crate::{
 // - external
 use redb::{Database, ReadableTable};
 use blake3::Hash as Blake3Hash;
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+	ser::{Serializer, SerializeStruct},
+};
+#[cfg(feature = "serde")]
+use hex;
 
 #[derive(Debug,Clone,PartialEq,Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkMap {
 	pub chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
 	target_size: usize,
@@ -97,6 +108,21 @@ impl HeaderCoding for ChunkMap {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for ChunkMap {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ChunkMap {
+	fn struct_name(&self) -> &'static str {
+		"ChunkMap"
+	}
+}
+
+#[derive(Debug)]
 pub enum DeduplicationChunkMap {
 	InMemory(HashMap<Blake3Hash, u64>), //<blake3-hash, the appropriate chunk number with the original data>
 	Redb(Database),
@@ -159,5 +185,63 @@ impl DeduplicationChunkMap {
     		Ok(value)
 			}
 		}
+	}
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for DeduplicationChunkMap {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), 6)?;
+        let mut ser_dedup_map = HashMap::new();
+        match self {
+        	DeduplicationChunkMap::InMemory(dedup_map) => {
+        		for (blake3_hash, chunk_number) in dedup_map {
+        			ser_dedup_map.insert(blake3_hash.to_hex().to_lowercase(), *chunk_number);
+        		};
+        		state.serialize_field("in-memory-map", &ser_dedup_map)?;
+        	},
+        	DeduplicationChunkMap::Redb(database) => {
+        		let read_txn = match database.begin_read() {
+        			Ok(txn) => txn,
+        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
+        		};
+        		let table = match read_txn.open_table(CHUNK_MAP_TABLE) {
+        			Ok(table) => table,
+        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
+        		};
+        		let iterator = match table.iter() {
+        			Ok(iterator) => iterator,
+        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
+        		};
+
+        		for element in iterator {
+        			let (k, v) = match element {
+	        			Ok((k, v)) => (k, v),
+	        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
+	        		};
+        			ser_dedup_map.insert(hex::encode(k.value()), v.value());
+        		};
+        		state.serialize_field("redb-map", &ser_dedup_map)?;
+        	}
+        }
+        state.end()
+    }
+}
+
+
+// - implement fmt::Display
+impl fmt::Display for DeduplicationChunkMap {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl DeduplicationChunkMap {
+	fn struct_name(&self) -> &'static str {
+		"DeduplicationChunkMap"
 	}
 }

@@ -1,6 +1,7 @@
 // - STD
 use std::collections::{HashMap, BTreeMap};
 use std::io::{Cursor};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -16,12 +17,20 @@ use crate::{
 };
 
 // - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 
 
 /// The SegmentFooter is a footer which is be written at the end of each segment.
 /// The footer contains a table on the chunks, present in the appropriate segment.
 /// The offset table is internally managed as a ```HashMap<u64, u64>```.
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct SegmentFooter {
 	pub version: u8,
 	pub length_of_segment: u64,
@@ -140,5 +149,19 @@ impl HeaderCoding for SegmentFooter {
 		let first_chunk_number = u64::decode_directly(&mut cursor)?;
 		let footer_offset = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentFooter::new(footer_version, length_of_segment, object_header_offsets, object_footer_offsets, chunk_map_table, first_chunk_number, footer_offset))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for SegmentFooter {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl SegmentFooter {
+	fn struct_name(&self) -> &'static str {
+		"SegmentFooter"
 	}
 }

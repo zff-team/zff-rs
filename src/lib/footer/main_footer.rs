@@ -1,6 +1,7 @@
 // - STD
 use std::io::Cursor;
 use std::collections::{BTreeMap};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -13,9 +14,19 @@ use crate::{
 	ENCODING_KEY_DESCRIPTION_NOTES,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
+
 /// The main footer is the last thing, which is written at the end of the last segment.\
 /// This footer contains a lot of variable information about the zff container (e.g. number of segments, ...).
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct MainFooter {
 	version: u8,
 	number_of_segments: u64,
@@ -151,5 +162,19 @@ impl HeaderCoding for MainFooter {
 			chunk_maps,
 			description_notes, 
 			footer_offset))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for MainFooter {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl MainFooter {
+	fn struct_name(&self) -> &'static str {
+		"MainFooter"
 	}
 }

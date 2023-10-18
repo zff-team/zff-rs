@@ -1,6 +1,7 @@
 // - STD
 use core::borrow::Borrow;
 use std::io::{Cursor, Read};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -22,11 +23,20 @@ use crate::header::{
 	EncryptionInformation,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
+
 /// The file footer is written at the end of each acquired file.
 /// The file footer contains several metadata about the acquisition process itself: e.g. the acquisition start/end time of the appropriate file,
 /// hash values, or size information.
 /// The general structure of the file footer is the same for all file types.
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct FileFooter {
 	/// the version of the [FileFooter].
 	version: u8,
@@ -215,5 +225,19 @@ impl HeaderCoding for FileFooter {
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileFooter::new(version, file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for FileFooter {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl FileFooter {
+	fn struct_name(&self) -> &'static str {
+		"FileFooter"
 	}
 }

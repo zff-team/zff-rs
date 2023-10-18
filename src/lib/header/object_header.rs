@@ -37,12 +37,19 @@ use crate::header::{
 
 // - external
 use byteorder::{ReadBytesExt, LittleEndian};
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
 
 /// Holds the appropriate object flags:
 /// - the encryption flag, if the appropriate object is encrypted.
 /// - the sign hash flag, if the appropriate calculated hash value was signed.
 /// - the passive object flag, if this object should not handled as an active object
-#[derive(Debug,Clone,Default)]
+#[derive(Debug,Clone,Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFlags {
 	pub encryption: bool,
 	pub sign_hash: bool,
@@ -68,6 +75,8 @@ impl From<u8> for ObjectFlags {
 /// - The [ObjectType] of this object. 
 /// - the appropriate [object flags](ObjectFlags).
 #[derive(Debug,Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectHeader {
 	pub object_number: u64,
 	pub flags: ObjectFlags,
@@ -233,23 +242,17 @@ impl ObjectHeader {
 	}
 }
 
-/// Defines the [ObjectType], which can be used in zff container.
-#[repr(u8)]
-#[derive(Debug,Clone,Eq,PartialEq,Hash)]
-pub enum ObjectType {
-	/// An object containing a physical dump.
-	Physical = 0,
-	/// An object, containing logical files.
-	Logical = 1,
+// - implement fmt::Display
+impl fmt::Display for ObjectHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
 }
 
-impl fmt::Display for ObjectType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let msg = match self {
-			ObjectType::Physical => "Physical",
-			ObjectType::Logical => "Logical",
-		};
-		write!(f, "{}", msg)
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ObjectHeader {
+	fn struct_name(&self) -> &'static str {
+		"ObjectHeader"
 	}
 }
 
@@ -341,8 +344,33 @@ impl Hash for ObjectHeader {
     }
 }
 
+/// Defines the [ObjectType], which can be used in zff container.
+#[repr(u8)]
+#[derive(Debug,Clone,Eq,PartialEq,Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum ObjectType {
+	/// An object containing a physical dump.
+	Physical = 0,
+	/// An object, containing logical files.
+	Logical = 1,
+}
 
-#[derive(Debug,Clone)]
+impl fmt::Display for ObjectType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let msg = match self {
+			ObjectType::Physical => "Physical",
+			ObjectType::Logical => "Logical",
+		};
+		write!(f, "{}", msg)
+	}
+}
+
+
+
+#[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptedObjectHeader {
 	pub object_number: u64,
 	pub flags: ObjectFlags,

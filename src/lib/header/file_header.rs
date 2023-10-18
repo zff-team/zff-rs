@@ -28,10 +28,19 @@ use crate::header::{
 	EncryptionInformation,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 /// Defines all file types, which are implemented for zff files.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum FileType {
 	/// Represents a regular file (e.g. like "textfile.txt").
 	File = 1,
@@ -62,6 +71,8 @@ impl fmt::Display for FileType {
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum SpecialFileType {
 	/// Represents a Fifo.
 	Fifo = 0,
@@ -95,6 +106,17 @@ impl TryFrom<&u8> for SpecialFileType {
 	}
 }
 
+impl fmt::Display for SpecialFileType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let msg = match self {
+			SpecialFileType::Fifo => "Fifo",
+			SpecialFileType::Char => "Char",
+			SpecialFileType::Block => "Block",
+		};
+		write!(f, "{}", msg)
+	}
+}
+
 /// Each dumped file* contains a [FileHeader] containing several metadata.
 /// The following metadata are included in a [FileHeader]:
 /// - the internal file number of the appropriate file.
@@ -103,6 +125,8 @@ impl TryFrom<&u8> for SpecialFileType {
 /// - the file number of the parent directory of this file (if the file lies into the root directory, this is 0 because the first valid file number in zff is 1).
 /// - A HashMap to extend the metadata based on the operating system/filesystem. Some fields are predefined, see [the full list in the wiki](https://github.com/ph0llux/zff/wiki/zff-header-layout#file-metadata-extended-information)
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct FileHeader {
 	pub file_number: u64,
 	pub file_type: FileType,
@@ -281,5 +305,19 @@ impl HeaderCoding for FileHeader {
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (file_type, filename, parent_file_number, metadata_ext) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileHeader::new(file_number, file_type, filename, parent_file_number, metadata_ext))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for FileHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl FileHeader {
+	fn struct_name(&self) -> &'static str {
+		"FileHeader"
 	}
 }

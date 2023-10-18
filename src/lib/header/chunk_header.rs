@@ -1,6 +1,7 @@
 // - STD
 use std::borrow::Borrow;
 use std::io::{Cursor};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -21,7 +22,16 @@ use crate::{
 	DEFAULT_HEADER_VERSION_CHUNK_HEADER
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 #[derive(Debug,Clone,Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeaderFlags {
 	pub error: bool,
 	pub compression: bool,
@@ -44,9 +54,25 @@ impl From<u8> for ChunkHeaderFlags {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for ChunkHeaderFlags {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ChunkHeaderFlags {
+	fn struct_name(&self) -> &'static str {
+		"ChunkHeaderFlags"
+	}
+}
+
 /// Header for chunk data.  
 /// Each data chunk has his own chunk header. After the header, the chunked data follows.
 #[derive(Debug,Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeader {
 	pub version: u8,
 	pub chunk_number: u64,
@@ -157,8 +183,24 @@ impl HeaderCoding for ChunkHeader {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for ChunkHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ChunkHeader {
+	fn struct_name(&self) -> &'static str {
+		"ChunkHeader"
+	}
+}
+
 /// Header for chunk data (contains encrypted crc32 and ed25519 signature).
 #[derive(Debug,Clone)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptedChunkHeader {
 	pub version: u8,
 	pub chunk_number: u64,
@@ -266,5 +308,19 @@ impl HeaderCoding for EncryptedChunkHeader {
 		let crc32 = Vec::<u8>::decode_directly(&mut cursor)?;
 
 		Ok(EncryptedChunkHeader::new(chunk_number, chunk_size, flags, crc32))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for EncryptedChunkHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl EncryptedChunkHeader {
+	fn struct_name(&self) -> &'static str {
+		"EncryptedChunkHeader"
 	}
 }

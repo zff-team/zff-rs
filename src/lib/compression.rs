@@ -8,10 +8,19 @@ use crate::{
 	Result,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 /// Defines all compression algorithms, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum CompressionAlgorithm {
 	/// No compression - encoded as 0 in the header.
 	None = 0,

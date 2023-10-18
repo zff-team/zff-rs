@@ -1,5 +1,6 @@
 // - STD
 use std::io::{Cursor, Read};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -16,10 +17,20 @@ use crate::{
 
 // - external
 use ed25519_dalek::{SIGNATURE_LENGTH};
+#[cfg(feature = "serde")]
+use serde::{
+	Serialize,
+	ser::{Serializer, SerializeStruct},
+};
+#[cfg(feature = "serde")]
+use base64;
+#[cfg(feature = "serde")]
+use hex;
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of various footers and contains 0 or more hash values of the dumped data.\
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct HashHeader {
 	version: u8,
 	hashes: Vec<HashValue>,
@@ -64,6 +75,20 @@ impl HeaderCoding for HashHeader {
 		let header_version = u8::decode_directly(&mut cursor)?;
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
 		Ok(HashHeader::new(header_version, hashes))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for HashHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl HashHeader {
+	fn struct_name(&self) -> &'static str {
+		"HashHeader"
 	}
 }
 
@@ -170,4 +195,34 @@ impl HeaderCoding for HashValue {
 
 		Ok(HashValue::new(structure_version, hash_type, hash, ed25519_signature))
 	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for HashValue {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl HashValue {
+	fn struct_name(&self) -> &'static str {
+		"HashValue"
+	}
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for HashValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), 3)?;
+        state.serialize_field("hash_type", &self.hash_type.to_string())?;
+        state.serialize_field("hash", &hex::encode(&self.hash))?;
+        if let Some(signature) = &self.ed25519_signature {
+        	state.serialize_field("ed25519_signature", &base64::encode(signature))?;
+        }
+        state.end()
+    }
 }

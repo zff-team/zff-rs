@@ -1,5 +1,6 @@
 // STD
 use std::io::{Read,Cursor};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -25,6 +26,11 @@ use crate::{
 
 // - external
 use byteorder::{BigEndian, ReadBytesExt};
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
 
 /// The pbe header contains all informations for the encryption of the encryption key.\
 /// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
@@ -32,6 +38,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 /// This encryption of the encryption key is done via a password-based encryption (PBE).\
 /// All metadata about this PBE can be found in this PBEHeader.\
 #[derive(Debug,Clone,PartialEq,Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBEHeader {
 	version: u8,
 	kdf_scheme: KDFScheme,
@@ -117,10 +125,26 @@ impl HeaderCoding for PBEHeader {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for PBEHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl PBEHeader {
+	fn struct_name(&self) -> &'static str {
+		"PBEHeader"
+	}
+}
+
 /// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum KDFParameters {
 	/// stores a struct [PBKDF2SHA256Parameters].
 	PBKDF2SHA256Parameters(PBKDF2SHA256Parameters),
@@ -180,6 +204,8 @@ impl ValueDecoder for KDFParameters {
 
 /// struct to store the parameters for the KDF PBKDF2-SHA256.
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBKDF2SHA256Parameters {
 	iterations: u32,
 	salt: [u8; 32],
@@ -237,6 +263,8 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 
 /// struct to store the parameters for the KDF Scrypt.
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ScryptParameters {
 	logn: u8,
 	r: u32,
@@ -313,6 +341,8 @@ impl HeaderCoding for ScryptParameters {
 
 /// struct to store the parameters for the KDF Scrypt.
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Argon2idParameters {
 	pub mem_cost: u32,
 	pub lanes: u32,

@@ -2,6 +2,7 @@
 use std::io::Cursor;
 use std::io::Read;
 use std::collections::HashMap;
+use std::fmt;
 
 // - internal
 use crate::{
@@ -19,6 +20,13 @@ use crate::{
 	ENCODING_KEY_EXAMINER_NAME,
 	ENCODING_KEY_NOTES,
 	constants::*,
+};
+
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
 };
 
 /// The description header contains all data,
@@ -43,7 +51,9 @@ use crate::{
 /// description_header.set_examiner_name("ph0llux");
 /// assert_eq!(Some("ph0llux"), description_header.examiner_name());
 /// ```
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct DescriptionHeader {
 	version: u8,
 	identifier_map: HashMap<String, String>
@@ -166,5 +176,19 @@ impl HeaderCoding for DescriptionHeader {
 		let description_header = DescriptionHeader::new(version, identifier_map);
 
 		Ok(description_header)
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for DescriptionHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl DescriptionHeader {
+	fn struct_name(&self) -> &'static str {
+		"DescriptionHeader"
 	}
 }

@@ -2,6 +2,7 @@
 use core::borrow::Borrow;
 use std::io::{Cursor, Read};
 use std::collections::HashMap;
+use std::fmt;
 
 // - internal
 use crate::{
@@ -27,9 +28,16 @@ use crate::header::{
 
 // - external
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 
 /// Each object contains its own object footer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum ObjectFooter {
 	/// A physical object contains a [ObjectFooterPhysical].
 	Physical(ObjectFooterPhysical),
@@ -123,8 +131,25 @@ impl From<ObjectFooterLogical> for ObjectFooter {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for ObjectFooter {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ObjectFooter {
+	fn struct_name(&self) -> &'static str {
+		"ObjectFooter"
+	}
+}
+
+
 /// Each object contains its own object footer (and this is the encrypted variant).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 pub enum EncryptedObjectFooter {
 	/// A physical object contains a [EncryptedObjectFooterPhysical].
 	Physical(EncryptedObjectFooterPhysical),
@@ -221,8 +246,12 @@ impl EncryptedObjectFooter {
 	}
 }
 
+
+
 /// Encrypted footer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct EncryptedObjectFooterPhysical {
 	pub version: u8,
 	pub object_number: u64,
@@ -289,6 +318,21 @@ impl EncryptedObjectFooterPhysical {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for EncryptedObjectFooterPhysical {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl EncryptedObjectFooterPhysical {
+	fn struct_name(&self) -> &'static str {
+		"EncryptedObjectFooterPhysical"
+	}
+}
+
+
 impl HeaderCoding for EncryptedObjectFooterPhysical {
 	type Item = EncryptedObjectFooterPhysical;
 	fn version(&self) -> u8 { 
@@ -323,7 +367,8 @@ impl HeaderCoding for EncryptedObjectFooterPhysical {
 /// - the first chunk number, which is used for this physical dump
 /// - the total number of chunks, used for this physical dump
 /// - a hash header with the appropriate hash values of the underlying physical dump
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterPhysical {
 	pub version: u8,
 	pub object_number: u64,
@@ -420,6 +465,20 @@ impl ObjectFooterPhysical {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for ObjectFooterPhysical {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ObjectFooterPhysical {
+	fn struct_name(&self) -> &'static str {
+		"ObjectFooterPhysical"
+	}
+}
+
 impl HeaderCoding for ObjectFooterPhysical {
 	type Item = ObjectFooterPhysical;
 	fn version(&self) -> u8 { 
@@ -457,7 +516,9 @@ impl HeaderCoding for ObjectFooterPhysical {
 }
 
 /// Encrypted footer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct EncryptedObjectFooterLogical {
 	pub version: u8,
 	pub object_number: u64,
@@ -528,6 +589,20 @@ impl EncryptedObjectFooterLogical {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for EncryptedObjectFooterLogical {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl EncryptedObjectFooterLogical {
+	fn struct_name(&self) -> &'static str {
+		"EncryptedObjectFooterLogical"
+	}
+}
+
 impl HeaderCoding for EncryptedObjectFooterLogical {
 	type Item = EncryptedObjectFooterLogical;
 	fn version(&self) -> u8 { 
@@ -563,7 +638,9 @@ impl HeaderCoding for EncryptedObjectFooterLogical {
 /// - a [HashMap] in which offsets of the corresponding file headers can be found.
 /// - a [HashMap] in which segment numbers the corresponding file footers can be found.
 /// - a [HashMap] in which offsets the corresponding file footers can be found.
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterLogical {
 	version: u8,
 	object_number: u64,
@@ -755,6 +832,20 @@ impl ObjectFooterLogical {
 			file_footer_segment_numbers,
 			file_footer_offsets
 			))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for ObjectFooterLogical {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ObjectFooterLogical {
+	fn struct_name(&self) -> &'static str {
+		"ObjectFooterLogical"
 	}
 }
 

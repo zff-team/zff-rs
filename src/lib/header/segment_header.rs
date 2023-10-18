@@ -1,6 +1,7 @@
 // - STD
 use std::cmp::{PartialEq};
 use std::io::{Cursor};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -14,12 +15,21 @@ use crate::{
 	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 /// The [SegmentHeader] contains a lot of initial metadata of the appropriate segment. Each segment has its own segment header.\
 /// The following metadata are included in the [SegmentHeader]:
 /// - The unique identifier value
 /// - the number of the appropriate segment (the first segment starts always with a 1).
 /// - the target chunkmap size.
 #[derive(Debug,Clone,Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct SegmentHeader {
 	pub unique_identifier: u64,
 	pub segment_number: u64,
@@ -84,4 +94,18 @@ impl PartialEq for SegmentHeader {
     fn eq(&self, other: &Self) -> bool {
         self.segment_number == other.segment_number
     }
+}
+
+// - implement fmt::Display
+impl fmt::Display for SegmentHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl SegmentHeader {
+	fn struct_name(&self) -> &'static str {
+		"SegmentHeader"
+	}
 }

@@ -1,5 +1,6 @@
 // - STD
 use std::io::{Cursor, Read};
+use std::fmt;
 
 // - internal
 use crate::{
@@ -22,7 +23,17 @@ use crate::{
 	DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
 /// This struct could be used to manage the encryption information while creating a zff container
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionInformation {
 	pub encryption_key: Vec<u8>,
 	pub algorithm: EncryptionAlgorithm,
@@ -73,6 +84,20 @@ impl TryFrom<&ObjectHeader> for EncryptionInformation {
 	}
 }
 
+// - implement fmt::Display
+impl fmt::Display for EncryptionInformation {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl EncryptionInformation {
+	fn struct_name(&self) -> &'static str {
+		"EncryptionInformation"
+	}
+}
+
 /// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
 /// The encryption header is the only optional header part of the main header
 /// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
@@ -80,6 +105,8 @@ impl TryFrom<&ObjectHeader> for EncryptionInformation {
 /// described by the containing [PBEHeader].
 /// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionHeader {
 	pbe_header: PBEHeader,
 	algorithm: EncryptionAlgorithm,
@@ -251,5 +278,19 @@ impl HeaderCoding for EncryptionHeader {
 		let mut encryption_key = vec![0u8; key_length];
 		cursor.read_exact(&mut encryption_key)?;
 		Ok(EncryptionHeader::new(pbe_header, encryption_algorithm, encryption_key))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for EncryptionHeader {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl EncryptionHeader {
+	fn struct_name(&self) -> &'static str {
+		"EncryptionHeader"
 	}
 }

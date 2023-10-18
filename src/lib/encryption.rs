@@ -30,6 +30,13 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
 use typenum::consts::U12;
 
+#[cfg(feature = "serde")]
+use serde::{
+	Deserialize,
+	Serialize,
+};
+
+
 // - type definitions
 type Nonce = AesGcmNonce<U12>; //use the (by NIST) recommended nonce size of 96-bit.
 
@@ -37,6 +44,8 @@ type Nonce = AesGcmNonce<U12>; //use the (by NIST) recommended nonce size of 96-
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum EncryptionAlgorithm {
 	/// AES (128-Bit) in Galois/Counter Mode operation.  
 	/// Encoded with value 0.
@@ -63,6 +72,8 @@ impl fmt::Display for EncryptionAlgorithm {
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum KDFScheme {
 	/// KDF scheme PBKDF2-SHA256, with encoding value 0.
 	PBKDF2SHA256 = 0,
@@ -87,6 +98,8 @@ impl fmt::Display for KDFScheme {
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum PBEScheme {
 	/// AES128-CBC encryption scheme used in pbe with the encoding value 0.
 	AES128CBC = 0,
