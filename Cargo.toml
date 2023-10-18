@@ -53,7 +53,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 hex = { version = "0.4.3", optional = true }
 
 [features]
-default = ["serde"]
+default = []
 serde = ["dep:serde", "dep:hex"]
 
 [dev-dependencies]
