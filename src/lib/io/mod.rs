@@ -1,6 +1,9 @@
 // - modules
+/// provides [ZffWriter](crate::io::zffwriter::ZffWriter) and some helper functions to create or extend zff containers.
 pub mod zffwriter;
+/// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
 pub mod zffreader;
+/// TODO
 pub mod zffstreamer;
 
 // - STD
