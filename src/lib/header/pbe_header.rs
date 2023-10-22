@@ -207,7 +207,9 @@ impl ValueDecoder for KDFParameters {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBKDF2SHA256Parameters {
+	/// The iterations to use.
 	iterations: u32,
+	/// The salt value.
 	salt: [u8; 32],
 }
 
@@ -266,9 +268,13 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ScryptParameters {
+	/// The log n parameter for Scrypt.
 	logn: u8,
+	/// The r parameter for Scrypt.
 	r: u32,
+	/// The p parameter for Scrypt.
 	p: u32,
+	/// The used salt.
 	salt: [u8; 32],
 }
 
@@ -344,9 +350,13 @@ impl HeaderCoding for ScryptParameters {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Argon2idParameters {
+	/// The memory cost parameter for Argon2id.
 	pub mem_cost: u32,
+	/// The used number of lanes for Argon2id.
 	pub lanes: u32,
+	/// The iterations value for Argon2id.
 	pub iterations: u32,
+	/// The used salt.
 	pub salt: [u8; 32],
 }
 

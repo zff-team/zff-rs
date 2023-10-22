@@ -104,6 +104,7 @@ impl MainFooter {
 		Some(self.description_notes.as_ref()?)
 	}
 
+	/// Returns a reference of the global chunkmap table.
 	pub fn chunk_maps(&self) -> &BTreeMap<u64, u64> {
 		&self.chunk_maps
 	}

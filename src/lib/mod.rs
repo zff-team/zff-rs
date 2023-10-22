@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
-//#![deny(missing_docs)]
+#![deny(missing_docs)]
+#![deny(warnings)]
 //! This crate provides the reference implementation of the forensic file format Zff.
 //! Zff is a new file format for forensic images, as an alternative to EWF and AFF.
 //! Zff is focused on speed and security. If you want to learn more about ZFF, visit [https://github.com/ph0llux/zff](https://github.com/ph0llux/zff).
@@ -11,6 +12,8 @@ pub mod constants;
 pub mod header;
 /// This module contains all footer, could be found in the zff specification (footer version 1 and footer version 2).
 pub mod footer;
+/// Contains several stuff to handle zff container (e.g. create, extend or read zff container).
+pub mod io;
 mod hashing;
 mod compression;
 mod encryption;
@@ -22,7 +25,6 @@ mod object;
 mod file;
 mod segment;
 mod chunk;
-pub mod io;
 
 // - re-exports
 pub use hashing::*;

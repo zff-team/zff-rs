@@ -23,8 +23,8 @@ use crate::{
 };
 
 /// Represents a full [Segment], containing a [crate::header::SegmentHeader],
-/// a [crate::footer::SegmentFooter], a [Reader](std::io::Read) to the appropriate
-/// segmented data and a position marker for this [Reader](std::io::Read).
+/// a [crate::footer::SegmentFooter], a [Read](std::io::Read)er to the appropriate
+/// segmented data and a position marker for this [Read](std::io::Read)er.
 #[derive(Debug)]
 pub struct Segment<R: Read + Seek> {
 	header: SegmentHeader,
@@ -44,7 +44,7 @@ impl<R: Read + Seek> Segment<R> {
 		}
 	}
 
-	/// Creates a new [Segment] from the given [Reader](std::io::Read).
+	/// Creates a new [Segment] from the given [Read](std::io::Read)er.
 	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
 
@@ -75,13 +75,14 @@ impl<R: Read + Seek> Segment<R> {
 		&self.footer
 	}
 
-	/// Returns the raw chunk, if so present, then also encrypted and/or compressed.
+	/// Returns the raw chunk (and if so present, then also in encrypted and/or compressed form).
 	pub fn raw_chunk(&mut self, chunk_number: u64) -> Result<Chunk> {
 		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
 		self.data.seek(SeekFrom::Start(chunk_offset))?;
 		Chunk::new_from_reader(&mut self.data)
 	}
 
+	/// Returns the offset of the appropriate chunk (number).
 	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
 		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_map_table, *chunk_number)?;
 		//get the first chunk number of the specific chunk map
@@ -104,9 +105,9 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(offset)
 	}
 
-	/// Returns the chunked data, uncompressed and unencrypted
-	/// The chunk offset could be optionally assigned directly, e.g. from a preloaded chunk map
-	pub fn chunk_data<E, C>(&mut self, 
+	/// Returns the chunked data, uncompressed and unencrypted.
+	/// The chunk offset could be optionally assigned directly, e.g. from a preloaded chunk map.
+	pub(crate) fn chunk_data<E, C>(&mut self, 
 		chunk_number: u64, 
 		encryption_information: &Option<E>, 
 		compression_algorithm: C,
@@ -180,6 +181,7 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(object_header)
 	}
 
+	/// Returns the [EncryptedObjectHeader] of the given object number (if available in this [Segment]). Otherwise, returns an error.
 	pub fn read_encrypted_object_header(&mut self, object_number: u64) -> Result<EncryptedObjectHeader> {
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
@@ -216,6 +218,7 @@ impl<R: Read + Seek> Segment<R> {
 		ObjectFooter::decode_directly(&mut self.data)
 	}
 
+	/// Returns the [crate::footer::EncryptedObjectFooter] of the given object number, if available in this [Segment]. Otherwise, returns an error.
 	pub fn read_encrypted_object_footer(&mut self, object_number: u64) -> Result<EncryptedObjectFooter> {
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 				Some(value) => value,
@@ -264,11 +267,14 @@ impl<R: Read + Seek> Seek for Segment<R> {
 	}
 }
 
-
-pub enum ChunkContent {
-		Raw(Vec<u8>), // contains original data,
-		SameBytes(u8), // contains the appropriate byte,
-		Duplicate(u64), //contains the appropriate chunk with the original data
+/// The data of the chunk.
+pub(crate) enum ChunkContent {
+		/// The unencrypted and uncompressed original data of the chunk.
+		Raw(Vec<u8>),
+		/// The appropriate byte, if the same byte flag is set.
+		SameBytes(u8),
+		/// The appropriate chunk, if this chunk is a duplication.
+		Duplicate(u64),
 }
 
 

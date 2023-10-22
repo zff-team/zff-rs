@@ -29,15 +29,22 @@ use serde::{
 	Serialize,
 };
 
+/// The appropriate flags for each chunk.
 #[derive(Debug,Clone,Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeaderFlags {
+	/// is set, if an read error is occured and the data in this chunk could be corrupted.
 	pub error: bool,
+	/// is set, if the data in the chunk are compressed.
 	pub compression: bool,
+	/// is set, if the chunk contains the same bytes.
 	pub same_bytes: bool,
+	/// is set, if this chunk is a duplicate of an other chunk.
 	pub duplicate: bool,
+	/// is set, if the chunk data is encrypted.
 	pub encryption: bool,
+	/// is set, if this is a placeholder chunk of an empty file.
 	pub empty_file: bool,
 }
 
@@ -74,10 +81,15 @@ impl ChunkHeaderFlags {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeader {
+	/// the header version.
 	pub version: u8,
+	/// the appropriate chunk number.
 	pub chunk_number: u64,
+	/// the appropriate size of the chunk data (in the final optionally compressed and encrypted form).
 	pub chunk_size: u64,
+	/// the appropriate chunk header flags.
 	pub flags: ChunkHeaderFlags,
+	/// the crc32 value to ensure (a bit) integrity.
 	pub crc32: u32,
 }
 
@@ -108,7 +120,7 @@ impl ChunkHeader {
 		}
 	}
 
-	/// tries to encrypt the ChunkHeader. If an error occures, the unencrypted ChunkHeader is still available.
+	/// Tries to encrypt the ChunkHeader. If an error occures, the unencrypted ChunkHeader is still available.
 	pub fn encrypt<A, K>(&self, key: K, algorithm: A) -> Result<EncryptedChunkHeader>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -118,7 +130,7 @@ impl ChunkHeader {
 		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags.clone(), crc32))
 	}
 
-	/// tries to encrypt the ChunkHeader. Consumes theunencrypted ChunkHeader, regardless of whether an error occurs or not.
+	/// Tries to encrypt the ChunkHeader. Consumes theunencrypted ChunkHeader, regardless of whether an error occurs or not.
 	pub fn encrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<EncryptedChunkHeader>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -197,15 +209,20 @@ impl ChunkHeader {
 	}
 }
 
-/// Header for chunk data (contains encrypted crc32 and ed25519 signature).
+/// Header for (encrypted) chunk data (contains encrypted crc32 and ed25519 signature).
 #[derive(Debug,Clone)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptedChunkHeader {
+	/// the header version.
 	pub version: u8,
+	/// the appropriate chunk number
 	pub chunk_number: u64,
+	/// the appropriate size of the chunk data (in the final optionally compressed and encrypted form).
 	pub chunk_size: u64,
+	/// the appropriate chunk header flags.
 	pub flags: ChunkHeaderFlags,
+	/// the encrypted crc32 value.
 	pub crc32: Vec<u8>,
 }
 

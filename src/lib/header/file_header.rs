@@ -128,10 +128,15 @@ impl fmt::Display for SpecialFileType {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct FileHeader {
+	/// The appropriate filenumber.
 	pub file_number: u64,
+	/// The appropriate filetype.
 	pub file_type: FileType,
+	/// The appropriate filename. 
 	pub filename: String,
+	/// The parent file number of this file. Will be 0, if the parent is the root directory.
 	pub parent_file_number: u64,
+	/// A [HashMap] of the metadata of this file.
 	pub metadata_ext: HashMap<String, String>,
 } 
 

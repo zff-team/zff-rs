@@ -47,23 +47,36 @@ use super::{
 // - external
 use ed25519_dalek::{SigningKey};
 
+/// Defines the output for a [ZffWriter].
+/// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
 pub enum ZffWriterOutput {
+	/// Build a new container by using the appropriate Path-prefix
+	/// (e.g. if "/home/user/zff_container" is given, "/home/user/zff_container.z??" will be used).
 	NewContainer(PathBuf),
+	/// Determine an extension of the given zff container (path).
 	ExtendContainer(Vec<PathBuf>),
 }
 
-/// struct contains optional, additional parameter.
-#[derive(Default)]
+/// This struct contains optional, additional parameter for the [ZffWriter].
+#[derive(Default, Debug)]
 pub struct ZffWriterOptionalParameter {
+	/// If given, the appropriate data will be signed by the given [SigningKey](crate::ed25519_dalek::SigningKey).
 	pub signature_key: Option<SigningKey>,
-	pub target_segment_size: Option<u64>, //if None, the container will not be segmentized.
+	/// If None, the container will not be segmentized. Otherwise, [ZffWriter] ensure that no segment will be larger than this size.
+	pub target_segment_size: Option<u64>,
+	/// An optional description for the container
+	/// (note: you can describe every object with custom descriptions by using the [DescriptionHeader](crate::header::DescriptionHeader)).
 	pub description_notes: Option<String>,
+	/// If set, the chunkmaps will not grow larger than the given size. Otherwise, the default size 32k will be used.
 	pub chunkmap_size: Option<u64>, //default is 32k
+	/// Optional [DeduplicationChunkMap](crate::header::DeduplicationChunkMap) to ensure a chunk deduplication (and safe some disk space).
 	pub deduplication_chunkmap: Option<DeduplicationChunkMap>,
-	pub unique_identifier: u64 // TODO: set a random number, if zero?
+	/// Will be used as a unique identifier, to assign each segment to the appropriate zff container.
+	/// If the [ZffWriter] will be extend an existing Zff container, this value will be ignored.
+	pub unique_identifier: u64
 }
 
-pub struct ZffExtenderParameter {
+struct ZffExtenderParameter {
 	pub main_footer: MainFooter,
 	pub current_segment: PathBuf,
 	pub next_object_no: u64,
@@ -71,7 +84,7 @@ pub struct ZffExtenderParameter {
 }
 
 impl ZffExtenderParameter {
-	pub fn with_data(
+	fn with_data(
 		main_footer: MainFooter,
 		current_segment: PathBuf,
 		next_object_no: u64,
@@ -132,6 +145,7 @@ impl<R: Read> ZffWriter<R> {
 			ZffWriterOutput::NewContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFCREATE)), //TODO,
 			ZffWriterOutput::ExtendContainer(ref files_to_extend) => files_to_extend.clone()
 		};
+		let mut params = params;
 		for ext_file in &files_to_extend {
 			let mut raw_segment = File::open(ext_file)?;
 			if let Ok(mf) = decode_main_footer(&mut raw_segment) {
@@ -152,6 +166,8 @@ impl<R: Read> ZffWriter<R> {
 					Some(x) => *x + 1,
 					None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
 				};
+				let unique_identifier = segment.header().unique_identifier;
+				params.unique_identifier = unique_identifier;
 
 				let extension_parameter = ZffExtenderParameter::with_data(
 					mf,

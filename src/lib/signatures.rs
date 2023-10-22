@@ -11,6 +11,7 @@ use ed25519_dalek::{
 };
 use rand::rngs::OsRng;
 use rand::RngCore;
+use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
 
 // - internal
 use crate::{
@@ -19,6 +20,7 @@ use crate::{
 	ZffErrorKind,
 	ED25519_DALEK_SIGNATURE_LEN,
 };
+
 
 /// structure contains serveral methods to handle signing of chunked data.
 pub struct Signature;
@@ -36,7 +38,7 @@ impl Signature {
 	/// Input data can be a secret key (32 bytes) or a secret/public keypair (64 bytes).
 	pub fn new_signingkey_from_base64<K: Into<String>>(key: K) -> Result<SigningKey> {
 		//decodes the base64 content.
-		let key = base64::decode(key.into())?;
+		let key = base64engine.decode(key.into())?;
 		// check if the content is a keypair or a secret key
 		if key.len() == KEYPAIR_LENGTH {
 			let mut key_slice = [0u8; KEYPAIR_LENGTH];

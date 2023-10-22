@@ -34,37 +34,37 @@ use hex;
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct ChunkMap {
-	pub chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
+pub(crate) struct ChunkMap {
+	pub(crate) chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
 	target_size: usize,
 }
 
 impl ChunkMap {
 	/// returns a new [ChunkMap] with the given values.
-	pub fn new(chunkmap: BTreeMap<u64, u64>) -> Self {
+	pub(crate) fn new(chunkmap: BTreeMap<u64, u64>) -> Self {
 		Self {
 			chunkmap,
 			target_size: 0,
 		}
 	}
 
-	pub fn current_size(&self) -> usize {
+	pub(crate) fn current_size(&self) -> usize {
 		self.chunkmap.len() * 16 + 8
 	}
 
 	/// returns a new, empty [ChunkMap] with the given values.
-	pub fn new_empty() -> Self {
+	pub(crate) fn new_empty() -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),
 			target_size: 0,
 		}
 	}
 
-	pub fn set_target_size(&mut self, target_size: usize) {
+	pub(crate) fn set_target_size(&mut self, target_size: usize) {
 		self.target_size = target_size
 	}
 
-	pub fn add_chunk_entry(&mut self, chunk_no: u64, offset: u64) -> bool {
+	pub(crate) fn add_chunk_entry(&mut self, chunk_no: u64, offset: u64) -> bool {
 		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
@@ -73,7 +73,7 @@ impl ChunkMap {
 		}
 	}
 
-	pub fn flush(&mut self) -> BTreeMap<u64, u64> {
+	pub(crate) fn flush(&mut self) -> BTreeMap<u64, u64> {
 		std::mem::take(&mut self.chunkmap)
 	}
 }
@@ -122,9 +122,12 @@ impl ChunkMap {
 	}
 }
 
+/// A map which can be used to handle the chunk deduplication.
 #[derive(Debug)]
 pub enum DeduplicationChunkMap {
+	/// Use a in-memory deduplication map at cost of memory.
 	InMemory(HashMap<Blake3Hash, u64>), //<blake3-hash, the appropriate chunk number with the original data>
+	/// Use a Redb based deduplication map at cost of I/O.
 	Redb(Database),
 }
 
@@ -135,19 +138,24 @@ impl Default for DeduplicationChunkMap {
 }
 
 impl DeduplicationChunkMap {
+	/// Creates a new [DeduplicationChunkMap] with a Redb by given path.
+	/// May fail if the Redb can not be created at the given Path.
 	pub fn new_from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
 		let db = Database::create(path.as_ref())?;
         Ok(Self::Redb(db))
 	}
 
+	/// Creates a new [DeduplicationChunkMap] with the given [Redb-Database](crate::redb::Database).
 	pub fn new_from_db(database: Database) -> Self {
 		Self::Redb(database)
 	}
 
+	/// Creates a new in-memory [DeduplicationChunkMap].
 	pub fn new_in_memory_map() -> Self {
 		DeduplicationChunkMap::InMemory(HashMap::new())
 	}
 
+	/// Adds an entry to the deduplication map.
 	pub fn append_entry(&mut self, chunk_no: u64, blak3_hash: Blake3Hash) -> Result<()> {
 		match self {
 			DeduplicationChunkMap::InMemory(map) => {
@@ -169,7 +177,7 @@ impl DeduplicationChunkMap {
 		}
 	}
 
-	#[allow(clippy::let_and_return)]
+	/// Returns the chunk number to the given hash.
 	pub fn get_chunk_number<B>(&mut self, blak3_hash: B) -> Result<u64>
 	where
 		B: Borrow<Blake3Hash>

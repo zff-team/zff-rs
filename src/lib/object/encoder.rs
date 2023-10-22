@@ -117,17 +117,10 @@ impl<R: Read> ObjectEncoder<R> {
 pub struct PhysicalObjectEncoder<R: Read> {
 	/// The appropriate object header
 	obj_header: ObjectHeader,
-	/// remaining bytes of the encoded header to read. This is only (internally) used, if you will use the [Read] implementation of [PhysicalObjectEncoder].
-	encoded_header_remaining_bytes: usize,
 	underlying_data: R,
 	read_bytes_underlying_data: u64,
-	/// data of current chunk (only used in Read implementation)
-	current_chunked_data: Option<Vec<u8>>,
-	current_chunked_data_remaining_bytes: usize,
 	current_chunk_number: u64,
 	initial_chunk_number: u64,
-	encoded_footer: Vec<u8>,
-	encoded_footer_remaining_bytes: usize,
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
 	signing_key: Option<SigningKey>,
 	has_hash_signatures: bool,
@@ -150,7 +143,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    	None => None
 	    };
 
-		let (encoded_header, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
+		let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
 			match encryption_header.get_encryption_key() {
 				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, obj_header.object_number.to_string()))
@@ -167,15 +160,10 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		Ok(Self {
 			has_hash_signatures: obj_header.has_hash_signatures(),
 			obj_header,
-			encoded_header_remaining_bytes: encoded_header.len(),
 			underlying_data: reader,
 			read_bytes_underlying_data: 0,
-			current_chunked_data: None,
-			current_chunked_data_remaining_bytes: 0,
 			current_chunk_number,
 			initial_chunk_number: current_chunk_number,
-			encoded_footer: Vec::new(),
-			encoded_footer_remaining_bytes: 0,
 			hasher_map,
 			encryption_key,
 			signing_key,
@@ -200,7 +188,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		self.current_chunk_number
 	}
 
-	/// Returns the encoded object header. A call of this method sets the acquisition start time to the current time.
+	/// Returns the encoded object header.
+	/// Note: **A call of this method sets the acquisition start time to the current time**.
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		if self.acquisition_start == 0 {
 			self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
@@ -340,79 +329,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	}
 }
 
-/*/// This implement Read for [PhysicalObjectEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
-impl<D: Read> Read for PhysicalObjectEncoder<D> {
-	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-		let mut read_bytes = 0;
-		//read encoded header, if there are remaining bytes to read.
-        if let remaining_bytes @ 1.. = self.encoded_header_remaining_bytes {
-            let mut inner_read_bytes = 0;
-            let mut inner_cursor = Cursor::new(self.get_encoded_header());
-            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
-            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-            self.encoded_header_remaining_bytes -= inner_read_bytes;
-            read_bytes += inner_read_bytes;
-        }
-        loop {
-        	if read_bytes == buf.len() {
-        		self.encoded_footer = match self.get_encoded_footer() {
-        			Ok(footer) => footer,
-        			Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
-        		};
-        		self.encoded_footer_remaining_bytes = self.encoded_footer.len();
-				break;
-			};
-        	match &self.current_chunked_data {
-        		Some(data) => {
-        			let mut inner_read_bytes = 0;
-        			let mut inner_cursor = Cursor::new(&data);
-        			inner_cursor.seek(SeekFrom::End(-(self.current_chunked_data_remaining_bytes as i64)))?;
-        			inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-        			self.current_chunked_data_remaining_bytes -= inner_read_bytes;
-        			if self.current_chunked_data_remaining_bytes < 1 {
-        				self.current_chunked_data = None;
-        			}
-        			read_bytes += inner_read_bytes;
-        		},
-        		None => {
-        			match self.get_next_chunk() {
-        				Ok(chunk) => {
-        					self.current_chunked_data_remaining_bytes = chunk.len();
-        					self.current_chunked_data = Some(chunk);
-        				},
-        				Err(e) => match e.unwrap_kind() {
-        					ZffErrorKind::ReadEOF => break,
-        					ZffErrorKind::IoError(ioe) => return Err(ioe),
-        					e => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
-        				}
-        			}
-        		}
-        	}
-        }
-        //read encoded footer, if there are remaining bytes to read.
-        if let remaining_bytes @ 1.. = self.encoded_footer_remaining_bytes {
-            let mut inner_read_bytes = 0;
-            let mut inner_cursor = Cursor::new(&self.encoded_footer);
-            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
-            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-            self.encoded_footer_remaining_bytes -= inner_read_bytes;
-            read_bytes += inner_read_bytes;
-        }
-        Ok(read_bytes)
-	}
-}*/
-
-pub enum FileRessource {
-	ByPath(PathBuf),
-	ByReader(Box<dyn Read>)
-}
-
-impl From<PathBuf> for FileRessource {
-	fn from(path: PathBuf) -> Self {
-		FileRessource::ByPath(path)
-	}
-}
-
 /// The [LogicalObjectEncoder] can be used to encode a logical object.
 pub struct LogicalObjectEncoder {
 	/// The appropriate original object header
@@ -454,7 +370,7 @@ impl LogicalObjectEncoder {
 	}
 
 
-	pub fn add_unaccessable_file<F>(&mut self, file_path: F)
+	pub(crate) fn add_unaccessable_file<F>(&mut self, file_path: F)
 	where
 		F: AsRef<Path>
 	{
@@ -474,7 +390,7 @@ impl LogicalObjectEncoder {
 		directory_children: HashMap<u64, Vec<u64>>,
 		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
 
-		//test if the encryption is successful.
+		// ensures that the encryption key is available in decrypted form.
 		let (_encoded_header, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
 			match encryption_header.get_encryption_key() {
 				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
@@ -484,7 +400,7 @@ impl LogicalObjectEncoder {
 	    	(obj_header.encode_directly(), None)
 	    };
 
-		let mut files = files; //TODO: ????
+		let mut files = files;
 		let (reader, current_file_header) = match files.pop() {
 			Some((file, header)) => (file, header),
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
@@ -496,12 +412,7 @@ impl LogicalObjectEncoder {
 			Some(children) => children.to_owned(),
 			None => Vec::new()
 		};
-		let signing_key = match &signing_key_bytes {
-	    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
-	    	None => None
-	    };
 			    
-
      	let encryption_information = if let Some(encryption_key) = &encryption_key {
      		obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
      	} else {
@@ -516,7 +427,6 @@ impl LogicalObjectEncoder {
 			reader, 
 			hash_types.clone(), 
 			encryption_information, 
-			signing_key, 
 			current_chunk_number, 
 			symlink_real_path, 
 			hardlink_filenumber, 
@@ -640,10 +550,6 @@ impl LogicalObjectEncoder {
 					Some(children) => children.to_owned(),
 					None => Vec::new(),
 				};
-				let signing_key = match &self.signing_key_bytes {
-			    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
-			    	None => None
-			    };
 
        			let encryption_information = if let Some(encryption_key) = &self.encryption_key {
 		     		self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
@@ -658,7 +564,6 @@ impl LogicalObjectEncoder {
 					reader, 
 					self.hash_types.clone(), 
 					encryption_information, 
-					signing_key, 
 					self.current_chunk_number, 
 					symlink_real_path, 
 					hardlink_filenumber, 

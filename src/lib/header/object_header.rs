@@ -51,8 +51,11 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFlags {
+	/// this flag is set if the object is encrypted.
 	pub encryption: bool,
+	/// this flag is set, if signatures are available for this object.
 	pub sign_hash: bool,
+	/// this flag is set, if the object is passive and should not read directly, but via a virtual object.
 	pub passive_object: bool,
 }
 
@@ -78,12 +81,19 @@ impl From<u8> for ObjectFlags {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectHeader {
+	/// the appropriate object number.
 	pub object_number: u64,
+	/// the appropriate [ObjectFlags].
 	pub flags: ObjectFlags,
+	/// the [EncryptionHeader], if available.
 	pub encryption_header: Option<EncryptionHeader>,
+	/// the target chunk size for chunks of this object.
 	pub chunk_size: u64,
+	/// the [crate::header::CompressionHeader], containing all information about the used compression method for this object.
 	pub compression_header: CompressionHeader,
+	/// the [crate::header::DescriptionHeader], containing some information about this object.
 	pub description_header: DescriptionHeader,
+	/// the appropriate [ObjectType].
 	pub object_type: ObjectType,
 }
 
@@ -367,14 +377,20 @@ impl fmt::Display for ObjectType {
 }
 
 
-
+/// An [EncryptedObjectHeader] contains the appropriate object number, the [ObjectFlags], 
+/// the [crate::header::EncryptionHeader] and 
+/// the encrypted blob containing the other header values (in encrypted form).
 #[derive(Debug,Clone,Eq,PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptedObjectHeader {
+	/// the appropriate object number.
 	pub object_number: u64,
+	/// the object flags.
 	pub flags: ObjectFlags,
+	/// the [crate::header::EncryptionHeader].
 	pub encryption_header: EncryptionHeader,
+	/// the encrypted blob with the other header values.
 	pub encrypted_content: Vec<u8>
 }
 
@@ -394,15 +410,16 @@ impl EncryptedObjectHeader {
 		}
 	}
 
-	/// decodes the length of the header.
-	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
+	//todo: check if this method is needed in any way or could be deleted
+	/// Decodes the length of the header.
+	pub fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {
 			Ok(value) => Ok(value),
 			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
 	}
 
-	/// decodes the encrypted header with the given password.
+	/// Decodes the encrypted header with the given password.
 	pub fn decrypt_with_password<P>(&mut self, password: P) -> Result<ObjectHeader>
 	where
 		P: AsRef<[u8]>,
@@ -426,7 +443,7 @@ impl EncryptedObjectHeader {
 		Ok(object_header)
 	}
 
-	/// tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
+	/// Tries to decrypt the ObjectHeader. Consumes the EncryptedObjectHeader, regardless of whether an error occurs or not.
 	pub fn decrypt_and_consume_with_password<P>(mut self, password: P) -> Result<ObjectHeader>
 	where
 		P: AsRef<[u8]>,

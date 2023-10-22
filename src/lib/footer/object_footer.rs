@@ -97,6 +97,7 @@ impl ObjectFooter {
 		}
 	}
 
+	/// Returns the appropriate object number.
 	pub fn object_number(&self) -> u64 {
 		match self {
 			ObjectFooter::Physical(footer) => footer.object_number,
@@ -104,6 +105,7 @@ impl ObjectFooter {
 		}
 	}
 
+	/// Returns the appropriate acquisition start timestamp.
 	pub fn acquisition_start(&self) -> u64 {
 		match self {
 			ObjectFooter::Physical(footer) => footer.acquisition_start,
@@ -111,6 +113,7 @@ impl ObjectFooter {
 		}
 	}
 
+	/// Returns the appropriate acquisition end timestamp.
 	pub fn acquisition_end(&self) -> u64 {
 		match self {
 			ObjectFooter::Physical(footer) => footer.acquisition_end,
@@ -248,17 +251,21 @@ impl EncryptedObjectFooter {
 
 
 
-/// Encrypted footer.
+/// Represents an encrypted object footer of a physical object.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct EncryptedObjectFooterPhysical {
+	/// The appropriate footer version.
 	pub version: u8,
+	/// The appropriate object number.
 	pub object_number: u64,
+	/// The underlying data in encrypted form.
 	pub encrypted_data: Vec<u8>,
 }
 
 impl EncryptedObjectFooterPhysical {
+	/// Creates a new [EncryptedObjectFooterPhysical] by the given values.
 	pub fn new(version: u8, object_number: u64, encrypted_data: Vec<u8>) -> Self {
 		Self {
 			version,
@@ -267,7 +274,7 @@ impl EncryptedObjectFooterPhysical {
 		}
 	}
 
-	/// tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterPhysical is still available.
+	/// Tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterPhysical is still available.
 	pub fn decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooterPhysical>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -292,7 +299,7 @@ impl EncryptedObjectFooterPhysical {
 			hash_header))
 	}
 
-	/// tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
+	/// Tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
 	pub fn decrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<ObjectFooterPhysical>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -370,13 +377,21 @@ impl HeaderCoding for EncryptedObjectFooterPhysical {
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterPhysical {
+	/// The version of the footer.
 	pub version: u8,
+	/// The object number of the footer.
 	pub object_number: u64,
+	/// The acquisition start timestamp of the footer.
 	pub acquisition_start: u64,
+	/// The acquisition end timestamp of the footer.
 	pub acquisition_end: u64,
+	/// The original length of the data.
 	pub length_of_data: u64,
+	/// The first used chunk number in this object.
 	pub first_chunk_number: u64,
+	/// The total number of chunks used in this object.
 	pub number_of_chunks: u64,
+	/// The appropriate [crate::header::HashHeader].
 	pub hash_header: HashHeader,
 }
 
@@ -414,6 +429,7 @@ impl ObjectFooterPhysical {
 		vec
 	}
 
+	/// encrypts the object footer by the given encryption information and returns the encrypted object footer.
 	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
@@ -515,17 +531,21 @@ impl HeaderCoding for ObjectFooterPhysical {
 	}
 }
 
-/// Encrypted footer.
+/// An object footer for a logical object in encrypted form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct EncryptedObjectFooterLogical {
+	/// The footer version.
 	pub version: u8,
+	/// The appropriate object number.
 	pub object_number: u64,
+	/// the encrypted data of this footer
 	pub encrypted_data: Vec<u8>,
 }
 
 impl EncryptedObjectFooterLogical {
+	/// Creates a new [EncryptedObjectFooterLogical] by the given values.
 	pub fn new(version: u8, object_number: u64, encrypted_data: Vec<u8>) -> Self {
 		Self {
 			version,
@@ -534,7 +554,7 @@ impl EncryptedObjectFooterLogical {
 		}
 	}
 
-	/// tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterPhysical is still available.
+	/// Tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterPhysical is still available.
 	pub fn decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooterLogical>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -561,7 +581,7 @@ impl EncryptedObjectFooterLogical {
 			file_footer_offsets))
 	}
 
-	/// tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
+	/// Tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
 	pub fn decrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<ObjectFooterLogical>
 	where
 		A: Borrow<EncryptionAlgorithm>,
@@ -780,6 +800,7 @@ impl ObjectFooterLogical {
 		vec
 	}
 
+	/// encrypts the object footer by the given encryption information and returns the encrypted object footer.
 	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
@@ -886,5 +907,4 @@ impl HeaderCoding for ObjectFooterLogical {
 			file_footer_segment_numbers, 
 			file_footer_offsets))
 	}
-
 }

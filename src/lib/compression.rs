@@ -52,7 +52,7 @@ impl fmt::Display for CompressionAlgorithm {
     }
 }
 
-/// decompresses a buffer with the given [CompressionAlgorithm].
+/// Decompresses a buffer with the given [CompressionAlgorithm].
 pub fn decompress_buffer<C>(buffer: &[u8], compression_algorithm: C) -> Result<Vec<u8>>
 where
 	C: Borrow<CompressionAlgorithm>,
@@ -74,6 +74,7 @@ where
     }
 }
 
+/// Decompresses a reader with the given [CompressionAlgorithm].
 pub fn decompress_reader<C, R>(input: &mut R, compression_algorithm: C) -> Result<Box<dyn Read + Send + '_>>
 where
 	C: Borrow<CompressionAlgorithm>,

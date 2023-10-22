@@ -35,11 +35,14 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionInformation {
+	/// The encryption key in **unencrypted** form.
 	pub encryption_key: Vec<u8>,
+	/// The used [crate::encryption::EncryptionAlgorithm].
 	pub algorithm: EncryptionAlgorithm,
 }
 
 impl EncryptionInformation {
+	/// Creates a new [EncryptionInformation] by the given values.
 	pub fn new(key: Vec<u8>, algorithm: EncryptionAlgorithm) -> Self {
 		Self {
 			encryption_key: key,

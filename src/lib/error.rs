@@ -29,7 +29,9 @@ use cbc::cipher::block_padding::UnpadError as AesCbcError;
 /// The main error-type of this crate.
 #[derive(Debug)]
 pub struct ZffError {
+	/// A detailed error message.
 	pub details: String,
+	/// The appropriate [ZffErrorKind].
 	pub kind: ZffErrorKind,
 }
 
@@ -283,6 +285,20 @@ impl ZffError {
 		}
 	}
 
+	/// Creates a new crate-related "value not in map" error.
+	/// # Example
+	/// ```
+	/// use zff::{ZffError, Result};
+	/// fn my_func() -> Result<()> {
+	///     let decode_error = ZffError::new_not_in_map_error("the appropriate value is not in map!");
+	///        Err(decode_error)
+	/// }
+	/// fn main() {
+	///        match my_func() {
+	///            Err(x) => println!("It work's! Your custom error message is: {}", x),
+	///            _ => ()
+	///        }
+	/// }
 	pub fn new_not_in_map_error() -> ZffError {
 		ZffError {
 			kind: ZffErrorKind::ValueNotInMap,

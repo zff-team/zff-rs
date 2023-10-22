@@ -1,8 +1,8 @@
 // - modules
 mod main_footer;
 mod segment_footer;
-pub mod file_footer;
-pub mod object_footer;
+mod file_footer;
+mod object_footer;
 
 // - re-exports -- this section contains the footer of the current zff version.
 pub use main_footer::*;

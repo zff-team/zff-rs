@@ -32,11 +32,17 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct SegmentFooter {
+	/// The footer version
 	pub version: u8,
+	/// The total length of the segment.
 	pub length_of_segment: u64,
+	/// A [HashMap] containing the object number and the appropriate offset of the [crate::header::ObjectHeader].
 	pub object_header_offsets: HashMap<u64, u64>, //<object number, offset>,
+	/// A [HashMap] containing the object number and the appropriate offset of the [crate::footer::ObjectFooter].
 	pub object_footer_offsets: HashMap<u64, u64>, //<object number, offset>,
+	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
 	pub chunk_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	/// The first chunk number which was used in this segment.
 	pub first_chunk_number: u64,
 	/// The offset where the footer starts.
 	pub footer_offset: u64,

@@ -31,8 +31,11 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct SegmentHeader {
+	/// the unique identifier. Segments at the same group (=same zff container) should have the same identifier.
 	pub unique_identifier: u64,
+	/// the appropriate segment number.
 	pub segment_number: u64,
+	/// the target size of a chunkmap.
 	pub chunkmap_size: u64,
 }
 

@@ -89,6 +89,7 @@ pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number i
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
+
 /// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
 
@@ -174,7 +175,9 @@ pub(crate) const METADATA_BTIME: &str = "btime";
 
 
 // - ChunkMap
+/// Table name for the redb chunkmap
 pub const CHUNK_MAP_TABLE: TableDefinition<&[u8; 32], u64> = TableDefinition::new("map");
+/// Table name for the redb preloaded chunkmap
 pub const PRELOADED_CHUNK_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_map");
 
 // - Encryption parameters

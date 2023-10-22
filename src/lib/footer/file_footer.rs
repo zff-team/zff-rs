@@ -124,6 +124,7 @@ impl FileFooter {
 		vec
 	}
 
+	/// encrypts the file footer by the given encryption information and returns the encrypted file footer.
 	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
