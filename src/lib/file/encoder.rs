@@ -27,21 +27,16 @@ use crate::{
 
 // - external
 use digest::DynDigest;
-use ed25519_dalek::{SigningKey};
 use time::{OffsetDateTime};
 
 /// The [FileEncoder] can be used to encode a [crate::file::File].
 pub struct FileEncoder {
 	/// The appropriate [FileHeader].
 	file_header: FileHeader,
-	/// remaining bytes of the encoded header to read. This is only (internally) used, if you will use the [Read] implementation of [FileEncoder].
-	encoded_header_remaining_bytes: usize,
 	/// The appropriate [ObjectHeader].
 	object_header: ObjectHeader,
 	/// The underlying [File](std::fs::File) object to read from.
 	underlying_file: Box<dyn Read>,
-	/// optinal signature key, to sign the data with the given SigningKey
-	signature_key: Option<SigningKey>,
 	/// optional encryption information, to encrypt the data with the given key and algorithm
 	encryption_information: Option<EncryptionInformation>,
 	/// HashMap for the Hasher objects to calculate the cryptographically hash values for this file. 
@@ -56,12 +51,6 @@ pub struct FileEncoder {
 	read_bytes_underlying_data: u64,
 	/// Path were the symlink links to. Note: This should be None, if this is not a symlink.
 	symlink_real_path: Option<PathBuf>,
-	/// The encoded footer, only used in Read implementation
-	encoded_footer: Vec<u8>,
-	encoded_footer_remaining_bytes: usize,
-	/// data of current chunk (only used in Read implementation)
-	current_chunked_data: Option<Vec<u8>>,
-	current_chunked_data_remaining_bytes: usize,
 	acquisition_start: u64,
 	acquisition_end: u64,
 	hard_link_filenumber: Option<u64>,
@@ -77,17 +66,10 @@ impl FileEncoder {
 		file: Box<dyn Read>,
 		hash_types: Vec<HashType>,
 		encryption_information: Option<EncryptionInformation>,
-		signature_key: Option<SigningKey>,
 		current_chunk_number: u64,
 		symlink_real_path: Option<PathBuf>,
 		hard_link_filenumber: Option<u64>,
 		directory_children: Vec<u64>) -> Result<FileEncoder> {
-
-		let encoded_header = if let Some(enc_info) = &encryption_information {
-	    	file_header.encode_encrypted_header_directly(enc_info)?
-	    } else {
-	    	file_header.encode_directly()
-	    };
 		
 		let mut hasher_map = HashMap::new();
 	    for h_type in hash_types {
@@ -101,22 +83,16 @@ impl FileEncoder {
 	    };
 	    let file_type = file_header.file_type.clone();
 		Ok(Self {
-			encoded_header_remaining_bytes: encoded_header.len(),
 			file_header,
 			object_header,
 			underlying_file: Box::new(file),
 			hasher_map,
 			encryption_information,
-			signature_key,
 			file_type,
 			initial_chunk_number: current_chunk_number,
 			current_chunk_number,
 			read_bytes_underlying_data: 0,
 			symlink_real_path,
-			current_chunked_data: None,
-			current_chunked_data_remaining_bytes: 0,
-			encoded_footer: Vec::new(),
-			encoded_footer_remaining_bytes: 0,
 			acquisition_start: 0,
 			acquisition_end: 0,
 			hard_link_filenumber,
@@ -223,7 +199,9 @@ impl FileEncoder {
 	    let crc32 = calculate_crc32(&buf);
 
 	    // check same byte
-	    if check_same_byte(&buf) {
+	    // if the length of the buffer is not equal the target chunk size, 
+	    // the condition failed and same byte flag can not be set.
+	    if buf.len() == chunk_size && check_same_byte(&buf) {
 	    	chunk_header.flags.same_bytes = true;
 	    	buf = vec![buf[0]]
 	    } else if let Some(deduplication_map) = deduplication_map {
