@@ -16,7 +16,7 @@ use pkcs5::{
 	pbes2::Parameters as PBES2Parameters,
 	scrypt::Params as ScryptParams
 };
-use argon2::{self, Config, ThreadMode, Variant, Version};
+use argon2::{self, Config, Variant, Version};
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
@@ -702,7 +702,6 @@ fn hash_password_argon2(password: &str, salt: &[u8; 32], mem_cost: u32, lanes: u
 	    mem_cost,
 	    time_cost: iterations,
 	    lanes,
-	    thread_mode: ThreadMode::Parallel,
 	    secret: &[],
 	    ad: &[],
 	    hash_length
