@@ -25,7 +25,6 @@ use aes_gcm::{
 use chacha20poly1305::{
     ChaCha20Poly1305
 };
-use ed25519_dalek::SIGNATURE_LENGTH;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
 use typenum::consts::U12;
@@ -124,18 +123,17 @@ impl fmt::Display for PBEScheme {
 enum MessageType {
 	ChunkData,
 	ChunkHeaderCRC32,
-	ChunkHeaderEd25519,
 	FileHeader,
 	FileFooter,
 	ObjectHeader,
 	ObjectFooter,
 }
 
-/// structure contains serveral methods to handle encryption
+/// Structure contains serveral methods to handle encryption
 pub struct Encryption;
 
 impl Encryption {
-	/// encrypts the given plaintext with the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
+	/// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -150,7 +148,7 @@ impl Encryption {
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
 
-	// encrypts the given plaintext with the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
+	/// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -166,7 +164,7 @@ impl Encryption {
 		Ok(cipher)
 	}
 
-	/// decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
+	/// Decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
 	/// Returns the plaintext as ```Vec<u8>```.
 	/// # Error
 	/// if the decryption fails, or the given parameters are false.
@@ -181,7 +179,7 @@ impl Encryption {
 		Ok(encryption_scheme.decrypt(password, ciphertext)?)
 	}
 
-	/// decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
+	/// Decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
 	/// Returns the plaintext as ```Vec<u8>```.
 	/// # Error
 	/// if the decryption fails, or the given parameters are false.
@@ -196,7 +194,7 @@ impl Encryption {
 		Ok(encryption_scheme.decrypt(password, ciphertext)?)
 	}
 
-	/// encrypts the given plaintext with the given values with Scrypt-AES128CBC.
+	/// Encrypts the given plaintext with the given values with Scrypt-AES128CBC.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -213,7 +211,7 @@ impl Encryption {
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
 
-	/// encrypts the given plaintext with the given values with Scrypt-AES256CBC.
+	/// Encrypts the given plaintext with the given values with Scrypt-AES256CBC.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -230,7 +228,7 @@ impl Encryption {
 		Ok(encryption_scheme.encrypt(password, plaintext)?)
 	}
 
-	/// decrypts the given ciphertext with the given values with Scrypt-AES128CBC.
+	/// Decrypts the given ciphertext with the given values with Scrypt-AES128CBC.
 	/// Returns the plaintext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -247,7 +245,7 @@ impl Encryption {
 		Ok(encryption_scheme.decrypt(password, plaintext)?)
 	}
 
-	/// decrypts the given ciphertext with the given values with Scrypt-AES256CBC.
+	/// Decrypts the given ciphertext with the given values with Scrypt-AES256CBC.
 	/// Returns the plaintext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -264,7 +262,7 @@ impl Encryption {
 		Ok(encryption_scheme.decrypt(password, plaintext)?)
 	}
 
-	/// encrypts the given plaintext with the given values with Argon2id-AES128CBC.
+	/// Encrypts the given plaintext with the given values with Argon2id-AES128CBC.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -281,7 +279,7 @@ impl Encryption {
 		encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
-	/// encrypts the given plaintext with the given values with Argon2id-AES256CBC.
+	/// Encrypts the given plaintext with the given values with Argon2id-AES256CBC.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the encryption fails, or the given parameters are false.
@@ -298,7 +296,7 @@ impl Encryption {
 		encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
-	/// decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
+	/// Decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the decryption fails, or the given parameters are false.
@@ -315,7 +313,7 @@ impl Encryption {
 		decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
-	/// decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
+	/// Decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
 	/// Returns the ciphertext as ```Vec<u8>```.
 	/// # Error
 	/// if the decryption fails, or the given parameters are false.
@@ -332,7 +330,7 @@ impl Encryption {
 		decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 	}
 
-	/// method to encrypt a chunk content with a key and and the given chunk number. This method should primary used to encrypt
+	/// Method to encrypt a chunk content with a key and and the given chunk number. This method should primary used to encrypt
 	/// the given chunk data (if selected, then **after the compression**).
 	/// Returns a the cipthertext as ```Vec<u8>```.
 	/// # Example
@@ -362,6 +360,27 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
 	}
 
+	/// Method to encrypt the crc32 value of a chunk header with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given crc32 value.
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	/// # Example
+	/// ```
+	/// use zff::*;
+	/// use hex::ToHex;
+	///
+	/// fn main() -> Result<()> {
+	///        let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
+	///        let chunk_no = 1; // 12Byte/96Bit Key
+	///        let message = "My message";
+	/// 
+	///        let ciphertext = Encryption::encrypt_chunk_header_crc32(key, message, chunk_no, EncryptionAlgorithm::AES256GCM)?;
+	/// 
+	///        assert_eq!(ciphertext.encode_hex::<String>(), "3f1879c7e3373af75b5b4e857cd88ab7c6db604cef2e60c5df42".to_string());
+	///        Ok(())
+	/// }
+	/// ```
+	/// # Error
+	/// This method will fail, if the encryption fails.
 	pub fn encrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -371,15 +390,9 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)
 	}
 
-	pub fn encrypt_chunk_header_ed25519_signature<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)
-	}
-
+	/// Method to encrypt a [crate::header::FileHeader] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::FileHeader].
+	/// Returns a the cipthertext as ```Vec<u8>```.
 	pub fn encrypt_file_header<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -389,6 +402,9 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
 	}
 
+	/// Method to encrypt a [crate::header::FileFooter] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::FileFooter].
+	/// Returns a the cipthertext as ```Vec<u8>```.
 	pub fn encrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -398,6 +414,9 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileFooter)
 	}
 
+	/// Method to encrypt a [crate::header::ObjectHeader] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ObjectHeader].
+	/// Returns a the cipthertext as ```Vec<u8>```.
 	pub fn encrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -407,6 +426,9 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
 	}
 
+	/// Method to encrypt a [crate::header::ObjectFooter] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ObjectFooter].
+	/// Returns a the cipthertext as ```Vec<u8>```.
 	pub fn encrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -416,7 +438,7 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
 	}
 
-	/// method to decrypt a chunk content with a key and and the given chunk number. This method should primary used to decrypt
+	/// Method to decrypt a chunk content with a key and and the given chunk number. This method should primary used to decrypt
 	/// the given chunk data (if selected, then **before the decompression**).
 	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
 	/// # Error
@@ -430,6 +452,11 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
 	}
 
+	/// Method to decrypt the crc32 value of a chunk header with a key and and the given chunk number. This method should primary used to decrypt
+	/// a crc32 value.
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
 	pub fn decrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<u32>
 	where
 		K: AsRef<[u8]>,
@@ -444,20 +471,11 @@ impl Encryption {
 		Ok(u32::from_le_bytes(bytes))
 	}
 
-	pub fn decrypt_chunk_header_ed25519_signature<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<[u8; SIGNATURE_LENGTH]>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let bytes: [u8; SIGNATURE_LENGTH] = match Encryption::decrypt_message(
-			key, message, chunk_no, algorithm, MessageType::ChunkHeaderEd25519)?.try_into() {
-			Ok(bytes) => bytes,
-			Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "")), //TODO: better error handling
-		};
-		Ok(bytes)
-	}
-
+	/// Method to decrypt a [crate::header::FileHeader] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::FileHeader].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
 	pub fn decrypt_file_header<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -467,6 +485,11 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
 	}
 
+	/// Method to decrypt a [crate::footer::FileFooter] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::footer::FileFooter].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
 	pub fn decrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -476,6 +499,11 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileFooter)
 	}
 
+	/// Method to decrypt a [crate::header::ObjectHeader] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ObjectHeader].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
 	pub fn decrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -485,6 +513,11 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
 	}
 
+	/// Method to decrypt a [crate::footer::ObjectFooter] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::footer::ObjectFooter].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
 	pub fn decrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -504,7 +537,6 @@ impl Encryption {
 		let nonce = match message_type.borrow() {
 			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
 			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(nonce_value)?,
-			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(nonce_value)?,
 			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
 			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
 			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
@@ -536,7 +568,6 @@ impl Encryption {
 		let nonce = match message_type.borrow() {
 			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
 			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(nonce_value)?,
-			MessageType::ChunkHeaderEd25519 => Encryption::gen_crypto_nonce_chunk_ed25519_signature(nonce_value)?,
 			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
 			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
 			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
@@ -554,61 +585,6 @@ impl Encryption {
 			EncryptionAlgorithm::CHACHA20POLY1305 => {
 				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
 				Ok(cipher.decrypt(&nonce, message.as_ref())?)
-			}
-		}
-	}
-
-
-	/// encrypts the given header with the given nonce.
-	/// This method should primary used to encrypt the given header.
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	/// # Error
-	/// This method will fail, if the encryption fails.
-	pub(crate) fn encrypt_header<K, M, A>(key: K, message: M, nonce: &[u8; 12], algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let nonce = Nonce::from_slice(nonce);
-		match algorithm.borrow() {
-			EncryptionAlgorithm::AES256GCM => {
-				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.encrypt(nonce, message.as_ref())?)
-			},
-			EncryptionAlgorithm::AES128GCM => {
-				let cipher = Aes128Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.encrypt(nonce, message.as_ref())?)
-			},
-			EncryptionAlgorithm::CHACHA20POLY1305 => {
-				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
-				Ok(cipher.encrypt(nonce, message.as_ref())?)
-			}
-		}
-	}
-
-	/// decrypts the given header with the given nonce and encryption key.
-	/// This method should primary used to decrypt the given header.
-	/// Returns a the plaintext as ```Vec<u8>```.
-	pub(crate) fn decrypt_header<K, C, A>(key: K, ciphertext: C, nonce: &[u8; 12], algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		C: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let nonce = Nonce::from_slice(nonce);
-		match *algorithm.borrow() {
-			EncryptionAlgorithm::AES256GCM => {
-				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
-			},
-			EncryptionAlgorithm::AES128GCM => {
-				let cipher = Aes128Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
-			},
-			EncryptionAlgorithm::CHACHA20POLY1305 => {
-				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
-				Ok(cipher.decrypt(nonce, ciphertext.as_ref())?)
 			}
 		}
 	}
@@ -670,17 +646,6 @@ impl Encryption {
 		buffer.append(&mut vec!(0u8; 4));
 		let buffer_len = buffer.len();
 		buffer[buffer_len - 1] |= 0b00000001;
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the chunk ed25519 signature value. Will use the chunk number as nonce and fills the
-	/// missing bits with zeros - except the second to last bit (will be set).
-	fn gen_crypto_nonce_chunk_ed25519_signature(chunk_no: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(chunk_no)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00000010;
 		Ok(*Nonce::from_slice(&buffer))
 	}
 
