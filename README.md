@@ -6,18 +6,20 @@
 ![Rust Version][rustc-image]
 [![website][website-image]][website-link]
 
-Zff (Z forensic file format) is a completely new designed file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
+Zff (Z forensic file format) is file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
 The focus of zff is on speed, security and modularity in concert with forensic requirements. The modular design promises high maintainability and scalability.
 Zff is an alternative to the ewf and aff file formats and is not compatible with them.
 
-You can learn more about the file format and its specifications at [https://zff.dev](https://zff.dev).
+See at the [wiki](https://github.com/ph0llux/zff/wiki) to learn more about the specification.
 
-## Features included in Zff(v2) (most of them are optional)
+## Features included in Zff(v3) (most of them are optional)
 
 - ⚡ modern, blazingly fast methods to compress the dumped data (like Zstd or Lz4) ⚡
 - 🔒 the data can optionally be stored encrypted. Strong AEAD and PBE algorithms are used.  🔒
 - ☄ The format is built to be streamable (e.g. you could stream a zff dump/container via HTTP). ☄
 - 🪂 Zff can handle both: logical dumps (like filesystem extractions) and physical dumps (like dd dumps). 🪂
+- 🌐️ It is possible to build a virtual object to setup proper reading of the content (e.g. to define RAIDs). 🌐️
+- ♊️ Zff can deduplicate the data to ensure the best usage of the available storage. ♊️
 - 🤹 The format is built to be splitable in multiple files. 🤹
 - 🍱 You can store multiple dumps within one zff-container and extend an existing zff container with additional dumps. 🍱
 - 🛡 To prevent manipulation attacks, the data can be stored signed. 🛡
@@ -29,12 +31,12 @@ There are several tools (and this library) to work with zff containers (or acqui
 
 | Name | Type | Description | Crates.io | MRSV
 |------|:----:|:------------|:---------:|:----:|
-| [zff](https://github.com/ph0llux/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.66.1 |
-| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.60 |
-| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.60 |
-| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.60 |
+| [zff](https://github.com/ph0llux/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.67.1 |
+| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.67.1 |
+| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.67.1 |
+| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.67.1 |
 
-## Benchmarks
+## Benchmarks (for Zffv2)
 
 The following benchmarks were all run on a notebook, which has the following specifications:
 - Dell XPS 13 9310 2-in-1
@@ -101,7 +103,7 @@ dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
 ```
 ## Zff layout
 
-See the [website](https://zff.dev) for further information.
+See the [wiki](https://github.com/ph0llux/zff/wiki) for further information.
 
 ## License
 
@@ -118,7 +120,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 [docs-image]: https://docs.rs/zff/badge.svg
 [docs-link]: https://docs.rs/zff/
 [license-image]: https://img.shields.io/badge/license-Apache2.0/MIT-blue.svg
-[rustc-image]: https://img.shields.io/badge/rustc-1.58.1+-blue.svg
+[rustc-image]: https://img.shields.io/badge/rustc-1.67.1+-blue.svg
 [website-image]: https://img.shields.io/website-up-down-green-red/http/zff.dev.svg
 [website-link]: https://zff.dev
 
