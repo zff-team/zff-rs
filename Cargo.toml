@@ -63,5 +63,5 @@ hex = "0.4.3"
 lto = true				# enables link time optimization
 panic = 'unwind'		# unwinds the stack if panic
 debug = false			# I won't see any debug options in release mode.
-opt-level = 'z'  		# optimized for size.
+opt-level = 2  			# optimized for performance.
 codegen-units = 1		# Set to 1 to allow for maximum size reduction optimizations - at the expense of the compile time.
