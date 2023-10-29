@@ -27,11 +27,16 @@ pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
 pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
 /// The identifier of the [ChunkMap](crate::header::ChunkMap).
 pub const HEADER_IDENTIFIER_CHUNK_MAP: u32 = 0x7A666678;
+/// The identifier of the [VirtualMappingInformation](crate::header::VirtualMappingInformation).
+pub const HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION: u32 = 0x7a666676;
+/// The identifier of the [VirtualLayer](crate::header::VirtualLayer).
+pub const HEADER_IDENTIFIER_VIRTUAL_LAYER: u32 = 0x7a666631;
 
 pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL: u32 = 0x7A666650;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL: u32 = 0x7A66664C;
+pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL: u32 = 0x7a666656;
 pub(crate) const FOOTER_IDENTIFIER_FILE_FOOTER: u32 = 0x7A666649;
 
 pub(crate) const PBE_KDF_PARAMETERS_PBKDF2: u32 = 0x6B646670;
@@ -132,11 +137,17 @@ pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 2;
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 2;
 /// current header version for the [ChunkMap](crate::header::ChunkMap) structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_MAP: u8 = 1;
+/// current header version for the [VirtualMappingInformation](crate::header::VirtualMappingInformation) structure.
+pub const DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION: u8 = 1;
+/// current header version for the [VirtualLayer](crate::header::VirtualLayer) structure.
+pub const DEFAULT_HEADER_VERSION_VIRTUAL_LAYER: u8 = 1;
 
 /// current footer version for the [ObjectFooterPhysical](crate::footer::ObjectFooterPhysical).
-pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 1;
+pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 2;
 /// current footer version for the [ObjectFooterLogical](crate::header::ObjectFooterLogical).
-pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 1;
+pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 2;
+/// current footer version for the [ObjectFooterVirtual](crate::footer::ObjectFooterVirtual) structure.
+pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::header::SegmentFooter).
 pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
 /// current footer version for the [MainFooter](crate::header::MainFooter).

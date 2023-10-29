@@ -9,6 +9,7 @@ mod description_header;
 mod pbe_header;
 mod hash_header;
 mod encryption_header;
+mod virtual_maps;
 
 // - re-export
 pub use hash_header::*;
@@ -21,3 +22,4 @@ pub use segment_header::*;
 pub use object_header::*;
 pub use file_header::*;
 pub use chunk_map::*;
+pub use virtual_maps::*;

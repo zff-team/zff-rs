@@ -85,7 +85,7 @@ pub enum PreloadedChunkMap {
 /// let segment_files = vec!["zff_segment.z01", "zff_segment.z02", "zff_segment.z03"];
 /// let mut files = Vec::new();
 /// for segment in segment_files {
-/// 	files.push(File::open(segment).unwrap());
+///     files.push(File::open(segment).unwrap());
 /// }
 ///
 /// let zffreader = ZffReader::with_reader(files);
@@ -276,7 +276,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	///   - convert the existing preloaded (in-memory) chunkmap to the Redb (copy the content) and use the Redb as the appropriate preloaded chunkmap.
 	pub fn set_preload_chunkmap_mode_redb(&mut self, mut db: Database) -> Result<()> {
 		match &self.chunk_map {
-			PreloadedChunkMap::Redb(old_db) => copy_redb_map(&old_db, &mut db)?,
+			PreloadedChunkMap::Redb(old_db) => copy_redb_map(old_db, &mut db)?,
 			PreloadedChunkMap::None => initialize_redb_chunkmap(&mut db, &HashMap::new())?,
 			PreloadedChunkMap::InMemory(map) => initialize_redb_chunkmap(&mut db, map)?,
 		}

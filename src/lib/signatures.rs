@@ -63,7 +63,7 @@ impl Signature {
 			Ok(SigningKey::from_keypair_bytes(&key_slice)?)
 		} else if key.len() == SECRET_KEY_LENGTH {
 			let mut key_slice = [0u8; SECRET_KEY_LENGTH];
-			key_slice.copy_from_slice(&key);
+			key_slice.copy_from_slice(key);
 			Ok(SigningKey::from_bytes(&key_slice))
 		} else {
 			Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""))
