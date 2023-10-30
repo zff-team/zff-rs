@@ -45,6 +45,8 @@ pub enum ObjectFooter {
 	Physical(ObjectFooterPhysical),
 	/// A logical object contains a [ObjectFooterLogical].
 	Logical(ObjectFooterLogical),
+	/// Footer of a virtual object.
+	Virtual(ObjectFooterVirtual),
 }
 
 impl ObjectFooter {
@@ -53,6 +55,7 @@ impl ObjectFooter {
 		match self {
 			ObjectFooter::Physical(phy) => phy.version(),
 			ObjectFooter::Logical(log) => log.version(),
+			ObjectFooter::Virtual(virt) => virt.version(),
 		}
 	}
 
@@ -104,6 +107,7 @@ impl ObjectFooter {
 		match self {
 			ObjectFooter::Physical(footer) => footer.object_number,
 			ObjectFooter::Logical(footer) => footer.object_number,
+			ObjectFooter::Virtual(footer) => footer.object_number,
 		}
 	}
 
@@ -112,6 +116,7 @@ impl ObjectFooter {
 		match self {
 			ObjectFooter::Physical(footer) => footer.acquisition_start,
 			ObjectFooter::Logical(footer) => footer.acquisition_start,
+			ObjectFooter::Virtual(footer) => footer.creation_timestamp,
 		}
 	}
 
@@ -120,6 +125,7 @@ impl ObjectFooter {
 		match self {
 			ObjectFooter::Physical(footer) => footer.acquisition_end,
 			ObjectFooter::Logical(footer) => footer.acquisition_end,
+			ObjectFooter::Virtual(footer) => footer.creation_timestamp,
 		}
 	}
 }
