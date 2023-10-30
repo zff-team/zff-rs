@@ -26,7 +26,6 @@ use crate::{
 	ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE,
 	ENCRYPT_OBJECT_FLAG_VALUE,
 	SIGN_HASH_FLAG_VALUE,
-	PASSIVE_OBJECT_FLAG_VALUE,
 };
 
 use crate::header::{
@@ -55,8 +54,6 @@ pub struct ObjectFlags {
 	pub encryption: bool,
 	/// this flag is set, if signatures are available for this object.
 	pub sign_hash: bool,
-	/// this flag is set, if the object is passive and should not read directly, but via a virtual object.
-	pub passive_object: bool,
 }
 
 impl From<u8> for ObjectFlags {
@@ -64,7 +61,6 @@ impl From<u8> for ObjectFlags {
 		Self {
 			encryption: flag_values & ENCRYPT_OBJECT_FLAG_VALUE != 0,
 			sign_hash: flag_values & SIGN_HASH_FLAG_VALUE != 0,
-			passive_object: flag_values & PASSIVE_OBJECT_FLAG_VALUE != 0,
 		}
 	}
 }
@@ -161,9 +157,6 @@ impl ObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		if self.flags.passive_object {
-			flags += PASSIVE_OBJECT_FLAG_VALUE;
-		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut encryption_header.encode_directly());
 
@@ -300,9 +293,6 @@ impl HeaderCoding for ObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		if self.flags.passive_object {
-			flags += PASSIVE_OBJECT_FLAG_VALUE;
-		}
 		vec.append(&mut flags.encode_directly());
 		if let Some(encryption_header) = &self.encryption_header {
 			vec.append(&mut encryption_header.encode_directly())
@@ -487,9 +477,6 @@ impl HeaderCoding for EncryptedObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		if self.flags.passive_object {
-			flags += PASSIVE_OBJECT_FLAG_VALUE;
-		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.encryption_header.encode_directly());
 		vec.append(&mut self.encrypted_content.encode_directly());
