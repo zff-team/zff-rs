@@ -946,21 +946,19 @@ impl EncryptedObjectFooterVirtual {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		let content = Encryption::decrypt_object_footer(
-			key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
-		let mut cursor = Cursor::new(content);
-		let (creation_timestamp, 
-			passive_objects, 
-			layer_map) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
-		Ok(ObjectFooterVirtual::with_data(
-			self.object_number,
-			creation_timestamp,
-			passive_objects,
-			layer_map))
+		self.inner_decrypt(key, algorithm)
 	}
 
 	/// Tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
 	pub fn decrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
+	where
+		A: Borrow<EncryptionAlgorithm>,
+		K: AsRef<[u8]>,
+	{
+		self.inner_decrypt(key, algorithm)
+	}
+
+	fn inner_decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
 	where
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
@@ -970,11 +968,13 @@ impl EncryptedObjectFooterVirtual {
 		let mut cursor = Cursor::new(content);
 		let (creation_timestamp, 
 			passive_objects, 
+			length_of_data,
 			layer_map) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
 		Ok(ObjectFooterVirtual::with_data(
 			self.object_number,
 			creation_timestamp,
 			passive_objects,
+			length_of_data,
 			layer_map))
 	}
 }
@@ -1039,6 +1039,8 @@ pub struct ObjectFooterVirtual {
 	pub creation_timestamp: u64,
 	/// A list of all objects which are affected by this virtual object.
 	pub passive_objects: Vec<u64>,
+	/// The length of the original data in bytes.
+	pub length_of_data: u64,
 	/// The map of the highest layer.
 	pub layer_map: BTreeMap<u64, u64>,
 	
@@ -1048,12 +1050,14 @@ impl ObjectFooterVirtual {
 	/// creates a new [ObjectFooterVirtual] with the given values.
 	pub fn with_data(object_number: u64, 
 		creation_timestamp: u64, 
-		passive_objects: Vec<u64>,  
+		passive_objects: Vec<u64>,
+		length_of_data: u64,
 		layer_map: BTreeMap<u64, u64>) -> Self {
 		Self {
 			object_number,
 			creation_timestamp,
 			passive_objects,
+			length_of_data,
 			layer_map,
 		}
 	}
@@ -1062,6 +1066,7 @@ impl ObjectFooterVirtual {
 		let mut vec = Vec::new();
 		vec.append(&mut self.creation_timestamp.encode_directly());
 		vec.append(&mut self.passive_objects.encode_directly());
+		vec.append(&mut self.length_of_data.encode_directly());
 		vec.append(&mut self.layer_map.encode_directly());
 		vec
 	}
@@ -1096,14 +1101,17 @@ impl ObjectFooterVirtual {
 	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
 		u64, //creation_timestamp
 		Vec<u64>, //passive_objects
+		u64, //length_of_data
 		BTreeMap<u64, u64>, //layer_map
 		)> {
 		let creation_timestamp = u64::decode_directly(data)?;
 		let passive_objects = Vec::<u64>::decode_directly(data)?;
+		let length_of_data = u64::decode_directly(data)?;
 		let layer_map = BTreeMap::<u64, u64>::decode_directly(data)?;
 		Ok((
 			creation_timestamp,
 			passive_objects,
+			length_of_data,
 			layer_map,
 			))
 	}
@@ -1145,12 +1153,14 @@ impl HeaderCoding for ObjectFooterVirtual {
 		};
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let (creation_timestamp, 
-			passive_objects, 
+			passive_objects,
+			length_of_data,
 			layer_map) = Self::decode_inner_content(&mut cursor)?;
 		Ok(Self::with_data(
 			object_number,
 			creation_timestamp, 
-			passive_objects, 
+			passive_objects,
+			length_of_data,
 			layer_map))
 	}
 }
