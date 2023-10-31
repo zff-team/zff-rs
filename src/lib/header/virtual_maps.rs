@@ -34,13 +34,19 @@ use serde::{
 #[cfg(feature = "serde")]
 use hex;
 
+/// Contains the information of the appropriate virtual mapping.
+/// The counterpart offset has to be stored outside of this structure (in the [VirtualLayer]).
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualMappingInformation {
+	/// The object number of the affected chunk.
 	pub object_number: u64,
+	/// The number of the first affected chunk for this offset.
 	pub start_chunk_no: u64,
+	/// The start offset inside of this chunk.
 	pub chunk_offset: u64,
+	/// The full length of this offset.
 	pub length: u64,	
 }
 
@@ -193,12 +199,15 @@ impl VirtualMappingInformation {
 	}
 }
 
-
+/// The [VirtualLayer] contains the appropriate offset map to find the counterpart [VirtualMappingInformation].
+/// As the name of this struct already suggests, this structure can be layered multiple times.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualLayer {
+	/// The Depth must be read backwards (0 shows the offset of the appropriate [VirtualMappingInformation]).
 	pub depth: u8,
+	/// The approrpriate offset map.
 	pub offsetmap: BTreeMap<u64, u64>,
 }
 
