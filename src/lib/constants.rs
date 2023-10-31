@@ -85,6 +85,7 @@ pub(crate) const ERROR_LAST_GREATER_FIRST: &str = "First chunk number is greater
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
+pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT: &str = "Operation not available for virtual objects.";
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
 
