@@ -25,6 +25,11 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_FILE_FOOTER,
 };
 
+#[cfg(feature = "log")]
+use crate::{
+	hashes_to_log,
+};
+
 // - external
 use digest::DynDigest;
 use time::{OffsetDateTime};
@@ -267,6 +272,10 @@ impl FileEncoder {
 			hash_value.set_hash(hash.to_vec());
 			hash_values.push(hash_value);
 		}
+
+		#[cfg(feature = "log")]
+		hashes_to_log(self.object_header.object_number, Some(self.file_header.file_number), &hash_values);
+
 		let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
 		let footer = FileFooter::new(
 			DEFAULT_FOOTER_VERSION_FILE_FOOTER,

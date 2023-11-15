@@ -22,6 +22,11 @@ use crate::{
 	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL,
 };
 
+#[cfg(feature = "log")]
+use crate::{
+	hashes_to_log,
+};
+
 use crate::{
 	header::{
 		ObjectHeader, 
@@ -296,6 +301,10 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	        };
 	        hash_values.push(hash_value);
 	    }
+
+	    #[cfg(feature = "log")]
+		hashes_to_log(self.obj_header.object_number, None, &hash_values);
+
 	    let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
 		let footer = ObjectFooterPhysical::new(
 			DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
@@ -306,6 +315,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			self.initial_chunk_number,
 			self.current_chunk_number - self.initial_chunk_number,
 			hash_header);
+
 		if let Some(encryption_key) = &self.encryption_key {
 			let encryption_information = EncryptionInformation {
 				encryption_key: encryption_key.to_vec(),
@@ -501,7 +511,6 @@ impl LogicalObjectEncoder {
 					return Ok(file_encoder.get_encoded_header());
 				}
 
-				//todo: find a more efficient way than copy the offset.
 				let mut current_offset = current_offset;
 
 				let mut data = Vec::new();
@@ -583,3 +592,4 @@ impl LogicalObjectEncoder {
 	}
 
 }
+

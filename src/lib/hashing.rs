@@ -12,6 +12,8 @@ use serde::{
 	Deserialize,
 	Serialize,
 };
+#[cfg(feature = "log")]
+use log::{info};
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]
@@ -77,5 +79,16 @@ impl Hash {
 	/// returns the default hashtype of zff.
 	pub fn default_hashtype() -> HashType {
 		HashType::Blake3
+	}
+}
+
+#[cfg(feature = "log")]
+pub(crate) fn hashes_to_log(object_no: u64, file_no: Option<u64>, values: &Vec<crate::header::HashValue>) {
+	for value in values {
+		if let Some(file_no) = file_no {
+			info!("{} hash for object {object_no} / file {file_no} finalized: {}", value.hash_type(), hex::encode(value.hash()));
+		} else {
+			info!("{} hash for object {object_no} finalized: {}", value.hash_type(), hex::encode(value.hash()));
+		}
 	}
 }
