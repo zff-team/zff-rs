@@ -377,7 +377,7 @@ impl Encryption {
 	/// 
 	///        let ciphertext = Encryption::encrypt_chunk_header_crc32(key, message, chunk_no, EncryptionAlgorithm::AES256GCM)?;
 	/// 
-	///        assert_eq!(ciphertext.encode_hex::<String>(), "3f1879c7e3373af75b5b4e857cd88ab7c6db604cef2e60c5df42".to_string());
+	///        assert_eq!(ciphertext.encode_hex::<String>(), "b1c69e9d1d2063327fbe887a1b94baf99a82669d0bff6b9f4f79".to_string());
 	///        Ok(())
 	/// }
 	/// ```

@@ -290,7 +290,7 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, Result};
 	/// fn my_func() -> Result<()> {
-	///     let decode_error = ZffError::new_not_in_map_error("the appropriate value is not in map!");
+	///     let decode_error = ZffError::new_not_in_map_error();
 	///        Err(decode_error)
 	/// }
 	/// fn main() {

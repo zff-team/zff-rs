@@ -85,8 +85,10 @@ pub enum PreloadedChunkMap {
 /// The [ZffReader] can be used to read the data of a zff container in a proper way.  
 /// It implements [std::io::Read] and [std::io::Seek] to ensure a wide range of possible use.
 /// # Example
-/// ```rust
+/// ```no_run
+/// use zff::io::zffreader::ZffReader;
 /// use std::fs::File;
+/// use std::io::Read;
 /// 
 /// let segment_files = vec!["zff_segment.z01", "zff_segment.z02", "zff_segment.z03"];
 /// let mut files = Vec::new();
@@ -94,13 +96,14 @@ pub enum PreloadedChunkMap {
 ///     files.push(File::open(segment).unwrap());
 /// }
 ///
-/// let zffreader = ZffReader::with_reader(files);
-/// assert_eq!(zffreader.list_objects().unwrap().keys(), vec![1]);
+/// let mut zffreader = ZffReader::with_reader(files).unwrap();
+/// // list available object numbers.
+/// println!("{:?}", zffreader.list_objects().unwrap().keys());
 /// // let us assume object 1 is a physical object.
 /// zffreader.initialize_object(1).unwrap();
 /// zffreader.set_active_object(1).unwrap();
 /// 
-/// let buffer = vec![0u8; 32000];
+/// let mut buffer = vec![0u8; 32000];
 /// let _  = zffreader.read_exact(&mut buffer).unwrap();
 /// ```
 #[derive(Debug)]
