@@ -46,7 +46,7 @@ pub struct VirtualMappingInformation {
 	pub start_chunk_no: u64,
 	/// The start offset inside of this chunk.
 	pub chunk_offset: u64,
-	/// The full length of this offset.
+	/// The full length of the data offset.
 	pub length: u64,	
 }
 
@@ -207,16 +207,19 @@ impl VirtualMappingInformation {
 pub struct VirtualLayer {
 	/// The Depth must be read backwards (0 shows the offset of the appropriate [VirtualMappingInformation]).
 	pub depth: u8,
-	/// The approrpriate offset map.
+	/// The appropriate offset map.
 	pub offsetmap: BTreeMap<u64, u64>,
+	/// The segment for the corresponding offset.
+	pub offset_segment_map: BTreeMap<u64, u64>,
 }
 
 impl VirtualLayer {
 	/// returns a new [VirtualLayer] with the given values.
-	pub fn with_data(depth: u8, offsetmap: BTreeMap<u64, u64>) -> Self {
+	pub fn with_data(depth: u8, offsetmap: BTreeMap<u64, u64>, offset_segment_map: BTreeMap<u64, u64>) -> Self {
 		Self {
 			depth,
 			offsetmap,
+			offset_segment_map,
 		}
 	}
 
@@ -274,22 +277,28 @@ impl VirtualLayer {
 			depth.into(), 
 			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
-		let offsetmap = Self::decode_inner_content(&mut cursor)?;
+		let (offsetmap, offset_segment_map) = Self::decode_inner_content(&mut cursor)?;
 		Ok(Self::with_data(
 			depth,
-			offsetmap
+			offsetmap,
+			offset_segment_map,
 			))
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.append(&mut self.offsetmap.encode_directly());
+		vec.append(&mut self.offset_segment_map.encode_directly());
 		vec
 	}
 
-	fn decode_inner_content<R: Read>(data: &mut R) -> Result<BTreeMap<u64, u64>> {
+	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
+		BTreeMap<u64, u64>, //offsetmap
+		BTreeMap<u64, u64>, //offset_segment_map
+		)> {
 		let offsetmap = BTreeMap::<u64, u64>::decode_directly(data)?;
-		Ok(offsetmap)
+		let offset_segment_map = BTreeMap::<u64, u64>::decode_directly(data)?;
+		Ok((offsetmap, offset_segment_map))
 	}
 }
 
@@ -318,9 +327,9 @@ impl HeaderCoding for VirtualLayer {
 			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
 		};
 		let depth = u8::decode_directly(&mut cursor)?;
-		let offsetmap = Self::decode_inner_content(&mut cursor)?;
+		let (offsetmap, offset_segment_map) = Self::decode_inner_content(&mut cursor)?;
 
-		Ok(Self::with_data(depth, offsetmap))
+		Ok(Self::with_data(depth, offsetmap, offset_segment_map))
 	}
 }
 

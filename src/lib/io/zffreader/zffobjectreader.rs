@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read, Seek, SeekFrom, Cursor};
+use std::io::{Read, Seek, SeekFrom, Cursor, ErrorKind};
 use std::collections::{HashMap, BTreeMap};
 
 
@@ -18,7 +18,12 @@ use crate::{
 		EncryptedObjectFooter,
 		ObjectFooter,
 	},
-	header::{HashHeader, EncryptionInformation, EncryptedObjectHeader},
+	header::{
+		HashHeader, 
+		EncryptionInformation, 
+		EncryptedObjectHeader, 
+		VirtualMappingInformation,
+		VirtualLayer},
 };
 
 use crate::{
@@ -471,6 +476,8 @@ pub struct ZffObjectReaderVirtual {
 	passive_object_header: BTreeMap<u64, ObjectHeader>,
 	/// Preloaded offset map (optional)
 	preloaded_offset_map: BTreeMap<u64, u64>,
+	/// Preloaded segment map (optional, but recommended, if you use the preloaded_offset_map - otherwise this segment map is useless).
+	preloaded_segment_map: BTreeMap<u64, u64>,
 	/// The global chunkmap which could be found in the [crate::footer::MainFooter].
 	global_chunkmap: BTreeMap<u64, u64>, //TODO: only used in read_with_segments. Could also be a &-paramter for the specific method?
 	/// the internal reader position
@@ -488,6 +495,7 @@ impl ZffObjectReaderVirtual {
 			object_footer,
 			passive_object_header: BTreeMap::new(),
 			preloaded_offset_map: BTreeMap::new(),
+			preloaded_segment_map: BTreeMap::new(),
 			global_chunkmap,
 			position: 0
 		}
@@ -518,18 +526,139 @@ impl ZffObjectReaderVirtual {
 		ObjectFooter::Virtual(self.object_footer.clone())
 	}
 
-	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.  
+	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.
 	pub fn read_with_segments<R: Read + Seek>(
 		&mut self, 
-		_buffer: &mut [u8], 
-		_segments: &mut HashMap<u64, Segment<R>>,
-		_preloaded_chunkmap: &PreloadedChunkMap,
+		buffer: &mut [u8], 
+		segments: &mut HashMap<u64, Segment<R>>,
+		preloaded_chunkmap: &PreloadedChunkMap,
 		) -> std::result::Result<usize, std::io::Error> {
+		
+		let mut read_bytes = 0; // number of bytes which are written to buffer
+		
+		'outer: loop {
+			// find the appropriate mapping information.
+			let virtual_mapping_information = match get_mapping_info(
+				self.position, 
+				&self.object_footer.layer_map, 
+				&self.object_footer.layer_segment_map, 
+				segments, 
+				&self.preloaded_offset_map, 
+				&self.preloaded_segment_map) {
 
-		let _ = self.preloaded_offset_map;
-		let _ = self.global_chunkmap;
-		todo!()
+				Ok(mi) => mi,
+				Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+			};
+
+			let object_header = get_affected_object_header(&virtual_mapping_information, &self.passive_object_header)?;
+			let chunk_size = object_header.chunk_size;
+			let mut current_chunk_number = virtual_mapping_information.start_chunk_no;
+			let mut inner_position = virtual_mapping_information.chunk_offset as usize; // the inner chunk position
+			let mut remaining_offset_length = virtual_mapping_information.length as usize;
+			let compression_algorithm = self.object_header.compression_header.algorithm();
+
+			loop {
+				if read_bytes == buffer.len() {
+					break 'outer;
+				}
+				let segment = match get_segment_of_chunk_no(current_chunk_number, &self.global_chunkmap) {
+					Some(segment_no) => match segments.get_mut(&segment_no) {
+						Some(segment) => segment,
+						None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+					},
+					None => break,
+				};
+				let enc_information = EncryptionInformation::try_from(object_header).ok();
+				let chunk_data = get_chunk_data(
+					segment, 
+					current_chunk_number, 
+					&enc_information, 
+					compression_algorithm, 
+					chunk_size,
+					extract_offset_from_preloaded_chunkmap(preloaded_chunkmap, current_chunk_number))?;
+				let mut should_break = false;
+				let mut cursor = if remaining_offset_length as u64 > chunk_data[inner_position..].len() as u64 {
+					Cursor::new(&chunk_data[inner_position..])
+				} else {
+					should_break = true;
+					Cursor::new(&chunk_data[inner_position..remaining_offset_length])
+				};
+				let read_bytes_at_round = cursor.read(&mut buffer[read_bytes..])?;
+				read_bytes += read_bytes_at_round;
+				remaining_offset_length -= read_bytes_at_round;
+				if should_break {
+					break;
+				}
+				inner_position = 0;
+				current_chunk_number += 1;
+			}
+
+		}
+
+		self.position += read_bytes as u64;
+		Ok(read_bytes)
 	}
+}
+
+fn get_affected_object_header<'a>(
+	virtual_mapping_information: &'a VirtualMappingInformation,
+	passive_object_header: &'a BTreeMap<u64, ObjectHeader>) -> std::io::Result<&'a ObjectHeader> {
+
+	let object_number = virtual_mapping_information.object_number;
+	let object_header = match passive_object_header.get(&virtual_mapping_information.object_number) {
+		Some(header) => header,
+		None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{object_number}"))),
+	};
+	Ok(object_header)
+}
+
+// find the appropriate mapping information.
+fn get_mapping_info<R: Read + Seek>(
+	position: u64,
+	initial_layer_map: &BTreeMap<u64, u64>,
+	initial_layer_segment_map: &BTreeMap<u64, u64>,
+	segments: &mut HashMap<u64, Segment<R>>,
+	preloaded_offset_map: &BTreeMap<u64, u64>,
+	preloaded_segment_map: &BTreeMap<u64, u64>,
+	) -> Result<VirtualMappingInformation> {
+	// try to run the following iteratively instead of recursively (for performance reasons).
+	let mut offset = get_map_value(initial_layer_map, position)?;
+	let mut segment_no = get_map_value(initial_layer_segment_map, position)?;
+
+	// checks if the preloaded maps are empty and search for the appropriate offset manually.
+	if preloaded_offset_map.is_empty() || preloaded_segment_map.is_empty() {
+		loop {
+			let segment = match segments.get_mut(&segment_no) {
+				Some(segment) => segment,
+				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+			};
+			segment.seek(SeekFrom::Start(offset))?;
+			let virtual_layer = VirtualLayer::decode_directly(segment)?;
+			if virtual_layer.depth > 0 {
+				offset = get_map_value(&virtual_layer.offsetmap, position)?;
+				segment_no = get_map_value(&virtual_layer.offset_segment_map, position)?;
+			} else {
+				offset = match virtual_layer.offsetmap.get(&position) {
+					Some(offset) => *offset,
+					None => return Err(ZffError::new(ZffErrorKind::ValueNotInMap, position.to_string())),
+				};
+				segment_no = match virtual_layer.offset_segment_map.get(&position) {
+					Some(offset) => *offset,
+					None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+				};
+				break;
+			}
+		}
+	} else {
+		offset = get_map_value(preloaded_offset_map, position)?;
+		segment_no = get_map_value(preloaded_segment_map, position)?;
+	}
+	let segment = match segments.get_mut(&segment_no) {
+		Some(segment) => segment,
+		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+	};
+	segment.seek(SeekFrom::Start(offset))?;
+	VirtualMappingInformation::decode_directly(segment)
 }
 
 impl Seek for ZffObjectReaderVirtual {
@@ -719,4 +848,11 @@ impl FileMetadata {
 			hash_header: Some(filefooter.hash_header().clone()),
 		}
 	}
+}
+
+fn get_map_value(map: &BTreeMap<u64, u64>, offset: u64) -> std::io::Result<u64> {
+    match map.range(..=offset).rev().next() {
+        Some((_, &v)) => Ok(v),
+        None => Err(std::io::Error::new(ErrorKind::NotFound, offset.to_string())),
+    }
 }
