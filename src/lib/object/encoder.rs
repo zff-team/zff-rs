@@ -1,7 +1,7 @@
 // - STD
-use std::path::Path;
 use std::io::{Read};
-use std::path::{PathBuf};
+use std::path::{PathBuf, Path};
+use std::fs::File;
 use std::collections::{HashMap};
 use std::time::{SystemTime};
 
@@ -344,7 +344,7 @@ pub struct LogicalObjectEncoder {
 	/// The appropriate original object header
 	obj_header: ObjectHeader,
 	//encoded_header_remaining_bytes: usize,
-	files: Vec<(Box<dyn Read>, FileHeader)>,
+	files: Vec<(PathBuf, FileHeader)>,
 	current_file_encoder: Option<FileEncoder>,
 	current_file_header_read: bool,
 	current_file_number: u64,
@@ -391,7 +391,7 @@ impl LogicalObjectEncoder {
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		obj_header: ObjectHeader,
-		files: Vec<(Box<dyn Read>, FileHeader)>,
+		files: Vec<(PathBuf, FileHeader)>,
 		root_dir_filenumbers: Vec<u64>,
 		hash_types: Vec<HashType>,
 		signing_key_bytes: Option<Vec<u8>>,
@@ -411,10 +411,12 @@ impl LogicalObjectEncoder {
 	    };
 
 		let mut files = files;
-		let (reader, current_file_header) = match files.pop() {
-			Some((file, header)) => (file, header),
+		let (path, current_file_header) = match files.pop() {
+			Some((path, header)) => (path, header),
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
+		//open first file path
+		let reader = File::open(&path)?;
 
 		let current_file_number = current_file_header.file_number;
 		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
@@ -434,7 +436,7 @@ impl LogicalObjectEncoder {
 		let first_file_encoder = Some(FileEncoder::new(
 			current_file_header,
 			obj_header.clone(),
-			reader, 
+			Box::new(reader), 
 			hash_types.clone(), 
 			encryption_information, 
 			current_chunk_number, 
@@ -541,8 +543,8 @@ impl LogicalObjectEncoder {
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
 				
-				let (reader, current_file_header) = match self.files.pop() {
-					Some((file, header)) => (file, header),
+				let (path, current_file_header) = match self.files.pop() {
+					Some((path, header)) => (path, header),
 					None => {
 						// if no files left, the acquisition ends and the date will be written to the object footer.
 						// The appropriate file footer will be returned.
@@ -550,7 +552,9 @@ impl LogicalObjectEncoder {
 						self.current_file_encoder = None;
 						return Ok(data);
 					}
-				};	    
+				};
+				let reader = File::open(&path)?;    
+		     	
 		     	let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).copied();
 
 				self.current_file_number = current_file_header.file_number;
@@ -570,7 +574,7 @@ impl LogicalObjectEncoder {
 				self.current_file_encoder = Some(FileEncoder::new(
 					current_file_header, 
 					self.obj_header.clone(),
-					reader, 
+					Box::new(reader), 
 					self.hash_types.clone(), 
 					encryption_information, 
 					self.current_chunk_number, 

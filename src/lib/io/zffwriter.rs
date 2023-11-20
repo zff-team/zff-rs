@@ -513,9 +513,9 @@ impl<R: Read> ZffWriter<R> {
 		}
 
 		let mut inner_hardlink_map = HashMap::new();
-		let files: Result<Vec<(Box<dyn Read>, FileHeader)>> = files.into_iter()
+		let files: Result<Vec<(PathBuf, FileHeader)>> = files.into_iter()
         .map(|(path, mut file_header)| {
-            let file = File::open(path)?;
+            let file = File::open(&path)?;
             let metadata = file.metadata()?;
 		    #[cfg(target_family = "unix")]
 		    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
@@ -526,8 +526,7 @@ impl<R: Read> ZffWriter<R> {
 					};
 		    	}
 	     	}
-            let file_read: Box<dyn Read> = Box::new(file);
-            Ok((file_read, file_header))
+            Ok((path, file_header))
         })
         .collect();
 
