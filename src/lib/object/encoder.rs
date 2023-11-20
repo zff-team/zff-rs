@@ -361,7 +361,9 @@ pub struct LogicalObjectEncoder {
 
 impl LogicalObjectEncoder {
 	/// Returns the encoded footer for this object.
-	pub fn get_encoded_footer(&self) -> Result<Vec<u8>> {
+	/// Sets the acquisition end timestamp of the object footer to current system time.
+	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
+		self.object_footer.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		if let Some(encryption_key) = &self.encryption_key {
 			let encryption_information = EncryptionInformation {
 				encryption_key: encryption_key.to_vec(),
