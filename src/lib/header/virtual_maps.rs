@@ -29,10 +29,8 @@ use crate::{
 use serde::{
 	Deserialize,
 	Serialize,
-	ser::{Serializer, SerializeStruct},
 };
-#[cfg(feature = "serde")]
-use hex;
+
 
 /// Contains the information of the appropriate virtual mapping.
 /// The counterpart offset has to be stored outside of this structure (in the [VirtualLayer]).

@@ -151,7 +151,7 @@ pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::header::SegmentFooter).
 pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
 /// current footer version for the [MainFooter](crate::header::MainFooter).
-pub const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 1;
+pub const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 2;
 /// current footer version for the [FileFooter](crate::header::FileFooter).
 pub const DEFAULT_FOOTER_VERSION_FILE_FOOTER: u8 = 2;
 

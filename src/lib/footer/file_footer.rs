@@ -26,7 +26,6 @@ use crate::header::{
 // - external
 #[cfg(feature = "serde")]
 use serde::{
-	Deserialize,
 	Serialize,
 };
 

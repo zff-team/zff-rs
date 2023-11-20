@@ -14,6 +14,8 @@ pub mod header;
 pub mod footer;
 /// Contains several stuff to handle zff container (e.g. create, extend or read zff container).
 pub mod io;
+/// Contains some little helper functions
+pub(crate) mod helper;
 mod hashing;
 mod compression;
 mod encryption;

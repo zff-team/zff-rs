@@ -13,6 +13,10 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 };
+
+#[cfg(feature = "serde")]
+use crate::helper::string_to_str;
+
 use crate::{
 	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
 	ENCODING_KEY_CASE_NUMBER,
@@ -25,8 +29,12 @@ use crate::{
 // - external
 #[cfg(feature = "serde")]
 use serde::{
+	ser::{
+		Serialize,
+		Serializer,
+		SerializeStruct,
+	},
 	Deserialize,
-	Serialize,
 };
 
 /// The description header contains all data,
@@ -53,10 +61,25 @@ use serde::{
 /// ```
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct DescriptionHeader {
 	version: u8,
 	identifier_map: HashMap<String, String>
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for DescriptionHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), self.identifier_map.keys().len()+1)?;
+        state.serialize_field("version", &self.version)?;
+        for (key, value) in &self.identifier_map {
+        	//work around lifetime checking (there is maybe a more elegant solution...)
+        	state.serialize_field(string_to_str(key.to_string()), string_to_str(value.to_string()))?;
+        }
+        state.end()
+    }
 }
 
 impl DescriptionHeader {

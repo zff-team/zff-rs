@@ -1,4 +1,5 @@
 // - STD
+use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use std::fmt;
 
@@ -23,17 +24,33 @@ use serde::{
 	ser::{Serializer, SerializeStruct},
 };
 #[cfg(feature = "serde")]
-use base64;
+use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
 #[cfg(feature = "serde")]
 use hex;
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of various footers and contains 0 or more hash values of the dumped data.\
 #[derive(Debug,Clone,Eq,PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct HashHeader {
 	version: u8,
 	hashes: Vec<HashValue>,
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for HashHeader {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), 3)?;
+        state.serialize_field("version", &self.version)?;
+        let mut hashes = HashMap::new();
+        for hashvalue in &self.hashes {
+        	hashes.insert(hashvalue.hash_type.to_string(), hashvalue);
+        }
+        state.serialize_field("hash", &hashes)?;
+        state.end()
+    }
 }
 
 impl HashHeader {
@@ -221,7 +238,7 @@ impl Serialize for HashValue {
         state.serialize_field("hash_type", &self.hash_type.to_string())?;
         state.serialize_field("hash", &hex::encode(&self.hash))?;
         if let Some(signature) = &self.ed25519_signature {
-        	state.serialize_field("ed25519_signature", &base64::encode(signature))?;
+        	state.serialize_field("ed25519_signature", &base64engine.encode(signature))?;
         }
         state.end()
     }

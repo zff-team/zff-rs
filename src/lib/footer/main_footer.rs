@@ -28,14 +28,20 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct MainFooter {
-	version: u8,
-	number_of_segments: u64,
-	object_header: BTreeMap<u64, u64>, // <object number, segment number>
-	object_footer: BTreeMap<u64, u64>, // <object number, segment number>
-	chunk_maps: BTreeMap<u64, u64>, //<highest chunk number, map offset>
-	description_notes: Option<String>,
+	/// version of the footer.
+	pub version: u8,
+	/// the total number of segments for this container
+	pub number_of_segments: u64,
+	/// the segment numbers where the appropriate object header can be found.
+	pub object_header: BTreeMap<u64, u64>, // <object number, segment number>
+	/// the segment numbers where the appropriate object footer can be found.
+	pub object_footer: BTreeMap<u64, u64>, // <object number, segment number>
+	/// the segment numbers where the appropriate chunkmap can be found.
+	pub chunk_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+	/// some optional (globally) description notes for the container.
+	pub description_notes: Option<String>,
 	/// offset in the current segment, where the footer starts.
-	footer_offset: u64,
+	pub footer_offset: u64,
 }
 
 impl MainFooter {
