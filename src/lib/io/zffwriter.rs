@@ -641,8 +641,22 @@ impl<R: Read> ZffWriter<R> {
 					break;
 				}
 			};
-			let current_offset = seek_value + written_bytes;
 			let current_chunk_number = self.current_object_encoder.current_chunk_number();
+
+			// check if the chunkmap is full - this lines are necessary to ensure
+			// the correct file footer offset is set while reading a bunch of empty files.
+			if chunkmap.is_full() {
+				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
+					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
+					segment_footer_len += 16; //append 16 bytes to segment footer len
+				}
+				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
+				chunkmap.flush();
+   			};
+
+   			let current_offset = seek_value + written_bytes;
+
 			let data = match self.current_object_encoder.get_next_data(
 				current_offset, 
 				self.current_segment_no,
@@ -696,8 +710,9 @@ impl<R: Read> ZffWriter<R> {
 					segment_footer_len += 16; //append 16 bytes to segment footer len
 				}
 				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
+
 				chunkmap.flush();
-				chunkmap.add_chunk_entry(current_chunk_number, written_bytes);
+				chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes);
    			};
    			written_bytes += output.write(&data)? as u64;
 		}
