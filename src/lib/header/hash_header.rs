@@ -1,7 +1,9 @@
 // - STD
-use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use std::fmt;
+
+#[cfg(feature = "serde")]
+use std::collections::HashMap;
 
 // - internal
 use crate::{

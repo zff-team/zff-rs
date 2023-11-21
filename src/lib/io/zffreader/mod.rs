@@ -46,6 +46,9 @@ use super::*;
 // - external
 use redb::{Database, ReadableTable};
 
+#[cfg(feature = "log")]
+use log::{debug};
+
 /// Defines the recognized object type (used by the [ZffReader]). 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ObjectType {
@@ -122,6 +125,9 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// This method will **not** initizalize the objects itself! This has to be done by using the
 	/// initialize_object() or initialize_objects_all() methods.
 	pub fn with_reader(reader_vec: Vec<R>) -> Result<Self> {
+		#[cfg(feature = "log")]
+		debug!("Initialize ZffReader with {} segments.", reader_vec.len());
+
 		let mut segments = HashMap::new();
 		let mut main_footer = None;
 
@@ -465,7 +471,7 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				ZffObjectReader::Physical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map),
 				ZffObjectReader::Logical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map),
 				ZffObjectReader::Encrypted(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map); } else { () },
+				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map); },
 			}
 		}
 
@@ -718,8 +724,8 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	segments: &mut HashMap<u64, Segment<R>>,
 	main_footer: &MainFooter,
 	) -> Result<ZffObjectReader> {
-
-
+	#[cfg(feature = "log")]
+	debug!("Initialize unencrypted object reader for object {}", obj_number);
 
 	let header = match segments.get_mut(&header_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),

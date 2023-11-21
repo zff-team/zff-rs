@@ -81,6 +81,7 @@ impl ObjectFooterVirtual {
 		Ok(vec)
 	}
 
+	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
 		u64, //creation_timestamp
 		Vec<u64>, //passive_objects

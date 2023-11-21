@@ -289,6 +289,8 @@ impl ZffObjectReaderLogical {
 		global_chunkmap: BTreeMap<u64, u64>,
 		degree_value: PreloadDegree,
 		) -> Result<Self> {
+		#[cfg(feature = "log")]
+		debug!("Initialize logical object {}", object_header.object_number);
 
 		let enc_info = if let Some(encryption_header) = &object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {
@@ -303,6 +305,9 @@ impl ZffObjectReaderLogical {
 		// reads all file header and appropriate footer and fill the files-map. Sets the File number 1 active.
 		let mut files = HashMap::new();
 		for (filenumber, header_segment_number) in object_footer.file_header_segment_numbers() {
+			#[cfg(feature = "log")]
+			debug!("Initialize file {filenumber}");
+
 			let header_offset = match object_footer.file_header_offsets().get(filenumber) {
 				Some(offset) => offset,
 				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
@@ -314,6 +319,7 @@ impl ZffObjectReaderLogical {
 					Some(offset) => (segment_no, offset),
 				}
 			};
+
 			let fileheader = match segments.get_mut(header_segment_number) {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
 				Some(segment) => {
@@ -326,6 +332,7 @@ impl ZffObjectReaderLogical {
 					}
 				}
 			};
+
 			let filefooter = match segments.get_mut(footer_segment_number) {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
 				Some(segment) => {
@@ -345,6 +352,9 @@ impl ZffObjectReaderLogical {
 			};
 			files.insert(*filenumber, metadata);
 		}
+
+		#[cfg(feature = "log")]
+		debug!("{} files were successfully initialized for logical object {}.", files.len(), object_header.object_number);
 
 		Ok(Self {
 			object_header,
@@ -851,7 +861,7 @@ impl FileMetadata {
 }
 
 fn get_map_value(map: &BTreeMap<u64, u64>, offset: u64) -> std::io::Result<u64> {
-    match map.range(..=offset).rev().next() {
+    match map.range(..=offset).next_back() {
         Some((_, &v)) => Ok(v),
         None => Err(std::io::Error::new(ErrorKind::NotFound, offset.to_string())),
     }

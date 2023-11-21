@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
 use std::path::{PathBuf};
-use std::fs::{File, OpenOptions, remove_file, read_link, read_dir};
+use std::fs::{File, OpenOptions, remove_file, read_link, read_dir, metadata};
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -15,15 +15,7 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	file_extension_next_value,
-	file_extension_previous_value,
-	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
-	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
-	DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
-	DEFAULT_CHUNKMAP_SIZE,
-	FILE_EXTENSION_INITIALIZER,
-	ERROR_MISMATCH_ZFF_VERSION,
-	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
-	ERROR_INVALID_OPTION_ZFFCREATE,
+	file_extension_previous_value
 };
 use crate::{
 	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap, FileHeader},
@@ -34,6 +26,8 @@ use crate::{
 	ValueDecoder,
 	Segment,
 };
+
+use crate::constants::*;
 
 use super::{
 	get_file_header,
@@ -46,6 +40,9 @@ use super::{
 
 // - external
 use ed25519_dalek::{SigningKey};
+
+#[cfg(feature = "log")]
+use log::{error, warn};
 
 /// Defines the output for a [ZffWriter].
 /// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
@@ -119,6 +116,10 @@ impl<R: Read> ZffWriter<R> {
 		hash_types: Vec<HashType>,
 		output: ZffWriterOutput,
 		params: ZffWriterOptionalParameter) -> Result<ZffWriter<R>> {
+
+		// checks if the outputfile is creatable or exists.
+		check_zffwriter_output(&output)?;
+
 		match output {
 			ZffWriterOutput::NewContainer(_) => Self::setup_new_container(
 												physical_objects,
@@ -382,7 +383,6 @@ impl<R: Read> ZffWriter<R> {
 					continue;
 				},
 			};
-
 			//test if file is readable and exists.
 			match File::open(&path) {
 				Ok(_) => (),
@@ -393,7 +393,6 @@ impl<R: Read> ZffWriter<R> {
 					continue;
 				},
 			};
-
 			root_dir_filenumbers.push(current_file_number);
 			if metadata.file_type().is_dir() {
 				directories_to_traversal.push_back((path, parent_file_number, current_file_number));
@@ -417,7 +416,6 @@ impl<R: Read> ZffWriter<R> {
 				files.push((path.clone(), file_header));
 			}
 		}
-
 		// - traverse files in subfolders
 		while let Some((current_dir, dir_parent_file_number, dir_current_file_number)) = directories_to_traversal.pop_front() {
 				let element_iterator = match read_dir(&current_dir) {
@@ -427,7 +425,6 @@ impl<R: Read> ZffWriter<R> {
 					continue;
 				}
 			};
-
 			let metadata = match std::fs::symlink_metadata(&current_dir) {
 				Ok(metadata) => metadata,
 				Err(_) => {
@@ -448,7 +445,6 @@ impl<R: Read> ZffWriter<R> {
 				directory_children.insert(dir_parent_file_number, Vec::new());
 				directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 			};
-
 			parent_file_number = dir_current_file_number;
 			let file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
 				Ok(file_header) => file_header,
@@ -456,9 +452,7 @@ impl<R: Read> ZffWriter<R> {
 			};
 			#[cfg(target_family = "unix")]
 			add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
-			
 			files.push((current_dir.clone(), file_header));
-
 			// files in current folder
 			for inner_element in element_iterator {
 				current_file_number += 1;
@@ -542,6 +536,8 @@ impl<R: Read> ZffWriter<R> {
 			chunk_number)?;
 
 		for file in unaccessable_files {
+			#[cfg(feature = "log")]
+			warn!("{file} will not dumped, due the file is not accessable.");
 			log_obj.add_unaccessable_file(file);
 		}
 		Ok(log_obj)
@@ -644,7 +640,7 @@ impl<R: Read> ZffWriter<R> {
 			let current_chunk_number = self.current_object_encoder.current_chunk_number();
 
 			// check if the chunkmap is full - this lines are necessary to ensure
-			// the correct file footer offset is set while reading a bunch of empty files.
+			// the correct file footer offset is set while e.g. reading a bunch of empty files.
 			if chunkmap.is_full() {
 				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
@@ -702,7 +698,7 @@ impl<R: Read> ZffWriter<R> {
 				},
 			};
 			let mut data_cursor = Cursor::new(&data);
-			if ChunkHeader::check_identifier(&mut data_cursor) && 
+			if ChunkHeader::check_identifier(&mut data_cursor) && // <-- checks if this is a chunk (and not e.g. a file footer or file header)
 			!chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes) {
 				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
 					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
@@ -798,7 +794,6 @@ impl<R: Read> ZffWriter<R> {
 	    	} else {
 	    		File::create(&segment_filename)?
 	    	};
-
 	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map, extend) {
 	    		Ok(written_bytes) => {
 	    			//adds the seek value to the written bytes
@@ -870,4 +865,32 @@ fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter>
 			_ => Err(e)
 		}
 	}
+}
+
+
+fn check_zffwriter_output(output: &ZffWriterOutput) -> Result<()> {
+	match output {
+		ZffWriterOutput::NewContainer(path) => { let mut path = path.clone(); path.set_extension(FIRST_FILE_EXTENSION); return file_exists_or_creatable(&path) },
+		ZffWriterOutput::ExtendContainer(path_vec) => {
+			for path in path_vec {
+				file_exists_or_creatable(path)?;
+			}
+		},
+	}
+	Ok(())
+}
+
+fn file_exists_or_creatable(path: &PathBuf) -> Result<()> {
+    // Check if the file already exists
+    if metadata(path).is_ok() {
+    	return Ok(())
+    }
+
+    // If the file doesn't exist, attempt to create it and check if the operation is successful
+    if let Err(e) = File::create(path) {
+    	#[cfg(feature = "log")]
+    	error!("{ERROR_ZFFWRITER_OPEN_OUTPUTFILE}{}", path.display());
+    	return Err(e.into());
+    }
+    Ok(())
 }

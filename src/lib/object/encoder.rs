@@ -356,6 +356,7 @@ pub struct LogicalObjectEncoder {
 	hardlink_map: HashMap<u64, u64>, //<filenumber, filenumber of hardlink>
 	directory_children: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
+	empty_file_eof: bool,
 	unaccessable_files: Vec<PathBuf>
 }
 
@@ -363,7 +364,8 @@ impl LogicalObjectEncoder {
 	/// Returns the encoded footer for this object.
 	/// Sets the acquisition end timestamp of the object footer to current system time.
 	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
-		self.object_footer.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+		let systemtime = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+		self.object_footer.set_acquisition_end(systemtime);
 		if let Some(encryption_key) = &self.encryption_key {
 			let encryption_information = EncryptionInformation {
 				encryption_key: encryption_key.to_vec(),
@@ -465,6 +467,7 @@ impl LogicalObjectEncoder {
 			hardlink_map,
 			directory_children,
 			object_footer,
+			empty_file_eof: false,
 			unaccessable_files: Vec::new(),
 		})
 	}
@@ -514,30 +517,35 @@ impl LogicalObjectEncoder {
 					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
 					return Ok(file_encoder.get_encoded_header());
 				}
-
-				let mut current_offset = current_offset;
-
+				
 				let mut data = Vec::new();
 				// return next chunk
-				match file_encoder.get_next_chunk(deduplication_map) {
-					Ok(data) => {
-						self.current_chunk_number += 1;
-						return Ok(data);
-					},
-					Err(e) => match e.get_kind() {
-						ZffErrorKind::EmptyFile(empty_file_data) => {
-							// increment the current chunk number as we write a empty chunk as placeholder
+				if !self.empty_file_eof {
+					match file_encoder.get_next_chunk(deduplication_map) {
+						Ok(data) => {
 							self.current_chunk_number += 1;
-							// append "empty" placeholder chunk (header) to the bytes which will be returned
-							data.append(&mut empty_file_data.clone());
-							// re-calculate the "current_offset" (append the bytes from the placeholder chunk)
-							current_offset += data.len() as u64;
+							return Ok(data);
 						},
-						ZffErrorKind::ReadEOF => (),
-						ZffErrorKind::NotAvailableForFileType => (),
-						_ => return Err(e)
-					}
+						Err(e) => match e.get_kind() {
+							ZffErrorKind::EmptyFile(empty_file_data) => {
+								// increment the current chunk number as we write a empty chunk as placeholder
+								self.current_chunk_number += 1;
+								// append "empty" placeholder chunk (header) to the bytes which will be returned
+								data.append(&mut empty_file_data.clone());
+								// re-calculate the "current_offset" (append the bytes from the placeholder chunk)
+								//current_offset += data.len() as u64;
+								self.empty_file_eof = true;
+								return Ok(data);
+							},
+							ZffErrorKind::ReadEOF => (),
+							ZffErrorKind::NotAvailableForFileType => (),
+							_ => return Err(e)
+						}
+					};
+				} else {
+					self.empty_file_eof = false;
 				};
+	
 
 				//return file footer, set next file_encoder
 				data.append(&mut file_encoder.get_encoded_footer()?);
@@ -555,7 +563,7 @@ impl LogicalObjectEncoder {
 						return Ok(data);
 					}
 				};
-				let reader = File::open(&path)?;    
+				let reader = File::open(path)?;    
 		     	
 		     	let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).copied();
 

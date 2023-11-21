@@ -91,6 +91,9 @@ pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable pos
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
 
+#[cfg(feature = "log")]
+pub(crate) const ERROR_ZFFWRITER_OPEN_OUTPUTFILE: &str = "Error while trying to open or create output file: ";
+
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
@@ -109,8 +112,10 @@ pub const ED25519_DALEK_SIGNATURE_LEN: usize = SIGNATURE_LENGTH;
 //ZFF File extension
 /// the start value for file extensions. a file-extension always starts with a 'z', followed by the segment number (e.g. "z01", "z02", ..., "z99", "z100", ...).
 pub const FILE_EXTENSION_START: char = 'z';
-/// the file extension for the first segment (which contains the main header also).
+/// Initializer to count the file extension numbers.
 pub const FILE_EXTENSION_INITIALIZER: &str = "z00";
+/// the file extension for the first segment.
+pub const FIRST_FILE_EXTENSION: &str = "z01";
 
 // default versions
 /// current header version for the [ChunkHeader](crate::header::ChunkHeader).

@@ -54,7 +54,7 @@ log = { version = "0.4.6", optional = true }
 hex = { version = "0.4.3", optional = true }
 
 [features]
-default = ["serde"]
+default = []
 serde = ["dep:serde", "dep:hex"]
 log = ["dep:log", "dep:hex"]
 
