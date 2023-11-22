@@ -1,6 +1,6 @@
 // - STD
-use std::io::{Read};
-use std::path::{PathBuf, Path};
+use std::io::{Read, Cursor};
+use std::path::{PathBuf};
 use std::fs::File;
 use std::collections::{HashMap};
 use std::time::{SystemTime};
@@ -357,7 +357,6 @@ pub struct LogicalObjectEncoder {
 	directory_children: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
 	empty_file_eof: bool,
-	unaccessable_files: Vec<PathBuf>
 }
 
 impl LogicalObjectEncoder {
@@ -381,14 +380,6 @@ impl LogicalObjectEncoder {
 	/// Returns the current chunk number.
 	pub fn object_header(&self) -> &ObjectHeader {
 		&self.obj_header
-	}
-
-
-	pub(crate) fn add_unaccessable_file<F>(&mut self, file_path: F)
-	where
-		F: AsRef<Path>
-	{
-		self.unaccessable_files.push(file_path.as_ref().to_path_buf())
 	}
 
 	/// Returns a new [LogicalObjectEncoder] by the given values.
@@ -419,8 +410,11 @@ impl LogicalObjectEncoder {
 			Some((path, header)) => (path, header),
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
-		//open first file path
-		let reader = File::open(&path)?;
+		//open first file path - if the path is not accessable, create an empty reader.
+		let reader = match File::open(path) {
+			Ok(reader) => Box::new(reader),
+			Err(_) => create_empty_reader()
+		};
 
 		let current_file_number = current_file_header.file_number;
 		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
@@ -468,7 +462,6 @@ impl LogicalObjectEncoder {
 			directory_children,
 			object_footer,
 			empty_file_eof: false,
-			unaccessable_files: Vec::new(),
 		})
 	}
 
@@ -563,7 +556,11 @@ impl LogicalObjectEncoder {
 						return Ok(data);
 					}
 				};
-				let reader = File::open(path)?;    
+
+				let reader = match File::open(path) {
+					Ok(reader) => Box::new(reader),
+					Err(_) => create_empty_reader()
+				};
 		     	
 		     	let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).copied();
 
@@ -584,7 +581,7 @@ impl LogicalObjectEncoder {
 				self.current_file_encoder = Some(FileEncoder::new(
 					current_file_header, 
 					self.obj_header.clone(),
-					Box::new(reader), 
+					reader, 
 					self.hash_types.clone(), 
 					encryption_information, 
 					self.current_chunk_number, 
@@ -607,3 +604,8 @@ impl LogicalObjectEncoder {
 
 }
 
+fn create_empty_reader() -> Box<dyn Read> {
+	let buffer = Vec::<u8>::new();
+	let cursor = Cursor::new(buffer);
+	return Box::new(cursor);
+}

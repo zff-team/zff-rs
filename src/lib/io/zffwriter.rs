@@ -42,7 +42,7 @@ use super::{
 use ed25519_dalek::{SigningKey};
 
 #[cfg(feature = "log")]
-use log::{error, warn};
+use log::{error, warn, debug};
 
 /// Defines the output for a [ZffWriter].
 /// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
@@ -366,7 +366,6 @@ impl<R: Read> ZffWriter<R> {
 		let mut current_file_number = 0;
 		let mut parent_file_number = 0;
 		let mut hardlink_map = HashMap::new();
-		let mut unaccessable_files = Vec::new();
 		let mut directories_to_traversal = VecDeque::new(); // <(path, parent_file_number, current_file_number)>
 		let mut files = Vec::new();
 		let mut symlink_real_paths = HashMap::new();
@@ -376,38 +375,49 @@ impl<R: Read> ZffWriter<R> {
 		//files in virtual root folder
 		for path in input_files {
 			current_file_number += 1;
+
+			#[allow(unused_variables)]
 			let metadata = match std::fs::symlink_metadata(&path) {
 				Ok(metadata) => metadata,
-				Err(_) => {
-					unaccessable_files.push(path.to_string_lossy().to_string());
+				Err(e) => {
+					#[cfg(feature = "log")]
+					warn!("The metadata of the file {} can't be read. This file will be completly ignored.", path.display());
+					#[cfg(feature = "log")]
+					debug!("{e}");
 					continue;
 				},
 			};
-			//test if file is readable and exists.
-			match File::open(&path) {
-				Ok(_) => (),
-				Err(_) => {
-					if !metadata.is_symlink() {
-						unaccessable_files.push(path.to_string_lossy().to_string());
-					};
-					continue;
-				},
-			};
+
 			root_dir_filenumbers.push(current_file_number);
 			if metadata.file_type().is_dir() {
 				directories_to_traversal.push_back((path, parent_file_number, current_file_number));
 			} else {
 				if metadata.file_type().is_symlink() {
-					// the error case should never reached, we have already checked that the path exists
-					// and is a symbolic link.
+					// the error case should not reached, but if, then the target can't be read (and the file is "empty").
 					match read_link(&path) {
 						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
 				}
-				let file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
+				let mut file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
 					Ok(file_header) => file_header,
 					Err(_) => continue,
+				};
+
+				//test if file is readable and exists.
+				// allow unused variables if the cfg feature log is not set.
+				#[allow(unused_variables)]
+				match File::open(&path) {
+					Ok(_) => (),
+					Err(e) => {
+						if !metadata.is_symlink() {
+							#[cfg(feature = "log")]
+							warn!("The content of the file {} can't be read, due the following error: {e}.\
+								The file will be stored as an empty file.", path.display());
+							// set the "ua" tag and the full path in file metadata.
+							file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.to_string_lossy().to_string());
+						};
+					},
 				};
 
 				#[cfg(target_family = "unix")]
@@ -418,27 +428,48 @@ impl<R: Read> ZffWriter<R> {
 		}
 		// - traverse files in subfolders
 		while let Some((current_dir, dir_parent_file_number, dir_current_file_number)) = directories_to_traversal.pop_front() {
-				let element_iterator = match read_dir(&current_dir) {
+			#[allow(unused_variables)]
+			let metadata = match std::fs::symlink_metadata(&current_dir) {
+				Ok(metadata) => metadata,
+				Err(e) => {
+					#[cfg(feature = "log")]
+					warn!("The metadata of the file {} can't be read. This file will be completly ignored.", current_dir.display());
+					#[cfg(feature = "log")]
+					debug!("{e}");
+					continue;
+				},
+			};
+
+			// creates an iterator to iterate over all files in the appropriate directory
+			// if the directory can not be read e.g. due a permission error, the metadata
+			// of the directory will be stored in the container as an empty directory.
+			#[allow(unused_variables)]
+			let element_iterator = match read_dir(&current_dir) {
 				Ok(iterator) => iterator,
-				Err(_) => {
-					unaccessable_files.push(current_dir.to_string_lossy().to_string());
+				Err(e) => {
+					// if the directory is not readable, we should continue but read the metadata of the directory.
+					#[cfg(feature = "log")]
+					warn!("The content of the file {} can't be read, due the following error: {e}.\
+						The file will be stored as an empty file.", current_dir.display());
+					if let Some(files_vec) = directory_children.get_mut(&dir_parent_file_number) {
+						files_vec.push(dir_current_file_number);
+					} else {
+						directory_children.insert(dir_parent_file_number, Vec::new());
+						directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
+					};
+					let mut file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
+						Ok(file_header) => file_header,
+						Err(_) => continue,
+					};
+					file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.to_string_lossy().to_string());
+					files.push((current_dir.clone(), file_header));
+
+					#[cfg(target_family = "unix")]
+					add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
 					continue;
 				}
 			};
-			let metadata = match std::fs::symlink_metadata(&current_dir) {
-				Ok(metadata) => metadata,
-				Err(_) => {
-					unaccessable_files.push(current_dir.to_string_lossy().to_string());
-					continue;
-				},
-			};
-			match File::open(&current_dir) {
-				Ok(_) => (),
-				Err(_) => {
-					unaccessable_files.push(current_dir.to_string_lossy().to_string());
-					continue;
-				},
-			};
+
 			if let Some(files_vec) = directory_children.get_mut(&dir_parent_file_number) {
 				files_vec.push(dir_current_file_number);
 			} else {
@@ -453,31 +484,34 @@ impl<R: Read> ZffWriter<R> {
 			#[cfg(target_family = "unix")]
 			add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
 			files.push((current_dir.clone(), file_header));
-			// files in current folder
+
+			// handle files in current folder
 			for inner_element in element_iterator {
-				current_file_number += 1;
+				#[allow(unused_variables)]
 				let inner_element = match inner_element {
 					Ok(element) => element,
 					Err(e) => {
-						unaccessable_files.push(e.to_string());
+						// not sure if this can be reached, as we checked a few things before.
+						#[cfg(feature = "log")]
+						debug!("Error while trying to unwrap the inner element of the element iterator of {}: {e}.", current_dir.display());
 						continue;
 					}
 				};
 
-				let metadata = match std::fs::symlink_metadata(inner_element.path()) {
+				#[allow(unused_variables)]
+				let metadata = match std::fs::symlink_metadata(&inner_element.path()) {
 					Ok(metadata) => metadata,
-					Err(_) => {
-						unaccessable_files.push(current_dir.to_string_lossy().to_string());
+					Err(e) => {
+						#[cfg(feature = "log")]
+						warn!("The metadata of the file {:?} can't be read. This file will be completly ignored.", inner_element);
+						#[cfg(feature = "log")]
+						debug!("{e}");
 						continue;
 					},
 				};
-				match File::open(inner_element.path()) {
-					Ok(_) => (),
-					Err(_) => {
-						unaccessable_files.push(inner_element.path().to_string_lossy().to_string());
-						continue;
-					},
-				};
+
+				current_file_number += 1;
+
 				if metadata.file_type().is_dir() {
 					directories_to_traversal.push_back((inner_element.path(), parent_file_number, current_file_number));
 				} else {
@@ -493,9 +527,23 @@ impl<R: Read> ZffWriter<R> {
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
 					let path = inner_element.path().clone();
-					let file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
+					let mut file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
+					};
+
+					//test if file is readable and exists.
+					// allow unused variables if the cfg feature log is not set.
+					#[allow(unused_variables)]
+					match File::open(&inner_element.path()) {
+						Ok(_) => (),
+						Err(e) => {
+							#[cfg(feature = "log")]
+							warn!("The content of the file {} can't be read, due the following error: {e}.\
+								The file will be stored as an empty file.", inner_element.path().display());
+							// set the "ua" tag and the full path in file metadata.
+							file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.to_string_lossy().to_string());
+						},
 					};
 					
 					#[cfg(target_family = "unix")]
@@ -509,8 +557,7 @@ impl<R: Read> ZffWriter<R> {
 		let mut inner_hardlink_map = HashMap::new();
 		let files: Result<Vec<(PathBuf, FileHeader)>> = files.into_iter()
         .map(|(path, mut file_header)| {
-            let file = File::open(&path)?;
-            let metadata = file.metadata()?;
+            let metadata = metadata(&path)?;
 		    #[cfg(target_family = "unix")]
 		    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
 	    		if let Some(fno) = inner_map.get(&metadata.ino()) {
@@ -524,7 +571,7 @@ impl<R: Read> ZffWriter<R> {
         })
         .collect();
 
-		let mut log_obj = LogicalObjectEncoder::new(
+		let log_obj = LogicalObjectEncoder::new(
 			logical_object_header,
 			files?,
 			root_dir_filenumbers,
@@ -534,12 +581,6 @@ impl<R: Read> ZffWriter<R> {
 			inner_hardlink_map,
 			directory_children,
 			chunk_number)?;
-
-		for file in unaccessable_files {
-			#[cfg(feature = "log")]
-			warn!("{file} will not dumped, due the file is not accessable.");
-			log_obj.add_unaccessable_file(file);
-		}
 		Ok(log_obj)
 	}
 

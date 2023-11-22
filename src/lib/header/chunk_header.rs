@@ -173,6 +173,9 @@ impl HeaderCoding for ChunkHeader {
 		if self.flags.encryption {
 			flags += ENCRYPTION_FLAG_VALUE;
 		}
+		if self.flags.empty_file {
+			flags += EMPTY_FILE_FLAG_VALUE;
+		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
 		
@@ -305,6 +308,9 @@ impl HeaderCoding for EncryptedChunkHeader {
 		}
 		if self.flags.encryption {
 			flags += ENCRYPTION_FLAG_VALUE;
+		}
+		if self.flags.empty_file {
+			flags += EMPTY_FILE_FLAG_VALUE;
 		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
