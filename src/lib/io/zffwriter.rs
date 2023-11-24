@@ -34,15 +34,13 @@ use super::{
 	ObjectEncoderInformation,
 };
 #[cfg(target_family = "unix")]
-use super::{
-	add_to_hardlink_map,
-};
+use super::*;
 
 // - external
 use ed25519_dalek::{SigningKey};
 
 #[cfg(feature = "log")]
-use log::{error, warn, debug};
+use log::{error, warn, debug, info};
 
 /// Defines the output for a [ZffWriter].
 /// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
@@ -341,6 +339,10 @@ impl<R: Read> ZffWriter<R> {
 		chunk_number: u64,
 		object_encoder: &mut Vec<ObjectEncoderInformation<R>>) -> Result<()> {
 		for (logical_object_header, input_files) in logical_objects {
+			#[cfg(feature = "log")]
+			info!("Collecting files and folders for logical object {} using following paths: {:?}",
+				logical_object_header.object_number, input_files);
+
 			let lobj = Self::setup_logical_object(
 				logical_object_header,
 				input_files,
@@ -404,6 +406,15 @@ impl<R: Read> ZffWriter<R> {
 					Err(_) => continue,
 				};
 
+				// check acls on unix systems
+				#[cfg(target_family = "unix")]
+				if let Ok(acl) = PosixACL::read_acl(&path) {
+					add_posix_acls_to_metadata_ext(
+						&mut file_header.metadata_ext, 
+						&acl, 
+						PosixACL::read_default_acl(&path).ok().as_ref());
+				}
+
 				//test if file is readable and exists.
 				// allow unused variables if the cfg feature log is not set.
 				#[allow(unused_variables)]
@@ -461,6 +472,15 @@ impl<R: Read> ZffWriter<R> {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
 					};
+					// check acls on unix systems
+					#[cfg(target_family = "unix")]
+					if let Ok(acl) = PosixACL::read_acl(&current_dir) {
+						add_posix_acls_to_metadata_ext(
+							&mut file_header.metadata_ext, 
+							&acl, 
+							PosixACL::read_default_acl(&current_dir).ok().as_ref());
+					}
+
 					file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.to_string_lossy().to_string());
 					files.push((current_dir.clone(), file_header));
 
@@ -477,10 +497,19 @@ impl<R: Read> ZffWriter<R> {
 				directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 			};
 			parent_file_number = dir_current_file_number;
-			let file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
+			let mut file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
 				Ok(file_header) => file_header,
 				Err(_) => continue,
 			};
+
+			#[cfg(target_family = "unix")]
+			if let Ok(acl) = PosixACL::read_acl(&current_dir) {
+				add_posix_acls_to_metadata_ext(
+					&mut file_header.metadata_ext, 
+					&acl, 
+					PosixACL::read_default_acl(&current_dir).ok().as_ref());
+			}
+
 			#[cfg(target_family = "unix")]
 			add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
 			files.push((current_dir.clone(), file_header));
@@ -531,6 +560,14 @@ impl<R: Read> ZffWriter<R> {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
 					};
+
+					#[cfg(target_family = "unix")]
+					if let Ok(acl) = PosixACL::read_acl(&path) {
+						add_posix_acls_to_metadata_ext(
+							&mut file_header.metadata_ext, 
+							&acl, 
+							PosixACL::read_default_acl(&path).ok().as_ref());
+					}
 
 					//test if file is readable and exists.
 					// allow unused variables if the cfg feature log is not set.
@@ -645,8 +682,11 @@ impl<R: Read> ZffWriter<R> {
 		
 		//write the object header
 		if !self.current_object_encoder.written_object_header {
-			self.object_header_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
-			segment_footer.add_object_header_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
+			let object_number = self.current_object_encoder.obj_number();
+			self.object_header_segment_numbers.insert(object_number, self.current_segment_no);
+			segment_footer.add_object_header_offset(object_number, seek_value + written_bytes);
+			#[cfg(feature = "log")]
+			debug!("Writing object {object_number}");
 			written_bytes += output.write(&self.current_object_encoder.get_encoded_header())? as u64;
 			self.current_object_encoder.written_object_header = true;
 		};
@@ -837,6 +877,8 @@ impl<R: Read> ZffWriter<R> {
 	    	};
 	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map, extend) {
 	    		Ok(written_bytes) => {
+	    			#[cfg(feature = "log")]
+					info!("Segment {} was written successfully.", segment_filename.display());
 	    			//adds the seek value to the written bytes
 	    			extend = false;
 	    			current_offset = seek_value + written_bytes;

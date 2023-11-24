@@ -200,3 +200,7 @@ pub const PRELOADED_CHUNK_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition
 // - Encryption parameters
 pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes
 pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_256: usize = 32; // in bytes
+
+// Unix ACLs
+pub(crate) const ACL_PREFIX: &str = "acl";
+pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";

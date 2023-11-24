@@ -25,7 +25,8 @@ use crate::{
     ZffError,
     ZffErrorKind,
     ObjectEncoder,
-    CompressionAlgorithm
+    CompressionAlgorithm,
+    constants::*,
 };
 
 #[cfg(target_family = "unix")]
@@ -50,6 +51,9 @@ use crate::{
 // - external
 use time::{OffsetDateTime};
 use crc32fast::{Hasher as CRC32Hasher};
+
+#[cfg(target_family = "unix")]
+use posix_acl::{PosixACL, Qualifier, ACLEntry};
 
 // returns the buffer with the read bytes and the number of bytes which was read.
 pub(crate) fn buffer_chunk<R>(
@@ -266,7 +270,11 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
     timestamps
 }
 
-fn get_file_header(metadata: &Metadata, path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+fn get_file_header(
+    metadata: &Metadata,
+    path: &Path,
+    current_file_number: u64,
+    parent_file_number: u64) -> Result<FileHeader> {
     let filetype = if metadata.file_type().is_dir() {
         FileType::Directory
     } else if metadata.file_type().is_file() {
@@ -291,6 +299,22 @@ fn get_file_header(metadata: &Metadata, path: &Path, current_file_number: u64, p
                     parent_file_number,
                     metadata_ext);
     Ok(file_header)
+}
+
+#[cfg(target_family = "unix")]
+pub(crate) fn add_posix_acls_to_metadata_ext(metadata_ext_map: &mut HashMap<String, String>, acl: &PosixACL, default_acls: Option<&PosixACL>) {
+    for entry in acl.entries() {
+        if let Some((key, value)) = gen_acl_key_value(false, &entry) {
+            metadata_ext_map.insert(key, value);
+        }
+    };
+    if let Some(default_acls) = default_acls {
+        for entry in default_acls.entries() {
+            if let Some((key, value)) = gen_acl_key_value(false, &entry) {
+                metadata_ext_map.insert(key, value);
+            }
+        };
+    }
 }
 
 // returns ...
@@ -328,4 +352,45 @@ pub(crate) fn check_same_byte(vec: &[u8]) -> bool {
     } else {
         true // Empty vector is considered to have the same byte on every position
     }
+}
+
+#[cfg(target_family = "unix")]
+fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)> {
+    let key = match entry.qual {
+        Qualifier::User(uid) => gen_acl_key_uid(default, uid),
+        Qualifier::Group(gid) => gen_acl_key_gid(default, gid),
+        Qualifier::Mask => gen_acl_mask(default),
+        _ => return None, // ignoring UserObj, GroupObj and Other while this is always figured by the "mode" key
+    };
+    return Some((key, entry.perm.to_string()))
+}
+
+#[cfg(target_family = "unix")]
+fn gen_acl_key_uid(default: bool, uid: u32) -> String {
+    let start = if default {
+        ACL_PREFIX
+    } else {
+        ACL_DEFAULT_PREFIX
+    };
+    format!("{start}:user:{uid}")
+}
+
+#[cfg(target_family = "unix")]
+fn gen_acl_key_gid(default: bool, gid: u32) -> String {
+    let start = if default {
+        ACL_PREFIX
+    } else {
+        ACL_DEFAULT_PREFIX
+    };
+    format!("{start}:group:{gid}")
+}
+
+#[cfg(target_family = "unix")]
+fn gen_acl_mask(default: bool) -> String {
+    let start = if default {
+        ACL_PREFIX
+    } else {
+        ACL_DEFAULT_PREFIX
+    };
+    format!("{start}:mask")
 }
