@@ -38,21 +38,21 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct FileFooter {
 	/// the version of the [FileFooter].
-	version: u8,
+	pub version: u8,
 	/// the appropriate file number.
-	file_number: u64,
+	pub file_number: u64,
 	/// the acquisition start time for this file.
-	acquisition_start: u64,
+	pub acquisition_start: u64,
 	/// the acquisition end/finish time for this file.
-	acquisition_end: u64,
+	pub acquisition_end: u64,
 	/// The appropriate hash header for this file.
-	hash_header: HashHeader,
+	pub hash_header: HashHeader,
 	/// the first chunk number which was used for this file.
-	first_chunk_number: u64,
+	pub first_chunk_number: u64,
 	/// The full number of chunks for this file.
-	number_of_chunks: u64,
+	pub number_of_chunks: u64,
 	/// the original (uncompressed & unencrypted) length of the file.
-	length_of_data: u64,
+	pub length_of_data: u64,
 }
 
 impl FileFooter {
