@@ -709,7 +709,7 @@ impl<R: Read> ZffWriter<R> {
 					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 				} else {
 					//finish segment chunkmap
-					if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+					if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
 						main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 						segment_footer.chunk_map_table.insert(*chunk_no, written_bytes + seek_value);
 						written_bytes += output.write(&chunkmap.encode_directly())? as u64;
@@ -723,7 +723,7 @@ impl<R: Read> ZffWriter<R> {
 			// check if the chunkmap is full - this lines are necessary to ensure
 			// the correct file footer offset is set while e.g. reading a bunch of empty files.
 			if chunkmap.is_full() {
-				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+				if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
 					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
 					segment_footer_len += 16; //append 16 bytes to segment footer len
@@ -745,7 +745,7 @@ impl<R: Read> ZffWriter<R> {
 							return Err(e);
 						} else {
 							// flush the chunkmap 
-							if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+							if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
 								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 								segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
 								segment_footer_len += 16; //append 16 bytes to segment footer len
@@ -781,7 +781,7 @@ impl<R: Read> ZffWriter<R> {
 			let mut data_cursor = Cursor::new(&data);
 			if ChunkHeader::check_identifier(&mut data_cursor) && // <-- checks if this is a chunk (and not e.g. a file footer or file header)
 			!chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes) {
-				if let Some(chunk_no) = chunkmap.chunkmap.keys().max() {
+				if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
 					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
 					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
 					segment_footer_len += 16; //append 16 bytes to segment footer len

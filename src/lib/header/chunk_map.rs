@@ -31,40 +31,51 @@ use serde::{
 #[cfg(feature = "serde")]
 use hex;
 
+/// The Chunkmap stores the information where the each appropriate chunk could be found.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub(crate) struct ChunkMap {
-	pub(crate) chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
+pub struct ChunkMap {
+	chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
 	target_size: usize,
 }
 
 impl ChunkMap {
 	/// returns a new [ChunkMap] with the given values.
-	pub(crate) fn new(chunkmap: BTreeMap<u64, u64>) -> Self {
+	pub fn with_data(chunkmap: BTreeMap<u64, u64>) -> Self {
 		Self {
 			chunkmap,
 			target_size: 0,
 		}
 	}
 
-	pub(crate) fn current_size(&self) -> usize {
+	/// Returns a reference to the inner map
+	pub fn chunkmap(&self) -> &BTreeMap<u64, u64> {
+		&self.chunkmap
+	}
+
+	/// The encoded size of this map.
+	pub fn current_size(&self) -> usize {
 		self.chunkmap.len() * 16 + 8
 	}
 
 	/// returns a new, empty [ChunkMap] with the given values.
-	pub(crate) fn new_empty() -> Self {
+	pub fn new_empty() -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),
 			target_size: 0,
 		}
 	}
 
-	pub(crate) fn set_target_size(&mut self, target_size: usize) {
+	/// Reset the target size to the given value.
+	pub fn set_target_size(&mut self, target_size: usize) {
 		self.target_size = target_size
 	}
 
-	pub(crate) fn add_chunk_entry(&mut self, chunk_no: u64, offset: u64) -> bool {
+	/// Tries to add a chunk entry.  
+	/// Returns true, if the chunk no / offset pair was added to the map.  
+	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, offset: u64) -> bool {
 		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
@@ -75,7 +86,8 @@ impl ChunkMap {
 		}
 	}
 
-	pub(crate) fn is_full(&self) -> bool {
+	/// Checks if the map is full (returns true if, returns false if not).
+	pub fn is_full(&self) -> bool {
 		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			true
 		} else {
@@ -83,7 +95,8 @@ impl ChunkMap {
 		}
 	}
 
-	pub(crate) fn flush(&mut self) -> BTreeMap<u64, u64> {
+	/// Returns the inner map and replaces it with an empty map.
+	pub fn flush(&mut self) -> BTreeMap<u64, u64> {
 		std::mem::take(&mut self.chunkmap)
 	}
 }
@@ -114,7 +127,7 @@ impl HeaderCoding for ChunkMap {
 			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
 		};
 		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		Ok(Self::new(chunkmap))
+		Ok(Self::with_data(chunkmap))
 	}
 }
 
