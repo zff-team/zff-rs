@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install acl-deps
-      run: apt-get install acl-dev
+      run: sudo apt-get install acl-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
