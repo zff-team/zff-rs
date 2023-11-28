@@ -386,16 +386,9 @@ impl<R: Read> ZffWriter<R> {
 		for path in input_files {
 			current_file_number += 1;
 
-			#[allow(unused_variables)]
-			let metadata = match std::fs::symlink_metadata(&path) {
+			let metadata = match check_and_get_metadata(&path) {
 				Ok(metadata) => metadata,
-				Err(e) => {
-					#[cfg(feature = "log")]
-					warn!("The metadata of the file {} can't be read. This file will be completly ignored.", path.display());
-					#[cfg(feature = "log")]
-					debug!("{e}");
-					continue;
-				},
+				Err(_) => continue,
 			};
 
 			root_dir_filenumbers.push(current_file_number);
@@ -415,20 +408,7 @@ impl<R: Read> ZffWriter<R> {
 				};
 
 				//test if file is readable and exists.
-				// allow unused variables if the cfg feature log is not set.
-				#[allow(unused_variables)]
-				match File::open(&path) {
-					Ok(_) => (),
-					Err(e) => {
-						if !metadata.is_symlink() {
-							#[cfg(feature = "log")]
-							warn!("The content of the file {} can't be read, due the following error: {e}.\
-								The file will be stored as an empty file.", path.display());
-							// set the "ua" tag and the full path in file metadata.
-							file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.to_string_lossy().to_string());
-						};
-					},
-				};
+				check_file_accessibility(&path, &mut file_header);
 
 				#[cfg(target_family = "unix")]
 				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
@@ -436,66 +416,24 @@ impl<R: Read> ZffWriter<R> {
 				files.push((path.clone(), file_header));
 			}
 		}
+
 		// - traverse files in subfolders
 		while let Some((current_dir, dir_parent_file_number, dir_current_file_number)) = directories_to_traversal.pop_front() {
-			#[allow(unused_variables)]
-			let metadata = match std::fs::symlink_metadata(&current_dir) {
-				Ok(metadata) => metadata,
-				Err(e) => {
-					#[cfg(feature = "log")]
-					warn!("The metadata of the file {} can't be read. This file will be completly ignored.", current_dir.display());
-					#[cfg(feature = "log")]
-					debug!("{e}");
-					continue;
-				},
-			};
-
+			parent_file_number = dir_current_file_number;
 			// creates an iterator to iterate over all files in the appropriate directory
 			// if the directory can not be read e.g. due a permission error, the metadata
 			// of the directory will be stored in the container as an empty directory.
-			#[allow(unused_variables)]
-			let element_iterator = match read_dir(&current_dir) {
+			let element_iterator = match create_iterator(
+				current_dir,
+				&mut hardlink_map,
+				dir_current_file_number,
+				dir_parent_file_number,
+				&mut directory_children,
+				&mut files,
+				) {
 				Ok(iterator) => iterator,
-				Err(e) => {
-					// if the directory is not readable, we should continue but read the metadata of the directory.
-					#[cfg(feature = "log")]
-					warn!("The content of the file {} can't be read, due the following error: {e}.\
-						The file will be stored as an empty file.", current_dir.display());
-					if let Some(files_vec) = directory_children.get_mut(&dir_parent_file_number) {
-						files_vec.push(dir_current_file_number);
-					} else {
-						directory_children.insert(dir_parent_file_number, Vec::new());
-						directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
-					};
-					let mut file_header = match get_file_header(&current_dir, dir_current_file_number, dir_parent_file_number) {
-						Ok(file_header) => file_header,
-						Err(_) => continue,
-					};
-
-					file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.to_string_lossy().to_string());
-					files.push((current_dir.clone(), file_header));
-
-					#[cfg(target_family = "unix")]
-					add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
-					continue;
-				}
-			};
-
-			if let Some(files_vec) = directory_children.get_mut(&dir_parent_file_number) {
-				files_vec.push(dir_current_file_number);
-			} else {
-				directory_children.insert(dir_parent_file_number, Vec::new());
-				directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
-			};
-			parent_file_number = dir_current_file_number;
-			let file_header = match get_file_header(&current_dir, dir_current_file_number, dir_parent_file_number) {
-				Ok(file_header) => file_header,
 				Err(_) => continue,
 			};
-
-			#[cfg(target_family = "unix")]
-			add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
-			files.push((current_dir.clone(), file_header));
 
 			// handle files in current folder
 			for inner_element in element_iterator {
@@ -510,16 +448,9 @@ impl<R: Read> ZffWriter<R> {
 					}
 				};
 
-				#[allow(unused_variables)]
-				let metadata = match std::fs::symlink_metadata(&inner_element.path()) {
+				let metadata = match check_and_get_metadata(&inner_element.path()) {
 					Ok(metadata) => metadata,
-					Err(e) => {
-						#[cfg(feature = "log")]
-						warn!("The metadata of the file {:?} can't be read. This file will be completly ignored.", inner_element);
-						#[cfg(feature = "log")]
-						debug!("{e}");
-						continue;
-					},
+					Err(_) => continue,
 				};
 
 				current_file_number += 1;
@@ -545,18 +476,7 @@ impl<R: Read> ZffWriter<R> {
 					};
 
 					//test if file is readable and exists.
-					// allow unused variables if the cfg feature log is not set.
-					#[allow(unused_variables)]
-					match File::open(&inner_element.path()) {
-						Ok(_) => (),
-						Err(e) => {
-							#[cfg(feature = "log")]
-							warn!("The content of the file {} can't be read, due the following error: {e}.\
-								The file will be stored as an empty file.", inner_element.path().display());
-							// set the "ua" tag and the full path in file metadata.
-							file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.to_string_lossy().to_string());
-						},
-					};
+					check_file_accessibility(&inner_element.path(), &mut file_header);
 					
 					#[cfg(target_family = "unix")]
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
@@ -913,6 +833,83 @@ fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter>
 		}
 	}
 }
+
+#[allow(unused_variables)]
+fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeader) {
+	match File::open(&path) {
+		Ok(_) => (),
+		Err(e) => {
+			#[cfg(feature = "log")]
+			warn!("The content of the file {} can't be read, due the following error: {e}.\
+				The file will be stored as an empty file.", path.display());
+			// set the "ua" tag and the full path in file metadata.
+			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string());
+		},
+	};
+}
+
+fn create_iterator<C: AsRef<Path>>(
+	current_dir: C,
+	hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>,
+	dir_current_file_number: u64,
+	dir_parent_file_number: u64,
+	directory_children: &mut HashMap::<u64, Vec<u64>>,
+	files: &mut Vec<(PathBuf, FileHeader)>,
+	) -> Result<std::fs::ReadDir> {
+	#[allow(unused_variables)]
+	let metadata = match std::fs::symlink_metadata(&current_dir) {
+		Ok(metadata) => metadata,
+		Err(e) => {
+			#[cfg(feature = "log")]
+			warn!("The metadata of the file {} can't be read. This file will be completly ignored.", &current_dir.display());
+			#[cfg(feature = "log")]
+			debug!("{e}");
+			return Err(e.into());
+		},
+	};
+
+	if let Some(files_vec) = directory_children.get_mut(&dir_parent_file_number) {
+		files_vec.push(dir_current_file_number);
+	} else {
+		directory_children.insert(dir_parent_file_number, Vec::new());
+		directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
+	};
+	let mut file_header = match get_file_header(&current_dir.as_ref(), dir_current_file_number, dir_parent_file_number) {
+		Ok(file_header) => file_header,
+		Err(e) => return Err(e),
+	};
+
+	let iterator = match read_dir(&current_dir) {
+		Ok(iterator) => iterator,
+		Err(e) => {
+			// if the directory is not readable, we should continue but read the metadata of the directory.
+			#[cfg(feature = "log")]
+			warn!("The content of the file {} can't be read, due the following error: {e}.\
+				The file will be stored as an empty file.", &current_dir.display());
+			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.as_ref().to_string_lossy().to_string());
+			return Err(e.into());
+		}
+	};
+	#[cfg(target_family = "unix")]
+	add_to_hardlink_map(hardlink_map, &metadata, dir_current_file_number);
+	files.push((current_dir.as_ref().to_path_buf(), file_header));
+	
+	Ok(iterator)
+}
+
+fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
+	match std::fs::symlink_metadata(&path) {
+		Ok(metadata) => Ok(metadata),
+		Err(e) => {
+			#[cfg(feature = "log")]
+			warn!("The metadata of the file {:?} can't be read. This file will be completly ignored.", inner_element);
+			#[cfg(feature = "log")]
+			debug!("{e}");
+			Err(e.into())
+		},
+	}
+}
+
 
 #[cfg(target_family = "unix")]
 fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: &mut Vec<(PathBuf, FileHeader)>) -> Result<HashMap<u64, u64>> {
