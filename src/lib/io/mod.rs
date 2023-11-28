@@ -8,9 +8,11 @@ pub mod zffstreamer;
 
 // - STD
 use std::io::{Read, copy as io_copy};
-use std::fs::{Metadata};
 use std::collections::HashMap;
 use std::path::{Path};
+
+#[cfg(target_family = "unix")]
+use std::fs::{Metadata};
 
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -52,8 +54,9 @@ use crate::{
 use log::{warn};
 
 // - external
-use time::{OffsetDateTime};
 use crc32fast::{Hasher as CRC32Hasher};
+#[cfg(target_family = "unix")]
+use time::{OffsetDateTime};
 #[cfg(target_family = "unix")]
 use posix_acl::{PosixACL, Qualifier, ACLEntry};
 #[cfg(target_family = "unix")]
@@ -204,7 +207,8 @@ impl<R: Read> ObjectEncoderInformation<R> {
 
 
 #[cfg(target_family = "unix")]
-fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
+fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, String>> {
+    let metadata = std::fs::symlink_metadata(path.as_ref())?;
     let mut metadata_ext = HashMap::new();
 
     //dev-id
@@ -219,47 +223,45 @@ fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
     metadata_ext.insert(METADATA_EXT_KEY_GID.into(), metadata.gid().to_string());
 
     // timestamps
-    let timestamps = get_time_from_metadata(metadata);
-    let atime = timestamps.get("atime").unwrap();
-    let mtime = timestamps.get("mtime").unwrap();
-    let ctime = timestamps.get("ctime").unwrap();
-    let btime = timestamps.get("btime").unwrap();
+    let timestamps = get_time_from_metadata(&metadata);
+    let atime = timestamps.get(METADATA_ATIME).unwrap();
+    let mtime = timestamps.get(METADATA_MTIME).unwrap();
+    let ctime = timestamps.get(METADATA_CTIME).unwrap();
+    let btime = timestamps.get(METADATA_BTIME).unwrap();
 
     metadata_ext.insert(METADATA_ATIME.into(), atime.to_string());
     metadata_ext.insert(METADATA_MTIME.into(), mtime.to_string());
     metadata_ext.insert(METADATA_CTIME.into(), ctime.to_string());
     metadata_ext.insert(METADATA_BTIME.into(), btime.to_string());
 
-    metadata_ext
-}
-
-#[cfg(target_family = "unix")]
-fn add_xattr_metadata<P: AsRef<Path>>(metadata_ext_map: &mut HashMap<String, String>, xattrs: XAttrs, path: P) -> Result<()> {
-    for ext_attr in xattrs {
-        let ext_attr = ext_attr.to_string_lossy().to_string();
-        // skip posix acls as we have defined the acl in other ways.
-        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) {
-            continue;
-        }
-        let value = match xattr::get(path.as_ref(), &ext_attr)? {
-            Some(value) => base64engine.encode(value),
-            None => String::new(),
-        };
-        metadata_ext_map.insert(ext_attr, value);
+    // check acls on unix systems
+    #[cfg(target_family = "unix")]
+    if let Ok(acl) = PosixACL::read_acl(path.as_ref()) {
+        metadata_ext.extend(get_posix_acls(&acl, PosixACL::read_default_acl(path.as_ref()).ok().as_ref()));
     }
-    Ok(())
+
+    // check extended attributes on unix systems
+    #[cfg(target_family = "unix")]
+    if let Ok(xattrs) = xattr::list(path.as_ref()) {
+        metadata_ext.extend(get_xattr_metadata(xattrs, path.as_ref())?);
+    }
+
+    Ok(metadata_ext)
 }
 
 #[cfg(target_os = "windows")]
-fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
+fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, String>> {
+    let metadata = std::fs::symlink_metadata(path.as_ref())?;
+
     let mut metadata_ext = HashMap::new();
 
     //dwFileAttributes
     metadata_ext.insert(METADATA_EXT_DW_FILE_ATTRIBUTES.into(), metadata.file_attributes().to_string());
 
-    metadata_ext
+    Ok(metadata_ext)
 }
 
+#[cfg(target_family = "unix")]
 fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
     let mut timestamps = HashMap::new();
 
@@ -292,11 +294,9 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
     timestamps
 }
 
-fn get_file_header(
-    metadata: &Metadata,
-    path: &Path,
-    current_file_number: u64,
-    parent_file_number: u64) -> Result<FileHeader> {
+fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+    let metadata = std::fs::symlink_metadata(&path)?;
+
     let filetype = if metadata.file_type().is_dir() {
         FileType::Directory
     } else if metadata.file_type().is_file() {
@@ -312,19 +312,39 @@ fn get_file_header(
         None => path.to_string_lossy(),
     };
 
-    let metadata_ext = get_metadata_ext(metadata);
+    let metadata_ext = get_metadata_ext(path);
 
     let file_header = FileHeader::new(
                     current_file_number,
                     filetype,
                     filename,
                     parent_file_number,
-                    metadata_ext);
+                    metadata_ext?);
     Ok(file_header)
 }
 
 #[cfg(target_family = "unix")]
-pub(crate) fn add_posix_acls_to_metadata_ext(metadata_ext_map: &mut HashMap<String, String>, acl: &PosixACL, default_acls: Option<&PosixACL>) {
+fn get_xattr_metadata<P: AsRef<Path>>(xattrs: XAttrs, path: P) -> Result<HashMap<String, String>> {
+    let mut metadata_ext_map = HashMap::new();
+    for ext_attr in xattrs {
+        let ext_attr = ext_attr.to_string_lossy().to_string();
+        // skip posix acls as we have defined the acl in other ways.
+        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) {
+            continue;
+        }
+        let value = match xattr::get(path.as_ref(), &ext_attr)? {
+            Some(value) => base64engine.encode(value),
+            None => String::new(),
+        };
+        metadata_ext_map.insert(ext_attr, value);
+    }
+    Ok(metadata_ext_map)
+}
+
+
+#[cfg(target_family = "unix")]
+pub(crate) fn get_posix_acls(acl: &PosixACL, default_acls: Option<&PosixACL>) -> HashMap<String, String> {
+    let mut metadata_ext_map = HashMap::new();
     for entry in acl.entries() {
         if let Some((key, value)) = gen_acl_key_value(false, &entry) {
             metadata_ext_map.insert(key, value);
@@ -337,6 +357,7 @@ pub(crate) fn add_posix_acls_to_metadata_ext(metadata_ext_map: &mut HashMap<Stri
             }
         };
     }
+    metadata_ext_map
 }
 
 // returns ...

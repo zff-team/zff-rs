@@ -18,7 +18,7 @@ use crate::{
 	file_extension_previous_value
 };
 use crate::{
-	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap, FileHeader},
+	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap},
 	footer::{MainFooter, SegmentFooter},
 	ObjectEncoder,
 	PhysicalObjectEncoder,
@@ -29,10 +29,16 @@ use crate::{
 
 use crate::constants::*;
 
+#[cfg(target_family = "unix")]
+use crate::{
+	header::{FileHeader},
+};
+
 use super::{
 	get_file_header,
 	ObjectEncoderInformation,
 };
+
 #[cfg(target_family = "unix")]
 use super::*;
 
@@ -367,12 +373,14 @@ impl<R: Read> ZffWriter<R> {
 
 		let mut current_file_number = 0;
 		let mut parent_file_number = 0;
-		let mut hardlink_map = HashMap::new();
 		let mut directories_to_traversal = VecDeque::new(); // <(path, parent_file_number, current_file_number)>
 		let mut files = Vec::new();
 		let mut symlink_real_paths = HashMap::new();
 		let mut directory_children = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
 		let mut root_dir_filenumbers = Vec::new();
+
+		#[cfg(target_family = "unix")]
+		let mut hardlink_map = HashMap::new();
 
 		//files in virtual root folder
 		for path in input_files {
@@ -401,25 +409,10 @@ impl<R: Read> ZffWriter<R> {
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
 				}
-				let mut file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
+				let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
 					Ok(file_header) => file_header,
 					Err(_) => continue,
 				};
-
-				// check acls on unix systems
-				#[cfg(target_family = "unix")]
-				if let Ok(acl) = PosixACL::read_acl(&path) {
-					add_posix_acls_to_metadata_ext(
-						&mut file_header.metadata_ext, 
-						&acl, 
-						PosixACL::read_default_acl(&path).ok().as_ref());
-				}
-
-				// check extended attributes on unix systems
-				#[cfg(target_family = "unix")]
-				if let Ok(xattrs) = xattr::list(&path) {
-					add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &path)?;
-				}
 
 				//test if file is readable and exists.
 				// allow unused variables if the cfg feature log is not set.
@@ -474,24 +467,10 @@ impl<R: Read> ZffWriter<R> {
 						directory_children.insert(dir_parent_file_number, Vec::new());
 						directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 					};
-					let mut file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
+					let mut file_header = match get_file_header(&current_dir, dir_current_file_number, dir_parent_file_number) {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
 					};
-					// check acls on unix systems
-					#[cfg(target_family = "unix")]
-					if let Ok(acl) = PosixACL::read_acl(&current_dir) {
-						add_posix_acls_to_metadata_ext(
-							&mut file_header.metadata_ext, 
-							&acl, 
-							PosixACL::read_default_acl(&current_dir).ok().as_ref());
-					}
-
-					// check extended attributes on unix systems
-					#[cfg(target_family = "unix")]
-					if let Ok(xattrs) = xattr::list(&current_dir) {
-						add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &current_dir)?;
-					}
 
 					file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.to_string_lossy().to_string());
 					files.push((current_dir.clone(), file_header));
@@ -509,24 +488,10 @@ impl<R: Read> ZffWriter<R> {
 				directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 			};
 			parent_file_number = dir_current_file_number;
-			let mut file_header = match get_file_header(&metadata, &current_dir, dir_current_file_number, dir_parent_file_number) {
+			let file_header = match get_file_header(&current_dir, dir_current_file_number, dir_parent_file_number) {
 				Ok(file_header) => file_header,
 				Err(_) => continue,
 			};
-
-			#[cfg(target_family = "unix")]
-			if let Ok(acl) = PosixACL::read_acl(&current_dir) {
-				add_posix_acls_to_metadata_ext(
-					&mut file_header.metadata_ext, 
-					&acl, 
-					PosixACL::read_default_acl(&current_dir).ok().as_ref());
-			}
-
-			// check extended attributes on unix systems
-			#[cfg(target_family = "unix")]
-			if let Ok(xattrs) = xattr::list(&current_dir) {
-				add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &current_dir)?;
-			}
 
 			#[cfg(target_family = "unix")]
 			add_to_hardlink_map(&mut hardlink_map, &metadata, dir_current_file_number);
@@ -574,24 +539,10 @@ impl<R: Read> ZffWriter<R> {
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
 					let path = inner_element.path().clone();
-					let mut file_header = match get_file_header(&metadata, &path, current_file_number, parent_file_number) {
+					let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
 						Ok(file_header) => file_header,
 						Err(_) => continue,
 					};
-
-					#[cfg(target_family = "unix")]
-					if let Ok(acl) = PosixACL::read_acl(&path) {
-						add_posix_acls_to_metadata_ext(
-							&mut file_header.metadata_ext, 
-							&acl, 
-							PosixACL::read_default_acl(&path).ok().as_ref());
-					}
-
-					// check extended attributes on unix systems
-					#[cfg(target_family = "unix")]
-					if let Ok(xattrs) = xattr::list(&path) {
-						add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &path)?;
-					}
 
 					//test if file is readable and exists.
 					// allow unused variables if the cfg feature log is not set.
@@ -615,31 +566,20 @@ impl<R: Read> ZffWriter<R> {
 			}
 		}
 
-		let mut inner_hardlink_map = HashMap::new();
-		let files: Result<Vec<(PathBuf, FileHeader)>> = files.into_iter()
-        .map(|(path, mut file_header)| {
-            let metadata = metadata(&path)?;
-		    #[cfg(target_family = "unix")]
-		    if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
-	    		if let Some(fno) = inner_map.get(&metadata.ino()) {
-					if *fno != file_header.file_number {
-						file_header.transform_to_hardlink();
-						inner_hardlink_map.insert(file_header.file_number, *fno);
-					};
-		    	}
-	     	}
-            Ok((path, file_header))
-        })
-        .collect();
+		#[cfg(target_family = "unix")]
+		let hardlink_map = transform_hardlink_map(hardlink_map, &mut files)?;
+
+		#[cfg(target_family = "windows")]
+		let hardlink_map = HashMap::new();
 
 		let log_obj = LogicalObjectEncoder::new(
 			logical_object_header,
-			files?,
+			files,
 			root_dir_filenumbers,
 			hash_types.to_owned(),
 			signature_key_bytes.clone(),
 			symlink_real_paths,
-			inner_hardlink_map,
+			hardlink_map,
 			directory_children,
 			chunk_number)?;
 		Ok(log_obj)
@@ -974,6 +914,22 @@ fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter>
 	}
 }
 
+#[cfg(target_family = "unix")]
+fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: &mut Vec<(PathBuf, FileHeader)>) -> Result<HashMap<u64, u64>> {
+	let mut inner_hardlink_map = HashMap::new();
+	for (path, file_header) in files {
+		let metadata = metadata(&path)?;
+		if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
+    		if let Some(fno) = inner_map.get(&metadata.ino()) {
+				if *fno != file_header.file_number {
+					file_header.transform_to_hardlink();
+					inner_hardlink_map.insert(file_header.file_number, *fno);
+				};
+	    	}
+     	}
+	}
+    Ok(inner_hardlink_map)
+}
 
 fn check_zffwriter_output(output: &ZffWriterOutput) -> Result<()> {
 	match output {

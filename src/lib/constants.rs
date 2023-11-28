@@ -202,8 +202,11 @@ pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes
 pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_256: usize = 32; // in bytes
 
 // Unix ACLs
+#[cfg(target_family = "unix")]
 pub(crate) const ACL_PREFIX: &str = "acl";
+#[cfg(target_family = "unix")]
 pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";
 
 // XAttr
+#[cfg(target_family = "unix")]
 pub(crate) const XATTR_ATTRNAME_POSIX_ACL: &str = "system.posix_acl_access";
