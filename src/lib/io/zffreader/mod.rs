@@ -566,15 +566,15 @@ fn extract_recommended_metadata(fileheader: &FileHeader) -> HashMap<String, Stri
 		metadata.insert(METADATA_BTIME.to_string(), value.to_string());
 	}
 
-	#[cfg(target_os = "linux")]
+	#[cfg(target_family = "unix")]
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_UID) {
 		metadata.insert(METADATA_EXT_KEY_UID.to_string(), value.to_string());
 	}
-	#[cfg(target_os = "linux")]
+	#[cfg(target_family = "unix")]
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_GID) {
 		metadata.insert(METADATA_EXT_KEY_GID.to_string(), value.to_string());
 	}
-	#[cfg(target_os = "linux")]
+	#[cfg(target_family = "unix")]
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_MODE) {
 		metadata.insert(METADATA_EXT_KEY_MODE.to_string(), value.to_string());
 	}
