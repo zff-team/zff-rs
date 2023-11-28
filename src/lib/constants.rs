@@ -204,3 +204,6 @@ pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_256: usize = 32; // in bytes
 // Unix ACLs
 pub(crate) const ACL_PREFIX: &str = "acl";
 pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";
+
+// XAttr
+pub(crate) const XATTR_ATTRNAME_POSIX_ACL: &str = "system.posix_acl_access";

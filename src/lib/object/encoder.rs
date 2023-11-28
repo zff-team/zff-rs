@@ -505,7 +505,9 @@ impl LogicalObjectEncoder {
 				// return file header
 				if !self.current_file_header_read {
 					self.current_file_header_read = true;
-					self.object_footer.set_acquisition_start(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+					if self.object_footer.acquisition_start == 0 {
+						self.object_footer.set_acquisition_start(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+					}
 					self.object_footer.add_file_header_segment_number(self.current_file_number, current_segment_no);
 					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
 					return Ok(file_encoder.get_encoded_header());

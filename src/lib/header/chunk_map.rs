@@ -19,6 +19,9 @@ use crate::{
 	CHUNK_MAP_TABLE,
 };
 
+#[cfg(feature = "serde")]
+use crate::helper::string_to_str;
+
 // - external
 use redb::{Database, ReadableTable};
 use blake3::Hash as Blake3Hash;
@@ -34,7 +37,6 @@ use hex;
 /// The Chunkmap stores the information where the each appropriate chunk could be found.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
-#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkMap {
 	chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
 	target_size: usize,
@@ -144,6 +146,22 @@ impl ChunkMap {
 		"ChunkMap"
 	}
 }
+
+#[cfg(feature = "serde")]
+impl Serialize for ChunkMap {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
+        state.serialize_field("target-size", &self.target_size)?;
+        for (key, value) in &self.chunkmap {
+        	state.serialize_field(string_to_str(key.to_string()), &value)?;
+        }
+        state.end()
+    }
+}
+
 
 /// A map which can be used to handle the chunk deduplication.
 #[derive(Debug)]

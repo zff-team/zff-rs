@@ -54,6 +54,10 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 log = { version = "0.4.6", optional = true }
 hex = { version = "0.4.3", optional = true }
 
+# platform specific dependencies
+[target.'cfg(target_family = "unix")'.dependencies]
+xattr = "1"
+
 [features]
 default = []
 serde = ["dep:serde", "dep:hex"]

@@ -48,12 +48,18 @@ use crate::{
     METADATA_EXT_DW_FILE_ATTRIBUTES
 };
 
+#[cfg(feature = "log")]
+use log::{warn};
+
 // - external
 use time::{OffsetDateTime};
 use crc32fast::{Hasher as CRC32Hasher};
-
 #[cfg(target_family = "unix")]
 use posix_acl::{PosixACL, Qualifier, ACLEntry};
+#[cfg(target_family = "unix")]
+use xattr::XAttrs;
+#[cfg(target_family = "unix")]
+use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
 
 // returns the buffer with the read bytes and the number of bytes which was read.
 pub(crate) fn buffer_chunk<R>(
@@ -197,8 +203,7 @@ impl<R: Read> ObjectEncoderInformation<R> {
 }
 
 
-//TODO: target_os = "macos"
-#[cfg(target_os = "linux")]
+#[cfg(target_family = "unix")]
 fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
     let mut metadata_ext = HashMap::new();
 
@@ -226,6 +231,23 @@ fn get_metadata_ext(metadata: &Metadata) -> HashMap<String, String> {
     metadata_ext.insert(METADATA_BTIME.into(), btime.to_string());
 
     metadata_ext
+}
+
+#[cfg(target_family = "unix")]
+fn add_xattr_metadata<P: AsRef<Path>>(metadata_ext_map: &mut HashMap<String, String>, xattrs: XAttrs, path: P) -> Result<()> {
+    for ext_attr in xattrs {
+        let ext_attr = ext_attr.to_string_lossy().to_string();
+        // skip posix acls as we have defined the acl in other ways.
+        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) {
+            continue;
+        }
+        let value = match xattr::get(path.as_ref(), &ext_attr)? {
+            Some(value) => base64engine.encode(value),
+            None => String::new(),
+        };
+        metadata_ext_map.insert(ext_attr, value);
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]

@@ -415,6 +415,12 @@ impl<R: Read> ZffWriter<R> {
 						PosixACL::read_default_acl(&path).ok().as_ref());
 				}
 
+				// check extended attributes on unix systems
+				#[cfg(target_family = "unix")]
+				if let Ok(xattrs) = xattr::list(&path) {
+					add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &path)?;
+				}
+
 				//test if file is readable and exists.
 				// allow unused variables if the cfg feature log is not set.
 				#[allow(unused_variables)]
@@ -481,6 +487,12 @@ impl<R: Read> ZffWriter<R> {
 							PosixACL::read_default_acl(&current_dir).ok().as_ref());
 					}
 
+					// check extended attributes on unix systems
+					#[cfg(target_family = "unix")]
+					if let Ok(xattrs) = xattr::list(&current_dir) {
+						add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &current_dir)?;
+					}
+
 					file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.to_string_lossy().to_string());
 					files.push((current_dir.clone(), file_header));
 
@@ -508,6 +520,12 @@ impl<R: Read> ZffWriter<R> {
 					&mut file_header.metadata_ext, 
 					&acl, 
 					PosixACL::read_default_acl(&current_dir).ok().as_ref());
+			}
+
+			// check extended attributes on unix systems
+			#[cfg(target_family = "unix")]
+			if let Ok(xattrs) = xattr::list(&current_dir) {
+				add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &current_dir)?;
 			}
 
 			#[cfg(target_family = "unix")]
@@ -567,6 +585,12 @@ impl<R: Read> ZffWriter<R> {
 							&mut file_header.metadata_ext, 
 							&acl, 
 							PosixACL::read_default_acl(&path).ok().as_ref());
+					}
+
+					// check extended attributes on unix systems
+					#[cfg(target_family = "unix")]
+					if let Ok(xattrs) = xattr::list(&path) {
+						add_xattr_metadata(&mut file_header.metadata_ext, xattrs, &path)?;
 					}
 
 					//test if file is readable and exists.
