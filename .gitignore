@@ -13,5 +13,8 @@ Cargo.lock
 # Added by cargo
 /target
 
-#for testing purposes only.
+# for testing purposes only.
 /zff/src/bin
+
+# ignore vscode folder
+/.vscode
