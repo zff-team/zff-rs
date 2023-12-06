@@ -9,6 +9,7 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::FileTypeExt;
 
+#[cfg(target_family = "unix")]
 use crate::SpecialFileEncodingInformation;
 // - internal
 use crate::{
@@ -446,6 +447,8 @@ impl LogicalObjectEncoder {
 				let hardlink_filenumber = hardlink_map.get(&current_file_number).unwrap_or(&0);
 				FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
 			},
+			#[cfg(target_family = "windows")]
+			FileType::SpecialFile => unreachable!("Special files are not supported on Windows"),
 			#[cfg(target_family = "unix")]
 			FileType::SpecialFile => {
 				let metadata = std::fs::metadata(&path)?;
@@ -621,6 +624,8 @@ impl LogicalObjectEncoder {
 						let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).unwrap_or(&0);
 						FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
 					},
+					#[cfg(target_family = "windows")]
+					FileType::SpecialFile => unreachable!("Special files are not supported on Windows"),
 					#[cfg(target_family = "unix")]
 					FileType::SpecialFile => {
 						let metadata = std::fs::metadata(&path)?;

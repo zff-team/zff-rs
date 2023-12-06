@@ -28,7 +28,6 @@ base64 = "0.21.0"
 time = { version = "0.3.21" }
 itertools = "0.12"
 redb = "1.0.5"
-winapi = "0.3.9"
 #encryption
 pkcs5 = { version = "0.7.1", features = [ "pbes2", "alloc" ] }
 rust-argon2 = "2.0"

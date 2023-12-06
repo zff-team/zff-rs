@@ -1,8 +1,8 @@
 // - STD
 use std::collections::BTreeMap;
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
-use std::path::PathBuf;
-use std::fs::{File, OpenOptions, remove_file, read_link, read_dir, metadata};
+use std::path::{PathBuf, Path};
+use std::fs::{File, Metadata, OpenOptions, remove_file, read_link, read_dir, metadata};
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -18,7 +18,7 @@ use crate::{
 	file_extension_previous_value
 };
 use crate::{
-	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap},
+	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap, FileHeader},
 	footer::{MainFooter, SegmentFooter},
 	ObjectEncoder,
 	PhysicalObjectEncoder,
@@ -29,15 +29,11 @@ use crate::{
 
 use crate::constants::*;
 
-#[cfg(target_family = "unix")]
-use crate::header::FileHeader;
-
 use super::{
 	get_file_header,
 	ObjectEncoderInformation,
 };
 
-#[cfg(target_family = "unix")]
 use super::*;
 
 // - external
@@ -377,7 +373,6 @@ impl<R: Read> ZffWriter<R> {
 		let mut directory_children = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
 		let mut root_dir_filenumbers = Vec::new();
 
-		#[cfg(target_family = "unix")]
 		let mut hardlink_map = HashMap::new();
 
 		//files in virtual root folder
@@ -408,7 +403,7 @@ impl<R: Read> ZffWriter<R> {
 				//test if file is readable and exists.
 				check_file_accessibility(&path, &mut file_header);
 
-				#[cfg(target_family = "unix")]
+				// add the file to the hardlink map
 				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 
 				files.push((path.clone(), file_header));
@@ -476,7 +471,6 @@ impl<R: Read> ZffWriter<R> {
 					//test if file is readable and exists.
 					check_file_accessibility(&inner_element.path(), &mut file_header);
 					
-					#[cfg(target_family = "unix")]
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 
 					files.push((inner_element.path().clone(), file_header));
@@ -834,7 +828,7 @@ fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter>
 
 #[allow(unused_variables)]
 fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeader) {
-	match File::open(&path) {
+	match File::open(path.as_ref()) {
 		Ok(_) => (),
 		Err(e) => {
 			#[cfg(feature = "log")]
@@ -855,7 +849,7 @@ fn create_iterator<C: AsRef<Path>>(
 	files: &mut Vec<(PathBuf, FileHeader)>,
 	) -> Result<std::fs::ReadDir> {
 	#[allow(unused_variables)]
-	let metadata = match std::fs::symlink_metadata(&current_dir) {
+	let metadata = match std::fs::symlink_metadata(current_dir.as_ref()) {
 		Ok(metadata) => metadata,
 		Err(e) => {
 			#[cfg(feature = "log")]
@@ -877,7 +871,7 @@ fn create_iterator<C: AsRef<Path>>(
 		Err(e) => return Err(e),
 	};
 
-	let iterator = match read_dir(&current_dir) {
+	let iterator = match read_dir(current_dir.as_ref()) {
 		Ok(iterator) => iterator,
 		Err(e) => {
 			// if the directory is not readable, we should continue but read the metadata of the directory.
@@ -888,7 +882,6 @@ fn create_iterator<C: AsRef<Path>>(
 			return Err(e.into());
 		}
 	};
-	#[cfg(target_family = "unix")]
 	add_to_hardlink_map(hardlink_map, &metadata, dir_current_file_number);
 	files.push((current_dir.as_ref().to_path_buf(), file_header));
 	
@@ -896,7 +889,7 @@ fn create_iterator<C: AsRef<Path>>(
 }
 
 fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
-	match std::fs::symlink_metadata(&path) {
+	match std::fs::symlink_metadata(path.as_ref()) {
 		Ok(metadata) => Ok(metadata),
 		Err(e) => {
 			#[cfg(feature = "log")]
