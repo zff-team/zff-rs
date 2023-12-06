@@ -22,8 +22,10 @@ jobs:
     - name: Install acl-deps
       if: matrix.os == 'ubuntu-20.04'
       run: sudo apt-get install acl-dev
+    - name: Set up Rust
+      if: matrix.os == 'windows-latest'
+      run: rustup toolchain install nightly && rustup default nightly
     - name: Build
       run: cargo clippy --verbose
     - name: Run tests
       run: cargo test --verbose
-
