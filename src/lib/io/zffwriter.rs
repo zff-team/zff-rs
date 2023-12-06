@@ -1,7 +1,7 @@
 // - STD
 use std::collections::BTreeMap;
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::fs::{File, OpenOptions, remove_file, read_link, read_dir, metadata};
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_family = "unix")]
@@ -30,9 +30,7 @@ use crate::{
 use crate::constants::*;
 
 #[cfg(target_family = "unix")]
-use crate::{
-	header::{FileHeader},
-};
+use crate::header::FileHeader;
 
 use super::{
 	get_file_header,
@@ -43,7 +41,7 @@ use super::{
 use super::*;
 
 // - external
-use ed25519_dalek::{SigningKey};
+use ed25519_dalek::SigningKey;
 
 #[cfg(feature = "log")]
 use log::{error, warn, debug, info};
@@ -874,7 +872,7 @@ fn create_iterator<C: AsRef<Path>>(
 		directory_children.insert(dir_parent_file_number, Vec::new());
 		directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 	};
-	let mut file_header = match get_file_header(&current_dir.as_ref(), dir_current_file_number, dir_parent_file_number) {
+	let mut file_header = match get_file_header(current_dir.as_ref(), dir_current_file_number, dir_parent_file_number) {
 		Ok(file_header) => file_header,
 		Err(e) => return Err(e),
 	};

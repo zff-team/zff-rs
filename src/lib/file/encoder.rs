@@ -2,13 +2,13 @@
 use std::io::{Read, Cursor};
 use std::path::PathBuf;
 
-use std::collections::{HashMap};
-use std::time::{SystemTime};
+use std::collections::HashMap;
+use std::time::SystemTime;
 
 // - internal
 use crate::{
-	header::{FileHeader, FileType, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
-	footer::{FileFooter},
+	header::{FileHeader, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
+	footer::FileFooter,
 };
 use crate::{
 	Result,
@@ -26,13 +26,11 @@ use crate::{
 };
 
 #[cfg(feature = "log")]
-use crate::{
-	hashes_to_log,
-};
+use crate::hashes_to_log;
 
 // - external
 use digest::DynDigest;
-use time::{OffsetDateTime};
+use time::OffsetDateTime;
 
 /// The [FileEncoder] can be used to encode a [crate::file::File].
 pub struct FileEncoder {
@@ -46,25 +44,47 @@ pub struct FileEncoder {
 	encryption_information: Option<EncryptionInformation>,
 	/// HashMap for the Hasher objects to calculate the cryptographically hash values for this file. 
 	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
-	/// The Type of this file
-	file_type: FileType,
 	/// The first chunk number for this file.
 	initial_chunk_number: u64,
 	/// The current chunk number
 	current_chunk_number: u64,
 	/// The number of bytes, which were read from the underlying file.
 	read_bytes_underlying_data: u64,
-	/// Path were the symlink links to. Note: This should be None, if this is not a symlink.
-	symlink_real_path: Option<PathBuf>,
 	acquisition_start: u64,
 	acquisition_end: u64,
-	hard_link_filenumber: Option<u64>,
-	encoded_directory_children: Vec<u8>,
+	filetype_encoding_information: FileTypeEncodingInformation,
+}
+
+/// This enum contains the information, which are needed to encode the different file types.
+pub enum FileTypeEncodingInformation {
+	/// A regular file.
+	File,
+	/// A directory with the given children.
+	Directory(Vec<u64>), // directory children,
+	/// A symlink with the given real path.
+	Symlink(PathBuf), // symlink real path
+	/// A hardlink with the given twin filenumber.
+	Hardlink(u64), // hardlink filenumber
+	/// A special file with the given special file information.
+	#[cfg(target_family = "unix")]
+	SpecialFile(SpecialFileEncodingInformation), // special file information (rdev, type_flag)
+}
+
+/// This enum contains the information, which are needed to encode the different special file types.
+#[cfg(target_family = "unix")]
+pub enum SpecialFileEncodingInformation {
+	/// A fifo file with the given rdev-id.
+	Fifo(u64), // fifo(rdev),
+	/// A char file with the given rdev-id.
+	Char(u64), // char(rdev),
+	/// A block file with the given rdev-id.
+	Block(u64), // block(rdev),
+	/// A socket file with the given rdev-id.
+	Socket(u64), // socket(rdev),
 }
 
 impl FileEncoder {
 	/// creates a new [FileEncoder] with the given values.
-	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		file_header: FileHeader,
 		object_header: ObjectHeader,
@@ -72,36 +92,25 @@ impl FileEncoder {
 		hash_types: Vec<HashType>,
 		encryption_information: Option<EncryptionInformation>,
 		current_chunk_number: u64,
-		symlink_real_path: Option<PathBuf>,
-		hard_link_filenumber: Option<u64>,
-		directory_children: Vec<u64>) -> Result<FileEncoder> {
+		filetype_encoding_information: FileTypeEncodingInformation) -> Result<FileEncoder> {
 		
 		let mut hasher_map = HashMap::new();
 	    for h_type in hash_types {
 	        let hasher = Hash::new_hasher(&h_type);
 	        hasher_map.insert(h_type.clone(), hasher);
 	    };
-	    let encoded_directory_children = if directory_children.is_empty() {
-	    	Vec::new()
-	    } else {
-	    	directory_children.encode_directly()
-	    };
-	    let file_type = file_header.file_type.clone();
 		Ok(Self {
 			file_header,
 			object_header,
 			underlying_file: Box::new(file),
 			hasher_map,
 			encryption_information,
-			file_type,
 			initial_chunk_number: current_chunk_number,
 			current_chunk_number,
 			read_bytes_underlying_data: 0,
-			symlink_real_path,
 			acquisition_start: 0,
 			acquisition_end: 0,
-			hard_link_filenumber,
-			encoded_directory_children,
+			filetype_encoding_information,
 		})
 	}
 
@@ -131,51 +140,78 @@ impl FileEncoder {
 		) -> Result<Vec<u8>> {
 		let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 		let chunk_size = self.object_header.chunk_size as usize;
+		let mut eof = false;
 
-		let mut buf = match self.file_type {
-			FileType::Directory => {
-				let mut cursor = Cursor::new(&self.encoded_directory_children);
+		let mut buf = match &self.filetype_encoding_information {
+			FileTypeEncodingInformation::Directory(directory_children) => {
+				let encoded_directory_children = if directory_children.is_empty() {
+					Vec::new()
+				} else {
+					directory_children.encode_directly()
+				};
+				let mut cursor = Cursor::new(&encoded_directory_children);
 				cursor.set_position(self.read_bytes_underlying_data);
 				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
 				self.read_bytes_underlying_data += read_bytes;
 				buf
 
 			},
-			FileType::Symlink => {
-				match &self.symlink_real_path {
-					None => Vec::new(),
-					Some(link_path) => {
-						let mut cursor = Cursor::new(link_path.to_string_lossy().encode_directly());
-						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
-						self.read_bytes_underlying_data += read_bytes;
-						self.symlink_real_path = None;
-						buf
-					},
+			FileTypeEncodingInformation::Symlink(symlink_real_path) => {
+				let encoded_symlink_real_path = symlink_real_path.to_string_lossy().encode_directly();
+				let mut cursor = Cursor::new(&encoded_symlink_real_path);
+				cursor.set_position(self.read_bytes_underlying_data);
+				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += read_bytes;
+				if read_bytes > 0 {
+					buf
+				} else {
+					eof = true;
+					Vec::new()
 				}
 			},
-			FileType::Hardlink => {
-				match self.hard_link_filenumber {
-					Some(filenumber) => {
-						let mut cursor = Cursor::new(filenumber.encode_directly());
-						let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
-						self.read_bytes_underlying_data += read_bytes;
-						self.hard_link_filenumber = None;
-						buf
-					},
-					None => Vec::new(),
-				}		
+			FileTypeEncodingInformation::Hardlink(hardlink_filenumber) => {
+				let encoded_hardlink_filenumber = hardlink_filenumber.encode_directly();
+				let mut cursor = Cursor::new(&encoded_hardlink_filenumber);
+				cursor.set_position(self.read_bytes_underlying_data);
+				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += read_bytes;
+				if read_bytes > 0 {
+					buf
+				} else {
+					eof = true;
+					Vec::new()
+				}	
 			},
-			FileType::File => {
+			FileTypeEncodingInformation::File => {
 				let (buf, read_bytes) = buffer_chunk(&mut self.underlying_file, chunk_size)?;
 				self.read_bytes_underlying_data += read_bytes;
 				buf
 			},
-			FileType::SpecialFile => {
-				todo!()
-				//TODO!
+			// contains the rdev-id and a flag for the type of the special file 
+			// (0 if fifo-, 1 if char-, 2 if block-, and 3 if it is a socket-file).
+			#[cfg(target_family = "unix")]
+			FileTypeEncodingInformation::SpecialFile(specialfile_encoding_information) => {
+				let (rdev_id, type_flag) = match specialfile_encoding_information {
+					SpecialFileEncodingInformation::Fifo(rdev_id) => (rdev_id, 0_u8),
+					SpecialFileEncodingInformation::Char(rdev_id) => (rdev_id, 1),
+					SpecialFileEncodingInformation::Block(rdev_id) => (rdev_id, 2),
+					SpecialFileEncodingInformation::Socket(rdev_id) => (rdev_id, 3),
+				};
+				let mut encoded_data = rdev_id.encode_directly();
+				encoded_data.append(&mut type_flag.encode_directly());
+				let mut cursor = Cursor::new(&encoded_data);
+				cursor.set_position(self.read_bytes_underlying_data);
+				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += read_bytes;
+				if read_bytes > 0 {
+					buf
+				} else {
+					eof = true;
+					Vec::new()
+				}
 			}
 		};
-		if buf.is_empty() && self.read_bytes_underlying_data != 0 {
+		if buf.is_empty() && self.read_bytes_underlying_data != 0 || eof {
 			//this case is the normal "file reader reached EOF".
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 		} else if buf.is_empty() && self.read_bytes_underlying_data == 0 {

@@ -22,9 +22,7 @@ use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
 	aead::{Aead},
 };
-use chacha20poly1305::{
-    ChaCha20Poly1305
-};
+use chacha20poly1305::ChaCha20Poly1305;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
 use typenum::consts::U12;

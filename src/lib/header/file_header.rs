@@ -16,7 +16,7 @@ use crate::{
 };
 
 use crate::{
-	encryption::{EncryptionAlgorithm},
+	encryption::EncryptionAlgorithm,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	HEADER_IDENTIFIER_FILE_HEADER,
@@ -24,9 +24,7 @@ use crate::{
 	DEFAULT_HEADER_VERSION_FILE_HEADER,
 };
 
-use crate::header::{
-	EncryptionInformation,
-};
+use crate::header::EncryptionInformation;
 
 // - external
 #[cfg(feature = "serde")]

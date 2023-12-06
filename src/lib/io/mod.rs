@@ -9,10 +9,10 @@ pub mod zffstreamer;
 // - STD
 use std::io::{Read, copy as io_copy};
 use std::collections::HashMap;
-use std::path::{Path};
+use std::path::Path;
 
 #[cfg(target_family = "unix")]
-use std::fs::{Metadata};
+use std::fs::Metadata;
 
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -46,17 +46,15 @@ use crate::{
 
 
 #[cfg(target_family = "windows")]
-use crate::{
-    METADATA_EXT_DW_FILE_ATTRIBUTES
-};
+use crate::METADATA_EXT_DW_FILE_ATTRIBUTES;
 
 #[cfg(feature = "log")]
-use log::{warn};
+use log::warn;
 
 // - external
-use crc32fast::{Hasher as CRC32Hasher};
+use crc32fast::Hasher as CRC32Hasher;
 #[cfg(target_family = "unix")]
-use time::{OffsetDateTime};
+use time::OffsetDateTime;
 #[cfg(target_family = "unix")]
 use posix_acl::{PosixACL, Qualifier, ACLEntry};
 #[cfg(target_family = "unix")]
@@ -295,7 +293,7 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
 }
 
 fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
-    let metadata = std::fs::symlink_metadata(&path)?;
+    let metadata = std::fs::symlink_metadata(path)?;
 
     let filetype = if metadata.file_type().is_dir() {
         FileType::Directory
@@ -405,7 +403,7 @@ fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)
         Qualifier::Mask => gen_acl_mask(default),
         _ => return None, // ignoring UserObj, GroupObj and Other while this is always figured by the "mode" key
     };
-    return Some((key, entry.perm.to_string()))
+    Some((key, entry.perm.to_string()))
 }
 
 #[cfg(target_family = "unix")]

@@ -1,10 +1,15 @@
 // - STD
 use std::io::{Read, Cursor};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::fs::File;
-use std::collections::{HashMap};
-use std::time::{SystemTime};
+use std::collections::HashMap;
+use std::time::SystemTime;
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::MetadataExt;
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::FileTypeExt;
 
+use crate::SpecialFileEncodingInformation;
 // - internal
 use crate::{
 	Result,
@@ -16,6 +21,7 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	Encryption,
+	FileTypeEncodingInformation,
 	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
 	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
 	DEFAULT_HEADER_VERSION_HASH_HEADER,
@@ -23,9 +29,7 @@ use crate::{
 };
 
 #[cfg(feature = "log")]
-use crate::{
-	hashes_to_log,
-};
+use crate::hashes_to_log;
 
 use crate::{
 	header::{
@@ -33,7 +37,8 @@ use crate::{
 		HashHeader, 
 		ChunkHeader, 
 		HashValue, 
-		FileHeader, 
+		FileHeader,
+		FileType,
 		EncryptionInformation,
 		DeduplicationChunkMap,
 	},
@@ -44,8 +49,8 @@ use crate::{
 
 // - external
 use digest::DynDigest;
-use ed25519_dalek::{SigningKey};
-use time::{OffsetDateTime};
+use ed25519_dalek::SigningKey;
+use time::OffsetDateTime;
 
 /// An encoder for each object. This is a wrapper Enum for [PhysicalObjectEncoder] and [LogicalObjectEncoder].
 pub enum ObjectEncoder<R: Read> {
@@ -411,25 +416,54 @@ impl LogicalObjectEncoder {
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
 		//open first file path - if the path is not accessable, create an empty reader.
-		let reader = match File::open(path) {
+		let reader = match File::open(&path) {
 			Ok(reader) => Box::new(reader),
 			Err(_) => create_empty_reader()
 		};
 
 		let current_file_number = current_file_header.file_number;
-		let symlink_real_path = symlink_real_paths.get(&current_file_number).cloned();
-		let current_directory_children = match directory_children.get(&current_file_number) {
-			Some(children) => children.to_owned(),
-			None => Vec::new()
-		};
-			    
-     	let encryption_information = if let Some(encryption_key) = &encryption_key {
-     		obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
-     	} else {
-     		None
-     	};
 
-     	let hardlink_filenumber = hardlink_map.get(&current_file_number).copied();
+		let encryption_information = if let Some(encryption_key) = &encryption_key {
+			obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
+		} else {
+			None
+		};
+
+		let filetype_encoding_information = match current_file_header.file_type {
+			FileType::File => FileTypeEncodingInformation::File,
+			FileType::Directory => {
+				let mut children = Vec::new();
+				for child in directory_children.get(&current_file_number).unwrap_or(&Vec::new()) {
+					children.push(*child);
+				};
+				FileTypeEncodingInformation::Directory(children)
+			},
+			FileType::Symlink => {
+				let real_path = symlink_real_paths.get(&current_file_number).unwrap_or(&PathBuf::new()).clone();
+				FileTypeEncodingInformation::Symlink(real_path)
+			},
+			FileType::Hardlink => {
+				let hardlink_filenumber = hardlink_map.get(&current_file_number).unwrap_or(&0);
+				FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
+			},
+			#[cfg(target_family = "unix")]
+			FileType::SpecialFile => {
+				let metadata = std::fs::metadata(&path)?;
+
+				let specialfile_info = if metadata.file_type().is_char_device() {
+					SpecialFileEncodingInformation::Char(metadata.rdev())
+				} else if metadata.file_type().is_block_device() {
+					SpecialFileEncodingInformation::Block(metadata.rdev())
+				} else if metadata.file_type().is_fifo() {
+					SpecialFileEncodingInformation::Fifo(metadata.rdev())
+				} else if metadata.file_type().is_socket() {
+					SpecialFileEncodingInformation::Socket(metadata.rdev())
+				} else {
+					return Err(ZffError::new(ZffErrorKind::UnknownFileType, "Unknown special file type"));
+				};
+				FileTypeEncodingInformation::SpecialFile(specialfile_info)
+			},
+		};
 
 		let first_file_encoder = Some(FileEncoder::new(
 			current_file_header,
@@ -438,9 +472,7 @@ impl LogicalObjectEncoder {
 			hash_types.clone(), 
 			encryption_information, 
 			current_chunk_number, 
-			symlink_real_path, 
-			hardlink_filenumber, 
-			current_directory_children)?);
+			filetype_encoding_information)?);
 		
 		let mut object_footer = ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL, obj_header.object_number);
 		for filenumber in root_dir_filenumbers {
@@ -559,25 +591,54 @@ impl LogicalObjectEncoder {
 					}
 				};
 
-				let reader = match File::open(path) {
+				let reader = match File::open(&path) {
 					Ok(reader) => Box::new(reader),
 					Err(_) => create_empty_reader()
 				};
 		     	
-		     	let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).copied();
-
 				self.current_file_number = current_file_header.file_number;
-				let symlink_real_path = self.symlink_real_paths.get(&self.current_file_number).cloned();
-				let current_directory_children = match self.directory_children.get(&self.current_file_number) {
-					Some(children) => children.to_owned(),
-					None => Vec::new(),
+
+				let encryption_information = if let Some(encryption_key) = &self.encryption_key {
+					self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
+				} else {
+					None
 				};
 
-       			let encryption_information = if let Some(encryption_key) = &self.encryption_key {
-		     		self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
-		     	} else {
-		     		None
-		     	};
+				let filetype_encoding_information = match current_file_header.file_type {
+					FileType::File => FileTypeEncodingInformation::File,
+					FileType::Directory => {
+						let mut children = Vec::new();
+						for child in self.directory_children.get(&self.current_file_number).unwrap_or(&Vec::new()) {
+							children.push(*child);
+						};
+						FileTypeEncodingInformation::Directory(children)
+					},
+					FileType::Symlink => {
+						let real_path = self.symlink_real_paths.get(&self.current_file_number).unwrap_or(&PathBuf::new()).clone();
+						FileTypeEncodingInformation::Symlink(real_path)
+					},
+					FileType::Hardlink => {
+						let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).unwrap_or(&0);
+						FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
+					},
+					#[cfg(target_family = "unix")]
+					FileType::SpecialFile => {
+						let metadata = std::fs::metadata(&path)?;
+		
+						let specialfile_info = if metadata.file_type().is_char_device() {
+							SpecialFileEncodingInformation::Char(metadata.rdev())
+						} else if metadata.file_type().is_block_device() {
+							SpecialFileEncodingInformation::Block(metadata.rdev())
+						} else if metadata.file_type().is_fifo() {
+							SpecialFileEncodingInformation::Fifo(metadata.rdev())
+						} else if metadata.file_type().is_socket() {
+							SpecialFileEncodingInformation::Socket(metadata.rdev())
+						} else {
+							return Err(ZffError::new(ZffErrorKind::UnknownFileType, "Unknown special file type"));
+						};
+						FileTypeEncodingInformation::SpecialFile(specialfile_info)
+					},
+				};
        			
 			    self.current_file_header_read = false;
 				self.current_file_encoder = Some(FileEncoder::new(
@@ -587,9 +648,7 @@ impl LogicalObjectEncoder {
 					self.hash_types.clone(), 
 					encryption_information, 
 					self.current_chunk_number, 
-					symlink_real_path, 
-					hardlink_filenumber, 
-					current_directory_children)?);
+					filetype_encoding_information)?);
 				Ok(data)
 			},
 			None => {
@@ -609,5 +668,5 @@ impl LogicalObjectEncoder {
 fn create_empty_reader() -> Box<dyn Read> {
 	let buffer = Vec::<u8>::new();
 	let cursor = Cursor::new(buffer);
-	return Box::new(cursor);
+	Box::new(cursor)
 }
