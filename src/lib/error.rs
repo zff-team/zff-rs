@@ -477,3 +477,12 @@ impl fmt::Display for ZffError {
 		write!(f, "{}", err_msg)
 	}
 }
+
+impl std::error::Error for ZffError {
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match &self.kind {
+			ZffErrorKind::IoError(e) => Some(e),
+			_ => None,
+		}
+	}
+}
