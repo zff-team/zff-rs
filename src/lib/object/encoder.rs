@@ -417,6 +417,7 @@ impl LogicalObjectEncoder {
 			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
 		};
 		//open first file path - if the path is not accessable, create an empty reader.
+		#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
 		let reader = match File::open(&path) {
 			Ok(reader) => Box::new(reader),
 			Err(_) => create_empty_reader()
@@ -594,6 +595,7 @@ impl LogicalObjectEncoder {
 					}
 				};
 
+				#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
 				let reader = match File::open(&path) {
 					Ok(reader) => Box::new(reader),
 					Err(_) => create_empty_reader()

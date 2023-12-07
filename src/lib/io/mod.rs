@@ -391,16 +391,16 @@ fn add_to_hardlink_map(hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>, metad
     let volume_serial_number = metadata.volume_serial_number().unwrap() as u64;
     match hardlink_map.get_mut(&volume_serial_number) {
         Some(inner_map) => match inner_map.get_mut(&file_index) {
-            Some(fno) => return Some(*fno),
+            Some(fno) => Some(*fno),
             None => {
                 inner_map.insert(file_index, filenumber);
-                return None
+                None
             },
         },
         None => {
             hardlink_map.insert(volume_serial_number, HashMap::new());
             hardlink_map.get_mut(&volume_serial_number).unwrap().insert(file_index, filenumber);
-            return None;
+            None
         },
     }
 }
