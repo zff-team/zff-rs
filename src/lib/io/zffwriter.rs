@@ -141,7 +141,7 @@ impl<R: Read> ZffWriter<R> {
 		output: ZffWriterOutput,
 		params: ZffWriterOptionalParameter) -> Result<ZffWriter<R>> {
 		let files_to_extend = match output {
-			ZffWriterOutput::NewContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFCREATE)), //TODO,
+			ZffWriterOutput::NewContainer(_) => return Err(ZffError::new(ZffErrorKind::InvalidOption, ERROR_INVALID_OPTION_ZFFCREATE)),
 			ZffWriterOutput::ExtendContainer(ref files_to_extend) => files_to_extend.clone()
 		};
 		let mut params = params;
@@ -210,7 +210,6 @@ impl<R: Read> ZffWriter<R> {
 			Some(params) => params.initial_chunk_number
 		};
 
-		//TODO: This will double the needed memory. I should find a more elegant solution to handle this:
 		let mut modify_map_phy = HashMap::new();
 		// check if all necessary stuff is available in object header and modify them (if needed)
 		for (mut header, reader) in physical_objects {
@@ -232,7 +231,6 @@ impl<R: Read> ZffWriter<R> {
 		}
 		let physical_objects = modify_map_phy;
 
-		//TODO: This will double the needed memory. I should find a more elegant solution to handle this:
 		let mut modify_map_log = HashMap::new();
 		for (mut header, input_files) in logical_objects {
 			//check if all EncryptionHeader are contain a decrypted encryption key.
@@ -574,7 +572,6 @@ impl<R: Read> ZffWriter<R> {
 		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 
 		// read chunks and write them into the Writer.
-		// TODO: precalculate the len of the mainfooter chunkmap and check this also?
 		loop {
 			if (written_bytes +
 				segment_footer_len +
@@ -714,10 +711,9 @@ impl<R: Read> ZffWriter<R> {
 	    let mut seek_value = 0;
 	    //prepare the current segment no for initial looping
 	    self.current_segment_no -= 1;
-	    let mut chunk_map = BTreeMap::new(); //TODO: check if this main footer chunkmap is filled while you use the extend...
+	    let mut chunk_map = BTreeMap::new(); //: check if this main footer chunkmap is filled while you use the extend...
 
 	    let mut extend = self.extender_parameter.is_some();
-	    // TODO: this could be a while loop - a while loop could be more clear here.
 	    loop {
 	    	self.current_segment_no += 1;
 	    	file_extension = file_extension_next_value(&file_extension)?;

@@ -195,7 +195,10 @@ impl ObjectHeader {
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
-		let _header_version = u8::decode_directly(&mut cursor)?; //TODO Check if this is a supported header version
+		let header_version = u8::decode_directly(&mut cursor)?;
+		if header_version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, header_version.to_string()));
+		};
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		if !flags.encryption {
@@ -400,7 +403,6 @@ impl EncryptedObjectHeader {
 		}
 	}
 
-	//todo: check if this method is needed in any way or could be deleted
 	/// Decodes the length of the header.
 	pub fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {

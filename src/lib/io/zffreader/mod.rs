@@ -211,7 +211,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		if let Some(object_reader) = self.object_reader.get_mut(&self.active_object) {
 			match object_reader {
 				ZffObjectReader::Logical(reader) => reader.set_active_file(filenumber),
-				_ => Err(ZffError::new(ZffErrorKind::MismatchObjectType, self.active_object.to_string())) //TODO: return object type instead of object_number,
+				_ => Err(ZffError::new(ZffErrorKind::MismatchObjectType, self.active_object.to_string()))
 			}
 		} else {
 			Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string()))
@@ -255,7 +255,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
 		};
 		let decrypted_reader = match object_reader {
-			ZffObjectReader::Encrypted(reader) => reader.decrypt_with_password(decryption_password, self.main_footer.chunk_maps(), &mut self.segments)?,
+			ZffObjectReader::Encrypted(reader) => reader.decrypt_with_password(decryption_password, &mut self.segments)?,
 			_ => return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, object_number.to_string()))
 		};
 		let o_type = match decrypted_reader {
@@ -468,10 +468,10 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 			};
 			match object_reader {
-				ZffObjectReader::Physical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map),
-				ZffObjectReader::Logical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map),
+				ZffObjectReader::Physical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps),
+				ZffObjectReader::Logical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps),
 				ZffObjectReader::Encrypted(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map); },
+				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps); },
 			}
 		}
 
@@ -508,7 +508,7 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 		match object_reader {
 			ZffObjectReader::Virtual(reader) => { 
 				reader.update_passive_object_header_map(passive_objects_map); 
-				reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map)
+				reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps)
 			},
 			_ => unreachable!(),
 		}		
@@ -705,8 +705,7 @@ fn initialize_object_reader<R: Read + Seek>(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
-								segments,
-								main_footer)
+								segments)
 						} else {
 							initialize_encrypted_object_reader(
 								object_number,
@@ -722,7 +721,6 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	header_segment_no: u64,
 	footer_segment_no: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
-	main_footer: &MainFooter,
 	) -> Result<ZffObjectReader> {
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {}", obj_number);
@@ -738,9 +736,9 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	};
 
 	let obj_reader = match footer {
-		ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(ZffObjectReaderPhysical::with_obj_metadata(header, physical, main_footer.chunk_maps().clone()))),
-		ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(ZffObjectReaderLogical::with_obj_metadata_recommended(header, logical, segments, main_footer.chunk_maps().clone())?)), //TODO: use enum to provide also minimal and full.
-		ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(ZffObjectReaderVirtual::with_data(header, virt, main_footer.chunk_maps().clone()))),
+		ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(ZffObjectReaderPhysical::with_obj_metadata(header, physical))),
+		ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(ZffObjectReaderLogical::with_obj_metadata_recommended(header, logical, segments)?)),
+		ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(ZffObjectReaderVirtual::with_data(header, virt))),
 	};
 	Ok(obj_reader)
 }

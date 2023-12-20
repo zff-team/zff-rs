@@ -491,7 +491,7 @@ impl Encryption {
 		let bytes: [u8; 4] = match Encryption::decrypt_message(
 			key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)?.try_into() {
 			Ok(bytes) => bytes,
-			Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "")), //TODO: better error handling
+			Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "")),
 		};
 		Ok(u32::from_le_bytes(bytes))
 	}

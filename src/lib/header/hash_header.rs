@@ -19,7 +19,7 @@ use crate::{
 };
 
 // - external
-use ed25519_dalek::{SIGNATURE_LENGTH};
+use ed25519_dalek::SIGNATURE_LENGTH;
 #[cfg(feature = "serde")]
 use serde::{
 	Serialize,

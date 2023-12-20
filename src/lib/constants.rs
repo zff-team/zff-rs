@@ -131,11 +131,11 @@ pub const DEFAULT_HEADER_VERSION_COMPRESSION_HEADER: u8 = 1;
 /// current header version for the [DescriptionHeader](crate::header::DescriptionHeader).
 pub const DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER: u8 = 2;
 /// current header version for the [PBEHeader](crate::header::PBEHeader).
-pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 2;
+pub const DEFAULT_HEADER_VERSION_PBE_HEADER: u8 = 3;
 /// current header version for the [EncryptionHeader](crate::header::EncryptionHeader).
-pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 2;
+pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 3;
 /// current header version for the [MainHeader](crate::header::MainHeader).
-pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 2;
+pub const DEFAULT_HEADER_VERSION_MAIN_HEADER: u8 = 3;
 /// current header version for the [FileHeader](crate::header::FileHeader).
 pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 2;
 /// current header version for the [ObjectHeader](crate::header::ObjectHeader).
@@ -154,7 +154,7 @@ pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 2;
 /// current footer version for the [ObjectFooterVirtual](crate::footer::ObjectFooterVirtual) structure.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::header::SegmentFooter).
-pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 2;
+pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 3;
 /// current footer version for the [MainFooter](crate::header::MainFooter).
 pub const DEFAULT_FOOTER_VERSION_MAIN_FOOTER: u8 = 2;
 /// current footer version for the [FileFooter](crate::header::FileFooter).

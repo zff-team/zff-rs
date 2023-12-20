@@ -1,6 +1,6 @@
 // - STD
 use std::collections::{HashMap, BTreeMap};
-use std::io::{Cursor};
+use std::io::Cursor;
 use std::fmt;
 
 // - internal
@@ -10,10 +10,7 @@ use crate::{
 	ValueEncoder,
 	ValueDecoder,
 	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
-};
-
-use crate::{
-	FOOTER_IDENTIFIER_SEGMENT_FOOTER,
+	FOOTER_IDENTIFIER_SEGMENT_FOOTER
 };
 
 // - external
