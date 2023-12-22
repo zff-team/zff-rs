@@ -728,7 +728,7 @@ impl<R: Read> ZffWriter<R> {
 	    		match &self.extender_parameter {
 		    		None => File::create(&segment_filename)?,
 		    		Some(params) => {
-		    			let mut file = OpenOptions::new().append(true).write(true).read(true).open(&params.current_segment)?;
+		    			let mut file = OpenOptions::new().append(true).read(true).open(&params.current_segment)?;
 		    			//delete the last main footer
 		    			file.seek(SeekFrom::End(-8))?;
 		    			let footer_offset = u64::decode_directly(&mut file)?;
@@ -789,7 +789,7 @@ impl<R: Read> ZffWriter<R> {
 			},
 		};
 		segment_filename.set_extension(&file_extension);
-	    let mut output_file = OpenOptions::new().write(true).append(true).open(&segment_filename)?;
+	    let mut output_file = OpenOptions::new().append(true).open(&segment_filename)?;
 	    output_file.write_all(&main_footer.encode_directly())?;
 
 	    Ok(())
