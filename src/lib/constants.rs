@@ -77,7 +77,6 @@ pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &str = "A segment with a val
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str = "Missing object header in segment with following object number: ";
 pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object footer in segment with following object number: ";
 pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
-pub(crate) const ERROR_MISMATCH_ZFF_VERSION: &str = "mismatch zff version";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
 pub(crate) const ERROR_INVALID_OPTION_ZFFCREATE: &str = "Create new container";
 pub(crate) const ERROR_LAST_GREATER_FIRST: &str = "First chunk number is greater than last chunk number. This is invalid.";

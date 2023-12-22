@@ -105,14 +105,14 @@ pub fn calculate_crc32(buffer: &[u8]) -> u32 {
 /// [CompressionHeader], the function returns a tuple of compressed bytes and the flag, if the bytes was compressed or not.
 pub fn compress_buffer(buf: Vec<u8>, chunk_size: usize, compression_header: &CompressionHeader) -> Result<(Vec<u8>, bool)> {
     let mut compression_flag = false;
-    let compression_threshold = compression_header.threshold();
+    let compression_threshold = compression_header.threshold;
 
-    match compression_header.algorithm() {
+    match compression_header.algorithm {
         CompressionAlgorithm::None => Ok((buf, compression_flag)),
         CompressionAlgorithm::Zstd => {
-            let compression_level = *compression_header.level() as i32;
+            let compression_level = compression_header.level as i32;
             let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
-            let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * *compression_header.level() as usize)?;
+            let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize)?;
             if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
                 Ok((buf, compression_flag))
             } else {

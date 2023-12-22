@@ -1,6 +1,6 @@
 // - STD
-use std::cmp::{PartialEq};
-use std::io::{Cursor};
+use std::cmp::PartialEq;
+use std::io::Cursor;
 use std::fmt;
 
 // - internal
@@ -9,8 +9,6 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
 	HEADER_IDENTIFIER_SEGMENT_HEADER,
 	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
 };
@@ -67,13 +65,13 @@ impl HeaderCoding for SegmentHeader {
 		HEADER_IDENTIFIER_SEGMENT_HEADER
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_SEGMENT_HEADER
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.unique_identifier.encode_directly());
 		vec.append(&mut self.segment_number.encode_directly());
 		vec.append(&mut self.chunkmap_size.encode_directly());
@@ -82,10 +80,7 @@ impl HeaderCoding for SegmentHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<SegmentHeader> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_SEGMENT_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let unique_identifier = u64::decode_directly(&mut cursor)?;
 		let segment_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap_size = u64::decode_directly(&mut cursor)?;

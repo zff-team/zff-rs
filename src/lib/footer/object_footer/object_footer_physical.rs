@@ -1,3 +1,5 @@
+use crate::constants::DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL;
+
 use super::*;
 
 /// An [ObjectFooterPhysical] is written at the end of each physical object.
@@ -11,8 +13,6 @@ use super::*;
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterPhysical {
-	/// The version of the footer.
-	pub version: u8,
 	/// The object number of the footer.
 	pub object_number: u64,
 	/// The acquisition start timestamp of the footer.
@@ -31,8 +31,7 @@ pub struct ObjectFooterPhysical {
 
 impl ObjectFooterPhysical {
 	/// creates a new [ObjectFooterPhysical] with the given values.
-	#[allow(clippy::too_many_arguments)]
-	pub fn new(version: u8,
+	pub fn new(
 		object_number: u64, 
 		acquisition_start: u64, 
 		acquisition_end: u64, 
@@ -41,7 +40,6 @@ impl ObjectFooterPhysical {
 		number_of_chunks: u64, 
 		hash_header: HashHeader) -> ObjectFooterPhysical {
 		Self {
-			version,
 			object_number,
 			acquisition_start,
 			acquisition_end,
@@ -78,12 +76,12 @@ impl ObjectFooterPhysical {
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER +
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			self.version.encode_directly().len() +
+			Self::version().encode_directly().len() +
 			self.object_number.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut encrypted_content.encode_directly());
 
@@ -131,21 +129,21 @@ impl ObjectFooterPhysical {
 
 impl HeaderCoding for ObjectFooterPhysical {
 	type Item = ObjectFooterPhysical;
-	fn version(&self) -> u8 { 
-		self.version
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<ObjectFooterPhysical> {
 		let mut cursor = Cursor::new(data);
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let (acquisition_start, 
 			acquisition_end, 
@@ -154,7 +152,6 @@ impl HeaderCoding for ObjectFooterPhysical {
 			number_of_chunks, 
 			hash_header) = Self::decode_inner_content(&mut cursor)?;
 		Ok(ObjectFooterPhysical::new(
-			footer_version, 
 			object_number,
 			acquisition_start, 
 			acquisition_end, 
@@ -170,8 +167,6 @@ impl HeaderCoding for ObjectFooterPhysical {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct EncryptedObjectFooterPhysical {
-	/// The appropriate footer version.
-	pub version: u8,
 	/// The appropriate object number.
 	pub object_number: u64,
 	/// The underlying data in encrypted form.
@@ -180,9 +175,8 @@ pub struct EncryptedObjectFooterPhysical {
 
 impl EncryptedObjectFooterPhysical {
 	/// Creates a new [EncryptedObjectFooterPhysical] by the given values.
-	pub fn new(version: u8, object_number: u64, encrypted_data: Vec<u8>) -> Self {
+	pub fn new(object_number: u64, encrypted_data: Vec<u8>) -> Self {
 		Self {
-			version,
 			object_number,
 			encrypted_data,
 		}
@@ -203,7 +197,6 @@ impl EncryptedObjectFooterPhysical {
 			number_of_chunks, 
 			hash_header) = ObjectFooterPhysical::decode_inner_content(&mut cursor)?;
 		Ok(ObjectFooterPhysical::new(
-			self.version, 
 			self.object_number,
 			acquisition_start,
 			acquisition_end,
@@ -219,23 +212,7 @@ impl EncryptedObjectFooterPhysical {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		let content = Encryption::decrypt_object_footer(key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
-		let mut cursor = Cursor::new(content);
-		let (acquisition_start, 
-			acquisition_end, 
-			length_of_data, 
-			first_chunk_number, 
-			number_of_chunks, 
-			hash_header) = ObjectFooterPhysical::decode_inner_content(&mut cursor)?;
-		Ok(ObjectFooterPhysical::new(
-			self.version, 
-			self.object_number,
-			acquisition_start,
-			acquisition_end,
-			length_of_data,
-			first_chunk_number,
-			number_of_chunks,
-			hash_header))
+		self.decrypt(key, algorithm)
 	}
 }
 
@@ -256,25 +233,24 @@ impl EncryptedObjectFooterPhysical {
 
 impl HeaderCoding for EncryptedObjectFooterPhysical {
 	type Item = EncryptedObjectFooterPhysical;
-	fn version(&self) -> u8 { 
-		self.version
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.encrypted_data.encode_directly());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		Ok(Self::new(
-			footer_version, 
 			object_number,
 			encrypted_data))
 	}

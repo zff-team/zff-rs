@@ -62,8 +62,8 @@ use serde::{
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct DescriptionHeader {
-	version: u8,
-	identifier_map: HashMap<String, String>
+	/// The inner identifier map.
+	pub identifier_map: HashMap<String, String>
 }
 
 #[cfg(feature = "serde")]
@@ -85,17 +85,15 @@ impl Serialize for DescriptionHeader {
 impl DescriptionHeader {
 	/// creates a new, empty header, which can be filled by the set_*-methods.
 	/// All fields will be initialized with ```None``` or ```0```.
-	pub fn new_empty(version: u8) -> DescriptionHeader {
+	pub fn new_empty() -> DescriptionHeader {
 		Self {
-			version,
 			identifier_map: HashMap::new(),
 		}
 	}
 
 	/// Creates a new [DescriptionHeader] with the given identifier map.
-	pub fn new(version: u8, identifier_map: HashMap<String, String>) -> DescriptionHeader {
+	pub fn new(identifier_map: HashMap<String, String>) -> DescriptionHeader {
 		Self {
-			version,
 			identifier_map,
 		}
 	}
@@ -128,11 +126,6 @@ impl DescriptionHeader {
 		}
 	}
 
-	/// inserts a custom key-value pair
-	pub fn custom_identifier_value<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
-		self.identifier_map.insert(key.into(), value.into());
-	}
-
 	/// returns the evidence number, if available.
 	pub fn evidence_number(&self) -> Option<&str> {
 		match &self.identifier_map.get(ENCODING_KEY_EVIDENCE_NUMBER) {
@@ -157,6 +150,11 @@ impl DescriptionHeader {
 		}
 	}
 
+	/// inserts a custom key-value pair
+	pub fn custom_identifier_value<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+		self.identifier_map.insert(key.into(), value.into());
+	}
+
 	/// returns all key-value pairs of this header.
 	pub fn identifier_map(&self) -> &HashMap<String, String> {
 		&self.identifier_map
@@ -170,13 +168,13 @@ impl HeaderCoding for DescriptionHeader {
 		HEADER_IDENTIFIER_DESCRIPTION_HEADER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.identifier_map.encode_directly());
 		vec
 	}
@@ -194,9 +192,9 @@ impl HeaderCoding for DescriptionHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<DescriptionHeader> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let identifier_map = HashMap::<String, String>::decode_directly(&mut cursor)?;
-		let description_header = DescriptionHeader::new(version, identifier_map);
+		let description_header = DescriptionHeader::new(identifier_map);
 
 		Ok(description_header)
 	}

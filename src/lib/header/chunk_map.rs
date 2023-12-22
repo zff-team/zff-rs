@@ -1,9 +1,9 @@
 // - STD
 use core::borrow::Borrow;
 use std::path::Path;
-use std::cmp::{PartialEq};
+use std::cmp::PartialEq;
 use std::collections::{HashMap, BTreeMap};
-use std::io::{Cursor};
+use std::io::Cursor;
 use std::fmt;
 
 // - internal
@@ -13,7 +13,6 @@ use crate::{
 	ValueEncoder,
 	ValueDecoder,
 	ZffError,
-	ZffErrorKind,
 	HEADER_IDENTIFIER_CHUNK_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_MAP,
 	CHUNK_MAP_TABLE,
@@ -110,24 +109,21 @@ impl HeaderCoding for ChunkMap {
 		HEADER_IDENTIFIER_CHUNK_MAP
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_CHUNK_MAP
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.chunkmap.encode_directly());
 		vec
 	}
 
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_CHUNK_MAP {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}

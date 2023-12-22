@@ -63,13 +63,14 @@ impl ObjectFooter {
 	/// returns the version of the object footer.
 	pub fn version(&self) -> u8 {
 		match self {
-			ObjectFooter::Physical(phy) => phy.version(),
-			ObjectFooter::Logical(log) => log.version(),
-			ObjectFooter::Virtual(virt) => virt.version(),
+			ObjectFooter::Physical(_) => ObjectFooterPhysical::version(),
+			ObjectFooter::Logical(_) => ObjectFooterLogical::version(),
+			ObjectFooter::Virtual(_) => ObjectFooterVirtual::version(),
 		}
 	}
 
-	/// checks if the identifier matches to an physical or logical object footer. Returns 1 for a physical object footer, 2 for a logical object footer and 0 if neither applies.
+	/// checks if the identifier matches to an physical or logical object footer. 
+	/// Returns 1 for a physical object footer, 2 for a logical object footer and 0 if neither applies.
 	fn check_identifier<R: Read>(data: &mut R) -> u8 {
 		let identifier = match data.read_u32::<BigEndian>() {
 			Ok(val) => val,
@@ -182,8 +183,8 @@ impl EncryptedObjectFooter {
 	/// returns the version of the object footer.
 	pub fn version(&self) -> u8 {
 		match self {
-			EncryptedObjectFooter::Physical(phy) => phy.version(),
-			EncryptedObjectFooter::Logical(log) => log.version(),
+			EncryptedObjectFooter::Physical(_) => ObjectFooterPhysical::version(),
+			EncryptedObjectFooter::Logical(_) => ObjectFooterLogical::version(),
 		}
 	}
 
@@ -254,15 +255,6 @@ impl EncryptedObjectFooter {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		match self {
-			EncryptedObjectFooter::Physical(encrypted_inner_footer) => {
-				let decrypted_footer = encrypted_inner_footer.decrypt_and_consume(key, algorithm)?;
-				Ok(ObjectFooter::from(decrypted_footer))
-			},
-			EncryptedObjectFooter::Logical(encrypted_inner_footer) => {
-				let decrypted_footer = encrypted_inner_footer.decrypt_and_consume(key, algorithm)?;
-				Ok(ObjectFooter::from(decrypted_footer))
-			}
-		}
+		self.decrypt(key, algorithm)
 	}
 }

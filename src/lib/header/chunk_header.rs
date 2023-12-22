@@ -1,6 +1,6 @@
 // - STD
 use std::borrow::Borrow;
-use std::io::{Cursor};
+use std::io::Cursor;
 use std::fmt;
 
 // - internal
@@ -9,8 +9,6 @@ use crate::{
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
 	encryption::{Encryption, EncryptionAlgorithm},
 	HEADER_IDENTIFIER_CHUNK_HEADER,
 	ERROR_FLAG_VALUE,
@@ -81,8 +79,6 @@ impl ChunkHeaderFlags {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeader {
-	/// the header version.
-	pub version: u8,
 	/// the appropriate chunk number.
 	pub chunk_number: u64,
 	/// the appropriate size of the chunk data (in the final optionally compressed and encrypted form).
@@ -97,7 +93,6 @@ impl ChunkHeader {
 	/// creates a new empty chunk header with a given chunk number. All other values are set to ```0``` or ```None```.
 	pub fn new_empty(chunk_number: u64) -> ChunkHeader {
 		Self {
-			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size: 0,
 			flags: ChunkHeaderFlags::default(),
@@ -112,7 +107,6 @@ impl ChunkHeader {
 		flags:ChunkHeaderFlags,
 		crc32: u32) -> ChunkHeader {
 		Self {
-			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size,
 			flags,
@@ -148,12 +142,12 @@ impl HeaderCoding for ChunkHeader {
 		HEADER_IDENTIFIER_CHUNK_HEADER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_CHUNK_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 
 		vec.append(&mut self.chunk_number.encode_directly());
 		vec.append(&mut self.chunk_size.encode_directly());
@@ -184,11 +178,7 @@ impl HeaderCoding for ChunkHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<ChunkHeader> {
 		let mut cursor = Cursor::new(&data);
-		// check if version correspondends to the current version
-		match u8::decode_directly(&mut cursor)? {
-			DEFAULT_HEADER_VERSION_CHUNK_HEADER => (),
-			other_version => return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, other_version.to_string())),
-		};
+		Self::check_version(&mut cursor)?;
 		let chunk_number = u64::decode_directly(&mut cursor)?;
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let flags = ChunkHeaderFlags::from(u8::decode_directly(&mut cursor)?);
@@ -217,8 +207,6 @@ impl ChunkHeader {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptedChunkHeader {
-	/// the header version.
-	pub version: u8,
 	/// the appropriate chunk number
 	pub chunk_number: u64,
 	/// the appropriate size of the chunk data (in the final optionally compressed and encrypted form).
@@ -233,7 +221,6 @@ impl EncryptedChunkHeader {
 	/// creates a new empty chunk header with a given chunk number. All other values are set to ```0``` or ```None```.
 	pub fn new_empty(chunk_number: u64) -> EncryptedChunkHeader {
 		Self {
-			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size: 0,
 			flags: ChunkHeaderFlags::default(),
@@ -248,7 +235,6 @@ impl EncryptedChunkHeader {
 		flags:ChunkHeaderFlags, 
 		crc32: Vec<u8>) -> EncryptedChunkHeader {
 		Self {
-			version: DEFAULT_HEADER_VERSION_CHUNK_HEADER,
 			chunk_number,
 			chunk_size,
 			flags,
@@ -284,12 +270,12 @@ impl HeaderCoding for EncryptedChunkHeader {
 		HEADER_IDENTIFIER_CHUNK_HEADER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_CHUNK_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 
 		vec.append(&mut self.chunk_number.encode_directly());
 		vec.append(&mut self.chunk_size.encode_directly());
@@ -320,11 +306,7 @@ impl HeaderCoding for EncryptedChunkHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<EncryptedChunkHeader> {
 		let mut cursor = Cursor::new(&data);
-		// check if version correspondends to the current version
-		match u8::decode_directly(&mut cursor)? {
-			DEFAULT_HEADER_VERSION_CHUNK_HEADER => (),
-			other_version => return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, other_version.to_string())),
-		};
+		Self::check_version(&mut cursor)?;
 		let chunk_number = u64::decode_directly(&mut cursor)?;
 		let chunk_size = u64::decode_directly(&mut cursor)?;
 		let flags = ChunkHeaderFlags::from(u8::decode_directly(&mut cursor)?);

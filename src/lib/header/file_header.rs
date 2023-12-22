@@ -187,7 +187,7 @@ impl FileHeader {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let mut vec = Vec::new();
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.file_number.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
@@ -225,10 +225,7 @@ impl FileHeader {
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_FILE_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
 		
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
@@ -286,13 +283,13 @@ impl HeaderCoding for FileHeader {
 		HEADER_IDENTIFIER_FILE_HEADER
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_FILE_HEADER
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.file_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
@@ -301,10 +298,7 @@ impl HeaderCoding for FileHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<FileHeader> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_FILE_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (file_type, filename, parent_file_number, metadata_ext) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileHeader::new(file_number, file_type, filename, parent_file_number, metadata_ext))

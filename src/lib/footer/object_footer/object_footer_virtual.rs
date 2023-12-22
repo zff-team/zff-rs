@@ -69,12 +69,12 @@ impl ObjectFooterVirtual {
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER +
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			self.version().encode_directly().len() +
+			Self::version().encode_directly().len() +
 			self.object_number.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut encrypted_content.encode_directly());
 
@@ -120,24 +120,21 @@ impl ObjectFooterVirtual {
 
 impl HeaderCoding for ObjectFooterVirtual {
 	type Item = ObjectFooterVirtual;
-	fn version(&self) -> u8 { 
+	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version()];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let (creation_timestamp, 
 			passive_objects,
@@ -232,14 +229,14 @@ impl EncryptedObjectFooterVirtual {
 
 impl HeaderCoding for EncryptedObjectFooterVirtual {
 	type Item = EncryptedObjectFooterVirtual;
-	fn version(&self) -> u8 { 
+	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version()];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.encrypted_data.encode_directly());
 		vec

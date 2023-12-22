@@ -25,9 +25,7 @@ use crate::header::{
 
 // - external
 #[cfg(feature = "serde")]
-use serde::{
-	Serialize,
-};
+use serde::Serialize;
 
 
 /// The file footer is written at the end of each acquired file.
@@ -37,8 +35,6 @@ use serde::{
 #[derive(Debug,Clone,Eq,PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct FileFooter {
-	/// the version of the [FileFooter].
-	pub version: u8,
 	/// the appropriate file number.
 	pub file_number: u64,
 	/// the acquisition start time for this file.
@@ -51,15 +47,18 @@ pub struct FileFooter {
 	pub first_chunk_number: u64,
 	/// The full number of chunks for this file.
 	pub number_of_chunks: u64,
-	/// the original (uncompressed & unencrypted) length of the file.
+	/// the original (uncompressed & unencrypted) length of the file.  
+	/// - If the file is a regular file, this method returns the original (uncompressed, unencrypted) size
+	/// of the file (without "filesystem-"metadata - just the size of the file content).  
+	/// - If the file is a hardlink, this method returns the size of the inner value (just the size of the appropriate filenumber: 8).  
+	/// - If the file is a directory, this method returns the size of the underlying vector of children.  
+	/// - If the file is a symlink, this method returns the length of the linked path.  
 	pub length_of_data: u64,
 }
 
 impl FileFooter {
 	/// creates a new FileFooter by given values/hashes.
-	#[allow(clippy::too_many_arguments)]
 	pub fn new(
-		version: u8, 
 		file_number: u64,
 		acquisition_start: u64, 
 		acquisition_end: u64, 
@@ -68,7 +67,6 @@ impl FileFooter {
 		number_of_chunks: u64, 
 		length_of_data: u64) -> FileFooter {
 		Self {
-			version,
 			file_number,
 			acquisition_start,
 			acquisition_end,
@@ -77,39 +75,6 @@ impl FileFooter {
 			number_of_chunks,
 			length_of_data,
 		}
-	}
-
-	/// returns the acquisition start time.
-	pub fn acquisition_start(&self) -> u64 {
-		self.acquisition_start
-	}
-
-	/// returns the acquisition end time.
-	pub fn acquisition_end(&self) -> u64 {
-		self.acquisition_end
-	}
-
-	/// returns the hash header.
-	pub fn hash_header(&self) -> &HashHeader {
-		&self.hash_header
-	}
-
-	/// returns the first chunk number, used for the underlying file.
-	pub fn first_chunk_number(&self) -> u64 {
-		self.first_chunk_number
-	}
-
-	/// returns the total number of chunks, used for the underlying file.
-	pub fn number_of_chunks(&self) -> u64 {
-		self.number_of_chunks
-	}
-
-	/// if the file is a regular file, this method returns the original (uncompressed, unencrypted) size of the file (without "filesystem-"metadata - just the size of the file content).
-	/// if the file is a hardlink, this method returns the size of the inner value (just the size of the appropriate filenumber: 8).
-	/// if the file is a directory, this method returns the size of the underlying vector of children.
-	/// if the file is a symlink, this method returns the length of the linked path.
-	pub fn length_of_data(&self) -> u64 {
-		self.length_of_data
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
@@ -157,10 +122,7 @@ impl FileFooter {
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_FOOTER_VERSION_FILE_FOOTER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
 		
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
@@ -172,7 +134,7 @@ impl FileFooter {
 			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
-		Ok(FileFooter::new(version, file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
+		Ok(FileFooter::new(file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
 	}
 
 	#[allow(clippy::type_complexity)]
@@ -204,27 +166,24 @@ impl FileFooter {
 
 impl HeaderCoding for FileFooter {
 	type Item = FileFooter;
-	fn version(&self) -> u8 { 
-		self.version
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_FILE_FOOTER
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_FILE_FOOTER
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.file_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<FileFooter> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_FOOTER_VERSION_FILE_FOOTER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
-		Ok(FileFooter::new(version, file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
+		Ok(FileFooter::new(file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
 	}
 }
 

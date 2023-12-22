@@ -22,11 +22,7 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	Encryption,
-	FileTypeEncodingInformation,
-	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
-	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
-	DEFAULT_HEADER_VERSION_HASH_HEADER,
-	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL,
+	FileTypeEncodingInformation
 };
 
 #[cfg(feature = "log")]
@@ -258,7 +254,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		let mut chunked_data = match &self.encryption_key {
 			Some(encryption_key) => {
 				let encryption_algorithm = match &self.obj_header.encryption_header {
-					Some(header) => header.algorithm(),
+					Some(header) => &header.algorithm,
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
 				
@@ -278,7 +274,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 				Some(key) => key,
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
 			};
-			chunk_header.encrypt_and_consume(key, enc_header.algorithm())?.encode_directly()
+			chunk_header.encrypt_and_consume(key, &enc_header.algorithm)?.encode_directly()
 		} else {
 			chunk_header.encode_directly()
 		};
@@ -297,7 +293,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		let mut hash_values = Vec::new();
 	    for (hash_type, hasher) in self.hasher_map.clone() {
 	        let hash = hasher.finalize();
-	        let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
+	        let mut hash_value = HashValue::new_empty(hash_type);
 	        hash_value.set_hash(hash.to_vec());
 	        if self.has_hash_signatures {
 	        	if let Some(signing_key) = &self.signing_key {
@@ -311,9 +307,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    #[cfg(feature = "log")]
 		hashes_to_log(self.obj_header.object_number, None, &hash_values);
 
-	    let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
+	    let hash_header = HashHeader::new(hash_values);
 		let footer = ObjectFooterPhysical::new(
-			DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL,
 			self.obj_number(),
 			self.acquisition_start,
 			self.acquisition_end,
@@ -326,7 +321,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			let encryption_information = EncryptionInformation {
 				encryption_key: encryption_key.to_vec(),
 				// unwrap should be safe here: there should not an encryption key exists without an encryption header.
-				algorithm: self.obj_header.encryption_header.clone().unwrap().algorithm().clone()
+				algorithm: self.obj_header.encryption_header.clone().unwrap().algorithm.clone()
 			};
 	    	footer.encrypt_directly(encryption_information)
 	    } else {
@@ -375,7 +370,7 @@ impl LogicalObjectEncoder {
 			let encryption_information = EncryptionInformation {
 				encryption_key: encryption_key.to_vec(),
 				// unwrap should be safe here: there should not an encryption key exists without an encryption header.
-				algorithm: self.obj_header.encryption_header.clone().unwrap().algorithm().clone()
+				algorithm: self.obj_header.encryption_header.clone().unwrap().algorithm.clone()
 			};
 	    	self.object_footer.encrypt_directly(encryption_information)
 	    } else {
@@ -426,7 +421,7 @@ impl LogicalObjectEncoder {
 		let current_file_number = current_file_header.file_number;
 
 		let encryption_information = if let Some(encryption_key) = &encryption_key {
-			obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
+			obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm.clone()))
 		} else {
 			None
 		};
@@ -478,7 +473,7 @@ impl LogicalObjectEncoder {
 			current_chunk_number, 
 			filetype_encoding_information)?);
 		
-		let mut object_footer = ObjectFooterLogical::new_empty(DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL, obj_header.object_number);
+		let mut object_footer = ObjectFooterLogical::new_empty(obj_header.object_number);
 		for filenumber in root_dir_filenumbers {
 			object_footer.add_root_dir_filenumber(filenumber)
 		};
@@ -604,7 +599,8 @@ impl LogicalObjectEncoder {
 				self.current_file_number = current_file_header.file_number;
 
 				let encryption_information = if let Some(encryption_key) = &self.encryption_key {
-					self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm().clone()))
+					self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(
+						encryption_key.to_vec(), enc_header.algorithm.clone()))
 				} else {
 					None
 				};

@@ -39,7 +39,8 @@ pub trait HeaderCoding {
 	}
 
 	/// returns the version of the header.
-	fn version(&self) -> u8;
+	/// This reflects the default version of the appropiate header used in zff v3.
+	fn version() -> u8;
 
 	/// encodes a given key.
 	fn encode_key<K: Into<String>>(key: K) -> Vec<u8> {
@@ -86,6 +87,18 @@ pub trait HeaderCoding {
 			Err(_) => return false,
 		};
 		identifier == Self::identifier()
+	}
+
+	/// checks if the read header / footer version is supported by this crate (only zff v3 headers / footers are supported).
+	fn check_version<R: Read>(data: &mut R) -> Result<()> {
+		let version = match data.read_u8() {
+			Ok(val) => val,
+			Err(_) => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+		};
+		if version != Self::version() {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()));
+		}
+		Ok(())
 	}
 	
 	/// helper method to check, if the key is on position.

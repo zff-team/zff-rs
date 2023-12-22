@@ -7,7 +7,7 @@ pub use encoder::*;
 // - internal
 use crate::{
 	header::{FileHeader, FileType},
-	footer::{FileFooter},
+	footer::FileFooter,
 };
 
 /// The [File] contains the appropriate [FileHeader] and [FileFooter] of a dumped [File].
@@ -61,6 +61,6 @@ impl File {
 
 	/// returns the length of the data, read from the underlying [FileFooter].
 	pub fn length_of_data(&self) -> u64 {
-		self.footer.length_of_data()
+		self.footer.length_of_data
 	}
 }

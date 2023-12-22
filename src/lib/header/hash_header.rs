@@ -5,6 +5,7 @@ use std::fmt;
 #[cfg(feature = "serde")]
 use std::collections::HashMap;
 
+use crate::constants::{DEFAULT_HEADER_VERSION_HASH_HEADER, DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER};
 // - internal
 use crate::{
 	Result,
@@ -34,8 +35,8 @@ use hex;
 /// This header is part of various footers and contains 0 or more hash values of the dumped data.\
 #[derive(Debug,Clone,Eq,PartialEq)]
 pub struct HashHeader {
-	version: u8,
-	hashes: Vec<HashValue>,
+	/// The hash values of the dumped data.
+	pub hashes: Vec<HashValue>,
 }
 
 #[cfg(feature = "serde")]
@@ -57,16 +58,10 @@ impl Serialize for HashHeader {
 
 impl HashHeader {
 	/// creates a new HashHeader by given values/hashes.
-	pub fn new(version: u8, hashes: Vec<HashValue>) -> HashHeader {
+	pub fn new(hashes: Vec<HashValue>) -> HashHeader {
 		Self {
-			version,
 			hashes,
 		}
-	}
-
-	/// returns a reference to the underlying [HashValue]s.
-	pub fn hash_values(&self) -> &Vec<HashValue> {
-		&self.hashes
 	}
 }
 
@@ -77,13 +72,13 @@ impl HeaderCoding for HashHeader {
 		HEADER_IDENTIFIER_HASH_HEADER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_HASH_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.hashes.encode_directly());
 
 		vec
@@ -91,9 +86,9 @@ impl HeaderCoding for HashHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<HashHeader> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
-		Ok(HashHeader::new(header_version, hashes))
+		Ok(HashHeader::new(hashes))
 	}
 }
 
@@ -115,27 +110,27 @@ impl HashHeader {
 /// The HashValue-struct contains the appropriate hash algorithm and the hash. This struct has a version also.
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub struct HashValue {
-	version: u8,
-	hash_type: HashType,
-	hash: Vec<u8>,
-	ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,
+	/// The hash algorithm.
+	pub hash_type: HashType,
+	/// The hash value.
+	pub hash: Vec<u8>,
+	/// The ed25519 signature.
+	pub ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,
 }
 
 impl HashValue {
 	/// creates a new [HashValue] with the given parameters.
-	pub fn new(version: u8, hash_type: HashType, hash: Vec<u8>, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,) -> HashValue{
+	pub fn new(hash_type: HashType, hash: Vec<u8>, ed25519_signature: Option<[u8; SIGNATURE_LENGTH]>,) -> HashValue{
 		Self {
-			version,
 			hash_type,
 			hash,
 			ed25519_signature,
 		}
 	}
 	/// creates a new, empty [HashValue] for a given hashtype.
-	pub fn new_empty(structure_version: u8, hash_type: HashType) -> HashValue {
+	pub fn new_empty(hash_type: HashType) -> HashValue {
 		let hash_default_len = hash_type.default_len();
 		Self {
-			version: structure_version,
 			hash_type,
 			hash: vec!(0u8; hash_default_len/8),
 			ed25519_signature: None
@@ -176,13 +171,13 @@ impl HeaderCoding for HashValue {
 		HEADER_IDENTIFIER_HASH_VALUE
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.push(self.hash_type.clone() as u8);
 		vec.append(&mut self.hash.encode_directly());
 		match self.ed25519_signature {
@@ -194,7 +189,7 @@ impl HeaderCoding for HashValue {
 
 	fn decode_content(data: Vec<u8>) -> Result<HashValue> {
 		let mut cursor = Cursor::new(&data);
-		let structure_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let hash_type = match u8::decode_directly(&mut cursor)? {
 			0 => HashType::Blake2b512,
 			1 => HashType::SHA256,
@@ -212,7 +207,7 @@ impl HeaderCoding for HashValue {
 			ed25519_signature = Some(buffer);
 		}
 
-		Ok(HashValue::new(structure_version, hash_type, hash, ed25519_signature))
+		Ok(HashValue::new(hash_type, hash, ed25519_signature))
 	}
 }
 

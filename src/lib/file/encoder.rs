@@ -20,9 +20,6 @@ use crate::{
 	Encryption,
 	ZffError,
 	ZffErrorKind,
-	DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER,
-	DEFAULT_HEADER_VERSION_HASH_HEADER,
-	DEFAULT_FOOTER_VERSION_FILE_FOOTER,
 };
 
 #[cfg(feature = "log")]
@@ -226,7 +223,7 @@ impl FileEncoder {
 					Some(key) => key,
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
 				};
-				chunk_header.encrypt_and_consume(key, enc_header.algorithm())?.encode_directly()
+				chunk_header.encrypt_and_consume(key, &enc_header.algorithm)?.encode_directly()
 			} else {
 				chunk_header.encode_directly()
 			};
@@ -286,7 +283,7 @@ impl FileEncoder {
 				Some(key) => key,
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
 			};
-			chunk_header.encrypt_and_consume(key, enc_header.algorithm())?.encode_directly()
+			chunk_header.encrypt_and_consume(key, &enc_header.algorithm)?.encode_directly()
 		} else {
 			chunk_header.encode_directly()
 		};
@@ -304,7 +301,7 @@ impl FileEncoder {
 		let mut hash_values = Vec::new();
 		for (hash_type, hasher) in self.hasher_map.clone() {
 			let hash = hasher.finalize();
-			let mut hash_value = HashValue::new_empty(DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER, hash_type);
+			let mut hash_value = HashValue::new_empty(hash_type);
 			hash_value.set_hash(hash.to_vec());
 			hash_values.push(hash_value);
 		}
@@ -312,9 +309,8 @@ impl FileEncoder {
 		#[cfg(feature = "log")]
 		hashes_to_log(self.object_header.object_number, Some(self.file_header.file_number), &hash_values);
 
-		let hash_header = HashHeader::new(DEFAULT_HEADER_VERSION_HASH_HEADER, hash_values);
+		let hash_header = HashHeader::new(hash_values);
 		let footer = FileFooter::new(
-			DEFAULT_FOOTER_VERSION_FILE_FOOTER,
 			self.file_header.file_number,
 			self.acquisition_start,
 			self.acquisition_end,

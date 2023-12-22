@@ -105,7 +105,7 @@ impl ZffObjectReaderPhysical {
 		let mut current_chunk_number = (first_chunk_number * chunk_size + self.position) / chunk_size;
 		let mut inner_position = (self.position % chunk_size) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
-		let compression_algorithm = self.object_header.compression_header.algorithm();
+		let compression_algorithm = &self.object_header.compression_header.algorithm;
 
 		loop {
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
@@ -225,7 +225,7 @@ impl ZffObjectReaderLogical {
 				Some(key) => key,
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
 			};
-			Some(EncryptionInformation::new(key, encryption_header.algorithm().clone()))
+			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
 		} else {
 			None
 		};
@@ -258,7 +258,7 @@ impl ZffObjectReaderLogical {
 				Some(key) => key,
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
 			};
-			Some(EncryptionInformation::new(key, encryption_header.algorithm().clone()))
+			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
 		} else {
 			None
 		};
@@ -290,7 +290,7 @@ impl ZffObjectReaderLogical {
 				Some(key) => key,
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
 			};
-			Some(EncryptionInformation::new(key, encryption_header.algorithm().clone()))
+			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
 		} else {
 			None
 		};
@@ -400,7 +400,7 @@ impl ZffObjectReaderLogical {
 		let mut current_chunk_number = (first_chunk_number * chunk_size + active_filemetadata.position) / chunk_size;
 		let mut inner_position = (active_filemetadata.position % chunk_size) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
-		let compression_algorithm = self.object_header.compression_header.algorithm();
+		let compression_algorithm = &self.object_header.compression_header.algorithm;
 		loop {
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
 				break;
@@ -556,7 +556,7 @@ impl ZffObjectReaderVirtual {
 			let mut current_chunk_number = virtual_mapping_information.start_chunk_no;
 			let mut inner_position = virtual_mapping_information.chunk_offset as usize; // the inner chunk position
 			let mut remaining_offset_length = virtual_mapping_information.length as usize;
-			let compression_algorithm = self.object_header.compression_header.algorithm();
+			let compression_algorithm = &self.object_header.compression_header.algorithm;
 
 			loop {
 				if read_bytes == buffer.len() {
@@ -779,9 +779,9 @@ impl FileMetadata {
 	pub fn with_header_minimal(fileheader: &FileHeader, filefooter: &FileFooter) -> Self {
 		Self {
 			parent_file_number: fileheader.parent_file_number,
-			length_of_data: filefooter.length_of_data(),
-			first_chunk_number: filefooter.first_chunk_number(),
-			number_of_chunks: filefooter.number_of_chunks(),
+			length_of_data: filefooter.length_of_data,
+			first_chunk_number: filefooter.first_chunk_number,
+			number_of_chunks: filefooter.number_of_chunks,
 			position: 0,
 			file_type: fileheader.file_type.clone(),
 			filename: None,
@@ -807,9 +807,9 @@ impl FileMetadata {
 	pub fn with_header_recommended(fileheader: &FileHeader, filefooter: &FileFooter) -> Self {
 		Self {
 			parent_file_number: fileheader.parent_file_number,
-			length_of_data: filefooter.length_of_data(),
-			first_chunk_number: filefooter.first_chunk_number(),
-			number_of_chunks: filefooter.number_of_chunks(),
+			length_of_data: filefooter.length_of_data,
+			first_chunk_number: filefooter.first_chunk_number,
+			number_of_chunks: filefooter.number_of_chunks,
 			position: 0,
 			file_type: fileheader.file_type.clone(),
 			filename: Some(fileheader.filename.clone()),
@@ -837,16 +837,16 @@ impl FileMetadata {
 	pub fn with_header_all(fileheader: &FileHeader, filefooter: &FileFooter) -> Self {
 		Self {
 			parent_file_number: fileheader.parent_file_number,
-			length_of_data: filefooter.length_of_data(),
-			first_chunk_number: filefooter.first_chunk_number(),
-			number_of_chunks: filefooter.number_of_chunks(),
+			length_of_data: filefooter.length_of_data,
+			first_chunk_number: filefooter.first_chunk_number,
+			number_of_chunks: filefooter.number_of_chunks,
 			position: 0,
 			file_type: fileheader.file_type.clone(),
 			filename: Some(fileheader.filename.clone()),
 			metadata_ext: extract_all_metadata(fileheader),
-			acquisition_start: Some(filefooter.acquisition_start()),
-			acquisition_end: Some(filefooter.acquisition_end()),
-			hash_header: Some(filefooter.hash_header().clone()),
+			acquisition_start: Some(filefooter.acquisition_start),
+			acquisition_end: Some(filefooter.acquisition_end),
+			hash_header: Some(filefooter.hash_header.clone()),
 		}
 	}
 }

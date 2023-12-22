@@ -150,7 +150,7 @@ impl ObjectHeader {
 		};
 
 		let mut vec = Vec::new();
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
 		let mut flags: u8 = 0;
 		flags += ENCRYPT_OBJECT_FLAG_VALUE;
@@ -166,8 +166,7 @@ impl ObjectHeader {
 		let encrypted_data = Encryption::encrypt_object_header(
 			key, data_to_encrypt,
 			self.object_number,
-			encryption_header.algorithm()
-			)?;
+			&encryption_header.algorithm)?;
 		vec.append(&mut encrypted_data.encode_directly());
 		Ok(vec)
 	}
@@ -195,10 +194,7 @@ impl ObjectHeader {
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
-		let header_version = u8::decode_directly(&mut cursor)?;
-		if header_version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, header_version.to_string()));
-		};
+		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		if !flags.encryption {
@@ -207,7 +203,7 @@ impl ObjectHeader {
 		let mut encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let encryption_key = encryption_header.decrypt_encryption_key(password)?;
-		let algorithm = encryption_header.algorithm();
+		let algorithm = &encryption_header.algorithm;
 		let decrypted_data = Encryption::decrypt_object_header(encryption_key, encrypted_data, object_number, algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (chunk_size,
@@ -268,7 +264,7 @@ impl HeaderCoding for ObjectHeader {
 		HEADER_IDENTIFIER_OBJECT_HEADER
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_OBJECT_HEADER
 	}
 
@@ -281,7 +277,7 @@ impl HeaderCoding for ObjectHeader {
 		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len() + encoded_object_number.len() + 1) as u64; //4 bytes identifier + 8 bytes for length + length of encoded content + len of object number + length of version
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.push(self.version());
+		vec.push(Self::version());
 		vec.append(&mut encoded_object_number);
 		vec.append(&mut encoded_header);
 		vec
@@ -307,10 +303,7 @@ impl HeaderCoding for ObjectHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<ObjectHeader> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		if flags.encryption {
@@ -417,7 +410,7 @@ impl EncryptedObjectHeader {
 		P: AsRef<[u8]>,
 	{
 		let encryption_key = self.encryption_header.decrypt_encryption_key(password)?;
-		let algorithm = self.encryption_header.algorithm();
+		let algorithm = &self.encryption_header.algorithm;
 		let decrypted_data = Encryption::decrypt_object_header(encryption_key, &self.encrypted_content, self.object_number, algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (chunk_size,
@@ -440,23 +433,7 @@ impl EncryptedObjectHeader {
 	where
 		P: AsRef<[u8]>,
 	{
-		let encryption_key = self.encryption_header.decrypt_encryption_key(password)?;
-		let algorithm = self.encryption_header.algorithm();
-		let decrypted_data = Encryption::decrypt_object_header(encryption_key, self.encrypted_content, self.object_number, algorithm)?;
-		let mut cursor = Cursor::new(decrypted_data);
-		let (chunk_size,
-			compression_header,
-			description_header,
-			object_type) = ObjectHeader::decode_inner_content(&mut cursor)?;
-		let object_header = ObjectHeader::new(
-			self.object_number,
-			Some(self.encryption_header),
-			chunk_size,
-			compression_header,
-			description_header,
-			object_type,
-			self.flags);
-		Ok(object_header)
+		self.decrypt_with_password(password)
 	}
 }
 
@@ -467,12 +444,12 @@ impl HeaderCoding for EncryptedObjectHeader {
 		HEADER_IDENTIFIER_OBJECT_HEADER
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_OBJECT_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version()];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		let mut flags: u8 = 0;
 		flags += ENCRYPT_OBJECT_FLAG_VALUE;

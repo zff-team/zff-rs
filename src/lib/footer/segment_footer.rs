@@ -29,8 +29,6 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct SegmentFooter {
-	/// The footer version
-	pub version: u8,
 	/// The total length of the segment.
 	pub length_of_segment: u64,
 	/// A [HashMap] containing the object number and the appropriate offset of the [crate::header::ObjectHeader].
@@ -48,15 +46,14 @@ pub struct SegmentFooter {
 
 impl Default for SegmentFooter {
 	fn default() -> Self {
-		SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER)
+		SegmentFooter::new_empty()
 	}
 }
 
 impl SegmentFooter {
 	/// creates a new empty SegmentFooter.
-	pub fn new_empty(version: u8) -> SegmentFooter {
+	pub fn new_empty() -> SegmentFooter {
 		Self {
-			version,
 			length_of_segment: 0,
 			object_header_offsets: HashMap::new(),
 			object_footer_offsets: HashMap::new(),
@@ -68,7 +65,6 @@ impl SegmentFooter {
 
 	/// creates a new SegmentFooter.
 	pub fn new(
-		version: u8, 
 		length_of_segment: u64, 
 		object_header_offsets: HashMap<u64, u64>, 
 		object_footer_offsets: HashMap<u64, u64>, 
@@ -76,7 +72,6 @@ impl SegmentFooter {
 		first_chunk_number: u64,
 		footer_offset: u64) -> SegmentFooter {
 		Self {
-			version,
 			length_of_segment,
 			object_header_offsets,
 			object_footer_offsets,
@@ -125,13 +120,13 @@ impl HeaderCoding for SegmentFooter {
 		FOOTER_IDENTIFIER_SEGMENT_FOOTER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.length_of_segment.encode_directly());
 		vec.append(&mut self.object_header_offsets.encode_directly());
 		vec.append(&mut self.object_footer_offsets.encode_directly());
@@ -143,15 +138,14 @@ impl HeaderCoding for SegmentFooter {
 
 	fn decode_content(data: Vec<u8>) -> Result<SegmentFooter> {
 		let mut cursor = Cursor::new(data);
-
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let length_of_segment = u64::decode_directly(&mut cursor)?;
 		let object_header_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let object_footer_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let first_chunk_number = u64::decode_directly(&mut cursor)?;
 		let footer_offset = u64::decode_directly(&mut cursor)?;
-		Ok(SegmentFooter::new(footer_version, length_of_segment, object_header_offsets, object_footer_offsets, chunk_map_table, first_chunk_number, footer_offset))
+		Ok(SegmentFooter::new(length_of_segment, object_header_offsets, object_footer_offsets, chunk_map_table, first_chunk_number, footer_offset))
 	}
 }
 

@@ -1,9 +1,9 @@
 // - STD
 use std::borrow::Borrow;
-use std::cmp::{PartialEq};
+use std::cmp::PartialEq;
 use std::io::{Cursor, Read};
 use std::fmt;
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 
 // - internal
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
-	header::{EncryptionInformation},
+	header::EncryptionInformation,
 	Encryption,
 	HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION,
 	HEADER_IDENTIFIER_VIRTUAL_LAYER,
@@ -75,11 +75,11 @@ impl VirtualMappingInformation {
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER +
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			self.version().encode_directly().len() +
+			Self::version().encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut encrypted_content.encode_directly());
 
 		Ok(vec)
@@ -98,11 +98,7 @@ impl VirtualMappingInformation {
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
-
+		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
 		let decrypted_data = Encryption::decrypt_virtual_mapping_information(
@@ -158,12 +154,12 @@ impl HeaderCoding for VirtualMappingInformation {
 		HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version()];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.encode_content());
 		vec
 	}
@@ -237,12 +233,12 @@ impl VirtualLayer {
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER +
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			self.version().encode_directly().len() +
+			Self::version().encode_directly().len() +
 			self.depth.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut self.version().encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.depth.encode_directly());
 		vec.append(&mut encrypted_content.encode_directly());
 
@@ -307,12 +303,12 @@ impl HeaderCoding for VirtualLayer {
 		HEADER_IDENTIFIER_VIRTUAL_LAYER
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_VIRTUAL_LAYER
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version()];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.depth.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
@@ -320,10 +316,7 @@ impl HeaderCoding for VirtualLayer {
 
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_VIRTUAL_LAYER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let depth = u8::decode_directly(&mut cursor)?;
 		let (offsetmap, offset_segment_map) = Self::decode_inner_content(&mut cursor)?;
 

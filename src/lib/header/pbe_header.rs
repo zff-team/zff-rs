@@ -2,6 +2,7 @@
 use std::io::{Read,Cursor};
 use std::fmt;
 
+use crate::constants::DEFAULT_HEADER_VERSION_PBE_HEADER;
 // - internal
 use crate::{
 	Result,
@@ -41,49 +42,30 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBEHeader {
-	version: u8,
-	kdf_scheme: KDFScheme,
-	encryption_scheme: PBEScheme,
-	kdf_parameters: KDFParameters,
-	pbencryption_nonce: [u8; 16],
+	/// The kdf scheme used for the encryption key derivation.
+	pub kdf_scheme: KDFScheme,
+	/// The encryption scheme used for the encryption key derivation.
+	pub encryption_scheme: PBEScheme,
+	/// The kdf parameters.
+	pub kdf_parameters: KDFParameters,
+	/// The nonce used for the encryption of the encryption key.
+	pub pbencryption_nonce: [u8; 16],
 }
 
 impl PBEHeader {
 	/// returns a new pbe header with the given values.
 	pub fn new(
-		version: u8,
 		kdf_scheme: KDFScheme,
 		encryption_scheme: PBEScheme,
 		kdf_parameters: KDFParameters,
 		pbencryption_nonce: [u8; 16],
 		) -> PBEHeader {
 		Self {
-			version,
 			kdf_scheme,
 			encryption_scheme,
 			kdf_parameters,
 			pbencryption_nonce,
 		}
-	}
-
-	/// returns the kdf scheme.
-	pub fn kdf_scheme(&self) -> &KDFScheme {
-		&self.kdf_scheme
-	}
-
-	/// returns the encryption scheme.
-	pub fn encryption_scheme(&self) -> &PBEScheme {
-		&self.encryption_scheme
-	}
-
-	/// returns the kdf parameters.
-	pub fn kdf_parameters(&self) -> &KDFParameters {
-		&self.kdf_parameters
-	}
-
-	/// returns the pbe nonce.
-	pub fn nonce(&self) -> &[u8; 16] {
-		&self.pbencryption_nonce
 	}
 }
 
@@ -94,12 +76,12 @@ impl HeaderCoding for PBEHeader {
 		HEADER_IDENTIFIER_PBE_HEADER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_PBE_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version, self.kdf_scheme.clone() as u8, self.encryption_scheme.clone() as u8];
+		let mut vec = vec![Self::version(), self.kdf_scheme.clone() as u8, self.encryption_scheme.clone() as u8];
 		vec.append(&mut self.kdf_parameters.encode_directly());
 		vec.append(&mut self.pbencryption_nonce.encode_directly());
 		vec
@@ -107,7 +89,7 @@ impl HeaderCoding for PBEHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<PBEHeader> {
 		let mut cursor = Cursor::new(data);
-		let header_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let kdf_scheme = match u8::decode_directly(&mut cursor)? {
 			0 => KDFScheme::PBKDF2SHA256,
 			1 => KDFScheme::Scrypt,
@@ -121,7 +103,7 @@ impl HeaderCoding for PBEHeader {
 		let kdf_params = KDFParameters::decode_directly(&mut cursor)?;
 		let mut encryption_nonce = [0; 16];
 		cursor.read_exact(&mut encryption_nonce)?;
-		Ok(PBEHeader::new(header_version, kdf_scheme, encryption_scheme, kdf_params, encryption_nonce))
+		Ok(PBEHeader::new(kdf_scheme, encryption_scheme, kdf_params, encryption_nonce))
 	}
 }
 
@@ -208,9 +190,9 @@ impl ValueDecoder for KDFParameters {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBKDF2SHA256Parameters {
 	/// The iterations to use.
-	iterations: u32,
+	pub iterations: u32,
 	/// The salt value.
-	salt: [u8; 32],
+	pub salt: [u8; 32],
 }
 
 impl PBKDF2SHA256Parameters {
@@ -221,16 +203,6 @@ impl PBKDF2SHA256Parameters {
 			salt,
 		}
 	}
-
-	/// returns the number of iterations
-	pub fn iterations(&self) -> u32 {
-		self.iterations
-	}
-
-	/// returns the salt
-	pub fn salt(&self) -> &[u8; 32] {
-		&self.salt
-	}
 }
 
 impl HeaderCoding for PBKDF2SHA256Parameters {
@@ -240,7 +212,8 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 		PBE_KDF_PARAMETERS_PBKDF2
 	}
 
-	fn version(&self) -> u8 {
+	/// just a placeholder, because this structure is not a header, but only a part of another header.
+	fn version() -> u8 {
 		0
 	}
 
@@ -269,13 +242,13 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ScryptParameters {
 	/// The log n parameter for Scrypt.
-	logn: u8,
+	pub logn: u8,
 	/// The r parameter for Scrypt.
-	r: u32,
+	pub r: u32,
 	/// The p parameter for Scrypt.
-	p: u32,
+	pub p: u32,
 	/// The used salt.
-	salt: [u8; 32],
+	pub salt: [u8; 32],
 }
 
 impl ScryptParameters {
@@ -288,26 +261,6 @@ impl ScryptParameters {
 			salt,
 		}
 	}
-
-	/// returns the logn
-	pub fn logn(&self) -> u8 {
-		self.logn
-	}
-
-	/// returns r
-	pub fn r(&self) -> u32 {
-		self.r
-	}
-
-	/// returns p
-	pub fn p(&self) -> u32 {
-		self.p
-	}
-
-	/// returns the salt
-	pub fn salt(&self) -> &[u8; 32] {
-		&self.salt
-	}
 }
 
 impl HeaderCoding for ScryptParameters {
@@ -317,7 +270,8 @@ impl HeaderCoding for ScryptParameters {
 		PBE_KDF_PARAMETERS_SCRYPT
 	}
 
-	fn version(&self) -> u8 {
+	/// just a placeholder, because this structure is not a header, but only a part of another header.
+	fn version() -> u8 {
 		0
 	}
 
@@ -379,7 +333,8 @@ impl HeaderCoding for Argon2idParameters {
 		PBE_KDF_PARAMETERS_ARGON2ID
 	}
 
-	fn version(&self) -> u8 {
+	/// just a placeholder, because this structure is not a header, but only a part of another header.
+	fn version() -> u8 {
 		0
 	}
 

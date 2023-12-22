@@ -61,7 +61,7 @@ impl TryFrom<ObjectHeader> for EncryptionInformation {
 					None => Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
 					Some(key) => Ok(EncryptionInformation {
 						encryption_key: key,
-						algorithm: enc_header.algorithm().clone()
+						algorithm: enc_header.algorithm
 					}),
 				}
 			}
@@ -79,7 +79,7 @@ impl TryFrom<&ObjectHeader> for EncryptionInformation {
 					None => Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
 					Some(key) => Ok(EncryptionInformation {
 						encryption_key: key,
-						algorithm: enc_header.algorithm().clone()
+						algorithm: enc_header.algorithm.clone()
 					}),
 				}
 			}
@@ -111,10 +111,14 @@ impl EncryptionInformation {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionHeader {
-	pbe_header: PBEHeader,
-	algorithm: EncryptionAlgorithm,
-	encrypted_encryption_key: Vec<u8>,
-	decrypted_encryption_key: Option<Vec<u8>>
+	/// The password based encryption header.
+	pub pbe_header: PBEHeader,
+	/// The used encryption algorithm.
+	pub algorithm: EncryptionAlgorithm,
+	/// The encrypted encryption key.
+	pub encrypted_encryption_key: Vec<u8>,
+	/// The decrypted encryption key.
+	pub decrypted_encryption_key: Option<Vec<u8>>
 }
 
 impl EncryptionHeader {
@@ -132,16 +136,6 @@ impl EncryptionHeader {
 		}
 	}
 
-	/// returns the used encryption algorithm as a reference.
-	pub fn algorithm(&self) -> &EncryptionAlgorithm {
-		&self.algorithm
-	}
-
-	/// returns a reference to the inner PBE header.
-	pub fn pbe_header(&self) -> &PBEHeader {
-		&self.pbe_header
-	}
-
 	/// returns the decrypted encryption key. If the Key is already encrypted, you will get an None and should use the decrypt_encryption_key() method.
 	pub fn get_encryption_key(&self) -> Option<Vec<u8>> {
 		self.decrypted_encryption_key.clone()
@@ -157,23 +151,23 @@ impl EncryptionHeader {
 		if let Some(decrypted_encryption_key) = &self.decrypted_encryption_key {
 			return Ok(decrypted_encryption_key.clone())
 		}
-		let decryption_key = match self.pbe_header.kdf_scheme() {
-			KDFScheme::PBKDF2SHA256 => match self.pbe_header.kdf_parameters() {
+		let decryption_key = match self.pbe_header.kdf_scheme {
+			KDFScheme::PBKDF2SHA256 => match &self.pbe_header.kdf_parameters {
 				KDFParameters::PBKDF2SHA256Parameters(parameters) => {
-					let iterations = parameters.iterations();
-					let salt = parameters.salt();
-					match self.pbe_header.encryption_scheme() {
+					let iterations = parameters.iterations;
+					let salt = parameters.salt;
+					match self.pbe_header.encryption_scheme {
 						PBEScheme::AES128CBC => Encryption::decrypt_pbkdf2sha256_aes128cbc(
 							iterations,
-							salt,
-							self.pbe_header.nonce(),
+							&salt,
+							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
 						PBEScheme::AES256CBC => Encryption::decrypt_pbkdf2sha256_aes256cbc(
 							iterations,
-							salt,
-							self.pbe_header.nonce(),
+							&salt,
+							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -181,19 +175,19 @@ impl EncryptionHeader {
 				}
 				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, ""))
 			},
-			KDFScheme::Scrypt => match self.pbe_header.kdf_parameters() {
+			KDFScheme::Scrypt => match &self.pbe_header.kdf_parameters {
 				KDFParameters::ScryptParameters(parameters) => {
-					let logn = parameters.logn();
-					let p = parameters.p();
-					let r = parameters.r();
-					let salt = parameters.salt();
-					match self.pbe_header.encryption_scheme() {
+					let logn = parameters.logn;
+					let p = parameters.p;
+					let r = parameters.r;
+					let salt = parameters.salt;
+					match self.pbe_header.encryption_scheme {
 						PBEScheme::AES128CBC => Encryption::decrypt_scrypt_aes128cbc(
 							logn,
 							p,
 							r,
-							salt,
-							self.pbe_header.nonce(),
+							&salt,
+							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -201,8 +195,8 @@ impl EncryptionHeader {
 							logn,
 							p,
 							r,
-							salt,
-							self.pbe_header.nonce(),
+							&salt,
+							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -210,19 +204,19 @@ impl EncryptionHeader {
 				},
 				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
 			},
-			KDFScheme::Argon2id => match self.pbe_header.kdf_parameters() {
+			KDFScheme::Argon2id => match &self.pbe_header.kdf_parameters {
 				KDFParameters::Argon2idParameters(parameters) => {
 					let mem_cost = parameters.mem_cost;
 					let lanes = parameters.lanes;
 					let iterations = parameters.iterations;
 					let salt = parameters.salt;
-					match self.pbe_header.encryption_scheme() {
+					match self.pbe_header.encryption_scheme {
 						PBEScheme::AES128CBC => Encryption::decrypt_argon2_aes128cbc(
 							mem_cost,
 							lanes,
 							iterations,
 							&salt,
-							self.pbe_header.nonce(),
+							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -231,7 +225,7 @@ impl EncryptionHeader {
 							lanes,
 							iterations,
 							&salt,
-							self.pbe_header.nonce(),
+							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -252,12 +246,12 @@ impl HeaderCoding for EncryptionHeader {
 		HEADER_IDENTIFIER_ENCRYPTION_HEADER
 	}
 
-	fn version(&self) -> u8 {
+	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version()];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
 		vec.append(&mut self.encrypted_encryption_key.encode_directly());
@@ -266,10 +260,7 @@ impl HeaderCoding for EncryptionHeader {
 
 	fn decode_content(data: Vec<u8>) -> Result<EncryptionHeader> {
 		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
-		};
+		Self::check_version(&mut cursor)?;
 		let pbe_header = PBEHeader::decode_directly(&mut cursor)?;
 		let encryption_algorithm = match u8::decode_directly(&mut cursor)? {
 			0 => EncryptionAlgorithm::AES128GCM,

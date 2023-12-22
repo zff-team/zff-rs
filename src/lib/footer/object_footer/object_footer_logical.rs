@@ -1,3 +1,5 @@
+use crate::constants::DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL;
+
 // - internal
 use super::*;
 
@@ -14,8 +16,6 @@ use super::*;
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterLogical {
-	/// The version of the footer.
-	pub version: u8,
 	/// The object number of the footer.
 	pub object_number: u64,
 	/// The acquisition start timestamp of the footer.
@@ -36,9 +36,8 @@ pub struct ObjectFooterLogical {
 
 impl ObjectFooterLogical {
 	/// creates a new empty [ObjectFooterLogical]
-	pub fn new_empty(version: u8, object_number: u64) -> ObjectFooterLogical {
+	pub fn new_empty(object_number: u64) -> ObjectFooterLogical {
 		Self {
-			version,
 			object_number,
 			acquisition_start: 0,
 			acquisition_end: 0,
@@ -53,7 +52,6 @@ impl ObjectFooterLogical {
 	/// creates a new [ObjectFooterLogical] with the given values.
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
-		version: u8,
 		object_number: u64,
 		acquisition_start: u64,
 		acquisition_end: u64,
@@ -63,7 +61,6 @@ impl ObjectFooterLogical {
 		file_footer_segment_numbers: HashMap<u64, u64>,
 		file_footer_offsets: HashMap<u64, u64>) -> ObjectFooterLogical {
 		Self {
-			version,
 			object_number,
 			acquisition_start,
 			acquisition_end,
@@ -176,12 +173,12 @@ impl ObjectFooterLogical {
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			self.version.encode_directly().len() +
+			Self::version().encode_directly().len() +
 			self.object_number.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut encrypted_content.encode_directly());
 
@@ -234,21 +231,21 @@ impl ObjectFooterLogical {
 impl HeaderCoding for ObjectFooterLogical {
 	type Item = ObjectFooterLogical;
 
-	fn version(&self) -> u8 { 
-		self.version
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<ObjectFooterLogical> {
 		let mut cursor = Cursor::new(data);
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let (acquisition_start,
 			acquisition_end,
@@ -258,7 +255,6 @@ impl HeaderCoding for ObjectFooterLogical {
 			file_footer_segment_numbers,
 			file_footer_offsets) = Self::decode_inner_content(&mut cursor)?;
 		Ok(ObjectFooterLogical::new(
-			footer_version, 
 			object_number,
 			acquisition_start, 
 			acquisition_end, 
@@ -275,8 +271,6 @@ impl HeaderCoding for ObjectFooterLogical {
 #[cfg_attr(feature = "serde", derive(Serialize))]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct EncryptedObjectFooterLogical {
-	/// The footer version.
-	pub version: u8,
 	/// The appropriate object number.
 	pub object_number: u64,
 	/// the encrypted data of this footer
@@ -285,9 +279,8 @@ pub struct EncryptedObjectFooterLogical {
 
 impl EncryptedObjectFooterLogical {
 	/// Creates a new [EncryptedObjectFooterLogical] by the given values.
-	pub fn new(version: u8, object_number: u64, encrypted_data: Vec<u8>) -> Self {
+	pub fn new(object_number: u64, encrypted_data: Vec<u8>) -> Self {
 		Self {
-			version,
 			object_number,
 			encrypted_data,
 		}
@@ -309,7 +302,6 @@ impl EncryptedObjectFooterLogical {
 			file_footer_segment_numbers,
 			file_footer_offsets) = ObjectFooterLogical::decode_inner_content(&mut cursor)?;
 		Ok(ObjectFooterLogical::new(
-			self.version, 
 			self.object_number,
 			acquisition_start, 
 			acquisition_end, 
@@ -326,25 +318,7 @@ impl EncryptedObjectFooterLogical {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		let content = Encryption::decrypt_object_footer(key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
-		let mut cursor = Cursor::new(content);
-		let (acquisition_start,
-			acquisition_end,
-			root_dir_filenumbers,
-			file_header_segment_numbers,
-			file_header_offsets,
-			file_footer_segment_numbers,
-			file_footer_offsets) = ObjectFooterLogical::decode_inner_content(&mut cursor)?;
-		Ok(ObjectFooterLogical::new(
-			self.version, 
-			self.object_number,
-			acquisition_start, 
-			acquisition_end, 
-			root_dir_filenumbers, 
-			file_header_segment_numbers, 
-			file_header_offsets, 
-			file_footer_segment_numbers, 
-			file_footer_offsets))
+		self.decrypt(key, algorithm)
 	}
 }
 
@@ -364,25 +338,24 @@ impl EncryptedObjectFooterLogical {
 
 impl HeaderCoding for EncryptedObjectFooterLogical {
 	type Item = EncryptedObjectFooterLogical;
-	fn version(&self) -> u8 { 
-		self.version
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![self.version];
+		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.encrypted_data.encode_directly());
 		vec
 	}
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		Ok(Self::new(
-			footer_version, 
 			object_number,
 			encrypted_data))
 	}

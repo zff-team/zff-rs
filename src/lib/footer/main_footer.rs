@@ -1,6 +1,6 @@
 // - STD
 use std::io::Cursor;
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::fmt;
 
 // - internal
@@ -11,7 +11,7 @@ use crate::{
 	ValueEncoder,
 	ZffErrorKind,
 	FOOTER_IDENTIFIER_MAIN_FOOTER,
-	ENCODING_KEY_DESCRIPTION_NOTES,
+	ENCODING_KEY_DESCRIPTION_NOTES, constants::DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
 };
 
 // - external
@@ -28,8 +28,6 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct MainFooter {
-	/// version of the footer.
-	pub version: u8,
 	/// the total number of segments for this container
 	pub number_of_segments: u64,
 	/// the segment numbers where the appropriate object header can be found.
@@ -47,7 +45,6 @@ pub struct MainFooter {
 impl MainFooter {
 	/// creates a new MainFooter with a given values.
 	pub fn new(
-		version: u8,
 		number_of_segments: u64,
 		object_header: BTreeMap<u64, u64>,
 		object_footer: BTreeMap<u64, u64>,
@@ -55,7 +52,6 @@ impl MainFooter {
 		description_notes: Option<String>,
 		footer_offset: u64) -> MainFooter {
 		Self {
-			version,
 			number_of_segments,
 			object_header,
 			object_footer,
@@ -123,13 +119,13 @@ impl HeaderCoding for MainFooter {
 		FOOTER_IDENTIFIER_MAIN_FOOTER
 	}
 
-	fn version(&self) -> u8 {
-		self.version
+	fn version() -> u8 {
+		DEFAULT_FOOTER_VERSION_MAIN_FOOTER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.version.encode_directly());
+		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.number_of_segments.encode_directly());
 		vec.append(&mut self.object_header.encode_directly());
 		vec.append(&mut self.object_footer.encode_directly());
@@ -143,8 +139,7 @@ impl HeaderCoding for MainFooter {
 
 	fn decode_content(data: Vec<u8>) -> Result<MainFooter> {
 		let mut cursor = Cursor::new(data);
-
-		let footer_version = u8::decode_directly(&mut cursor)?;
+		Self::check_version(&mut cursor)?;
 		let number_of_segments = u64::decode_directly(&mut cursor)?;
 		let object_header = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let object_footer = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
@@ -162,7 +157,6 @@ impl HeaderCoding for MainFooter {
 		};
 		let footer_offset = u64::decode_directly(&mut cursor)?;
 		Ok(MainFooter::new(
-			footer_version, 
 			number_of_segments, 
 			object_header, 
 			object_footer, 

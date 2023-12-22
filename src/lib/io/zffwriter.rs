@@ -150,12 +150,7 @@ impl<R: Read> ZffWriter<R> {
 			if let Ok(mf) = decode_main_footer(&mut raw_segment) {
 				let current_segment = ext_file.to_path_buf();
 				
-				// checks if the correct header version is set
 				let segment = Segment::new_from_reader(&raw_segment)?;
-				match segment.header().version() {
-					DEFAULT_HEADER_VERSION_SEGMENT_HEADER => (),
-					_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
-				}
 				let current_segment_no = segment.header().segment_number;
 				let initial_chunk_number = match segment.footer().chunk_map_table.keys().max() {
 					Some(x) => *x + 1,
@@ -182,11 +177,8 @@ impl<R: Read> ZffWriter<R> {
 					params,
 					Some(extension_parameter));
 			}
-			let segment = Segment::new_from_reader(raw_segment)?;
-			match segment.header().version() {
-				3 => (),
-				_ => return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_MISMATCH_ZFF_VERSION)),
-			}
+			// try to decode the segment header to check if the file is a valid segment.
+			let _ = Segment::new_from_reader(raw_segment)?;
 		}
 		Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER))
 	}
@@ -495,10 +487,15 @@ impl<R: Read> ZffWriter<R> {
 		Ok(log_obj)
 	}
 
-	fn write_next_segment<O: Read + Write + Seek>(
+	/// Writes the next segment into the given Writer.  
+	/// The seek_value is the value of bytes you need to skip (e.g. in case of an extension).  
+	/// The main_footer_chunk_map is a map of all chunk numbers and the appropriate segment number.  
+	/// The extend parameter is true, if the container should be extended.  
+	/// The return value is the number of written bytes.  
+	pub fn write_next_segment<O: Read + Write + Seek>(
 		&mut self,
 		output: &mut O,
-		seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. the main_header, the object_header, ...)
+		seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. in case of an extension).
 		main_footer_chunk_map: &mut BTreeMap<u64, u64>,
 		extend: bool
 		) -> Result<u64> {
@@ -532,7 +529,7 @@ impl<R: Read> ZffWriter<R> {
 			segment_footer
 
 		} else {
-			let mut segment_footer = SegmentFooter::new_empty(DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER);
+			let mut segment_footer = SegmentFooter::new_empty();
 			segment_footer.first_chunk_number = self.current_object_encoder.current_chunk_number();
 			segment_footer
 		};
@@ -673,7 +670,6 @@ impl<R: Read> ZffWriter<R> {
 			let main_footer = if extend {
 				if let Some(params) = &self.extender_parameter {
 					MainFooter::new(
-					DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
 					self.current_segment_no, 
 					self.object_header_segment_numbers.clone(), 
 					self.object_footer_segment_numbers.clone(), 
@@ -686,7 +682,6 @@ impl<R: Read> ZffWriter<R> {
 				}
 			} else {
 				MainFooter::new(
-				DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
 				self.current_segment_no, 
 				self.object_header_segment_numbers.clone(), 
 				self.object_footer_segment_numbers.clone(), 
@@ -769,7 +764,6 @@ impl<R: Read> ZffWriter<R> {
 	    }
 	    let main_footer = if let Some(params) = &self.extender_parameter {
 			MainFooter::new(
-			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
 			self.current_segment_no, 
 			self.object_header_segment_numbers.clone(), 
 			self.object_footer_segment_numbers.clone(), 
@@ -778,7 +772,6 @@ impl<R: Read> ZffWriter<R> {
 			current_offset)
 		} else {
 			MainFooter::new(
-			DEFAULT_FOOTER_VERSION_MAIN_FOOTER, 
 			self.current_segment_no, 
 			self.object_header_segment_numbers.clone(), 
 			self.object_footer_segment_numbers.clone(), 
