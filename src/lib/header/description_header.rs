@@ -73,7 +73,7 @@ impl Serialize for DescriptionHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(self.struct_name(), self.identifier_map.keys().len()+1)?;
-        state.serialize_field("version", &self.version)?;
+        state.serialize_field("version", &Self::version())?;
         for (key, value) in &self.identifier_map {
         	//work around lifetime checking (there is maybe a more elegant solution...)
         	state.serialize_field(string_to_str(key.to_string()), string_to_str(value.to_string()))?;

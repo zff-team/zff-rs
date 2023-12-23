@@ -46,7 +46,7 @@ impl Serialize for HashHeader {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(self.struct_name(), 3)?;
-        state.serialize_field("version", &self.version)?;
+        state.serialize_field("version", &Self::version())?;
         let mut hashes = HashMap::new();
         for hashvalue in &self.hashes {
         	hashes.insert(hashvalue.hash_type.to_string(), hashvalue);

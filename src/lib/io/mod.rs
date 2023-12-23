@@ -46,9 +46,6 @@ use crate::{
 #[cfg(target_family = "windows")]
 use crate::METADATA_EXT_DW_FILE_ATTRIBUTES;
 
-#[cfg(feature = "log")]
-use log::warn;
-
 // - external
 use crc32fast::Hasher as CRC32Hasher;
 #[cfg(target_family = "unix")]

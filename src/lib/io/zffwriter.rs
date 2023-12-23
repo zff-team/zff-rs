@@ -426,7 +426,7 @@ impl<R: Read> ZffWriter<R> {
 					Err(e) => {
 						// not sure if this can be reached, as we checked a few things before.
 						#[cfg(feature = "log")]
-						debug!("Error while trying to unwrap the inner element of the element iterator of {}: {e}.", current_dir.display());
+						debug!("Error while trying to unwrap the inner element of the element iterator: {e}.");
 						continue;
 					}
 				};
@@ -822,7 +822,7 @@ fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeade
 		Err(e) => {
 			#[cfg(feature = "log")]
 			warn!("The content of the file {} can't be read, due the following error: {e}.\
-				The file will be stored as an empty file.", path.display());
+				The file will be stored as an empty file.", path.as_ref().display());
 			// set the "ua" tag and the full path in file metadata.
 			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string());
 		},
@@ -842,7 +842,7 @@ fn create_iterator<C: AsRef<Path>>(
 		Ok(metadata) => metadata,
 		Err(e) => {
 			#[cfg(feature = "log")]
-			warn!("The metadata of the file {} can't be read. This file will be completly ignored.", &current_dir.display());
+			warn!("The metadata of the file {} can't be read. This file will be completly ignored.", &current_dir.as_ref().display());
 			#[cfg(feature = "log")]
 			debug!("{e}");
 			return Err(e.into());
@@ -866,7 +866,7 @@ fn create_iterator<C: AsRef<Path>>(
 			// if the directory is not readable, we should continue but read the metadata of the directory.
 			#[cfg(feature = "log")]
 			warn!("The content of the file {} can't be read, due the following error: {e}.\
-				The file will be stored as an empty file.", &current_dir.display());
+				The file will be stored as an empty file.", &current_dir.as_ref().display());
 			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.as_ref().to_string_lossy().to_string());
 			return Err(e.into());
 		}
@@ -882,7 +882,7 @@ fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 		Ok(metadata) => Ok(metadata),
 		Err(e) => {
 			#[cfg(feature = "log")]
-			warn!("The metadata of the file {:?} can't be read. This file will be completly ignored.", inner_element);
+			warn!("The metadata of the file {:?} can't be read. This file will be completly ignored.", path.as_ref().display());
 			#[cfg(feature = "log")]
 			debug!("{e}");
 			Err(e.into())
