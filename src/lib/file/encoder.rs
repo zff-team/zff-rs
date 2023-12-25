@@ -16,12 +16,11 @@ use crate::{
 	io::buffer_chunk,
 	HeaderCoding,
 	ValueEncoder,
-	Encryption,
 	ZffError,
 	ZffErrorKind,
 	EncodingThreadPoolManager,
-	ChunkContent,
 	Signature,
+	chunking,
 };
 
 #[cfg(feature = "log")]
@@ -131,7 +130,6 @@ impl FileEncoder {
 		&mut self, 
 		deduplication_map: Option<&mut DeduplicationChunkMap>,
 		) -> Result<Vec<u8>> {
-		let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
 
@@ -208,6 +206,7 @@ impl FileEncoder {
 			//this case is the normal "file reader reached EOF".
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 		} else if buf.is_empty() && self.read_bytes_underlying_data == 0 {
+			let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 			//this case ensures, that empty files will already get a chunk
 			chunk_header.flags.empty_file = true;
 			chunk_header.chunk_size = 0;
@@ -230,73 +229,26 @@ impl FileEncoder {
 		};
 
 		// Needed for the same byte check
-		let buf_len = buf.len();
+		let buf_len = buf.len() as u64;
 
 		let mut encoding_thread_pool_manager = self.encoding_thread_pool_manager.borrow_mut();
 
 		encoding_thread_pool_manager.update(buf);
 		encoding_thread_pool_manager.trigger();
 
-	    // check same byte
-	    // if the length of the buffer is not equal the target chunk size, 
-	    // the condition failed and same byte flag can not be set.
-		let same_bytes = encoding_thread_pool_manager.same_bytes_thread.get_result();
-	    let chunk_content = if buf_len == chunk_size && same_bytes.is_some() {
-	    	chunk_header.flags.same_bytes = true;
-			#[allow(clippy::unnecessary_unwrap)] //TODO: Remove this until https://github.com/rust-lang/rust/issues/53667 is stable.
-	    	ChunkContent::SameBytes(same_bytes.unwrap()) //unwrap should be safe here, because we have already testet this before.
-	    } else if let Some(deduplication_map) = deduplication_map {
-	    	let b3h = encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
-	    	if let Ok(chunk_no) = deduplication_map.get_chunk_number(b3h) {
-	    		chunk_header.flags.duplicate = true;
-				ChunkContent::Duplicate(chunk_no)
-	    	} else {
-	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;
-				ChunkContent::Raw(Vec::new())
-	    	}
-	    } else {
-	    	ChunkContent::Raw(Vec::new())
-	    };
+		let encryption_algorithm = self.encryption_information.as_ref().map(|encryption_information| &encryption_information.algorithm);
+		let encryption_key = self.encryption_information.as_ref().map(|encryption_information| &encryption_information.encryption_key);
 
-		let (chunked_data, inner_compression_flag) = match chunk_content {
-			ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
-			ChunkContent::Duplicate(chunk_no) => (chunk_no.to_le_bytes().to_vec(), false),
-			ChunkContent::Raw(_) => encoding_thread_pool_manager.compression_thread.get_result()?,
-		};
-		let compression_flag = inner_compression_flag;
+	    let chunk = chunking(
+			&mut encoding_thread_pool_manager,
+			self.current_chunk_number,
+			buf_len,
+			chunk_size as u64,
+			deduplication_map,
+			encryption_key,
+			encryption_algorithm,
+		)?;
 
-		let mut chunk_data = match &self.encryption_information {
-			Some(encryption_information) => {	
-				Encryption::encrypt_chunk_content(
-					&encryption_information.encryption_key,
-					&chunked_data,
-					chunk_header.chunk_number,
-					&encryption_information.algorithm)?
-			},
-			None => chunked_data
-		};
-
-		let mut chunk = Vec::new();
-
-	    // prepare chunk header:
-		chunk_header.chunk_size = chunk_data.len() as u64; 
-		chunk_header.crc32 = encoding_thread_pool_manager.crc32_thread.finalize();
-		if compression_flag {
-			chunk_header.flags.compression = true;
-		}
-
-		let mut encoded_header = if let Some(enc_header) = &self.object_header.encryption_header {
-			let key = match enc_header.get_encryption_key_ref() {
-				Some(key) => key,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
-			};
-			chunk_header.encrypt_and_consume(key, &enc_header.algorithm)?.encode_directly()
-		} else {
-			chunk_header.encode_directly()
-		};
-
-		chunk.append(&mut encoded_header);
-		chunk.append(&mut chunk_data);
 		self.current_chunk_number += 1;
 	    Ok(chunk)
 	}

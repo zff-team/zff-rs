@@ -16,11 +16,16 @@ pub use encoder::*;
 // - internal
 use crate::{
     Result,
+	HeaderCoding,
     header::CompressionHeader,
     HashType,
     Hash,
     CompressionAlgorithm,
     io::{buffer_chunk, check_same_byte},
+	header::{ChunkHeader, DeduplicationChunkMap},
+	error::{ZffError, ZffErrorKind},
+	encryption::{Encryption, EncryptionAlgorithm},
+	ChunkContent,
 };
 
 /// creates a EncodingThreadPoolManager which contains a HashingThreadManager and a CompressionThread and a Crc32Thread.
@@ -442,4 +447,92 @@ impl SameBytesThread {
 	pub fn get_result(&self) -> Option<u8> {
 		self.receiver.recv().unwrap()
 	}
+}
+
+/// creates a chunk by using the given data and the given chunk size.
+pub(crate) fn chunking(
+	encoding_thread_pool_manager: &mut EncodingThreadPoolManager,
+	current_chunk_number: u64,
+	samebyte_checklen_value: u64,
+	chunk_size: u64, // target chunk size,
+	deduplication_map: Option<&mut DeduplicationChunkMap>,
+	encryption_key: Option<&Vec<u8>>,
+	encryption_algorithm: Option<&EncryptionAlgorithm>,
+) -> Result<Vec<u8>> {
+	let mut chunk = Vec::new();
+	// create chunk header
+	let mut chunk_header = ChunkHeader::new_empty(current_chunk_number);
+
+	// check same byte
+	// if the length of the buffer is not equal the target chunk size, 
+	// the condition failed and same byte flag can not be set.
+	let same_bytes = encoding_thread_pool_manager.same_bytes_thread.get_result();
+	let chunk_content = if samebyte_checklen_value == chunk_size && same_bytes.is_some() {
+		chunk_header.flags.same_bytes = true;
+		#[allow(clippy::unnecessary_unwrap)] //TODO: Remove this until https://github.com/rust-lang/rust/issues/53667 is stable.
+		ChunkContent::SameBytes(same_bytes.unwrap()) //unwrap should be safe here, because we have already testet this before.
+	} else if let Some(deduplication_map) = deduplication_map {
+		// unwrap should be safe here, because we have already testet this before.
+		let b3h = encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
+		if let Ok(chunk_no) = deduplication_map.get_chunk_number(b3h) {
+			chunk_header.flags.duplicate = true;
+			ChunkContent::Duplicate(chunk_no)
+		} else {
+			deduplication_map.append_entry(current_chunk_number, b3h)?;
+			ChunkContent::Raw(Vec::new())
+		}
+	} else {
+		ChunkContent::Raw(Vec::new())
+	};
+
+	let (chunked_data, compression_flag) = match chunk_content {
+		ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
+		ChunkContent::Duplicate(chunk_no) => (chunk_no.to_le_bytes().to_vec(), false),
+		ChunkContent::Raw(_) => encoding_thread_pool_manager.compression_thread.get_result()?,
+	};
+
+	// prepare chunk header:
+	chunk_header.crc32 = encoding_thread_pool_manager.crc32_thread.finalize();
+	if compression_flag {
+		chunk_header.flags.compression = true;
+	}
+	let mut chunked_data = match &encryption_key {
+		Some(encryption_key) => {
+			let encryption_algorithm = match encryption_algorithm {
+				Some(algorithm) => algorithm,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+			};
+			//TODO: check to encrypt the content if the chunked data also in the "compression_thread"?.
+			Encryption::encrypt_chunk_content(
+				encryption_key,
+				&chunked_data,
+				chunk_header.chunk_number,
+				encryption_algorithm)?
+		},
+		None => chunked_data,
+	};
+	
+	chunk_header.chunk_size = chunked_data.len() as u64;
+
+	let mut encoded_header = if let Some(key) = encryption_key {
+		let encryption_algorithm = match encryption_algorithm {
+			Some(algorithm) => algorithm,
+			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+		};
+		chunk_header.encrypt_and_consume(key, encryption_algorithm)?.encode_directly()
+	} else {
+		chunk_header.encode_directly()
+	};
+
+	// if the chunk is duplicate or same byte, the receiver of the compression thread has to be triggered.
+	match chunk_content {
+		ChunkContent::SameBytes(_) | ChunkContent::Duplicate(_) => {
+			let _ = encoding_thread_pool_manager.compression_thread.get_result();
+		},
+		_ => {},
+	}
+
+	chunk.append(&mut encoded_header);
+	chunk.append(&mut chunked_data);
+	Ok(chunk)
 }
