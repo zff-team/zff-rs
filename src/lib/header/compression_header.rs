@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Cursor};
+use std::io::Cursor;
 use std::fmt;
 
 use crate::constants::DEFAULT_HEADER_VERSION_COMPRESSION_HEADER;

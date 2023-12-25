@@ -2,10 +2,10 @@
 use std::fmt;
 
 // - external
-use blake3::{Hasher as Blake3};
-use blake2::{Blake2b512};
+use blake3::Hasher as Blake3;
+use blake2::Blake2b512;
 use sha2::{Sha256, Sha512};
-use sha3::{Sha3_256};
+use sha3::Sha3_256;
 use digest::{DynDigest, Digest};
 #[cfg(feature = "serde")]
 use serde::{
@@ -13,7 +13,7 @@ use serde::{
 	Serialize,
 };
 #[cfg(feature = "log")]
-use log::{debug};
+use log::debug;
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]

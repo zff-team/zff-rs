@@ -3,10 +3,9 @@ use std::io::Read;
 use std::borrow::Borrow;
 use std::fmt;
 
+
 // - internal
-use crate::{
-	Result,
-};
+use crate::Result;
 
 // - external
 #[cfg(feature = "serde")]

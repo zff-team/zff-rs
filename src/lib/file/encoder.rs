@@ -1,8 +1,9 @@
 // - STD
 use std::io::{Read, Cursor};
 use std::path::PathBuf;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-use std::collections::HashMap;
 use std::time::SystemTime;
 
 // - internal
@@ -12,45 +13,23 @@ use crate::{
 };
 use crate::{
 	Result,
-	io::{buffer_chunk, calculate_crc32, compress_buffer, check_same_byte},
+	io::buffer_chunk,
 	HeaderCoding,
 	ValueEncoder,
-	HashType,
-	Hash,
 	Encryption,
 	ZffError,
 	ZffErrorKind,
+	EncodingThreadPoolManager,
+	ChunkContent,
+	Signature,
 };
 
 #[cfg(feature = "log")]
 use crate::hashes_to_log;
 
 // - external
-use digest::DynDigest;
 use time::OffsetDateTime;
-
-/// The [FileEncoder] can be used to encode a [crate::file::File].
-pub struct FileEncoder {
-	/// The appropriate [FileHeader].
-	file_header: FileHeader,
-	/// The appropriate [ObjectHeader].
-	object_header: ObjectHeader,
-	/// The underlying [File](std::fs::File) object to read from.
-	underlying_file: Box<dyn Read>,
-	/// optional encryption information, to encrypt the data with the given key and algorithm
-	encryption_information: Option<EncryptionInformation>,
-	/// HashMap for the Hasher objects to calculate the cryptographically hash values for this file. 
-	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
-	/// The first chunk number for this file.
-	initial_chunk_number: u64,
-	/// The current chunk number
-	current_chunk_number: u64,
-	/// The number of bytes, which were read from the underlying file.
-	read_bytes_underlying_data: u64,
-	acquisition_start: u64,
-	acquisition_end: u64,
-	filetype_encoding_information: FileTypeEncodingInformation,
-}
+use ed25519_dalek::SigningKey;
 
 /// This enum contains the information, which are needed to encode the different file types.
 pub enum FileTypeEncodingInformation {
@@ -80,27 +59,50 @@ pub enum SpecialFileEncodingInformation {
 	Socket(u64), // socket(rdev),
 }
 
+/// The [FileEncoder] can be used to encode a [crate::file::File].
+pub struct FileEncoder {
+	/// The appropriate [FileHeader].
+	file_header: FileHeader,
+	/// The appropriate [ObjectHeader].
+	object_header: ObjectHeader,
+	/// The underlying [File](std::fs::File) object to read from.
+	underlying_file: Box<dyn Read>,
+	/// The optional signing key, to sign the hashes.
+	signing_key: Option<SigningKey>,
+	/// optional encryption information, to encrypt the data with the given key and algorithm
+	encryption_information: Option<EncryptionInformation>,
+	/// A reference counter to the encoding thread pool manager of the parent logical object encoder.
+	encoding_thread_pool_manager: Rc<RefCell<EncodingThreadPoolManager>>,
+	/// The first chunk number for this file.
+	initial_chunk_number: u64,
+	/// The current chunk number
+	current_chunk_number: u64,
+	/// The number of bytes, which were read from the underlying file.
+	read_bytes_underlying_data: u64,
+	acquisition_start: u64,
+	acquisition_end: u64,
+	filetype_encoding_information: FileTypeEncodingInformation,
+}
+
 impl FileEncoder {
 	/// creates a new [FileEncoder] with the given values.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		file_header: FileHeader,
 		object_header: ObjectHeader,
 		file: Box<dyn Read>,
-		hash_types: Vec<HashType>,
+		encoding_thread_pool_manager: Rc<RefCell<EncodingThreadPoolManager>>,
+		signing_key: Option<SigningKey>,
 		encryption_information: Option<EncryptionInformation>,
 		current_chunk_number: u64,
 		filetype_encoding_information: FileTypeEncodingInformation) -> Result<FileEncoder> {
 		
-		let mut hasher_map = HashMap::new();
-	    for h_type in hash_types {
-	        let hasher = Hash::new_hasher(&h_type);
-	        hasher_map.insert(h_type.clone(), hasher);
-	    };
 		Ok(Self {
 			file_header,
 			object_header,
 			underlying_file: Box::new(file),
-			hasher_map,
+			encoding_thread_pool_manager,
+			signing_key,
 			encryption_information,
 			initial_chunk_number: current_chunk_number,
 			current_chunk_number,
@@ -109,12 +111,6 @@ impl FileEncoder {
 			acquisition_end: 0,
 			filetype_encoding_information,
 		})
-	}
-
-	fn update_hasher(&mut self, buffer: &[u8]) {
-		for hasher in self.hasher_map.values_mut() {
-			hasher.update(buffer);
-		}
 	}
 
 	/// returns the underlying encoded header
@@ -139,7 +135,7 @@ impl FileEncoder {
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
 
-		let mut buf = match &self.filetype_encoding_information {
+		let buf = match &self.filetype_encoding_information {
 			FileTypeEncodingInformation::Directory(directory_children) => {
 				let encoded_directory_children = if directory_children.is_empty() {
 					Vec::new()
@@ -233,47 +229,58 @@ impl FileEncoder {
 	   	 	return Err(ZffError::new(ZffErrorKind::EmptyFile(chunk), (self.current_chunk_number-1).to_string()))
 		};
 
-		self.update_hasher(&buf);
-	    let crc32 = calculate_crc32(&buf);
+		// Needed for the same byte check
+		let buf_len = buf.len();
+
+		let mut encoding_thread_pool_manager = self.encoding_thread_pool_manager.borrow_mut();
+
+		encoding_thread_pool_manager.update(buf);
+		encoding_thread_pool_manager.trigger();
 
 	    // check same byte
 	    // if the length of the buffer is not equal the target chunk size, 
 	    // the condition failed and same byte flag can not be set.
-	    if buf.len() == chunk_size && check_same_byte(&buf) {
+		let same_bytes = encoding_thread_pool_manager.same_bytes_thread.get_result();
+	    let chunk_content = if buf_len == chunk_size && same_bytes.is_some() {
 	    	chunk_header.flags.same_bytes = true;
-	    	buf = vec![buf[0]]
+			#[allow(clippy::unnecessary_unwrap)] //TODO: Remove this until https://github.com/rust-lang/rust/issues/53667 is stable.
+	    	ChunkContent::SameBytes(same_bytes.unwrap()) //unwrap should be safe here, because we have already testet this before.
 	    } else if let Some(deduplication_map) = deduplication_map {
-	    	let b3h = blake3::hash(&buf);
+	    	let b3h = encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
 	    	if let Ok(chunk_no) = deduplication_map.get_chunk_number(b3h) {
-	    		buf = chunk_no.to_le_bytes().to_vec();
 	    		chunk_header.flags.duplicate = true;
+				ChunkContent::Duplicate(chunk_no)
 	    	} else {
 	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;
+				ChunkContent::Raw(Vec::new())
 	    	}
-	    }
+	    } else {
+	    	ChunkContent::Raw(Vec::new())
+	    };
 
-		let (compressed_data, inner_compression_flag) = compress_buffer(
-			buf, 
-			self.object_header.chunk_size as usize, 
-			&self.object_header.compression_header)?;
+		let (chunked_data, inner_compression_flag) = match chunk_content {
+			ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
+			ChunkContent::Duplicate(chunk_no) => (chunk_no.to_le_bytes().to_vec(), false),
+			ChunkContent::Raw(_) => encoding_thread_pool_manager.compression_thread.get_result()?,
+		};
 		let compression_flag = inner_compression_flag;
 
 		let mut chunk_data = match &self.encryption_information {
 			Some(encryption_information) => {	
 				Encryption::encrypt_chunk_content(
 					&encryption_information.encryption_key,
-					&compressed_data,
+					&chunked_data,
 					chunk_header.chunk_number,
 					&encryption_information.algorithm)?
 			},
-			None => compressed_data
+			None => chunked_data
 		};
 
 		let mut chunk = Vec::new();
 
 	    // prepare chunk header:
 		chunk_header.chunk_size = chunk_data.len() as u64; 
-		chunk_header.crc32 = crc32;
+		chunk_header.crc32 = encoding_thread_pool_manager.crc32_thread.finalize();
 		if compression_flag {
 			chunk_header.flags.compression = true;
 		}
@@ -297,14 +304,23 @@ impl FileEncoder {
 	/// returns the appropriate encoded [FileFooter].
 	/// A call of this method finalizes the underlying hashers. You should be care.
 	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
+		let mut encoding_thread_pool_manager = self.encoding_thread_pool_manager.borrow_mut();
+
 		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
-		for (hash_type, hasher) in self.hasher_map.clone() {
-			let hash = hasher.finalize();
-			let mut hash_value = HashValue::new_empty(hash_type);
-			hash_value.set_hash(hash.to_vec());
-			hash_values.push(hash_value);
-		}
+	    for (hash_type, hash) in encoding_thread_pool_manager.hashing_threads.finalize_all() {
+	        let mut hash_value = HashValue::new_empty(hash_type.clone());
+	        hash_value.set_hash(hash.to_vec());
+	        for (hash_type, hash) in encoding_thread_pool_manager.hashing_threads.finalize_all() {
+				let mut hash_value = HashValue::new_empty(hash_type.clone());
+				hash_value.set_hash(hash.to_vec());
+				if let Some(signing_key) = &self.signing_key {
+					let signature = Signature::sign(signing_key, &hash);
+					hash_value.set_ed25519_signature(signature);
+				}
+				hash_values.push(hash_value);
+			}
+	    }
 
 		#[cfg(feature = "log")]
 		hashes_to_log(self.object_header.object_number, Some(self.file_header.file_number), &hash_values);

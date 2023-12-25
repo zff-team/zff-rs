@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::collections::HashMap;
 use std::time::SystemTime;
+use std::rc::Rc;
+use std::cell::RefCell;
+
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
 #[cfg(target_family = "unix")]
@@ -14,10 +17,10 @@ use crate::SpecialFileEncodingInformation;
 // - internal
 use crate::{
 	Result,
-	io::{buffer_chunk, calculate_crc32, compress_buffer},
+	io::buffer_chunk,
 	HeaderCoding,
 	HashType,
-	Hash,
+	EncodingThreadPoolManager,
 	Signature,
 	ZffError,
 	ZffErrorKind,
@@ -41,11 +44,10 @@ use crate::{
 	},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 	FileEncoder,
-	io::check_same_byte,
+	ChunkContent,
 };
 
 // - external
-use digest::DynDigest;
 use ed25519_dalek::SigningKey;
 use time::OffsetDateTime;
 
@@ -128,9 +130,8 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	read_bytes_underlying_data: u64,
 	current_chunk_number: u64,
 	initial_chunk_number: u64,
-	hasher_map: HashMap<HashType, Box<dyn DynDigest>>,
+	encoding_thread_pool_manager: EncodingThreadPoolManager,
 	signing_key: Option<SigningKey>,
-	has_hash_signatures: bool,
 	encryption_key: Option<Vec<u8>>,
 	acquisition_start: u64,
 	acquisition_end: u64,
@@ -159,19 +160,20 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    	(obj_header.encode_directly(), None)
 	    };
 
-		let mut hasher_map = HashMap::new();
+		let mut encoding_thread_pool_manager = EncodingThreadPoolManager::new(
+			obj_header.compression_header.clone(), obj_header.chunk_size as usize);
+
 	    for h_type in hash_types {
-	        let hasher = Hash::new_hasher(&h_type);
-	        hasher_map.insert(h_type.clone(), hasher);
+			encoding_thread_pool_manager.add_hashing_thread(h_type.clone());
 	    };
+		
 		Ok(Self {
-			has_hash_signatures: obj_header.has_hash_signatures(),
 			obj_header,
 			underlying_data: reader,
 			read_bytes_underlying_data: 0,
 			current_chunk_number,
 			initial_chunk_number: current_chunk_number,
-			hasher_map,
+			encoding_thread_pool_manager,
 			encryption_key,
 			signing_key,
 			acquisition_start: 0,
@@ -182,12 +184,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	/// Returns the current chunk number.
 	pub fn object_header(&self) -> &ObjectHeader {
 		&self.obj_header
-	}
-
-	fn update_hasher(&mut self, buffer: &[u8]) {
-		for hasher in self.hasher_map.values_mut() {
-			hasher.update(buffer);
-		}
 	}
 
 	/// Returns the current chunk number.
@@ -216,38 +212,54 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		deduplication_map: Option<&mut DeduplicationChunkMap>,
 		) -> Result<Vec<u8>> {
 		let mut chunk = Vec::new();
+			
+		// checks and adds a deduplication thread to the internal thread manager (check is included in the add_deduplication_thread method)
+		if deduplication_map.is_some() {
+			self.encoding_thread_pool_manager.hashing_threads.add_deduplication_thread();
+		};
 
 		// prepare chunked data:
 	    let chunk_size = self.obj_header.chunk_size as usize;
-	    let (mut buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size)?;
+	    let (buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size)?;
 	    self.read_bytes_underlying_data += read_bytes;
 	    if buf.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 	    };
-	    self.update_hasher(&buf);
-	    let crc32 = calculate_crc32(&buf);
+
+		self.encoding_thread_pool_manager.update(buf);
+		self.encoding_thread_pool_manager.trigger();
 
 	    // create chunk header
 	    let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
 
 	    // check same byte (but only if length of the buf is == chunk size)
-	    if read_bytes == chunk_size as u64 && check_same_byte(&buf) {
+		let same_bytes = self.encoding_thread_pool_manager.same_bytes_thread.get_result();
+	    let chunk_content = if read_bytes == chunk_size as u64 && same_bytes.is_some() {
 	    	chunk_header.flags.same_bytes = true;
-	    	buf = vec![buf[0]]
+			#[allow(clippy::unnecessary_unwrap)] //TODO: Remove this until https://github.com/rust-lang/rust/issues/53667 is stable.
+	    	ChunkContent::SameBytes(same_bytes.unwrap()) //unwrap should be safe here, because we have already testet this before.
 	    } else if let Some(deduplication_map) = deduplication_map {
-	    	let b3h = blake3::hash(&buf);
+			// unwrap should be safe here, because we have already testet this before.
+	    	let b3h = self.encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
 	    	if let Ok(chunk_no) = deduplication_map.get_chunk_number(b3h) {
-	    		buf = chunk_no.to_le_bytes().to_vec();
 	    		chunk_header.flags.duplicate = true;
+				ChunkContent::Duplicate(chunk_no)
 	    	} else {
 	    		deduplication_map.append_entry(self.current_chunk_number, b3h)?;
+				ChunkContent::Raw(Vec::new())
 	    	}
-	    }
+	    } else {
+	    	ChunkContent::Raw(Vec::new())
+	    };
 
-	    let (chunked_data, compression_flag) = compress_buffer(buf, self.obj_header.chunk_size as usize, &self.obj_header.compression_header)?;
+		let (chunked_data, compression_flag) = match chunk_content {
+			ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
+			ChunkContent::Duplicate(chunk_no) => (chunk_no.to_le_bytes().to_vec(), false),
+			ChunkContent::Raw(_) => self.encoding_thread_pool_manager.compression_thread.get_result()?,
+		};
 
 	    // prepare chunk header:
-	    chunk_header.crc32 = crc32;
+	    chunk_header.crc32 = self.encoding_thread_pool_manager.crc32_thread.finalize();
 	    if compression_flag {
 			chunk_header.flags.compression = true;
 		}
@@ -257,7 +269,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 					Some(header) => &header.algorithm,
 					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 				};
-				
+				//TODO: check to encrypt the content if the chunked data also in the "compression_thread"?.
 				Encryption::encrypt_chunk_content(
 					encryption_key,
 					&chunked_data,
@@ -287,20 +299,17 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 	/// Generates a appropriate footer. Attention: A call of this method ...
 	/// - sets the acquisition end time to the current time
-	/// - finalizes the underlying hashers
+	/// - finalizes the underlying hashing threads
 	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
 		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
-	    for (hash_type, hasher) in self.hasher_map.clone() {
-	        let hash = hasher.finalize();
-	        let mut hash_value = HashValue::new_empty(hash_type);
+	    for (hash_type, hash) in self.encoding_thread_pool_manager.hashing_threads.finalize_all() {
+	        let mut hash_value = HashValue::new_empty(hash_type.clone());
 	        hash_value.set_hash(hash.to_vec());
-	        if self.has_hash_signatures {
-	        	if let Some(signing_key) = &self.signing_key {
-	        		let signature = Signature::sign(signing_key, &hash);
-	        		hash_value.set_ed25519_signature(signature);
-	        	}
-	        };
+			if let Some(signing_key) = &self.signing_key {
+				let signature = Signature::sign(signing_key, &hash);
+				hash_value.set_ed25519_signature(signature);
+			}
 	        hash_values.push(hash_value);
 	    }
 
@@ -349,9 +358,9 @@ pub struct LogicalObjectEncoder {
 	current_file_encoder: Option<FileEncoder>,
 	current_file_header_read: bool,
 	current_file_number: u64,
-	hash_types: Vec<HashType>,
+	encoding_thread_pool_manager: Rc<RefCell<EncodingThreadPoolManager>>,
 	encryption_key: Option<Vec<u8>>,
-	signing_key_bytes: Option<Vec<u8>>,
+	signing_key: Option<SigningKey>,
 	current_chunk_number: u64,
 	symlink_real_paths: HashMap<u64, PathBuf>,
 	hardlink_map: HashMap<u64, u64>, //<filenumber, filenumber of hardlink>
@@ -405,6 +414,20 @@ impl LogicalObjectEncoder {
 	    } else {
 	    	(obj_header.encode_directly(), None)
 	    };
+
+		let signing_key = match &signing_key_bytes {
+	    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
+	    	None => None
+	    };
+
+		let mut encoding_thread_pool_manager = EncodingThreadPoolManager::new(
+			obj_header.compression_header.clone(), obj_header.chunk_size as usize);
+
+	    for h_type in hash_types {
+			encoding_thread_pool_manager.add_hashing_thread(h_type.clone());
+	    };
+
+		let encoding_thread_pool_manager = Rc::new(RefCell::new(encoding_thread_pool_manager));
 
 		let mut files = files;
 		let (path, current_file_header) = match files.pop() {
@@ -468,7 +491,8 @@ impl LogicalObjectEncoder {
 			current_file_header,
 			obj_header.clone(),
 			Box::new(reader), 
-			hash_types.clone(), 
+			Rc::clone(&encoding_thread_pool_manager),
+			signing_key.clone(),
 			encryption_information, 
 			current_chunk_number, 
 			filetype_encoding_information)?);
@@ -484,9 +508,9 @@ impl LogicalObjectEncoder {
 			current_file_encoder: first_file_encoder,
 			current_file_header_read: false,
 			current_file_number,
-			hash_types,
+			encoding_thread_pool_manager,
 			encryption_key,
-			signing_key_bytes,
+			signing_key,
 			current_chunk_number,
 			symlink_real_paths,
 			hardlink_map,
@@ -507,11 +531,8 @@ impl LogicalObjectEncoder {
 	}
 
 	/// Returns the current signature key (if available).
-	pub fn signing_key(&self) -> Option<SigningKey> {
-	    match &self.signing_key_bytes {
-	    	Some(bytes) => Signature::bytes_to_signingkey(bytes).ok(),
-	    	None => None
-	    }
+	pub fn signing_key(&self) -> &Option<SigningKey> {
+	    &self.signing_key
 	}
 
 	/// Returns the encoded object header.
@@ -648,7 +669,8 @@ impl LogicalObjectEncoder {
 					current_file_header, 
 					self.obj_header.clone(),
 					reader, 
-					self.hash_types.clone(), 
+					Rc::clone(&self.encoding_thread_pool_manager),
+					self.signing_key.clone(),
 					encryption_information, 
 					self.current_chunk_number, 
 					filetype_encoding_information)?);

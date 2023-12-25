@@ -20,7 +20,7 @@ use argon2::{self, Config, Variant, Version};
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
-	aead::{Aead},
+	aead::Aead,
 };
 use chacha20poly1305::ChaCha20Poly1305;
 use byteorder::{LittleEndian, WriteBytesExt};

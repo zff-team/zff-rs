@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read};
+use std::io::Read;
 use std::collections::{HashMap, BTreeMap};
 
 // - internal
