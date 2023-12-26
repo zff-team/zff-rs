@@ -36,41 +36,41 @@ There are several tools (and this library) to work with zff containers (or acqui
 | [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.67.1 |
 | [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.67.1 |
 
-## Benchmarks (for Zffv2)
+## Benchmarks
 
 The following benchmarks were all run on a notebook, which has the following specifications:
-- Dell XPS 13 9310 2-in-1
-- 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
-- 32GB LPDDR4x 4267 Mhz
-- KBG40ZPZ1T02 NVMe KIOXIA 1024GB\
-The installed operating system was Gentoo Linux.\
-Input and output storage device was the internal NVMe.
+- Lenovo Thinkbook 14S Yoga ITL  
+- Intel(R) 11th Gen i5-1135G7 @ AVG: 2.40GHz (MAX: 4.2 GHz)  
+- 16GB DDR4-3200 RAM  
+- internal Samsung 980 Pro NVMe 1TB 
+The installed operating system was Gentoo Linux.  
+Input and output storage device was the internal NVMe.  
 
-The following benchmark was created for a \~20GB prebuilt image, which was generated using [this script](https://gist.github.com/ph0llux/6969329b060d393e199442dc0787dc9a).
+The following benchmark was created for a \~20GB prebuilt image, which was generated using [the benchmark script](/benchmarks/gen_benchmark_image.sh).
 
-![Acquisition time](/benchmarks/acquisition_time.png)
-\
-¹Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".\
-²Using Guymager 0.8.12, with enabled Aff support and Aff compression level 1 in guymager.cfg, with MD5 hash calculation, without "HashVerifyDest".\
-³using ```zffacquire physical -i raw/example01.dd -o zff_lz4 -z lz4```\
-⁴using ```zffacquire physical -i raw/example01.dd -o zff -S per_chunk_signatures```\
-⁵using ```zffacquire physical -i raw/example01.dd -o zff -p 123```\
-⁶using ```zffacquire physical -i raw/example01.dd -o zff```\
-⁷using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```\
-⁸using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.\
-⁹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4```\
-¹⁰using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 --threads 8```\
-¹¹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy```\
-¹²using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy --threads 8```\
-¹³using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c lz4```\
+![Acquisition time](/benchmarks/acquisition_time.png)  
 
-As you can see, zffacquire is in most cases much faster than the other tools - even if you store the data encrypted. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).\
-\
-zffacquire and linpmem produce very good benchmarks using lz4 (which just goes to show how much switching compression algorithms can do!).
+¹using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.  
+²using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```  
+³using ```zffacquire physical -i raw/example01.dd -o zff``` 
+⁴using ```zffacquire physical -i raw/example01.dd -o zff -p -L debug```  
+⁵using ```zffacquire physical -i raw/example01.dd -o zff -S```  
+⁶using ```zffacquire physical -i raw/example01.dd -o zff_lz4 -z lz4```   
+⁷Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".  
+⁸Using Guymager 0.8.12, with enabled Aff support and Aff compression level 1 in guymager.cfg, with MD5 hash calculation, without "HashVerifyDest".  
+⁹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4```  
+¹⁰using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 --threads 8```  
+¹¹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy```  
+¹²using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy --threads 8```  
+¹³using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c lz4```  
 
+As you can see, zffacquire is in most cases much faster than the other tools - even if you store the data encrypted. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).  
+\ 
+zffacquire and linpmem produce very good benchmarks using lz4 (which just goes to show how much switching compression algorithms can do!).  
+\ 
 Two of the acquired images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
-For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.
-
+For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.  
+\ 
 Unfortunately, I have not found an official reference tool that could have been used to FUSE mount aff4 images (neither on www.aff4.org nor on docs.aff4.org).
 If someone can tell me one, I will update the benchmarks appropriately.
 
@@ -78,25 +78,30 @@ If someone can tell me one, I will update the benchmarks appropriately.
 \
 ¹The following commands were used:
 ```bash
-zffmount -i zff.z01 -m /tmp/zffmount
+zffmount -i zff.z01 -m /tmp/zffmount -c in-memory
 dd if=/tmp/zffmount/zff_image.dd of=/dev/null bs=1M
 ```
 ²The following commands were used:
 ```bash
+zffmount-v2 -i zff.z01 -m /tmp/zffmount
+dd if=/tmp/zffmount/zff_image.dd of=/dev/null bs=1M
+```
+³The following commands were used:
+```bash
 affuse aff_image.aff /tmp/affmount
 dd if=/tmp/affmount/aff_example01.aff.raw of=/dev/null bs=1M
 ```
-³The following commands were used:
+⁴The following commands were used:
 ```bash
 xmount --in aff aff_image.aff /tmp/affmount
 dd if=/tmp/affmount/aff_image.dd of=/dev/null bs=1M
 ```
-⁴The following commands were used:
+⁵The following commands were used:
 ```bash
 xmount --in ewf ewfacquired.Ex01 /tmp/ewfmount
 dd if=/tmp/ewfmount/ewfacquired.dd of=/dev/null bs=1M
 ```
-⁵The following commands were used:
+⁶The following commands were used:
 ```bash
 xmount --in ewf guymager.e01 /tmp/ewfmount
 dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
