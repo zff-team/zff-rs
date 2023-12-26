@@ -54,7 +54,7 @@ use serde::{
 /// use zff::header::DescriptionHeader;
 /// 
 /// let header_version = 2;
-/// let mut description_header = DescriptionHeader::new_empty(header_version);
+/// let mut description_header = DescriptionHeader::new_empty();
 /// 
 /// description_header.set_examiner_name("ph0llux");
 /// assert_eq!(Some("ph0llux"), description_header.examiner_name());
