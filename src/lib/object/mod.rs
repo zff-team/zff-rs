@@ -1,7 +1,7 @@
 // - STD
 use std::sync::{
     Arc,
-    RwLock,
+    RwLock, RwLockReadGuard,
 };
 use std::collections::HashMap;
 use std::thread;
@@ -32,13 +32,13 @@ use crate::{
 /// The EncodingThreadPoolManager is used to manage the threads and to ensure that the threads will use the given data in zero-copy way.
 pub struct EncodingThreadPoolManager {
     /// the hashing threads.
-    pub hashing_threads: HashingThreadManager,
+    hashing_threads: HashingThreadManager,
     /// the compression thread.
-    pub compression_thread: CompressionThread,
+    compression_thread: CompressionThread,
     /// the crc32 thread.
-    pub crc32_thread: Crc32Thread,
+    crc32_thread: Crc32Thread,
 	/// the same bytes thread.
-	pub same_bytes_thread: SameBytesThread,
+	same_bytes_thread: SameBytesThread,
     /// the data, which will be used by the appropriate threads.
     pub data: Arc<RwLock<Vec<u8>>>, 
 }
@@ -68,19 +68,24 @@ impl EncodingThreadPoolManager {
         *w = data;
     }
 
+	/// finalizes all hashing threads and returns a HashMap<HashType, Vec<u8>> with the appropriate hash values.
+	pub fn finalize_all_hashing_threads(&mut self) -> HashMap<HashType, Vec<u8>> {
+		self.hashing_threads.finalize_all()
+	}
+
     /// triggers the underlying HashingThreadManager, the CompressionThread and the Crc32Thread to continue processes with the updated data field.
     /// This function should be called after the data field was updated.
     pub fn trigger(&mut self) {
 		self.same_bytes_thread.trigger();
-        self.hashing_threads.trigger();
         self.compression_thread.trigger();
         self.crc32_thread.trigger();
+		self.hashing_threads.trigger();
     }
 }
 
 /// Structure to manage the HashingThreads and ensures that the threads will use the given data in zero-copy way.
 #[derive(Debug)]
-pub struct HashingThreadManager {
+pub(crate) struct HashingThreadManager {
 	/// the hashing threads.
 	pub threads: HashMap<HashType, HashingThread>,
 	/// a separate hashing thread for deduplication hashing.
@@ -106,11 +111,6 @@ impl HashingThreadManager {
 		}
 	}
 
-	/// checks if a hashing thread with the given HashType exists.
-	pub fn has_thread(&self, hash_type: &HashType) -> bool {
-		self.threads.get(hash_type).is_some()
-	}
-
 	/// adds a new deduplication thread.
 	pub fn add_deduplication_thread(&mut self) {
 		if self.deduplication_thread.is_none() {
@@ -131,21 +131,18 @@ impl HashingThreadManager {
 	/// triggers all hashing threads to continue the hashing process with the updated data field.
 	/// This function should be called after the data field was updated.
 	pub fn trigger(&mut self) {
+		// blocks a read on the RwLock to ensure that the threads will use valid data.
+		let a = self.data.read().unwrap();
+
 		for thread in self.threads.values_mut() {
 			thread.trigger();
-		}
-		for thread in self.threads.values_mut() {
-			thread.reader_created.recv().unwrap();
 		}
 		// trigger the deduplication thread (if exists)
 		if let Some(thread) = &self.deduplication_thread {
 			thread.trigger();
 		}
-	}
 
-	/// finalizes the hashing thread and returns the hash of the given data and removes the thread from the HashingThreadManager.
-	pub fn finalize(&mut self, hash_type: HashType) -> Option<Vec<u8>> {
-		self.threads.remove(&hash_type).map(|thread| thread.finalize())
+		drop(a);
 	}
 
 	/// finalizes all hashing threads and returns a HashMap<HashType, Vec<u8>> with the appropriate hash values.
@@ -163,15 +160,9 @@ impl HashingThreadManager {
 /// This struct is used to calculate the hash of a given data in a separate thread.
 /// The thread could be filled with data by using the function `fill_data`.
 #[derive(Debug)]
-pub struct HashingThread {
-	/// the thread, which calculates the hash of the given data.
-	pub thread: thread::JoinHandle<()>,
-	/// the data, which will be used by the hashing thread.
-	pub data: Arc<RwLock<Vec<u8>>>,
+pub(crate) struct HashingThread {
 	/// triggers the hashing thread to continue the hashing process with the updated data field.
 	pub trigger: crossbeam::channel::Sender<bool>,
-	/// contains a receiver, which will be used to ensure, that the thread has accessed the data field.
-	pub reader_created: crossbeam::channel::Receiver<()>,
 	/// the receiver, which will be used to receive the hash of the given data.
 	pub hash_receiver: crossbeam::channel::Receiver<Vec<u8>>,
 }
@@ -180,15 +171,13 @@ impl HashingThread {
 	/// creates a new hashing thread.
 	pub fn new(hash_type: HashType, data: Arc<RwLock<Vec<u8>>>) -> Self {
 		let (trigger, receiver) = crossbeam::channel::unbounded::<bool>();
-		let (reader_created, reader_created_receiver) = crossbeam::channel::unbounded::<()>(); // this channel will be used to ensure, that the thread has accessed the data field
 		let (hash_sender, hash_receiver) = crossbeam::channel::unbounded::<Vec<u8>>();
 		let c_data = Arc::clone(&data);
-		let thread = thread::spawn(move || {
+		let _ = thread::spawn(move || {
 			let mut hasher = Hash::new_hasher(&hash_type);
 			while let Ok(eof) = receiver.recv() {
 				if !eof {
 					let r_data = c_data.read().unwrap();
-					reader_created.send(()).unwrap();
 					hasher.update(&r_data);
 				} else {
 					let hash = hasher.finalize();
@@ -198,10 +187,7 @@ impl HashingThread {
 			}
 		});
 		Self {
-			thread,
-			data,
 			trigger,
-			reader_created: reader_created_receiver,
 			hash_receiver,
 		}
 	}
@@ -221,11 +207,7 @@ impl HashingThread {
 
 /// Structure to manage the deduplication thread.
 #[derive(Debug)]
-pub struct DeduplicationThread {
-	/// the thread, which will be used to calculate the hash of the given data.
-	pub thread: thread::JoinHandle<()>,
-	/// the data, which will be used by the deduplication thread.
-	pub data: Arc<RwLock<Vec<u8>>>,
+pub(crate) struct DeduplicationThread {
 	/// the sender, which will be used to trigger the deduplication thread.
 	pub trigger: crossbeam::channel::Sender<()>,
 	/// the receiver, which will be used to receive the hash of the given data.
@@ -238,15 +220,13 @@ impl DeduplicationThread {
 		let (trigger, trigger_receiver) = crossbeam::channel::unbounded::<()>();
 		let (sender, receiver) = crossbeam::channel::unbounded::<blake3::Hash>();
 		let c_data = Arc::clone(&data);
-		let thread = thread::spawn(move || {
+		let _ = thread::spawn(move || {
 			while trigger_receiver.recv().is_ok() {
 				let r_data = c_data.read().unwrap();
 				sender.send(blake3::hash(&r_data)).unwrap();
 			}
 		});
 		Self {
-			thread,
-			data,
 			trigger,
 			receiver,
 		}
@@ -265,11 +245,7 @@ impl DeduplicationThread {
 }
 
 /// Structure to manage the crc32 calculation in a separate thread.
-pub struct Crc32Thread {
-	/// the thread, which calculates the crc32 of the given data.
-	pub thread: thread::JoinHandle<()>,
-	/// the data, which will be used by the crc32 thread.
-	pub data: Arc<RwLock<Vec<u8>>>,
+pub(crate) struct Crc32Thread {
 	/// triggers the crc32 thread to continue the crc32 calculation with the updated data field.
 	pub trigger: crossbeam::channel::Sender<()>,
 	/// the receiver, which will be used to receive the compressed data and if the compression flag has to be set or not.
@@ -282,7 +258,7 @@ impl Crc32Thread {
 		let (trigger, trigger_receiver) = crossbeam::channel::unbounded::<()>();
 		let (sender, receiver) = crossbeam::channel::unbounded::<u32>();
 		let c_data = Arc::clone(&data);
-		let thread = thread::spawn(move || {
+		let _ = thread::spawn(move || {
 			while trigger_receiver.recv().is_ok() {
 				let r_data = c_data.read().unwrap();
 				let mut hasher = crc32fast::Hasher::new();
@@ -291,8 +267,6 @@ impl Crc32Thread {
 			}
 		});
 		Self {
-			thread,
-			data,
 			trigger,
 			receiver,
 		}
@@ -311,76 +285,73 @@ impl Crc32Thread {
 
 /// Structure contains all information about a compression thread.
 #[derive(Debug)]
-pub struct CompressionThread {
-	/// the thread, which will be used to compress the data.
-	pub thread: thread::JoinHandle<()>,
-	/// the data, which will be used by the compression thread.
-	pub data: Arc<RwLock<Vec<u8>>>,
+pub(crate) struct CompressionThread {
 	/// the sender, which will be used to trigger the compression thread.
 	pub trigger: crossbeam::channel::Sender<()>,
-	/// the receiver, which will be used to receive the compressed data and if the compression flag has to be set or not.
-	pub receiver: crossbeam::channel::Receiver<Result<(Vec<u8>, bool)>>,
+	/// will be used to receive the compressed data and if the compression flag has to be set or not.
+	pub result: Arc<RwLock<CompressedData>>,
 }
 
 impl CompressionThread {
 	/// creates a new compression thread.
 	pub fn new(compression_header: CompressionHeader, chunk_size: usize, data: Arc<RwLock<Vec<u8>>>) -> Self {
-		let (sender, receiver) = crossbeam::channel::unbounded::<Result<(Vec<u8>, bool)>>();
 		let (trigger, trigger_receiver) = crossbeam::channel::unbounded::<()>();
+		let result = Arc::new(RwLock::new(CompressedData::Raw));
+		let c_result = Arc::clone(&result);
 		let c_data = Arc::clone(&data);
-		let thread = thread::spawn(move || {
+		let _ = thread::spawn(move || {
 			while trigger_receiver.recv().is_ok() {
 				let r_data = c_data.read().unwrap();
-				let result = Self::compress_buffer(&r_data, chunk_size, &compression_header);
-				sender.send(result).unwrap();
+				let mut w_result = c_result.write().unwrap();
+				*w_result = Self::compress_buffer(&r_data, chunk_size, &compression_header);
 			}
 		});
 		Self {
-			thread,
-			data,
 			trigger,
-			receiver,
+			result,
 		}
 	}
 
-	fn compress_buffer(buf: &std::sync::RwLockReadGuard<'_, Vec<u8>>, chunk_size: usize, compression_header: &CompressionHeader) -> Result<(Vec<u8>, bool)> {
-		let mut compression_flag = false;
+	fn compress_buffer(
+		buf: &std::sync::RwLockReadGuard<'_, Vec<u8>>,
+		chunk_size: usize,
+		compression_header: &CompressionHeader) -> CompressedData {
 		let compression_threshold = compression_header.threshold;
 	
 		match compression_header.algorithm {
-			CompressionAlgorithm::None => Ok((buf.to_vec(), compression_flag)),
+			CompressionAlgorithm::None => CompressedData::Raw,
 			CompressionAlgorithm::Zstd => {
 				let compression_level = compression_header.level as i32;
-				let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
+				let mut stream = match zstd::stream::read::Encoder::new(buf.as_slice(), compression_level) {
+					Ok(stream) => stream,
+					Err(e) => return CompressedData::Err(ZffError::from(e)),
+				};
 				// unwrap is safe here, because the read will not fail on a Vec<u8>.
 				let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize).unwrap();
 				if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
-					Ok((buf.to_vec(), compression_flag))
+					CompressedData::Raw
 				} else {
-					compression_flag = true;
-					Ok((compressed_data, compression_flag))
+					CompressedData::Compressed(compressed_data)
 				}
 			},
 			CompressionAlgorithm::Lz4 => {
 				let buffer = Vec::new();
 				let mut compressor = lz4_flex::frame::FrameEncoder::new(buffer);
-				io_copy(&mut buf.as_slice(), &mut compressor)?;
-				let compressed_data = compressor.finish()?;
+				if let Err(e) = io_copy(&mut buf.as_slice(), &mut compressor) {
+					return CompressedData::Err(ZffError::from(e));
+				};
+				let compressed_data = match compressor.finish() {
+					Ok(data) => data,
+					Err(e) => return CompressedData::Err(ZffError::from(e)),
+				
+				};
 				if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
-					Ok((buf.to_vec(), compression_flag))
+					CompressedData::Raw
 				} else {
-					compression_flag = true;
-					Ok((compressed_data, compression_flag))
+					CompressedData::Compressed(compressed_data)
 				}
 			}
 		}
-	}
-	
-
-	/// fills the data field of the compression thread.
-	pub fn update(&self, data: Vec<u8>) {
-		let mut w = self.data.write().unwrap();
-		*w = data;
 	}
 
 	/// triggers the compression thread to continue the compression process with the updated data field.
@@ -390,17 +361,26 @@ impl CompressionThread {
 	}
 
 	/// returns the compressed data and if the compression flag has to be set or not.
-	pub fn get_result(&self) -> Result<(Vec<u8>, bool)> {
-		self.receiver.recv().unwrap()
+	pub fn get_result(&self) -> RwLockReadGuard<'_, CompressedData> {
+		self.result.read().unwrap()
 	}
 }
 
+/// Indicates if the data are compressed or not.
+/// This enum is used to avoid unnecessary copy operations.
+/// If the data are compressed, the data will be used directly.
+#[derive(Debug)]
+pub(crate) enum CompressedData {
+	/// indicates to use the compressed data (to avoid unnecessary copy operations)
+	Compressed(Vec<u8>),
+	/// indicates to use the original raw data (to avoid unnecessary copy operations)
+	Raw,
+	/// indicates an error during the compression process.
+	Err(ZffError),
+}
+
 /// A structure, which contains all information and capabilities to check if the underlying data are same bytes or not.
-pub struct SameBytesThread {
-	/// the thread, which will be used to check if the underlying data are same bytes or not.
-	pub thread: thread::JoinHandle<()>,
-	/// the data, which will be used by the same bytes thread.
-	pub data: Arc<RwLock<Vec<u8>>>,
+pub(crate) struct SameBytesThread {
 	/// the sender, which will be used to trigger the same bytes thread.
 	pub trigger: crossbeam::channel::Sender<()>,
 	/// the receiver, which will be used to receive the result of the same bytes thread.
@@ -413,7 +393,7 @@ impl SameBytesThread {
 		let (sender, receiver) = crossbeam::channel::unbounded::<Option<u8>>();
 		let (trigger, trigger_receiver) = crossbeam::channel::unbounded::<()>();
 		let c_data = Arc::clone(&data);
-		let thread = thread::spawn(move || {
+		let _ = thread::spawn(move || {
 			while trigger_receiver.recv().is_ok() {
 				let r_data = c_data.read().unwrap();
 				let result = Self::check_same_bytes(&r_data);
@@ -421,8 +401,6 @@ impl SameBytesThread {
 			}
 		});
 		Self {
-			thread,
-			data,
 			trigger,
 			receiver,
 		}
@@ -488,7 +466,13 @@ pub(crate) fn chunking(
 	let (chunked_data, compression_flag) = match chunk_content {
 		ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
 		ChunkContent::Duplicate(chunk_no) => (chunk_no.to_le_bytes().to_vec(), false),
-		ChunkContent::Raw(_) => encoding_thread_pool_manager.compression_thread.get_result()?,
+		ChunkContent::Raw(_) => {
+			match &*encoding_thread_pool_manager.compression_thread.get_result() {
+				CompressedData::Compressed(compressed_data) => (compressed_data.clone(), true),
+				CompressedData::Raw => (encoding_thread_pool_manager.data.read().unwrap().clone(), false),
+				CompressedData::Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "Compression error")),
+			}
+		},
 	};
 
 	// prepare chunk header:
@@ -523,14 +507,6 @@ pub(crate) fn chunking(
 	} else {
 		chunk_header.encode_directly()
 	};
-
-	// if the chunk is duplicate or same byte, the receiver of the compression thread has to be triggered.
-	match chunk_content {
-		ChunkContent::SameBytes(_) | ChunkContent::Duplicate(_) => {
-			let _ = encoding_thread_pool_manager.compression_thread.get_result();
-		},
-		_ => {},
-	}
 
 	chunk.append(&mut encoded_header);
 	chunk.append(&mut chunked_data);
