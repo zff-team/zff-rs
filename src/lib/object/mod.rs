@@ -147,18 +147,15 @@ impl HashingThreadManager {
 	/// triggers all hashing threads to continue the hashing process with the updated data field.
 	/// This function should be called after the data field was updated.
 	pub fn trigger(&mut self) {
-		// blocks a read on the RwLock to ensure that the threads will use valid data.
-		let a = self.data.read().unwrap();
-
 		for thread in self.threads.values_mut() {
-			thread.trigger();
+			let wg = crossbeam::sync::WaitGroup::new();
+			thread.trigger(wg.clone());
+			wg.wait();
 		}
 		// trigger the deduplication thread (if exists)
 		if let Some(thread) = &mut self.deduplication_thread {
 			thread.trigger();
 		}
-
-		drop(a);
 	}
 
 	/// finalizes all hashing threads and returns a HashMap<HashType, Vec<u8>> with the appropriate hash values.
@@ -178,7 +175,7 @@ impl HashingThreadManager {
 #[derive(Debug)]
 pub(crate) struct HashingThread {
 	/// triggers the hashing thread to continue the hashing process with the updated data field.
-	pub trigger: crossbeam::channel::Sender<bool>,
+	pub trigger: crossbeam::channel::Sender<(crossbeam::sync::WaitGroup, bool)>,
 	/// the receiver, which will be used to receive the hash of the given data.
 	pub hash_receiver: crossbeam::channel::Receiver<Vec<u8>>,
 }
@@ -186,18 +183,20 @@ pub(crate) struct HashingThread {
 impl HashingThread {
 	/// creates a new hashing thread.
 	pub fn new(hash_type: HashType, data: Arc<RwLock<Vec<u8>>>) -> Self {
-		let (trigger, receiver) = crossbeam::channel::unbounded::<bool>();
+		let (trigger, receiver) = crossbeam::channel::unbounded::<(crossbeam::sync::WaitGroup, bool)>();
 		let (hash_sender, hash_receiver) = crossbeam::channel::unbounded::<Vec<u8>>();
 		let c_data = Arc::clone(&data);
 		let _ = thread::spawn(move || {
 			let mut hasher = Hash::new_hasher(&hash_type);
-			while let Ok(eof) = receiver.recv() {
+			while let Ok((wg, eof)) = receiver.recv() {
 				if !eof {
 					let r_data = c_data.read().unwrap();
+					drop(wg);
 					hasher.update(&r_data);
 				} else {
 					let hash = hasher.finalize();
 					hasher = Hash::new_hasher(&hash_type);
+					drop(wg);
 					hash_sender.send(hash.to_vec()).unwrap();
 				}
 			}
@@ -209,14 +208,16 @@ impl HashingThread {
 	}
 
 	/// trigger the thread to continue the hashing process with the updated data field.
-	pub fn trigger(&self) {
-		self.trigger.send(false).unwrap();
+	pub fn trigger(&self, wg: crossbeam::sync::WaitGroup) {
+		self.trigger.send((wg, false)).unwrap();
 	}
 
 	/// returns the hash of the given data.
 	/// This function blocks until the hash is calculated.
 	pub fn finalize(self) -> Vec<u8> {
-		self.trigger.send(true).unwrap();
+		let wg = crossbeam::sync::WaitGroup::new();
+		self.trigger.send((wg.clone(), true)).unwrap();
+		wg.wait();
 		self.hash_receiver.recv().unwrap()
 	}
 }
