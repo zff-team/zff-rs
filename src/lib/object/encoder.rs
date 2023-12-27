@@ -224,7 +224,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    };
 
 		self.encoding_thread_pool_manager.update(buf);
-		self.encoding_thread_pool_manager.trigger();
 
 		let encryption_algorithm = self.obj_header.encryption_header.as_ref().map(|encryption_header| &encryption_header.algorithm);
 		let encryption_key = if let Some(encryption_header) = &self.obj_header.encryption_header {

@@ -234,7 +234,6 @@ impl FileEncoder {
 		let mut encoding_thread_pool_manager = self.encoding_thread_pool_manager.borrow_mut();
 
 		encoding_thread_pool_manager.update(buf);
-		encoding_thread_pool_manager.trigger();
 
 		let encryption_algorithm = self.encryption_information.as_ref().map(|encryption_information| &encryption_information.algorithm);
 		let encryption_key = self.encryption_information.as_ref().map(|encryption_information| &encryption_information.encryption_key);
