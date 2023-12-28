@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "This crate is a library to interact with zff, a file format for forensic images."
 readme = "./README.md"
 homepage = "https://zff.dev"
-repository = "https://github.com/ph0llux/zff"
+repository = "https://github.com/zff-team/zff-rs"
 keywords = ["forensics", "security", "acquisition", "file-format", "file"]
 publish = true
 
