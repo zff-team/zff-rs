@@ -44,11 +44,16 @@ pub(crate) const PBE_KDF_PARAMETERS_SCRYPT: u32 = 0x6b646673;
 pub(crate) const PBE_KDF_PARAMETERS_ARGON2ID: u32 = 0x6b646661;
 
 // Encoding keys
-pub(crate) const ENCODING_KEY_CASE_NUMBER: &str = "cn";
-pub(crate) const ENCODING_KEY_EVIDENCE_NUMBER: &str = "ev";
-pub(crate) const ENCODING_KEY_EXAMINER_NAME: &str = "ex";
-pub(crate) const ENCODING_KEY_NOTES: &str = "no";
-pub(crate) const ENCODING_KEY_DESCRIPTION_NOTES: &str = "dn";
+/// Encoding key for the case number.
+pub const ENCODING_KEY_CASE_NUMBER: &str = "cn";
+/// Encoding key for the evidence number.
+pub const ENCODING_KEY_EVIDENCE_NUMBER: &str = "ev";
+/// Encoding key for the examiner name.
+pub const ENCODING_KEY_EXAMINER_NAME: &str = "ex";
+/// Encoding key for the notes.
+pub const ENCODING_KEY_NOTES: &str = "no";
+/// Encoding key for the global description notes.
+pub const ENCODING_KEY_DESCRIPTION_NOTES: &str = "dn";
 
 // chunk header flags
 pub(crate) const ERROR_FLAG_VALUE: u8 = 1<<0;
