@@ -30,6 +30,7 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct SegmentHeader {
 	/// the unique identifier. Segments at the same group (=same zff container) should have the same identifier.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::as_hex"))]
 	pub unique_identifier: u64,
 	/// the appropriate segment number.
 	pub segment_number: u64,
