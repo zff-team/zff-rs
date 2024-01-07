@@ -507,7 +507,7 @@ pub(crate) fn chunking(
 			match &*encoding_thread_pool_manager.compression_thread.get_result() {
 				CompressedData::Compressed(compressed_data) => (compressed_data.clone(), true),
 				CompressedData::Raw => (encoding_thread_pool_manager.data.read().unwrap().clone(), false),
-				CompressedData::Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "Compression error")),
+				CompressedData::Err(e) => return Err(ZffError::new(ZffErrorKind::Custom, e.details.clone())),
 			}
 		},
 	};
