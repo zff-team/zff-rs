@@ -1,8 +1,9 @@
 // - STD
 use core::borrow::Borrow;
 use std::io::{Cursor, Read};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::any::Any;
 
 // - internal
 use crate::{
@@ -22,15 +23,33 @@ use crate::{
 	HEADER_IDENTIFIER_FILE_HEADER,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
 	DEFAULT_HEADER_VERSION_FILE_HEADER,
+	METADATA_EXT_TYPE_IDENTIFIER_U8,
+	METADATA_EXT_TYPE_IDENTIFIER_U16,
+	METADATA_EXT_TYPE_IDENTIFIER_U32,
+	METADATA_EXT_TYPE_IDENTIFIER_U64,
+	METADATA_EXT_TYPE_IDENTIFIER_I8,
+	METADATA_EXT_TYPE_IDENTIFIER_I16,
+	METADATA_EXT_TYPE_IDENTIFIER_I32,
+	METADATA_EXT_TYPE_IDENTIFIER_I64,
+	METADATA_EXT_TYPE_IDENTIFIER_STRING,
+	METADATA_EXT_TYPE_IDENTIFIER_HASHMAP,
+	METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP,
+	METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY,
+	METADATA_EXT_TYPE_IDENTIFIER_F32,
+	METADATA_EXT_TYPE_IDENTIFIER_F64,
+	METADATA_EXT_TYPE_IDENTIFIER_VEC,
+	METADATA_EXT_TYPE_IDENTIFIER_BOOL,
 };
 
 use crate::header::EncryptionInformation;
 
 // - external
+use ordered_float::OrderedFloat;
 #[cfg(feature = "serde")]
 use serde::{
 	Deserialize,
 	Serialize,
+	ser::{Serializer, SerializeMap, SerializeSeq},
 };
 
 /// Defines all file types, which are implemented for zff files.
@@ -134,9 +153,9 @@ pub struct FileHeader {
 	pub filename: String,
 	/// The parent file number of this file. Will be 0, if the parent is the root directory.
 	pub parent_file_number: u64,
-	/// A [HashMap] of the metadata of this file.
-	pub metadata_ext: HashMap<String, String>,
-} 
+	/// A [HashMap] of the metadata of this file. The keys are the names of the metadata and the values are the values of the metadata.
+	pub metadata_ext: HashMap<String, MetadataExtendedValue>,
+}
 
 impl FileHeader {
 	/// creates a new [FileHeader] with the given values.
@@ -145,7 +164,7 @@ impl FileHeader {
 		file_type: FileType,
 		filename: F,
 		parent_file_number: u64,
-		metadata_ext: HashMap<String, String>) -> FileHeader {
+		metadata_ext: HashMap<String, MetadataExtendedValue>) -> FileHeader {
 		Self {
 			file_number,
 			file_type,
@@ -254,7 +273,7 @@ impl FileHeader {
 		FileType,
 		String, //Filename
 		u64, //parent_file_number
-		HashMap<String, String>,
+		HashMap<String, MetadataExtendedValue>,
 		)> {
 		let file_type = match u8::decode_directly(inner_content)? {
 			1 => FileType::File,
@@ -265,8 +284,7 @@ impl FileHeader {
 		};
 		let filename = String::decode_directly(inner_content)?;
 		let parent_file_number = u64::decode_directly(inner_content)?;
-		let metadata_ext = HashMap::<String, String>::decode_directly(inner_content)?;
-
+		let metadata_ext = HashMap::<String, MetadataExtendedValue>::decode_directly(inner_content)?;
 		let inner_content = (
 			file_type,
 			filename,
@@ -316,5 +334,395 @@ impl fmt::Display for FileHeader {
 impl FileHeader {
 	fn struct_name(&self) -> &'static str {
 		"FileHeader"
+	}
+}
+
+/// This is a wrapper enum for all possible values of the metadata extended values.
+#[derive(Debug,Clone,Eq,PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+pub enum MetadataExtendedValue {
+	/// represents a uint8 value
+	U8(u8),
+	/// represents a uint16 value
+	U16(u16),
+	/// represents a uint32 value
+	U32(u32),
+	/// represents a uint64 value
+	U64(u64),
+	/// represents a int8 value
+	I8(i8),
+	/// represents a int16 value
+	I16(i16),
+	/// represents a int32 value
+	I32(i32),
+	/// represents a int64 value
+	I64(i64),
+	/// represents a string value
+	String(String),
+	/// represents a hashmap value
+	Hashmap(HashMap<String, MetadataExtendedValue>),
+	/// represents a BTreeMap value
+	BTreeMap(BTreeMap<String, MetadataExtendedValue>),
+	/// represents a loose byte array
+	ByteArray(Vec<u8>),
+	/// represents a float32 value
+	F32(OrderedFloat<f32>),
+	/// represents a float64 value
+	F64(OrderedFloat<f64>),
+	/// represents a vector
+	Vector(Vec<MetadataExtendedValue>),
+	/// represents a bool value
+	Bool(bool),
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for MetadataExtendedValue {
+	fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		match self {
+			MetadataExtendedValue::U8(value) => serializer.serialize_u8(*value),
+			MetadataExtendedValue::U16(value) => serializer.serialize_u16(*value),
+			MetadataExtendedValue::U32(value) => serializer.serialize_u32(*value),
+			MetadataExtendedValue::U64(value) => serializer.serialize_u64(*value),
+			MetadataExtendedValue::I8(value) => serializer.serialize_i8(*value),
+			MetadataExtendedValue::I16(value) => serializer.serialize_i16(*value),
+			MetadataExtendedValue::I32(value) => serializer.serialize_i32(*value),
+			MetadataExtendedValue::I64(value) => serializer.serialize_i64(*value),
+			MetadataExtendedValue::String(value) => serializer.serialize_str(value),
+			MetadataExtendedValue::Hashmap(value) => {
+				let mut state = serializer.serialize_map(Some(value.len()))?;
+				for (key, value) in value {
+					state.serialize_entry(key, value)?;
+				}
+				state.end()
+			},
+			MetadataExtendedValue::BTreeMap(value) => {
+				let mut state = serializer.serialize_map(Some(value.len()))?;
+				for (key, value) in value {
+					state.serialize_entry(key, value)?;
+				}
+				state.end()
+			},
+			MetadataExtendedValue::ByteArray(value) => serializer.serialize_bytes(value),
+			MetadataExtendedValue::F32(value) => serializer.serialize_f32(value.into_inner()),
+			MetadataExtendedValue::F64(value) => serializer.serialize_f64(value.into_inner()),
+			MetadataExtendedValue::Vector(value) => {
+				let mut state = serializer.serialize_seq(Some(value.len()))?;
+				for value in value {
+					state.serialize_element(value)?;
+				}
+				state.end()
+			},
+			MetadataExtendedValue::Bool(value) => serializer.serialize_bool(*value),
+		}
+	}
+}
+
+impl MetadataExtendedValue {
+	/// returns the inner value.
+	pub fn into_any(self) -> Box<dyn Any> {
+		match self {
+			MetadataExtendedValue::U8(value) => Box::new(value),
+			MetadataExtendedValue::U16(value) => Box::new(value),
+			MetadataExtendedValue::U32(value) => Box::new(value),
+			MetadataExtendedValue::U64(value) => Box::new(value),
+			MetadataExtendedValue::I8(value) => Box::new(value),
+			MetadataExtendedValue::I16(value) => Box::new(value),
+			MetadataExtendedValue::I32(value) => Box::new(value),
+			MetadataExtendedValue::I64(value) => Box::new(value),
+			MetadataExtendedValue::String(value) => Box::new(value),
+			MetadataExtendedValue::Hashmap(value) => Box::new(value),
+			MetadataExtendedValue::BTreeMap(value) => Box::new(value),
+			MetadataExtendedValue::ByteArray(value) => Box::new(value),
+			MetadataExtendedValue::F32(value) => Box::new(value),
+			MetadataExtendedValue::F64(value) => Box::new(value),
+			MetadataExtendedValue::Vector(value) => Box::new(value),
+			MetadataExtendedValue::Bool(value) => Box::new(value),
+		}
+	}
+}
+
+impl ValueEncoder for Vec<MetadataExtendedValue> {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		for value in self {
+			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_VEC
+	}
+
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.push(self.identifier());
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for value in self {
+			vec.append(&mut value.encode_with_identifier());
+		}
+		vec
+	}
+}
+
+impl ValueEncoder for HashMap<String, MetadataExtendedValue> {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, value) in self {
+			vec.append(&mut key.encode_directly());
+			vec.append(&mut value.encode_with_identifier());
+		}
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_HASHMAP
+	}
+
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.push(self.identifier());
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, value) in self {
+			vec.append(&mut key.encode_directly());
+			vec.append(&mut value.encode_with_identifier());
+		}
+		vec
+	}
+}
+
+impl ValueEncoder for MetadataExtendedValue {
+	fn encode_directly(&self) -> Vec<u8> {
+		self.encode_with_identifier()
+	}
+
+	fn identifier(&self) -> u8 {
+		match self {
+			MetadataExtendedValue::U8(value) => value.identifier(),
+			MetadataExtendedValue::U16(value) => value.identifier(),
+			MetadataExtendedValue::U32(value) => value.identifier(),
+			MetadataExtendedValue::U64(value) => value.identifier(),
+			MetadataExtendedValue::I8(value) => value.identifier(),
+			MetadataExtendedValue::I16(value) => value.identifier(),
+			MetadataExtendedValue::I32(value) => value.identifier(),
+			MetadataExtendedValue::I64(value) => value.identifier(),
+			MetadataExtendedValue::String(value) => value.identifier(),
+			MetadataExtendedValue::Hashmap(value) => value.identifier(),
+			MetadataExtendedValue::BTreeMap(value) => value.identifier(),
+			MetadataExtendedValue::ByteArray(value) => value.identifier(),
+			MetadataExtendedValue::F32(value) => value.identifier(),
+			MetadataExtendedValue::F64(value) => value.identifier(),
+			MetadataExtendedValue::Vector(value) => value.identifier(),
+			MetadataExtendedValue::Bool(value) => value.identifier(),
+		}
+	}
+
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		match self {
+			MetadataExtendedValue::U8(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::U16(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::U32(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::U64(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::I8(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::I16(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::I32(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::I64(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::String(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::Hashmap(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::BTreeMap(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::ByteArray(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::F32(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::F64(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::Vector(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::Bool(value) => value.encode_with_identifier(),
+		}
+	}
+}
+
+impl ValueDecoder for MetadataExtendedValue {
+	type Item = MetadataExtendedValue;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self> {
+		let identifier = u8::decode_directly(data)?;
+		match identifier {
+			METADATA_EXT_TYPE_IDENTIFIER_U8 => Ok(MetadataExtendedValue::U8(u8::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_U16 => Ok(MetadataExtendedValue::U16(u16::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_U32 => Ok(MetadataExtendedValue::U32(u32::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_U64 => Ok(MetadataExtendedValue::U64(u64::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_I8 => Ok(MetadataExtendedValue::I8(i8::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_I16 => Ok(MetadataExtendedValue::I16(i16::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_I32 => Ok(MetadataExtendedValue::I32(i32::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_I64 => Ok(MetadataExtendedValue::I64(i64::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_STRING => Ok(MetadataExtendedValue::String(String::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_HASHMAP => {
+				let length = u64::decode_directly(data)?;
+				let mut hashmap = HashMap::new();
+				for _ in 0..length {
+					let key = String::decode_directly(data)?;
+					let value = MetadataExtendedValue::decode_directly(data)?;
+					hashmap.insert(key, value);
+				}
+				Ok(MetadataExtendedValue::Hashmap(hashmap))
+			},
+			METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP => {
+				let length = u64::decode_directly(data)?;
+				let mut btreemap = BTreeMap::new();
+				for _ in 0..length {
+					let key = String::decode_directly(data)?;
+					let value = MetadataExtendedValue::decode_directly(data)?;
+					btreemap.insert(key, value);
+				}
+				Ok(MetadataExtendedValue::BTreeMap(btreemap))
+			},
+			METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY => Ok(MetadataExtendedValue::ByteArray(Vec::<u8>::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_F32 => Ok(MetadataExtendedValue::F32(OrderedFloat::from(f32::decode_directly(data)?))),
+			METADATA_EXT_TYPE_IDENTIFIER_F64 => Ok(MetadataExtendedValue::F64(OrderedFloat::from(f64::decode_directly(data)?))),
+			METADATA_EXT_TYPE_IDENTIFIER_VEC => {
+				let length = u64::decode_directly(data)?;
+				let mut vec = Vec::new();
+				for _ in 0..length {
+					vec.push(MetadataExtendedValue::decode_directly(data)?);
+				}
+				Ok(MetadataExtendedValue::Vector(vec))
+			},
+			METADATA_EXT_TYPE_IDENTIFIER_BOOL => Ok(MetadataExtendedValue::Bool(bool::decode_directly(data)?)),
+			_ => Err(ZffError::new(ZffErrorKind::UnknownMetadataExtendedType, identifier.to_string())),
+		}
+	}
+}
+
+impl From<u8> for MetadataExtendedValue {
+	fn from(value: u8) -> Self {
+		MetadataExtendedValue::U8(value)
+	}
+}
+
+impl From<&u8> for MetadataExtendedValue {
+	fn from(value: &u8) -> Self {
+		MetadataExtendedValue::U8(*value)
+	}
+}
+
+impl From<u16> for MetadataExtendedValue {
+	fn from(value: u16) -> Self {
+		MetadataExtendedValue::U16(value)
+	}
+}
+
+impl From<&u16> for MetadataExtendedValue {
+	fn from(value: &u16) -> Self {
+		MetadataExtendedValue::U16(*value)
+	}
+}
+
+impl From<u32> for MetadataExtendedValue {
+	fn from(value: u32) -> Self {
+		MetadataExtendedValue::U32(value)
+	}
+}
+
+impl From<&u32> for MetadataExtendedValue {
+	fn from(value: &u32) -> Self {
+		MetadataExtendedValue::U32(*value)
+	}
+}
+
+impl From<u64> for MetadataExtendedValue {
+	fn from(value: u64) -> Self {
+		MetadataExtendedValue::U64(value)
+	}
+}
+
+impl From<&u64> for MetadataExtendedValue {
+	fn from(value: &u64) -> Self {
+		MetadataExtendedValue::U64(*value)
+	}
+}
+
+impl From<i8> for MetadataExtendedValue {
+	fn from(value: i8) -> Self {
+		MetadataExtendedValue::I8(value)
+	}
+}
+
+impl From<&i8> for MetadataExtendedValue {
+	fn from(value: &i8) -> Self {
+		MetadataExtendedValue::I8(*value)
+	}
+}
+
+impl From<i16> for MetadataExtendedValue {
+	fn from(value: i16) -> Self {
+		MetadataExtendedValue::I16(value)
+	}
+}
+
+impl From<&i16> for MetadataExtendedValue {
+	fn from(value: &i16) -> Self {
+		MetadataExtendedValue::I16(*value)
+	}
+}
+
+impl From<i32> for MetadataExtendedValue {
+	fn from(value: i32) -> Self {
+		MetadataExtendedValue::I32(value)
+	}
+}
+
+impl From<&i32> for MetadataExtendedValue {
+	fn from(value: &i32) -> Self {
+		MetadataExtendedValue::I32(*value)
+	}
+}
+
+impl From<i64> for MetadataExtendedValue {
+	fn from(value: i64) -> Self {
+		MetadataExtendedValue::I64(value)
+	}
+}
+
+impl From<&i64> for MetadataExtendedValue {
+	fn from(value: &i64) -> Self {
+		MetadataExtendedValue::I64(*value)
+	}
+}
+
+impl From<String> for MetadataExtendedValue {
+	fn from(value: String) -> Self {
+		MetadataExtendedValue::String(value)
+	}
+}
+
+impl From<&str> for MetadataExtendedValue {
+	fn from(value: &str) -> Self {
+		MetadataExtendedValue::String(value.to_string())
+	}
+}
+
+impl From<Vec<u8>> for MetadataExtendedValue {
+	fn from(value: Vec<u8>) -> Self {
+		MetadataExtendedValue::ByteArray(value)
+	}
+}
+
+impl From<&[u8]> for MetadataExtendedValue {
+	fn from(value: &[u8]) -> Self {
+		MetadataExtendedValue::ByteArray(value.to_vec())
+	}
+}
+
+impl From<f32> for MetadataExtendedValue {
+	fn from(value: f32) -> Self {
+		MetadataExtendedValue::F32(OrderedFloat::from(value))
+	}
+}
+
+impl From<f64> for MetadataExtendedValue {
+	fn from(value: f64) -> Self {
+		MetadataExtendedValue::F64(OrderedFloat::from(value))
 	}
 }

@@ -21,7 +21,7 @@ use std::os::windows::fs::MetadataExt;
 // - internal
 use crate::{
     Result,
-    header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationChunkMap},
+    header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationChunkMap, MetadataExtendedValue},
     ZffError,
     ZffErrorKind,
     ObjectEncoder,
@@ -54,8 +54,6 @@ use time::OffsetDateTime;
 use posix_acl::{PosixACL, Qualifier, ACLEntry};
 #[cfg(target_family = "unix")]
 use xattr::XAttrs;
-#[cfg(target_family = "unix")]
-use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
 
 // returns the buffer with the read bytes and the number of bytes which was read.
 pub(crate) fn buffer_chunk<R>(
@@ -200,20 +198,20 @@ impl<R: Read> ObjectEncoderInformation<R> {
 
 
 #[cfg(target_family = "unix")]
-fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, String>> {
+fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataExtendedValue>> {
     let metadata = std::fs::symlink_metadata(path.as_ref())?;
     let mut metadata_ext = HashMap::new();
 
     //dev-id
-    metadata_ext.insert(METADATA_EXT_KEY_DEVID.into(), metadata.dev().to_string());
+    metadata_ext.insert(METADATA_EXT_KEY_DEVID.into(), metadata.dev().into());
     // inode
-    metadata_ext.insert(METADATA_EXT_KEY_INODE.into(), metadata.ino().to_string());
+    metadata_ext.insert(METADATA_EXT_KEY_INODE.into(), metadata.ino().into());
     // mode
-    metadata_ext.insert(METADATA_EXT_KEY_MODE.into(), metadata.mode().to_string());
+    metadata_ext.insert(METADATA_EXT_KEY_MODE.into(), metadata.mode().into());
     // uid
-    metadata_ext.insert(METADATA_EXT_KEY_UID.into(), metadata.uid().to_string());
+    metadata_ext.insert(METADATA_EXT_KEY_UID.into(), metadata.uid().into());
     // gid
-    metadata_ext.insert(METADATA_EXT_KEY_GID.into(), metadata.gid().to_string());
+    metadata_ext.insert(METADATA_EXT_KEY_GID.into(), metadata.gid().into());
 
     // timestamps
     let timestamps = get_time_from_metadata(&metadata);
@@ -222,10 +220,10 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, String>> 
     let ctime = timestamps.get(METADATA_CTIME).unwrap();
     let btime = timestamps.get(METADATA_BTIME).unwrap();
 
-    metadata_ext.insert(METADATA_ATIME.into(), atime.to_string());
-    metadata_ext.insert(METADATA_MTIME.into(), mtime.to_string());
-    metadata_ext.insert(METADATA_CTIME.into(), ctime.to_string());
-    metadata_ext.insert(METADATA_BTIME.into(), btime.to_string());
+    metadata_ext.insert(METADATA_ATIME.into(), atime.into());
+    metadata_ext.insert(METADATA_MTIME.into(), mtime.into());
+    metadata_ext.insert(METADATA_CTIME.into(), ctime.into());
+    metadata_ext.insert(METADATA_BTIME.into(), btime.into());
 
     // check acls on unix systems
     #[cfg(target_family = "unix")]
@@ -317,36 +315,36 @@ fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u6
 }
 
 #[cfg(target_family = "unix")]
-fn get_xattr_metadata<P: AsRef<Path>>(xattrs: XAttrs, path: P) -> Result<HashMap<String, String>> {
+fn get_xattr_metadata<P: AsRef<Path>>(xattrs: XAttrs, path: P) -> Result<HashMap<String, MetadataExtendedValue>> {
     let mut metadata_ext_map = HashMap::new();
     for ext_attr in xattrs {
         let ext_attr = ext_attr.to_string_lossy().to_string();
         // skip posix acls as we have defined the acl in other ways.
-        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) {
+        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) || ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL_DEFAULT) {
             continue;
         }
         let value = match xattr::get(path.as_ref(), &ext_attr)? {
-            Some(value) => base64engine.encode(value),
-            None => String::new(),
+            Some(value) => value,
+            None => Vec::new(),
         };
-        metadata_ext_map.insert(ext_attr, value);
+        metadata_ext_map.insert(ext_attr, value.into());
     }
     Ok(metadata_ext_map)
 }
 
 
 #[cfg(target_family = "unix")]
-pub(crate) fn get_posix_acls(acl: &PosixACL, default_acls: Option<&PosixACL>) -> HashMap<String, String> {
+pub(crate) fn get_posix_acls(acl: &PosixACL, default_acls: Option<&PosixACL>) -> HashMap<String, MetadataExtendedValue> {
     let mut metadata_ext_map = HashMap::new();
     for entry in acl.entries() {
         if let Some((key, value)) = gen_acl_key_value(false, &entry) {
-            metadata_ext_map.insert(key, value);
+            metadata_ext_map.insert(key, value.into());
         }
     };
     if let Some(default_acls) = default_acls {
         for entry in default_acls.entries() {
             if let Some((key, value)) = gen_acl_key_value(false, &entry) {
-                metadata_ext_map.insert(key, value);
+                metadata_ext_map.insert(key, value.into());
             }
         };
     }

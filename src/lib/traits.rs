@@ -4,9 +4,7 @@ use std::collections::{HashMap, BTreeMap};
 
 // - internal
 use crate::{
-	Result,
-	ZffError,
-	ZffErrorKind,
+	Result, ZffError, ZffErrorKind,
 };
 
 // - external
@@ -16,8 +14,24 @@ use crate::constants::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	ERROR_HEADER_DECODER_HEADER_LENGTH,
-	ERROR_HEADER_DECODER_KEY_POSITION,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
+	ERROR_HEADER_DECODER_KEY_POSITION,
+	METADATA_EXT_TYPE_IDENTIFIER_U8,
+	METADATA_EXT_TYPE_IDENTIFIER_U16,
+	METADATA_EXT_TYPE_IDENTIFIER_U32,
+	METADATA_EXT_TYPE_IDENTIFIER_U64,
+	METADATA_EXT_TYPE_IDENTIFIER_I8,
+	METADATA_EXT_TYPE_IDENTIFIER_I16,
+	METADATA_EXT_TYPE_IDENTIFIER_I32,
+	METADATA_EXT_TYPE_IDENTIFIER_I64,
+	METADATA_EXT_TYPE_IDENTIFIER_STRING,
+	METADATA_EXT_TYPE_IDENTIFIER_HASHMAP,
+	METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP,
+	METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY,
+	METADATA_EXT_TYPE_IDENTIFIER_F32,
+	METADATA_EXT_TYPE_IDENTIFIER_F64,
+	METADATA_EXT_TYPE_IDENTIFIER_VEC,
+	METADATA_EXT_TYPE_IDENTIFIER_BOOL,
 };
 
 // - external
@@ -63,14 +77,6 @@ pub trait HeaderCoding {
 
 		vec
 	}
-	/// encodes a key to the (header) value/object.
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
-	}
 
 	/// decodes the length of the header.
 	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
@@ -100,24 +106,6 @@ pub trait HeaderCoding {
 		}
 		Ok(())
 	}
-	
-	/// helper method to check, if the key is on position.
-	fn check_key_on_position<K: Into<String>, R: Read>(data: &mut R, key: K) -> bool {
-		let key_length = match data.read_u8() {
-			Ok(len) => len,
-			Err(_) => return false,
-		};
-		let mut read_key = vec![0u8; key_length as usize];
-		match data.read_exact(&mut read_key) {
-			Ok(_) => (),
-			Err(_) => return false,
-		};
-		let read_key = match String::from_utf8(read_key) {
-			Ok(key) => key,
-			Err(_) => return false,
-		};
-		read_key == key.into()
-	}
 
 	/// decodes the content of the header.
 	fn decode_content(data: Vec<u8>) -> Result<Self::Item>;
@@ -133,53 +121,56 @@ pub trait HeaderCoding {
 		Self::decode_content(header_content)
 	}
 
-	/// decodes the header for the given key.
-	fn decode_for_key<K: Into<String>, R: Read>(data: &mut R, key: K) -> Result<Self::Item> {
-		if !Self::check_key_on_position(data, key) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecoderKeyNotOnPosition, ERROR_HEADER_DECODER_KEY_POSITION))
-		}
-		Self::decode_directly(data)
-	}
 }
 
 /// encoder methods for values (and primitive types). This is an extension trait.
 pub trait ValueEncoder {
-	/// encodes a given key.
-	fn encode_key<K: Into<String>>(key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let key = key.into();
-		let key_length = key.len() as u8;
-		vec.push(key_length);
-		vec.append(&mut key.into_bytes());
-		vec
-	}
 	/// encodes the value directly (= without key).
 	fn encode_directly(&self) -> Vec<u8>;
 	/// encodes a key to the value.
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
+	fn encode_for_key(&self, key: &str) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
+		let mut encoded_key = encode_key(key);
 		vec.append(&mut encoded_key);
 		vec.append(&mut self.encode_directly());
 		vec
 	}
+
+	/// encodes with the appropriate type identifier.
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.push(self.identifier());
+		vec.append(&mut self.encode_directly());
+		vec
+	}
+
+	/// returns the identifier of the appropiate type.
+	fn identifier(&self) -> u8;
 }
 
 impl ValueEncoder for bool {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		if *self {
-			vec.push(0_u8);
-		} else {
 			vec.push(1_u8);
+		} else {
+			vec.push(0_u8);
 		};
 		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BOOL
 	}
 }
 
 impl ValueEncoder for u8 {
 	fn encode_directly(&self) -> Vec<u8> {
 		vec![*self]
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_U8
 	}
 }
 
@@ -189,6 +180,10 @@ impl ValueEncoder for u16 {
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_U16
+	}
 }
 
 impl ValueEncoder for u32 {
@@ -196,6 +191,10 @@ impl ValueEncoder for u32 {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_U32
 	}
 }
 
@@ -205,6 +204,44 @@ impl ValueEncoder for u64 {
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_U64
+	}
+}
+
+impl ValueEncoder for i8 {
+	fn encode_directly(&self) -> Vec<u8> {
+		vec![*self as u8]
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_I8
+	}
+}
+
+impl ValueEncoder for i16 {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut self.to_le_bytes().to_vec());
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_I16
+	}
+}
+
+impl ValueEncoder for i32 {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut self.to_le_bytes().to_vec());
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_I32
+	}
 }
 
 impl ValueEncoder for i64 {
@@ -212,6 +249,10 @@ impl ValueEncoder for i64 {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_I64
 	}
 }
 
@@ -221,6 +262,22 @@ impl ValueEncoder for f32 {
 		vec.append(&mut self.to_le_bytes().to_vec());
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_F32
+	}
+}
+
+impl ValueEncoder for f64 {
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut self.to_le_bytes().to_vec());
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_F64
+	}
 }
 
 impl ValueEncoder for [u8; 12] {
@@ -228,6 +285,10 @@ impl ValueEncoder for [u8; 12] {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_vec());
 		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
 	}
 }
 
@@ -237,6 +298,10 @@ impl ValueEncoder for [u8; 16] {
 		vec.append(&mut self.to_vec());
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
+	}
 }
 
 impl ValueEncoder for [u8; 32] {
@@ -245,6 +310,10 @@ impl ValueEncoder for [u8; 32] {
 		vec.append(&mut self.to_vec());
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
+	}
 }
 
 impl ValueEncoder for [u8; 64] {
@@ -252,6 +321,10 @@ impl ValueEncoder for [u8; 64] {
 		let mut vec = Vec::new();
 		vec.append(&mut self.to_vec());
 		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
 	}
 }
 
@@ -263,6 +336,10 @@ impl ValueEncoder for String {
 		vec.append(&mut self.as_bytes().to_vec());
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_STRING
+	}
 }
 
 impl ValueEncoder for str {
@@ -272,6 +349,10 @@ impl ValueEncoder for str {
 		vec.append(&mut string_length.to_le_bytes().to_vec());
 		vec.append(&mut self.as_bytes().to_vec());
 		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_STRING
 	}
 }
 
@@ -287,6 +368,10 @@ where
 		}
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_VEC
+	}
 }
 
 impl ValueEncoder for Vec<u8> {
@@ -298,6 +383,10 @@ impl ValueEncoder for Vec<u8> {
 		}
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
+	}
 }
 
 impl ValueEncoder for Vec<u64> {
@@ -306,6 +395,20 @@ impl ValueEncoder for Vec<u64> {
 		vec.append(&mut (self.len() as u64).encode_directly());
 		for value in self {
 			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_VEC
+	}
+
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.push(self.identifier());
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for value in self {
+			vec.append(&mut value.encode_with_identifier());
 		}
 		vec
 	}
@@ -325,6 +428,21 @@ where
 		}
 		vec
 	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_HASHMAP
+	}
+
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.push(self.identifier());
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, value) in self.iter() {
+			vec.append(&mut key.encode_with_identifier());
+			vec.append(&mut value.encode_with_identifier());
+		}
+		vec
+	}
 }
 
 impl<K, V> ValueEncoder for BTreeMap<K, V>
@@ -338,6 +456,21 @@ where
 		for (key, value) in self.iter() {
 			vec.append(&mut key.encode_directly());
 			vec.append(&mut value.encode_directly());
+		}
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP
+	}
+
+	fn encode_with_identifier(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.push(self.identifier());
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, value) in self.iter() {
+			vec.append(&mut key.encode_with_identifier());
+			vec.append(&mut value.encode_with_identifier());
 		}
 		vec
 	}
@@ -419,6 +552,30 @@ impl ValueDecoder for u64 {
 	}
 }
 
+impl ValueDecoder for i8 {
+	type Item = i8;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
+		Ok(data.read_i8()?)
+	}
+}
+
+impl ValueDecoder for i16 {
+	type Item = i16;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<i16> {
+		Ok(data.read_i16::<LittleEndian>()?)
+	}
+}
+
+impl ValueDecoder for i32 {
+	type Item = i32;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<i32> {
+		Ok(data.read_i32::<LittleEndian>()?)
+	}
+}
+
 impl ValueDecoder for i64 {
 	type Item = i64;
 
@@ -432,6 +589,14 @@ impl ValueDecoder for f32 {
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<f32> {
 		Ok(data.read_f32::<LittleEndian>()?)
+	}
+}
+
+impl ValueDecoder for f64 {
+	type Item = f64;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
+		Ok(data.read_f64::<LittleEndian>()?)
 	}
 }
 
@@ -502,7 +667,7 @@ where
 impl<K, V> ValueDecoder for HashMap<K, V>
 where
 	K: ValueDecoder<Item = K> + std::cmp::Eq + std::hash::Hash,
-	V: ValueDecoder<Item = V>
+	V: ValueDecoder<Item = V>,
 {
 
 	type Item = HashMap<K, V>;
@@ -539,4 +704,13 @@ where
 		}
 		Ok(btreemap)
 	}
+}
+
+/// encodes a given key.
+fn encode_key(key: &str) -> Vec<u8> {
+	let mut vec = Vec::new();
+	let key_length = key.len() as u8;
+	vec.push(key_length);
+	vec.append(&mut key.as_bytes().to_vec());
+	vec
 }

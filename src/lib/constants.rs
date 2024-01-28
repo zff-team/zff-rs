@@ -189,10 +189,14 @@ pub(crate) const METADATA_EXT_KEY_GID: &str = "gid";
 pub(crate) const METADATA_EXT_DW_FILE_ATTRIBUTES: &str = "dwFileAttributes";
 pub(crate) const METADATA_EXT_KEY_UNACCESSABLE_FILE: &str = "ua";
 
-pub(crate) const METADATA_ATIME: &str = "atime";
-pub(crate) const METADATA_MTIME: &str = "mtime";
-pub(crate) const METADATA_CTIME: &str = "ctime";
-pub(crate) const METADATA_BTIME: &str = "btime";
+/// The metadata key for atime.
+pub const METADATA_ATIME: &str = "atime";
+/// The metadata key for mtime.
+pub const METADATA_MTIME: &str = "mtime";
+/// The metadata key for ctime.
+pub const METADATA_CTIME: &str = "ctime";
+/// The metadata key for btime.
+pub const METADATA_BTIME: &str = "btime";
 
 
 // - ChunkMap
@@ -214,3 +218,23 @@ pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";
 // XAttr
 #[cfg(target_family = "unix")]
 pub(crate) const XATTR_ATTRNAME_POSIX_ACL: &str = "system.posix_acl_access";
+pub(crate) const XATTR_ATTRNAME_POSIX_ACL_DEFAULT: &str = "system.posix_acl_default";
+
+// type identifier values for metadata extended map values.
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U8: u8 = 0x00;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U16: u8 = 0x01;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U32: u8 = 0x02;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U64: u8 = 0x03;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_I8: u8 = 0x04;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_I16: u8 = 0x05;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_I32: u8 = 0x06;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_I64: u8 = 0x07;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_STRING: u8 = 0x08;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_HASHMAP: u8 = 0x09;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP: u8 = 0x0A;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY: u8 = 0x0B;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F32: u8 = 0x0C;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F64: u8 = 0x0D;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VEC: u8 = 0x0E;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BOOL: u8 = 0x0F;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN: u8 = 0xFF;

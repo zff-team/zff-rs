@@ -756,7 +756,7 @@ pub struct FileMetadata {
 	/// The appropriate filename.
 	pub filename: Option<String>,
 	/// The metadata of the appropriate file.
-	pub metadata_ext: HashMap<String, String>,
+	pub metadata_ext: HashMap<String, MetadataExtendedValue>,
 	/// The timestamp when the acquisition has started.
 	pub acquisition_start: Option<u64>,
 	/// The timestamp when the acquisition has ended.

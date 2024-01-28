@@ -824,7 +824,7 @@ fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeade
 			warn!("The content of the file {} can't be read, due the following error: {e}.\
 				The file will be stored as an empty file.", path.as_ref().display());
 			// set the "ua" tag and the full path in file metadata.
-			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string());
+			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string().into());
 		},
 	};
 }
@@ -867,7 +867,7 @@ fn create_iterator<C: AsRef<Path>>(
 			#[cfg(feature = "log")]
 			warn!("The content of the file {} can't be read, due the following error: {e}.\
 				The file will be stored as an empty file.", &current_dir.as_ref().display());
-			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.as_ref().to_string_lossy().to_string());
+			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.as_ref().to_string_lossy().to_string().into());
 			return Err(e.into());
 		}
 	};

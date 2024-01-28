@@ -23,6 +23,7 @@ use crate::{
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF,
 	ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME,
 	ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME,
+	METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN,
 };
 
 // - external
@@ -144,12 +145,9 @@ impl ValueEncoder for KDFParameters {
 			KDFParameters::Argon2idParameters(params) => params.encode_directly(),
 		}
 	}
-	fn encode_for_key<K: Into<String>>(&self, key: K) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let mut encoded_key = Self::encode_key(key);
-		vec.append(&mut encoded_key);
-		vec.append(&mut self.encode_directly());
-		vec
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN
 	}
 }
 

@@ -153,6 +153,10 @@ pub enum ZffErrorKind {
 	NoEncryptionDetected,
 	/// If an invalid option was used.
 	InvalidOption,
+	/// Error will be returned, if the given metadata extended type identifier is unknown.
+	UnknownMetadataExtendedType,
+	/// Error will be returned, if the given metadata extended type identifier missmatches.
+	MissmatchIdentifier,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -215,6 +219,8 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::NoEncryptionDetected => "NoEncryptionDetected",
 			ZffErrorKind::InvalidOption => "InvalidOption",
 			ZffErrorKind::RedbError => "RedbError",
+			ZffErrorKind::UnknownMetadataExtendedType => "UnknownMetadataExtendedType",
+			ZffErrorKind::MissmatchIdentifier => "MissmatchIdentifier",
 		};
 	write!(f, "{}", err_msg)
 	}

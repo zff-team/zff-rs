@@ -4,7 +4,7 @@ pub(crate) fn string_to_str(s: String) -> &'static str {
 }
 
 #[cfg(feature = "serde")]
-fn as_hex<S>(x: &u64, s: S) -> Result<S::Ok, S::Error>
+pub(crate) fn as_hex<S>(x: &u64, s: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {

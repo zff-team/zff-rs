@@ -515,32 +515,6 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 	}
 }
 
-/*
-{
-	// fill the passive object header map while first read operation.
-	if reader.is_passive_object_header_map_empty() {
-		let mut passive_objects = BTreeMap::new();
-		for passive_object_no in &reader.object_footer_ref().passive_objects {
-			let object_header = match self.object_reader.get(&passive_object_no) {
-				Some(reader) => match reader {
-					ZffObjectReader::Physical(phy) => phy.object_header_ref(),
-					ZffObjectReader::Logical(log) => log.object_header_ref(),
-					ZffObjectReader::Virtual(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-					ZffObjectReader::Encrypted(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				},
-				None => return Err(
-					std::io::Error::new(
-						std::io::ErrorKind::NotFound, 
-						format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{passive_object_no}"))
-				),
-			};
-			passive_objects.insert(*passive_object_no, object_header.clone());
-		}
-		reader.update_passive_object_header_map(passive_objects);
-	}
-},
-*/
-
 impl<R: Read + Seek> Seek for ZffReader<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		let object_reader = match self.object_reader.get_mut(&self.active_object) {
@@ -551,38 +525,38 @@ impl<R: Read + Seek> Seek for ZffReader<R> {
 	}
 }
 
-fn extract_recommended_metadata(fileheader: &FileHeader) -> HashMap<String, String> {
+fn extract_recommended_metadata(fileheader: &FileHeader) -> HashMap<String, MetadataExtendedValue> {
 	let mut metadata = HashMap::new();
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_ATIME) {
-		metadata.insert(METADATA_ATIME.to_string(), value.to_string());
+		metadata.insert(METADATA_ATIME.to_string(), value.clone());
 	}
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_MTIME) {
-		metadata.insert(METADATA_MTIME.to_string(), value.to_string());
+		metadata.insert(METADATA_MTIME.to_string(), value.clone());
 	}
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_CTIME) {
-		metadata.insert(METADATA_CTIME.to_string(), value.to_string());
+		metadata.insert(METADATA_CTIME.to_string(), value.clone());
 	}
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_BTIME) {
-		metadata.insert(METADATA_BTIME.to_string(), value.to_string());
+		metadata.insert(METADATA_BTIME.to_string(), value.clone());
 	}
 
 	#[cfg(target_family = "unix")]
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_UID) {
-		metadata.insert(METADATA_EXT_KEY_UID.to_string(), value.to_string());
+		metadata.insert(METADATA_EXT_KEY_UID.to_string(), value.clone());
 	}
 	#[cfg(target_family = "unix")]
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_GID) {
-		metadata.insert(METADATA_EXT_KEY_GID.to_string(), value.to_string());
+		metadata.insert(METADATA_EXT_KEY_GID.to_string(), value.clone());
 	}
 	#[cfg(target_family = "unix")]
 	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_MODE) {
-		metadata.insert(METADATA_EXT_KEY_MODE.to_string(), value.to_string());
+		metadata.insert(METADATA_EXT_KEY_MODE.to_string(), value.clone());
 	}
 
 	metadata
 }
 
-fn extract_all_metadata(fileheader: &FileHeader) -> HashMap<String, String> {
+fn extract_all_metadata(fileheader: &FileHeader) -> HashMap<String, MetadataExtendedValue> {
 	fileheader.metadata_ext.clone()
 }
 
