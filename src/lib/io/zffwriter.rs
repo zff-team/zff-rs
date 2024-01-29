@@ -868,6 +868,7 @@ fn create_iterator<C: AsRef<Path>>(
 			warn!("The content of the file {} can't be read, due the following error: {e}.\
 				The file will be stored as an empty file.", &current_dir.as_ref().display());
 			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.as_ref().to_string_lossy().to_string().into());
+			files.push((current_dir.as_ref().to_path_buf(), file_header));
 			return Err(e.into());
 		}
 	};

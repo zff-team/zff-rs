@@ -136,7 +136,7 @@ impl FileEncoder {
 		let buf = match &self.filetype_encoding_information {
 			FileTypeEncodingInformation::Directory(directory_children) => {
 				let encoded_directory_children = if directory_children.is_empty() {
-					Vec::new()
+					Vec::<u64>::new().encode_directly()
 				} else {
 					directory_children.encode_directly()
 				};
