@@ -442,6 +442,28 @@ impl MetadataExtendedValue {
 			MetadataExtendedValue::Bool(value) => Box::new(value),
 		}
 	}
+
+	/// returns the inner value.
+	pub fn as_any(&self) -> Box<&dyn Any> {
+		match self {
+			MetadataExtendedValue::U8(value) => Box::new(value),
+			MetadataExtendedValue::U16(value) => Box::new(value),
+			MetadataExtendedValue::U32(value) => Box::new(value),
+			MetadataExtendedValue::U64(value) => Box::new(value),
+			MetadataExtendedValue::I8(value) => Box::new(value),
+			MetadataExtendedValue::I16(value) => Box::new(value),
+			MetadataExtendedValue::I32(value) => Box::new(value),
+			MetadataExtendedValue::I64(value) => Box::new(value),
+			MetadataExtendedValue::String(value) => Box::new(value),
+			MetadataExtendedValue::Hashmap(value) => Box::new(value),
+			MetadataExtendedValue::BTreeMap(value) => Box::new(value),
+			MetadataExtendedValue::ByteArray(value) => Box::new(value),
+			MetadataExtendedValue::F32(value) => Box::new(value),
+			MetadataExtendedValue::F64(value) => Box::new(value),
+			MetadataExtendedValue::Vector(value) => Box::new(value),
+			MetadataExtendedValue::Bool(value) => Box::new(value),
+		}
+	}
 }
 
 impl ValueEncoder for Vec<MetadataExtendedValue> {
