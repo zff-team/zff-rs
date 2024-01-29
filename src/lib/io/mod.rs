@@ -241,13 +241,13 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataE
 }
 
 #[cfg(target_os = "windows")]
-fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, String>> {
+fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataExtendedValue>> {
     let metadata = std::fs::symlink_metadata(path.as_ref())?;
 
     let mut metadata_ext = HashMap::new();
 
     //dwFileAttributes
-    metadata_ext.insert(METADATA_EXT_DW_FILE_ATTRIBUTES.into(), metadata.file_attributes().to_string());
+    metadata_ext.insert(METADATA_EXT_DW_FILE_ATTRIBUTES.into(), metadata.file_attributes().into());
 
     Ok(metadata_ext)
 }
