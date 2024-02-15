@@ -62,6 +62,7 @@ pub(crate) const SAME_BYTES_FLAG_VALUE: u8 = 1<<2;
 pub(crate) const DUPLICATION_FLAG_VALUE: u8 = 1<<3;
 pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1<<4;
 pub(crate) const EMPTY_FILE_FLAG_VALUE: u8 = 1<<5;
+pub(crate) const VIRTUAL_FLAG_VALUE: u8 = 1<<6;
 
 // object header flags
 pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1<<0;
@@ -218,6 +219,7 @@ pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";
 // XAttr
 #[cfg(target_family = "unix")]
 pub(crate) const XATTR_ATTRNAME_POSIX_ACL: &str = "system.posix_acl_access";
+#[cfg(target_family = "unix")]
 pub(crate) const XATTR_ATTRNAME_POSIX_ACL_DEFAULT: &str = "system.posix_acl_default";
 
 // type identifier values for metadata extended map values.

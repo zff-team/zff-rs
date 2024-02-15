@@ -157,6 +157,8 @@ pub enum ZffErrorKind {
 	UnknownMetadataExtendedType,
 	/// Error will be returned, if the given metadata extended type identifier missmatches.
 	MissmatchIdentifier,
+	/// Error will be returned if the binary search fails (e.g. if the set is empty or malformed).
+	BinarySearchError,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -221,6 +223,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::RedbError => "RedbError",
 			ZffErrorKind::UnknownMetadataExtendedType => "UnknownMetadataExtendedType",
 			ZffErrorKind::MissmatchIdentifier => "MissmatchIdentifier",
+			ZffErrorKind::BinarySearchError => "BinarySearchError",
 		};
 	write!(f, "{}", err_msg)
 	}

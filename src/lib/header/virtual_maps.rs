@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use std::cmp::PartialEq;
 use std::io::{Cursor, Read};
 use std::fmt;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 // - internal
 use crate::{
@@ -38,7 +38,8 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualMappingInformation {
-	/// The object number of the affected chunk.
+	/// The object number of the appropriate start chunk.
+	/// This is necessary to be able to decrypt an encrypted chunk.
 	pub object_number: u64,
 	/// The number of the first affected chunk for this offset.
 	pub start_chunk_no: u64,
@@ -170,7 +171,7 @@ impl HeaderCoding for VirtualMappingInformation {
 		if version != DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION {
 			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
 		};
-		let (object_number, 
+		let (object_number,
 			start_chunk_no, 
 			chunk_offset,
 			length) = Self::decode_inner_content(&mut cursor)?;
@@ -193,60 +194,53 @@ impl VirtualMappingInformation {
 	}
 }
 
-/// The [VirtualLayer] contains the appropriate offset map to find the counterpart [VirtualMappingInformation].
+/// The [VirtualObjectMap] contains the appropriate offset map to find the counterpart [VirtualMappingInformation].
 /// As the name of this struct already suggests, this structure can be layered multiple times.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct VirtualLayer {
-	/// The Depth must be read backwards (0 shows the offset of the appropriate [VirtualMappingInformation]).
-	pub depth: u8,
-	/// The appropriate offset map.
-	pub offsetmap: BTreeMap<u64, u64>,
-	/// The segment for the corresponding offset.
-	pub offset_segment_map: BTreeMap<u64, u64>,
+pub struct VirtualObjectMap {
+	/// The appropriate offset maps.
+	pub offsetmaps: BTreeSet<BTreeMap<u64, (u64, u64)>>, // <original offset, (segment number, offset for the appropriate VMI)>
 }
 
-impl VirtualLayer {
+impl VirtualObjectMap {
 	/// returns a new [VirtualLayer] with the given values.
-	pub fn with_data(depth: u8, offsetmap: BTreeMap<u64, u64>, offset_segment_map: BTreeMap<u64, u64>) -> Self {
+	pub fn with_data(offsetmaps: BTreeSet<BTreeMap<u64, (u64, u64)>>) -> Self {
 		Self {
-			depth,
-			offsetmap,
-			offset_segment_map,
+			offsetmaps,
 		}
 	}
 
 	/// encrypts the mapping information by the given encryption information and the original offset as nonce value,
 	/// and returns the encrypted data.
-	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
+	/// Needs the object number of the appropriate virtual Object to encrypt.
+	pub fn encrypt_directly<E>(&self, encryption_information: E, object_number: u64) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let encrypted_content = Encryption::encrypt_virtual_layer(
+		let encrypted_content = Encryption::encrypt_virtual_object_map(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
-			self.depth.into(), 
+			object_number, 
 			&encryption_information.borrow().algorithm)?;
 		let identifier = Self::identifier();
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER +
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
 			Self::version().encode_directly().len() +
-			self.depth.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
 		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.depth.encode_directly());
 		vec.append(&mut encrypted_content.encode_directly());
 
 		Ok(vec)
 	}
 
 	/// decodes the encrypted structure with the given [crate::header::EncryptionInformation] and the appropriate original data offset.
-	pub fn decode_encrypted_structure_with_key<R, E>(data: &mut R, encryption_information: E) -> Result<Self>
+	pub fn decode_encrypted_structure_with_key<R, E>(data: &mut R, encryption_information: E, object_number: u64) -> Result<Self>
 	where
 		R: Read,
 		E: Borrow<EncryptionInformation>
@@ -262,42 +256,32 @@ impl VirtualLayer {
 		if version != DEFAULT_HEADER_VERSION_VIRTUAL_LAYER {
 			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
 		};
-		let depth = u8::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
 		let decrypted_data = Encryption::decrypt_virtual_mapping_information(
 			&encryption_information.borrow().encryption_key, 
-			encrypted_data, 
-			depth.into(), 
+			encrypted_data,
+			object_number, 
 			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
-		let (offsetmap, offset_segment_map) = Self::decode_inner_content(&mut cursor)?;
-		Ok(Self::with_data(
-			depth,
-			offsetmap,
-			offset_segment_map,
-			))
+		let offsetmaps = Self::decode_inner_content(&mut cursor)?;
+		Ok(Self::with_data(offsetmaps))
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.offsetmap.encode_directly());
-		vec.append(&mut self.offset_segment_map.encode_directly());
+		vec.append(&mut self.offsetmaps.encode_directly());
 		vec
 	}
 
-	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
-		BTreeMap<u64, u64>, //offsetmap
-		BTreeMap<u64, u64>, //offset_segment_map
-		)> {
-		let offsetmap = BTreeMap::<u64, u64>::decode_directly(data)?;
-		let offset_segment_map = BTreeMap::<u64, u64>::decode_directly(data)?;
-		Ok((offsetmap, offset_segment_map))
+	fn decode_inner_content<R: Read>(data: &mut R) -> Result<BTreeSet<BTreeMap<u64, (u64, u64)>>> {
+		let offsetmaps = BTreeSet::<BTreeMap<u64, (u64, u64)>>::decode_directly(data)?;
+		Ok(offsetmaps)
 	}
 }
 
-impl HeaderCoding for VirtualLayer {
-	type Item = VirtualLayer;
+impl HeaderCoding for VirtualObjectMap {
+	type Item = VirtualObjectMap;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_VIRTUAL_LAYER
@@ -309,7 +293,6 @@ impl HeaderCoding for VirtualLayer {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.depth.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
 	}
@@ -317,22 +300,21 @@ impl HeaderCoding for VirtualLayer {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
-		let depth = u8::decode_directly(&mut cursor)?;
-		let (offsetmap, offset_segment_map) = Self::decode_inner_content(&mut cursor)?;
+		let offsetmaps = Self::decode_inner_content(&mut cursor)?;
 
-		Ok(Self::with_data(depth, offsetmap, offset_segment_map))
+		Ok(Self::with_data(offsetmaps))
 	}
 }
 
 // - implement fmt::Display
-impl fmt::Display for VirtualLayer {
+impl fmt::Display for VirtualObjectMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.struct_name())
 	}
 }
 
 // - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl VirtualLayer {
+impl VirtualObjectMap {
 	fn struct_name(&self) -> &'static str {
 		"VirtualLayer"
 	}

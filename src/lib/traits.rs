@@ -1,6 +1,6 @@
 // - STD
 use std::io::Read;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, BTreeSet};
 
 // - internal
 use crate::{
@@ -476,6 +476,49 @@ where
 	}
 }
 
+impl<K, A, B> ValueEncoder for BTreeMap<K, (A, B)> 
+where
+	K: ValueEncoder,
+	A: ValueEncoder,
+	B: ValueEncoder
+{
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for (key, (value_a, value_b)) in self.iter() {
+			vec.append(&mut key.encode_directly());
+			vec.append(&mut value_a.encode_directly());
+			vec.append(&mut value_b.encode_directly());
+		}
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP
+	}
+
+}
+
+impl <K, A, B> ValueEncoder for BTreeSet<BTreeMap<K, (A, B)>> 
+where
+	K: ValueEncoder,
+	A: ValueEncoder,
+	B: ValueEncoder
+{
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.append(&mut (self.len() as u64).encode_directly());
+		for map in self.iter() {
+			vec.append(&mut map.encode_directly());
+		}
+		vec
+	}
+
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_VEC
+	}
+}
+
 /// decoder methods for values (and primitive types). This is an extension trait.
 pub trait ValueDecoder {
 	/// the return value for decode_directly() and decode_for_key();
@@ -703,6 +746,40 @@ where
 			btreemap.insert(key, value);
 		}
 		Ok(btreemap)
+	}
+}
+
+impl<A, B> ValueDecoder for (A, B) 
+where
+	A: ValueDecoder<Item = A>,
+	B: ValueDecoder<Item = B>,
+{
+	type Item = (A, B);
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<(A, B)> {
+		let a = A::decode_directly(data)?;
+		let b = B::decode_directly(data)?;
+		Ok((a, b))
+	}
+}
+
+impl<K, A, B> ValueDecoder for BTreeSet<BTreeMap<K, (A, B)>>
+where
+	K: ValueDecoder<Item = K> + std::cmp::Ord,
+	A: ValueDecoder<Item = A> + std::cmp::Ord,
+	B: ValueDecoder<Item = B> + std::cmp::Ord,
+{
+	type Item = BTreeSet<BTreeMap<K, (A, B)>>;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<BTreeSet<BTreeMap<K, (A, B)>>>
+	{
+		let length = u64::decode_directly(data)? as usize;
+		let mut btree_set = BTreeSet::new();
+		for _ in 0..length {
+			let map = BTreeMap::decode_directly(data)?;
+			btree_set.insert(map);
+		}
+		Ok(btree_set)
 	}
 }
 

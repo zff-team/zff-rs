@@ -17,6 +17,7 @@ use crate::{
 	DUPLICATION_FLAG_VALUE,
 	ENCRYPTION_FLAG_VALUE,
 	EMPTY_FILE_FLAG_VALUE,
+	VIRTUAL_FLAG_VALUE,
 	DEFAULT_HEADER_VERSION_CHUNK_HEADER
 };
 
@@ -44,6 +45,8 @@ pub struct ChunkHeaderFlags {
 	pub encryption: bool,
 	/// is set, if this is a placeholder chunk of an empty file.
 	pub empty_file: bool,
+	/// is set, if the chunk is a virtual chunk.
+	pub virtual_chunk: bool,
 }
 
 impl From<u8> for ChunkHeaderFlags {
@@ -55,6 +58,7 @@ impl From<u8> for ChunkHeaderFlags {
 			duplicate: flag_values & DUPLICATION_FLAG_VALUE != 0,
 			encryption: flag_values & ENCRYPTION_FLAG_VALUE != 0,
 			empty_file: flag_values & EMPTY_FILE_FLAG_VALUE != 0,
+			virtual_chunk: flag_values & VIRTUAL_FLAG_VALUE != 0,
 		}
 	}
 }
@@ -169,6 +173,9 @@ impl HeaderCoding for ChunkHeader {
 		}
 		if self.flags.empty_file {
 			flags += EMPTY_FILE_FLAG_VALUE;
+		}
+		if self.flags.virtual_chunk {
+			flags += VIRTUAL_FLAG_VALUE;
 		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());
@@ -297,6 +304,9 @@ impl HeaderCoding for EncryptedChunkHeader {
 		}
 		if self.flags.empty_file {
 			flags += EMPTY_FILE_FLAG_VALUE;
+		}
+		if self.flags.virtual_chunk {
+			flags += VIRTUAL_FLAG_VALUE;
 		}
 		vec.append(&mut flags.encode_directly());
 		vec.append(&mut self.crc32.encode_directly());

@@ -126,7 +126,7 @@ enum MessageType {
 	ObjectHeader,
 	ObjectFooter,
 	VirtualMappingInformation,
-	VirtualLayer,
+	VirtualObjectMap,
 }
 
 /// Structure contains serveral methods to handle encryption
@@ -402,16 +402,16 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, offset, algorithm, MessageType::VirtualMappingInformation)
 	}
 
-	/// Method to encrypt a [crate::header::VirtualLayer] with a key and and the given depth. This method should primary used to encrypt
-	/// the given [crate::header::VirtualLayer].
+	/// Method to encrypt a [crate::header::VirtualObjectMap] with a key and and the given depth. This method should primary used to encrypt
+	/// the given [crate::header::VirtualObjectMap].
 	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_virtual_layer<K, M, A>(key: K, message: M, depth: u64, algorithm: A) -> Result<Vec<u8>>
+	pub fn encrypt_virtual_object_map<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
-		Encryption::encrypt_message(key, message, depth, algorithm, MessageType::VirtualLayer)
+		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::VirtualObjectMap)
 	}
 
 
@@ -515,13 +515,13 @@ impl Encryption {
 	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
 	/// # Error
 	/// This method will fail, if the decryption fails.
-	pub fn decrypt_virtual_layer<K, M, A>(key: K, message: M, depth: u64, algorithm: A) -> Result<Vec<u8>>
+	pub fn decrypt_virtual_object_map<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
-		Encryption::decrypt_message(key, message, depth, algorithm, MessageType::VirtualLayer)
+		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::VirtualObjectMap)
 	}
 
 	/// Method to decrypt a [crate::header::FileHeader] with a key and and the given chunk number. This method should primary used to decrypt
@@ -595,7 +595,7 @@ impl Encryption {
 			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
 			MessageType::ObjectFooter => Encryption::gen_crypto_nonce_object_footer(nonce_value)?,
 			MessageType::VirtualMappingInformation => Encryption::gen_crypto_nonce_virtual_mapping_information(nonce_value)?,
-			MessageType::VirtualLayer => Encryption::gen_crypto_nonce_virtual_layer(nonce_value)?,
+			MessageType::VirtualObjectMap => Encryption::gen_crypto_nonce_virtual_object_map(nonce_value)?,
 		};
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
@@ -628,7 +628,7 @@ impl Encryption {
 			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
 			MessageType::ObjectFooter => Encryption::gen_crypto_nonce_object_footer(nonce_value)?,
 			MessageType::VirtualMappingInformation => Encryption::gen_crypto_nonce_virtual_mapping_information(nonce_value)?,
-			MessageType::VirtualLayer => Encryption::gen_crypto_nonce_virtual_layer(nonce_value)?,
+			MessageType::VirtualObjectMap => Encryption::gen_crypto_nonce_virtual_object_map(nonce_value)?,
 		};
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
@@ -764,9 +764,9 @@ impl Encryption {
 
 	/// Method to generate a 96-bit nonce for the object footer. Will use the object number as nonce and fills the
 	/// missing bits with zeros - except the 7th to last bit (will be set).
-	fn gen_crypto_nonce_virtual_layer(depth: u64) -> Result<Nonce> {
+	fn gen_crypto_nonce_virtual_object_map(object_number: u64) -> Result<Nonce> {
 		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(depth)?;
+		buffer.write_u64::<LittleEndian>(object_number)?;
 		buffer.append(&mut vec!(0u8; 11));
 		let buffer_len = buffer.len();
 		buffer[buffer_len - 1] |= 0b01000000;

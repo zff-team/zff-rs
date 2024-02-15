@@ -1,7 +1,7 @@
 // - STD
 use core::borrow::Borrow;
 use std::io::{Cursor, Read};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 use std::fmt;
 
 // - internal

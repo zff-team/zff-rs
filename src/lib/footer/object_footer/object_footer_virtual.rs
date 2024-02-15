@@ -21,9 +21,9 @@ pub struct ObjectFooterVirtual {
 	/// The length of the original data in bytes.
 	pub length_of_data: u64,
 	/// The map of to the highest layer.
-	pub layer_map: BTreeMap<u64, u64>,
+	pub virtual_object_map_offset: u64,
 	/// The map of the segments to the appropriate next layer
-	pub layer_segment_map: BTreeMap<u64, u64>,
+	pub virtual_object_map_segment_no: u64,
 }
 
 impl ObjectFooterVirtual {
@@ -32,15 +32,15 @@ impl ObjectFooterVirtual {
 		creation_timestamp: u64, 
 		passive_objects: Vec<u64>,
 		length_of_data: u64,
-		layer_map: BTreeMap<u64, u64>,
-		layer_segment_map: BTreeMap<u64, u64>) -> Self {
+		virtual_object_map_offset: u64,
+		virtual_object_map_segment_no: u64) -> Self {
 		Self {
 			object_number,
 			creation_timestamp,
 			passive_objects,
 			length_of_data,
-			layer_map,
-			layer_segment_map,
+			virtual_object_map_offset,
+			virtual_object_map_segment_no,
 		}
 	}
 
@@ -49,8 +49,8 @@ impl ObjectFooterVirtual {
 		vec.append(&mut self.creation_timestamp.encode_directly());
 		vec.append(&mut self.passive_objects.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
-		vec.append(&mut self.layer_map.encode_directly());
-		vec.append(&mut self.layer_segment_map.encode_directly());
+		vec.append(&mut self.virtual_object_map_offset.encode_directly());
+		vec.append(&mut self.virtual_object_map_segment_no.encode_directly());
 		vec
 	}
 
@@ -86,20 +86,20 @@ impl ObjectFooterVirtual {
 		u64, //creation_timestamp
 		Vec<u64>, //passive_objects
 		u64, //length_of_data
-		BTreeMap<u64, u64>, //layer_map
-		BTreeMap<u64, u64>, //layer_segment_map,
+		u64, //virtual_object_map_offset
+		u64, //virtual_object_map_segment_no,
 		)> {
 		let creation_timestamp = u64::decode_directly(data)?;
 		let passive_objects = Vec::<u64>::decode_directly(data)?;
 		let length_of_data = u64::decode_directly(data)?;
-		let layer_map = BTreeMap::<u64, u64>::decode_directly(data)?;
-		let layer_segment_map = BTreeMap::<u64, u64>::decode_directly(data)?;
+		let virtual_object_map_offset = u64::decode_directly(data)?;
+		let virtual_object_map_segment_no = u64::decode_directly(data)?;
 		Ok((
 			creation_timestamp,
 			passive_objects,
 			length_of_data,
-			layer_map,
-			layer_segment_map,
+			virtual_object_map_offset,
+			virtual_object_map_segment_no,
 			))
 	}
 }
@@ -139,15 +139,15 @@ impl HeaderCoding for ObjectFooterVirtual {
 		let (creation_timestamp, 
 			passive_objects,
 			length_of_data,
-			layer_map,
-			layer_segment_map) = Self::decode_inner_content(&mut cursor)?;
+			virtual_object_map_offset,
+			virtual_object_map_segment_no) = Self::decode_inner_content(&mut cursor)?;
 		Ok(Self::with_data(
 			object_number,
 			creation_timestamp, 
 			passive_objects,
 			length_of_data,
-			layer_map,
-			layer_segment_map))
+			virtual_object_map_offset,
+			virtual_object_map_segment_no))
 	}
 }
 
@@ -200,15 +200,15 @@ impl EncryptedObjectFooterVirtual {
 		let (creation_timestamp, 
 			passive_objects, 
 			length_of_data,
-			layer_map,
-			layer_segment_map) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
+			virtual_object_map_offset,
+			virtual_object_map_segment_no) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
 		Ok(ObjectFooterVirtual::with_data(
 			self.object_number,
 			creation_timestamp,
 			passive_objects,
 			length_of_data,
-			layer_map,
-			layer_segment_map))
+			virtual_object_map_offset,
+			virtual_object_map_segment_no))
 	}
 }
 
