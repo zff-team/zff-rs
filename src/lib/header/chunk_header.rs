@@ -221,6 +221,7 @@ pub struct EncryptedChunkHeader {
 	/// the appropriate chunk header flags.
 	pub flags: ChunkHeaderFlags,
 	/// the encrypted crc32 value.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex", deserialize_with = "crate::helper::hex_to_buffer"))]
 	pub crc32: Vec<u8>,
 }
 

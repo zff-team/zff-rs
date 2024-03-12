@@ -36,6 +36,7 @@ use serde::{
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionInformation {
 	/// The encryption key in **unencrypted** form.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex", deserialize_with = "crate::helper::hex_to_buffer"))]
 	pub encryption_key: Vec<u8>,
 	/// The used [crate::encryption::EncryptionAlgorithm].
 	pub algorithm: EncryptionAlgorithm,
@@ -116,8 +117,10 @@ pub struct EncryptionHeader {
 	/// The used encryption algorithm.
 	pub algorithm: EncryptionAlgorithm,
 	/// The encrypted encryption key.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_base64", deserialize_with = "crate::helper::base64_to_buffer"))]
 	pub encrypted_encryption_key: Vec<u8>,
 	/// The decrypted encryption key.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_base64"))]
 	pub decrypted_encryption_key: Option<Vec<u8>>
 }
 

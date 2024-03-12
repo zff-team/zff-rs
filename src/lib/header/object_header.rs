@@ -377,6 +377,7 @@ pub struct EncryptedObjectHeader {
 	/// the [crate::header::EncryptionHeader].
 	pub encryption_header: EncryptionHeader,
 	/// the encrypted blob with the other header values.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex", deserialize_with = "crate::helper::hex_to_buffer"))]
 	pub encrypted_content: Vec<u8>
 }
 

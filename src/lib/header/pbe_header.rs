@@ -50,6 +50,7 @@ pub struct PBEHeader {
 	/// The kdf parameters.
 	pub kdf_parameters: KDFParameters,
 	/// The nonce used for the encryption of the encryption key.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex"))]
 	pub pbencryption_nonce: [u8; 16],
 }
 
@@ -190,6 +191,7 @@ pub struct PBKDF2SHA256Parameters {
 	/// The iterations to use.
 	pub iterations: u32,
 	/// The salt value.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex"))]
 	pub salt: [u8; 32],
 }
 
@@ -246,6 +248,7 @@ pub struct ScryptParameters {
 	/// The p parameter for Scrypt.
 	pub p: u32,
 	/// The used salt.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex"))]
 	pub salt: [u8; 32],
 }
 
