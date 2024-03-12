@@ -120,7 +120,7 @@ pub struct EncryptionHeader {
 	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_base64", deserialize_with = "crate::helper::base64_to_buffer"))]
 	pub encrypted_encryption_key: Vec<u8>,
 	/// The decrypted encryption key.
-	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_base64"))]
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::option_buffer_to_base64"))]
 	pub decrypted_encryption_key: Option<Vec<u8>>
 }
 

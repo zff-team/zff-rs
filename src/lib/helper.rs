@@ -89,10 +89,23 @@ pub fn hex_to_buffer<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D:
 #[cfg(feature = "serde")]
 /// Serializes `buffer` to a lowercase base64 string.
 pub fn buffer_to_base64<T, S>(buffer: &T, serializer: S) -> std::result::Result<S::Ok, S::Error>
-  where T: AsRef<[u8]>,
-        S: serde::Serializer
+where 
+    T: AsRef<[u8]>,
+    S: serde::Serializer
 {
-  serializer.serialize_str(&base64engine.encode(&buffer))
+    serializer.serialize_str(&base64engine.encode(&buffer))
+}
+
+#[cfg(feature = "serde")]
+/// Serializes `buffer` (Option) to a lowecase base64 Option<String>.
+pub fn option_buffer_to_base64<S>(buffer: &Option<Vec<u8>>, serializer: S) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer
+{
+    match buffer {
+        Some(buffer) => buffer_to_base64(&buffer, serializer),
+        None => serializer.serialize_none(),
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -100,6 +113,6 @@ pub fn buffer_to_base64<T, S>(buffer: &T, serializer: S) -> std::result::Result<
 pub fn base64_to_buffer<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
   where D: serde::Deserializer<'de>
 {
-  use serde::de::Error;
-  String::deserialize(deserializer).and_then(|string| base64engine.decode(&string).map_err(|err| Error::custom(err.to_string())))
+    use serde::de::Error;
+    String::deserialize(deserializer).and_then(|string| base64engine.decode(&string).map_err(|err| Error::custom(err.to_string())))
 }
