@@ -164,6 +164,7 @@ impl ObjectFooterLogical {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
+		
 		let encrypted_content = Encryption::encrypt_object_footer(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
@@ -175,11 +176,13 @@ impl ObjectFooterLogical {
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
 			Self::version().encode_directly().len() +
 			self.object_number.encode_directly().len() +
+			true.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.encode_directly());
 		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.object_number.encode_directly());
+		vec.append(&mut true.encode_directly()); // encryption flag
 		vec.append(&mut encrypted_content.encode_directly());
 
 		Ok(vec)
@@ -240,6 +243,7 @@ impl HeaderCoding for ObjectFooterLogical {
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
+		vec.append(&mut false.encode_directly()); // encryption flag
 		vec.append(&mut self.encode_content());
 		vec
 	}
@@ -247,6 +251,10 @@ impl HeaderCoding for ObjectFooterLogical {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let object_number = u64::decode_directly(&mut cursor)?;
+		let encryption_flag = bool::decode_directly(&mut cursor)?;
+		if encryption_flag {
+			return Err(ZffError::new(ZffErrorKind::MissingPassword, ""));
+		}
 		let (acquisition_start,
 			acquisition_end,
 			root_dir_filenumbers,
@@ -273,6 +281,7 @@ impl HeaderCoding for ObjectFooterLogical {
 pub struct EncryptedObjectFooterLogical {
 	/// The appropriate object number.
 	pub object_number: u64,
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex", deserialize_with = "crate::helper::hex_to_buffer"))]
 	/// the encrypted data of this footer
 	pub encrypted_data: Vec<u8>,
 }
@@ -347,6 +356,7 @@ impl HeaderCoding for EncryptedObjectFooterLogical {
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
 		vec.append(&mut self.object_number.encode_directly());
+		vec.append(&mut true.encode_directly()); // encryption flag
 		vec.append(&mut self.encrypted_data.encode_directly());
 		vec
 	}
@@ -354,6 +364,10 @@ impl HeaderCoding for EncryptedObjectFooterLogical {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let object_number = u64::decode_directly(&mut cursor)?;
+		let encryption_flag = bool::decode_directly(&mut cursor)?;
+		if !encryption_flag {
+			return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, ""));
+		}
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		Ok(Self::new(
 			object_number,
