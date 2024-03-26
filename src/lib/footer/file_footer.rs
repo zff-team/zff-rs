@@ -12,6 +12,7 @@ use crate::{
 	Encryption,
 	ZffError,
 	ZffErrorKind,
+	encryption::EncryptionAlgorithm,
 	FOOTER_IDENTIFIER_FILE_FOOTER,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
@@ -89,22 +90,42 @@ impl FileFooter {
 	}
 
 	/// encrypts the file footer by the given encryption information and returns the encrypted file footer.
-	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
+	/// # Error
+	/// The method returns an error, if the encryption fails.
+	pub fn encode_encrypted_header_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let mut encrypted_content = Encryption::encrypt_file_footer(
-			&encryption_information.borrow().encryption_key, 
-			self.encode_content(), 
-			self.file_number, 
-			&encryption_information.borrow().algorithm)?;
+		let encryption_information = encryption_information.borrow();
+		let mut encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
 		let identifier = Self::identifier();
-		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encrypted_content.len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
+		let encoded_header_length = 4 + 8 + (encoded_footer.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encrypted_content);
+		vec.append(&mut encoded_footer);
 
+		Ok(vec)
+	}
+
+	fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		let mut vec = Vec::new();
+		vec.append(&mut Self::version().encode_directly());
+		vec.append(&mut self.file_number.encode_directly());
+
+		let mut data_to_encrypt = Vec::new();
+		data_to_encrypt.append(&mut self.encode_content());
+
+		let encrypted_data = Encryption::encrypt_file_footer(
+			key, data_to_encrypt,
+			self.file_number,
+			algorithm
+			)?;
+		vec.append(&mut encrypted_data.encode_directly());
 		Ok(vec)
 	}
 
@@ -124,7 +145,6 @@ impl FileFooter {
 		let mut cursor = Cursor::new(header_content);
 		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
-		
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
 		let decrypted_data = Encryption::decrypt_file_footer(

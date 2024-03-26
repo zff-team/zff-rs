@@ -287,7 +287,7 @@ impl FileEncoder {
 			self.read_bytes_underlying_data,
 			);
 		if let Some(enc_info) = &self.encryption_information {
-	    	footer.encrypt_directly(enc_info)
+	    	footer.encode_encrypted_header_directly(enc_info)
 	    } else {
 	    	Ok(footer.encode_directly())
 	    }
