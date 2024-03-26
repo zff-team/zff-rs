@@ -125,7 +125,9 @@ impl ChunkHeader {
 		K: AsRef<[u8]>,
 	{
 		let crc32 = Encryption::encrypt_chunk_header_crc32(&key, self.crc32.to_le_bytes(), self.chunk_number, algorithm.borrow())?;
-		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags.clone(), crc32))
+		let mut flags = self.flags.clone();
+		flags.encryption = true;
+		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, flags, crc32))
 	}
 
 	/// Tries to encrypt the ChunkHeader. Consumes theunencrypted ChunkHeader, regardless of whether an error occurs or not.
@@ -134,8 +136,7 @@ impl ChunkHeader {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		let crc32 = Encryption::encrypt_chunk_header_crc32(&key, self.crc32.to_le_bytes(), self.chunk_number, algorithm.borrow())?;
-		Ok(EncryptedChunkHeader::new(self.chunk_number, self.chunk_size, self.flags, crc32))
+		self.encrypt(key, algorithm)
 	}
 }
 
