@@ -25,6 +25,7 @@ use crate::{
 		SegmentFooter,
 		ObjectFooter,
 	},
+	helper::get_segment_of_chunk_no,
 	header::{EncryptionInformation, SegmentHeader, ObjectType as HeaderObjectType},
 	ChunkContent,
 };
@@ -335,9 +336,11 @@ impl<R: Read + Seek> ZffReader<R> {
 			let segment = match get_segment_of_chunk_no(chunk_no, self.main_footer.chunk_maps()) {
 				Some(segment_no) => match self.segments.get_mut(&segment_no) {
 					Some(segment) => segment,
-					None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+					None => return Err(ZffError::new(
+						ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 				},
-				None => return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, chunk_no.to_string())),
+				None => return Err(ZffError::new(
+					ZffErrorKind::InvalidChunkNumber, chunk_no.to_string())),
 			};
 			let offset = segment.get_chunk_offset(&chunk_no)?;
 			match &mut self.chunk_map {
@@ -558,29 +561,6 @@ fn extract_recommended_metadata(fileheader: &FileHeader) -> HashMap<String, Meta
 
 fn extract_all_metadata(fileheader: &FileHeader) -> HashMap<String, MetadataExtendedValue> {
 	fileheader.metadata_ext.clone()
-}
-
-fn get_segment_of_chunk_no(chunk_no: u64, global_chunkmap: &BTreeMap<u64, u64>) -> Option<u64> {
-    // If the chunk_no is exactly matched, return the corresponding value.
-    if let Some(&value) = global_chunkmap.get(&chunk_no) {
-        return Some(value);
-    }
-
-    // If the chunk_no is higher than the highest key, return None.
-    if let Some((&highest_chunk_no, _)) = global_chunkmap.iter().next_back() {
-        if chunk_no > highest_chunk_no {
-            return None;
-        }
-    }
-
-    // Find the next higher key and return its value.
-    if let Some((_, &segment_no)) = global_chunkmap.iter().find(|(&key, _)| key > chunk_no) {
-        return Some(segment_no);
-    }
-
-    // If no next higher key is found, it means the chunk_no is higher than all keys,
-    // so we should return None.
-    None
 }
 
 enum Footer {
