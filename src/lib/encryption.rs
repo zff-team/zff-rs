@@ -16,7 +16,7 @@ use pkcs5::{
 	pbes2::Parameters as PBES2Parameters,
 	scrypt::Params as ScryptParams
 };
-use argon2::{self, Config, Variant, Version};
+use argon2::{Config, Variant, Version};
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,

@@ -13,12 +13,9 @@ pub use zffobjectreader::*;
 
 // - internal
 use crate::{
-	Result,
 	Segment,
 	HeaderCoding,
 	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
 	footer::{
 		MainFooter,
 		FileFooter,
@@ -30,25 +27,13 @@ use crate::{
 	ChunkContent,
 };
 
-use crate::{
-	PRELOADED_CHUNK_MAP_TABLE,
-	ERROR_MISSING_SEGMENT_MAIN_FOOTER,
-	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
-	ERROR_LAST_GREATER_FIRST,
-	ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT,
-	ERROR_ZFFREADER_MISSING_OBJECT,
-	ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT,
-	ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT,
-	ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT,
-};
-
 use super::*;
 
 // - external
 use redb::{Database, ReadableTable};
 
 #[cfg(feature = "log")]
-use log::{debug};
+use log::debug;
 
 /// Defines the recognized object type (used by the [ZffReader]). 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -196,7 +181,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	///  # Error
 	///  This method fails, if the appropriate object number not exists in this zff container.
 	pub fn set_active_object(&mut self, object_number: u64) -> Result<()> {
-		if self.object_reader.get(&object_number).is_some() {
+		if self.object_reader.contains_key(&object_number) {
 			self.active_object = object_number;
 			Ok(())
 		} else {

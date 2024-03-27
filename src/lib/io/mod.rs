@@ -29,23 +29,6 @@ use crate::{
     constants::*,
 };
 
-#[cfg(target_family = "unix")]
-use crate::{
-    METADATA_EXT_KEY_GID,
-    METADATA_EXT_KEY_UID,
-    METADATA_EXT_KEY_MODE,
-    METADATA_EXT_KEY_DEVID,
-    METADATA_EXT_KEY_INODE,
-    METADATA_ATIME,
-    METADATA_MTIME,
-    METADATA_CTIME,
-    METADATA_BTIME,
-};
-
-
-#[cfg(target_family = "windows")]
-use crate::METADATA_EXT_DW_FILE_ATTRIBUTES;
-
 // - external
 use crc32fast::Hasher as CRC32Hasher;
 #[cfg(target_family = "unix")]

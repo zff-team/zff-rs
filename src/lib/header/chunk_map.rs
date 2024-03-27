@@ -80,9 +80,7 @@ impl ChunkMap {
 		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
-			if self.chunkmap.get(&chunk_no).is_none() {
-				self.chunkmap.insert(chunk_no, offset);
-			};
+			self.chunkmap.entry(chunk_no).or_insert(offset);
 			true
 		}
 	}

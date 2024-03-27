@@ -17,14 +17,7 @@ use crate::{
 #[cfg(feature = "serde")]
 use crate::helper::string_to_str;
 
-use crate::{
-	HEADER_IDENTIFIER_DESCRIPTION_HEADER,
-	ENCODING_KEY_CASE_NUMBER,
-	ENCODING_KEY_EVIDENCE_NUMBER,
-	ENCODING_KEY_EXAMINER_NAME,
-	ENCODING_KEY_NOTES,
-	constants::*,
-};
+use crate::constants::*;
 
 // - external
 #[cfg(feature = "serde")]

@@ -1,5 +1,4 @@
 // - STD
-use std::cmp::PartialEq;
 use std::io::Cursor;
 use std::fmt;
 

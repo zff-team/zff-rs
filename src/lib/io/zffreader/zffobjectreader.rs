@@ -1,36 +1,21 @@
 // - STD
-use std::io::{Read, Seek, SeekFrom, Cursor};
-use std::collections::{HashMap, BTreeMap, BTreeSet};
+use std::io::Cursor;
+use std::collections::BTreeSet;
 
 
 // - internal
 use crate::{
-	Result,
-	Segment,
-	HeaderCoding,
-	ZffError,
-	ZffErrorKind,
 	footer::{
 		ObjectFooterPhysical,
 		ObjectFooterLogical,
 		ObjectFooterVirtual,
-		FileFooter,
 		EncryptedObjectFooter,
-		ObjectFooter,
 	},
 	header::{
 		HashHeader, 
-		EncryptionInformation, 
 		EncryptedObjectHeader, 
 		VirtualMappingInformation},
 	helper::find_vmi_offset,
-};
-
-use crate::{
-	ERROR_ZFFREADER_SEGMENT_NOT_FOUND,
-	ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION,
-	ERROR_MISSING_FILE_NUMBER,
-	ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT,
 };
 
 use super::*;

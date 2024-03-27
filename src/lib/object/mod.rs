@@ -122,7 +122,7 @@ impl HashingThreadManager {
 
 	/// creates a new HashingThread by using the given HashType.
 	pub fn add_thread(&mut self, hash_type: HashType) {
-		if self.threads.get(&hash_type).is_none() {
+		if !self.threads.contains_key(&hash_type) {
 			self.threads.insert(hash_type.clone(), HashingThread::new(hash_type, self.data.clone()));
 		}
 	}

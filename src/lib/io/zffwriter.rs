@@ -1,26 +1,22 @@
 // - STD
 use std::collections::BTreeMap;
-use std::io::{Read, Write, Seek, SeekFrom, Cursor};
-use std::path::{PathBuf, Path};
-use std::fs::{File, Metadata, OpenOptions, remove_file, read_link, read_dir, metadata};
-use std::collections::{HashMap, VecDeque};
+use std::io::{Write, Seek, SeekFrom, Cursor};
+use std::path::PathBuf;
+use std::fs::{File, OpenOptions, remove_file, read_link, read_dir, metadata};
+use std::collections::VecDeque;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
 
 // - internal
 use crate::{
-	Result,
 	HashType,
 	HeaderCoding,
-	ZffError,
-	ZffErrorKind,
 	file_extension_next_value,
 	file_extension_previous_value
 };
 use crate::{
-	header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader, DeduplicationChunkMap, FileHeader},
+	header::{SegmentHeader, ChunkMap, ChunkHeader},
 	footer::{MainFooter, SegmentFooter},
-	ObjectEncoder,
 	PhysicalObjectEncoder,
 	LogicalObjectEncoder,
 	ValueDecoder,
@@ -28,11 +24,6 @@ use crate::{
 };
 
 use crate::constants::*;
-
-use super::{
-	get_file_header,
-	ObjectEncoderInformation,
-};
 
 use super::*;
 
