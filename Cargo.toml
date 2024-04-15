@@ -1,6 +1,6 @@
 [package]
 name = "zff"
-version = "3.0.0-beta.3"
+version = "3.0.0-beta.4"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2021"
 rust-version = "1.67.1"
@@ -27,7 +27,7 @@ rand = "0.8.5"
 base64 = "0.22.0"
 time = { version = "0.3.21" }
 itertools = "0.12"
-redb = "1.0.5"
+redb = "2.0"
 #encryption
 pkcs5 = { version = "0.7.1", features = [ "pbes2", "alloc" ] }
 rust-argon2 = "2.0"

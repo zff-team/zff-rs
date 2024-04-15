@@ -22,7 +22,7 @@ use crate::{
 use crate::helper::string_to_str;
 
 // - external
-use redb::{Database, ReadableTable};
+use redb::Database;
 use blake3::Hash as Blake3Hash;
 #[cfg(feature = "serde")]
 use serde::{
