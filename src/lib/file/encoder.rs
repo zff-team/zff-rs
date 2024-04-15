@@ -31,6 +31,7 @@ use time::OffsetDateTime;
 use ed25519_dalek::SigningKey;
 
 /// This enum contains the information, which are needed to encode the different file types.
+#[derive(Debug)]
 pub enum FileTypeEncodingInformation {
 	/// A regular file.
 	File,
@@ -47,6 +48,7 @@ pub enum FileTypeEncodingInformation {
 
 /// This enum contains the information, which are needed to encode the different special file types.
 #[cfg(target_family = "unix")]
+#[derive(Debug)]
 pub enum SpecialFileEncodingInformation {
 	/// A fifo file with the given rdev-id.
 	Fifo(u64), // fifo(rdev),

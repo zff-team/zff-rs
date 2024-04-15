@@ -43,6 +43,7 @@ pub(crate) enum CompressedData {
 
 /// creates a EncodingThreadPoolManager which contains a HashingThreadManager and a CompressionThread and a Crc32Thread.
 /// The EncodingThreadPoolManager is used to manage the threads and to ensure that the threads will use the given data in zero-copy way.
+#[derive(Debug)]
 pub struct EncodingThreadPoolManager {
     /// the hashing threads.
     hashing_threads: HashingThreadManager,
@@ -273,6 +274,7 @@ impl DeduplicationThread {
 }
 
 /// Structure to manage the crc32 calculation in a separate thread.
+#[derive(Debug)]
 pub(crate) struct Crc32Thread {
 	/// triggers the crc32 thread to continue the crc32 calculation with the updated data field.
 	pub trigger: crossbeam::channel::Sender<crossbeam::sync::WaitGroup>,
@@ -412,6 +414,7 @@ impl CompressionThread {
 }
 
 /// A structure, which contains all information and capabilities to check if the underlying data are same bytes or not.
+#[derive(Debug)]
 pub(crate) struct SameBytesThread {
 	/// the sender, which will be used to trigger the same bytes thread.
 	pub trigger: crossbeam::channel::Sender<crossbeam::sync::WaitGroup>,
