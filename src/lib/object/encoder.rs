@@ -217,13 +217,13 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 		// prepare chunked data:
 	    let chunk_size = self.obj_header.chunk_size as usize;
-	    let (buf, read_bytes) = buffer_chunk(&mut self.underlying_data, chunk_size)?;
-	    self.read_bytes_underlying_data += read_bytes;
-	    if buf.is_empty() {
+	    let buffered_chunk = buffer_chunk(&mut self.underlying_data, chunk_size)?;
+	    self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+	    if buffered_chunk.buffer.is_empty() {
 	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 	    };
 
-		self.encoding_thread_pool_manager.update(buf);
+		self.encoding_thread_pool_manager.update(buffered_chunk.buffer);
 
 		let encryption_algorithm = self.obj_header.encryption_header.as_ref().map(|encryption_header| &encryption_header.algorithm);
 		let encryption_key = if let Some(encryption_header) = &self.obj_header.encryption_header {
@@ -238,7 +238,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		let chunk = chunking(
 			&mut self.encoding_thread_pool_manager,
 			self.current_chunk_number,
-			read_bytes,
+			buffered_chunk.bytes_read,
 			chunk_size as u64,
 			deduplication_map,
 			encryption_key,

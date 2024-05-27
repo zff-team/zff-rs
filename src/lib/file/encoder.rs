@@ -144,19 +144,18 @@ impl FileEncoder {
 				};
 				let mut cursor = Cursor::new(&encoded_directory_children);
 				cursor.set_position(self.read_bytes_underlying_data);
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
-				self.read_bytes_underlying_data += read_bytes;
-				buf
-
+				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+				buffered_chunk.buffer
 			},
 			FileTypeEncodingInformation::Symlink(symlink_real_path) => {
 				let encoded_symlink_real_path = symlink_real_path.to_string_lossy().encode_directly();
 				let mut cursor = Cursor::new(&encoded_symlink_real_path);
 				cursor.set_position(self.read_bytes_underlying_data);
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
-				self.read_bytes_underlying_data += read_bytes;
-				if read_bytes > 0 {
-					buf
+				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+				if buffered_chunk.bytes_read > 0 {
+					buffered_chunk.buffer
 				} else {
 					eof = true;
 					Vec::new()
@@ -166,19 +165,19 @@ impl FileEncoder {
 				let encoded_hardlink_filenumber = hardlink_filenumber.encode_directly();
 				let mut cursor = Cursor::new(&encoded_hardlink_filenumber);
 				cursor.set_position(self.read_bytes_underlying_data);
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
-				self.read_bytes_underlying_data += read_bytes;
-				if read_bytes > 0 {
-					buf
+				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+				if buffered_chunk.bytes_read > 0 {
+					buffered_chunk.buffer
 				} else {
 					eof = true;
 					Vec::new()
 				}	
 			},
 			FileTypeEncodingInformation::File => {
-				let (buf, read_bytes) = buffer_chunk(&mut self.underlying_file, chunk_size)?;
-				self.read_bytes_underlying_data += read_bytes;
-				buf
+				let buffered_chunk = buffer_chunk(&mut self.underlying_file, chunk_size)?;
+				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+				buffered_chunk.buffer
 			},
 			// contains the rdev-id and a flag for the type of the special file 
 			// (0 if fifo-, 1 if char-, 2 if block-, and 3 if it is a socket-file).
@@ -194,10 +193,10 @@ impl FileEncoder {
 				encoded_data.append(&mut type_flag.encode_directly());
 				let mut cursor = Cursor::new(&encoded_data);
 				cursor.set_position(self.read_bytes_underlying_data);
-				let (buf, read_bytes) = buffer_chunk(&mut cursor, chunk_size)?;
-				self.read_bytes_underlying_data += read_bytes;
-				if read_bytes > 0 {
-					buf
+				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
+				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+				if buffered_chunk.bytes_read > 0 {
+					buffered_chunk.buffer
 				} else {
 					eof = true;
 					Vec::new()

@@ -11,6 +11,8 @@ use std::io::{Read, copy as io_copy};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::fs::{Metadata, read_link, File, read_dir};
+use std::thread::sleep;
+use std::time::Duration;
 
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
@@ -74,38 +76,70 @@ pub struct ZffCreationParameters {
 	pub unique_identifier: u64
 }
 
+#[derive(Default, Debug)]
+pub(crate) struct BufferedChunk {
+    pub buffer: Vec<u8>,
+    pub bytes_read: u64,
+    pub error_flag: bool,
+}
+
 // returns the buffer with the read bytes and the number of bytes which was read.
 pub(crate) fn buffer_chunk<R>(
 	input: &mut R,
 	chunk_size: usize,
-	) -> Result<(Vec<u8>, u64)> 
+	) -> Result<BufferedChunk> 
 where
 	R: Read
 {
-	let mut buf = vec![0u8; chunk_size];
-    let mut bytes_read = 0;
+    let mut buffered_chunk = BufferedChunk::default();
+    let mut interrupt_retries = 0;
 
-    while bytes_read < chunk_size {
-        let r = match input.read(&mut buf[bytes_read..]) {
+    while (buffered_chunk.bytes_read as usize) < chunk_size {
+        let r = match input.read(&mut buffered_chunk.buffer[buffered_chunk.bytes_read as usize..]) {
         	Ok(r) => r,
         	Err(e) => match e.kind() {
-                //TODO
-        		std::io::ErrorKind::Interrupted => return Err(ZffError::new(ZffErrorKind::InterruptedInputStream, "")),
+                //the Error::io::ErrorKind::Interrupted guarantees 
+                // that the read operation can be retried (see https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read)
+        		std::io::ErrorKind::Interrupted => {
+                    if interrupt_retries < DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT {
+                        #[cfg(feature = "log")]
+                        warn!("Read operation was interrupted. Retry reading ({} of {}).", interrupt_retries, DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT);
+                        sleep(Duration::from_millis(DEFAULT_WAIT_TIME_IO_INTERRUPT_RETRY));
+                        interrupt_retries += 1;
+                        continue;
+                    } else {
+                        buffered_chunk.error_flag = true;
+                        #[cfg(feature = "log")] {
+                            warn!("The read operation was interrupted {} times.", interrupt_retries);
+                            warn!("The appropriate chunk will be marked with error flag and the content will be zeroed");
+                        }
+                        0
+                    }
+                },
         		_ => return Err(ZffError::from(e)),
         	},
         };
         if r == 0 {
             break;
         }
-        bytes_read += r;
+        buffered_chunk.bytes_read += r as u64;
     }
 
-    let buf = if bytes_read == chunk_size {
-        buf
+    if buffered_chunk.bytes_read as usize != chunk_size {
+        buffered_chunk.buffer = buffered_chunk.buffer[..buffered_chunk.bytes_read as usize].to_vec();
+    }
+    if buffered_chunk.error_flag {
+        buffered_chunk.buffer = vec![0; chunk_size];
+        buffered_chunk.bytes_read = 0;
+    }
+
+    /*let buffered_chunk.buffer = if bytes_read == chunk_size {
+        buffered_chunk.buffer
     } else {
-        buf[..bytes_read].to_vec()
-    };
-    Ok((buf, bytes_read as u64))
+        buffered_chunk.buffer[..bytes_read].to_vec()
+    };*/
+
+    Ok(buffered_chunk)
 }
 
 /// calculates a crc32 hash for the given bytes.
@@ -127,12 +161,12 @@ pub fn compress_buffer(buf: Vec<u8>, chunk_size: usize, compression_header: &Com
         CompressionAlgorithm::Zstd => {
             let compression_level = compression_header.level as i32;
             let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
-            let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize)?;
-            if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
+            let buffered_chunk = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize)?;
+            if (buf.len() as f32 / buffered_chunk.buffer.len() as f32) < compression_threshold {
                 Ok((buf, compression_flag))
             } else {
                 compression_flag = true;
-                Ok((compressed_data, compression_flag))
+                Ok((buffered_chunk.buffer, compression_flag))
             }
         },
         CompressionAlgorithm::Lz4 => {

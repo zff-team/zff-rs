@@ -369,11 +369,11 @@ impl CompressionThread {
 					Err(e) => return CompressedData::Err(ZffError::from(e)),
 				};
 				// unwrap is safe here, because the read will not fail on a Vec<u8>.
-				let (compressed_data, _) = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize).unwrap();
-				if (buf.len() as f32 / compressed_data.len() as f32) < compression_threshold {
+				let buffered_chunk = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize).unwrap();
+				if (buf.len() as f32 / buffered_chunk.buffer.len() as f32) < compression_threshold {
 					CompressedData::Raw
 				} else {
-					CompressedData::Compressed(compressed_data)
+					CompressedData::Compressed(buffered_chunk.buffer)
 				}
 			},
 			CompressionAlgorithm::Lz4 => {
