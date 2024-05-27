@@ -85,7 +85,7 @@ impl EncodingThreadPoolManager {
 		self.trigger();
     }
 
-	/// finalizes all hashing threads and returns a HashMap<HashType, Vec<u8>> with the appropriate hash values.
+	/// finalizes all hashing threads and returns a `HashMap<HashType, Vec<u8>>` with the appropriate hash values.
 	pub fn finalize_all_hashing_threads(&mut self) -> HashMap<HashType, Vec<u8>> {
 		self.hashing_threads.finalize_all()
 	}

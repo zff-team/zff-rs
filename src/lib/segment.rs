@@ -229,9 +229,9 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(encrypted_object_footer)
 	}
 
-	/// Returns the [crate::header::ObjectFooter] of the given object number (decrypts the encrypted object footer on-the-fly with the given decryption password).
+	/// Returns the [crate::footer::ObjectFooter] of the given object number (decrypts the encrypted object footer on-the-fly with the given decryption password).
 	/// # Error
-	/// Fails if the [crate::header::ObjectFooter] could not be found in this [Segment] or/and if the decryption password is wrong.
+	/// Fails if the [crate::footer::ObjectFooter] could not be found in this [Segment] or/and if the decryption password is wrong.
 	pub fn read_and_decrypt_object_footer<E>(&mut self, object_number: u64, encryption_information: E) -> Result<ObjectFooter>
 	where
 		E: Borrow<EncryptionInformation>,

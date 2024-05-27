@@ -105,8 +105,8 @@ pub struct ZffReader<R: Read + Seek> {
 
 impl<R: Read + Seek> ZffReader<R> {
 	/// This method will initialize the [ZffReader] in general.  
-	/// This method will identify the appropriate [SegmentHeader](crate::header::SegmentHeader), 
-	/// [SegmentFooter](crate::footer::SegmentFooter) and [MainFooter](crate::footer::MainFooter).  
+	/// This method will identify the appropriate [SegmentHeader], 
+	/// [SegmentFooter] and [MainFooter].  
 	/// This method will **not** initizalize the objects itself! This has to be done by using the
 	/// initialize_object() or initialize_objects_all() methods.
 	pub fn with_reader(reader_vec: Vec<R>) -> Result<Self> {
@@ -285,7 +285,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		Ok(())
 	}
 	
-	/// Preloads the offsets of the given [Range](std::ops::Range) of chunks.
+	/// Preloads the offsets of the given [Range] of chunks.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	pub fn preload_chunkmap(&mut self, chunk_numbers: &Range<u64>) -> Result<()> {
 		// check if chunk numbers are valid.
@@ -363,7 +363,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	/// Returns the [FileHeader](crate::header::FileHeader) of the appropriate active file.
+	/// Returns the [FileHeader] of the appropriate active file.
 	/// # Error
 	/// May fail if   
 	/// - the active object is not a "logical" object.  
@@ -381,7 +381,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	/// Returns the [FileFooter](crate::footer::FileFooter) of the appropriate active file.
+	/// Returns the [FileFooter] of the appropriate active file.
 	/// # Error
 	/// May fail if   
 	/// - the active object is not a "logical" object.  
@@ -399,7 +399,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	/// Returns a reference to the [ObjectHeader](crate::header::ObjectHeader) of the appropriate active object.
+	/// Returns a reference to the [ObjectHeader] of the appropriate active object.
 	/// # Error
 	/// May fail if   
 	/// - no object was set as active.  
@@ -413,7 +413,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	/// Returns the [ObjectFooter](crate::footer::ObjectFooter) of the appropriate active object.
+	/// Returns the [ObjectFooter] of the appropriate active object.
 	/// # Error
 	/// May fail if   
 	/// - no object was set as active.  
@@ -434,7 +434,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	/// Returns a reference to the [Segment](crate::segment::Segment) of the appropriate segment number.
+	/// Returns a reference to the [Segment] of the appropriate segment number.
 	/// # Error
 	/// May fail if   
 	/// - the appropriate segment number does not exist.

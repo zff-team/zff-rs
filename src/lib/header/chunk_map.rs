@@ -186,7 +186,7 @@ impl DeduplicationChunkMap {
         Ok(Self::Redb(db))
 	}
 
-	/// Creates a new [DeduplicationChunkMap] with the given [Redb-Database](crate::redb::Database).
+	/// Creates a new [DeduplicationChunkMap] with the given [Redb-Database](Database).
 	pub fn new_from_db(database: Database) -> Self {
 		Self::Redb(database)
 	}

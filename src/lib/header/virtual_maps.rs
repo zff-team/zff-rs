@@ -16,9 +16,9 @@ use crate::{
 	header::EncryptionInformation,
 	Encryption,
 	HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION,
-	HEADER_IDENTIFIER_VIRTUAL_LAYER,
+	HEADER_IDENTIFIER_VIRTUAL_OBJECT_MAP,
 	DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION,
-	DEFAULT_HEADER_VERSION_VIRTUAL_LAYER,
+	DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP,
 	DEFAULT_LENGTH_HEADER_IDENTIFIER,
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
@@ -33,7 +33,7 @@ use serde::{
 
 
 /// Contains the information of the appropriate virtual mapping.
-/// The counterpart offset has to be stored outside of this structure (in the [VirtualLayer]).
+/// The counterpart offset has to be stored outside of this structure (in the [VirtualObjectMap]).
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -205,7 +205,7 @@ pub struct VirtualObjectMap {
 }
 
 impl VirtualObjectMap {
-	/// returns a new [VirtualLayer] with the given values.
+	/// returns a new [VirtualObjectMap] with the given values.
 	pub fn with_data(offsetmaps: BTreeSet<BTreeMap<u64, (u64, u64)>>) -> Self {
 		Self {
 			offsetmaps,
@@ -253,7 +253,7 @@ impl VirtualObjectMap {
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
 		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_HEADER_VERSION_VIRTUAL_LAYER {
+		if version != DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP {
 			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
 		};
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
@@ -284,11 +284,11 @@ impl HeaderCoding for VirtualObjectMap {
 	type Item = VirtualObjectMap;
 
 	fn identifier() -> u32 {
-		HEADER_IDENTIFIER_VIRTUAL_LAYER
+		HEADER_IDENTIFIER_VIRTUAL_OBJECT_MAP
 	}
 
 	fn version() -> u8 {
-		DEFAULT_HEADER_VERSION_VIRTUAL_LAYER
+		DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
@@ -316,6 +316,6 @@ impl fmt::Display for VirtualObjectMap {
 // - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
 impl VirtualObjectMap {
 	fn struct_name(&self) -> &'static str {
-		"VirtualLayer"
+		"VirtualObjectMap"
 	}
 }

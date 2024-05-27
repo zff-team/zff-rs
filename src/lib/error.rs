@@ -131,7 +131,7 @@ pub enum ZffErrorKind {
 	MalformedHeader,
 	/// Error will be returned, if no object type exists for the given value
 	UnknownObjectTypeValue,
-	/// Error will be returned, if you try to call a method, which is not available for this [FileType].
+	/// Error will be returned, if you try to call a method, which is not available for this [FileType](crate::header::FileType).
 	NotAvailableForFileType,
 	/// Error will be returned, if the underlying file type is not a File, a Directory or a Symlink.
 	UnimplementedFileType,

@@ -55,22 +55,22 @@ struct ZffExtenderParameter {
 	pub initial_chunk_number: u64,
 }
 
-/// This struct contains optional, additional parameter for the [ZffWriter].
+/// This struct contains optional, additional parameter for the [ZffWriter](zffwriter::ZffWriter).
 #[derive(Default, Debug)]
 pub struct ZffCreationParameters {
-    /// If given, the appropriate data will be signed by the given [SigningKey](crate::ed25519_dalek::SigningKey).
+    /// If given, the appropriate data will be signed by the given [SigningKey].
 	pub signature_key: Option<SigningKey>,
-	/// If None, the container will not be segmentized. Otherwise, [ZffWriter] ensure that no segment will be larger than this size.
+	/// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.
 	pub target_segment_size: Option<u64>,
 	/// An optional description for the container
 	/// (note: you can describe every object with custom descriptions by using the [DescriptionHeader](crate::header::DescriptionHeader)).
 	pub description_notes: Option<String>,
 	/// If set, the chunkmaps will not grow larger than the given size. Otherwise, the default size 32k will be used.
 	pub chunkmap_size: Option<u64>, //default is 32k
-	/// Optional [DeduplicationChunkMap](crate::header::DeduplicationChunkMap) to ensure a chunk deduplication (and safe some disk space).
+	/// Optional [DeduplicationChunkMap] to ensure a chunk deduplication (and safe some disk space).
 	pub deduplication_chunkmap: Option<DeduplicationChunkMap>,
 	/// Will be used as a unique identifier, to assign each segment to the appropriate zff container.
-	/// If the [ZffWriter] will be extend an existing Zff container, this value will be ignored.
+	/// If the [ZffWriter](zffwriter::ZffWriter) will be extend an existing Zff container, this value will be ignored.
 	pub unique_identifier: u64
 }
 

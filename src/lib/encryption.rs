@@ -427,8 +427,8 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
 	}
 
-	/// Method to encrypt a [crate::header::FileFooter] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::FileFooter].
+	/// Method to encrypt a [crate::footer::FileFooter] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::footer::FileFooter].
 	/// Returns a the cipthertext as ```Vec<u8>```.
 	pub fn encrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
@@ -451,8 +451,8 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
 	}
 
-	/// Method to encrypt a [crate::header::ObjectFooter] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ObjectFooter].
+	/// Method to encrypt a [crate::footer::ObjectFooter] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::footer::ObjectFooter].
 	/// Returns a the cipthertext as ```Vec<u8>```.
 	pub fn encrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
 	where
@@ -510,8 +510,8 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, offset, algorithm, MessageType::VirtualMappingInformation)
 	}
 
-	/// Method to decrypt a [crate::header::VirtualLayer] with a key and and the given depth. This method should primary used to decrypt
-	/// the given [crate::header::VirtualLayer].
+	/// Method to decrypt a [VirtualLayer](crate::header::VirtualObjectMap) with a key and and the given depth. This method should primary used to decrypt
+	/// the given [VirtualLayer](crate::header::VirtualObjectMap).
 	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
 	/// # Error
 	/// This method will fail, if the decryption fails.
