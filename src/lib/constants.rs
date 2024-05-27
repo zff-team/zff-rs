@@ -106,6 +106,12 @@ pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
 /// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
 
+/// The first chunk number in a zff container.
+pub const INITIAL_CHUNK_NUMBER: u64 = 1;
+
+/// The first segment number in a zff container.
+pub const INITIAL_SEGMENT_NUMBER: u64 = 1;
+
 /// The default compression ratio threshold
 pub const DEFAULT_COMPRESSION_RATIO_THRESHOLD: &str = "1.05";
 

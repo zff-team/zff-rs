@@ -24,7 +24,7 @@ use serde::{
 
 /// The main footer is the last thing, which is written at the end of the last segment.\
 /// This footer contains a lot of variable information about the zff container (e.g. number of segments, ...).
-#[derive(Debug,Clone, Eq, PartialEq)]
+#[derive(Debug,Clone, Eq, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct MainFooter {

@@ -41,6 +41,12 @@ pub struct ChunkMap {
 	target_size: usize,
 }
 
+impl Default for ChunkMap {
+	fn default() -> Self {
+		Self::new_empty()
+	}
+}
+
 impl ChunkMap {
 	/// returns a new [ChunkMap] with the given values.
 	pub fn with_data(chunkmap: BTreeMap<u64, u64>) -> Self {
