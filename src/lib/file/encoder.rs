@@ -6,6 +6,7 @@ use std::cell::RefCell;
 
 use std::time::SystemTime;
 
+use crate::io::BufferedChunk;
 // - internal
 use crate::{
 	header::{FileHeader, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
@@ -135,7 +136,7 @@ impl FileEncoder {
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
 
-		let buf = match &self.filetype_encoding_information {
+		let buffered_chunk = match &self.filetype_encoding_information {
 			FileTypeEncodingInformation::Directory(directory_children) => {
 				let encoded_directory_children = if directory_children.is_empty() {
 					Vec::<u64>::new().encode_directly()
@@ -146,7 +147,7 @@ impl FileEncoder {
 				cursor.set_position(self.read_bytes_underlying_data);
 				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
 				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
-				buffered_chunk.buffer
+				buffered_chunk
 			},
 			FileTypeEncodingInformation::Symlink(symlink_real_path) => {
 				let encoded_symlink_real_path = symlink_real_path.to_string_lossy().encode_directly();
@@ -155,10 +156,10 @@ impl FileEncoder {
 				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
 				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
 				if buffered_chunk.bytes_read > 0 {
-					buffered_chunk.buffer
+					buffered_chunk
 				} else {
 					eof = true;
-					Vec::new()
+					BufferedChunk::default()
 				}
 			},
 			FileTypeEncodingInformation::Hardlink(hardlink_filenumber) => {
@@ -168,16 +169,16 @@ impl FileEncoder {
 				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
 				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
 				if buffered_chunk.bytes_read > 0 {
-					buffered_chunk.buffer
+					buffered_chunk
 				} else {
 					eof = true;
-					Vec::new()
+					BufferedChunk::default()
 				}	
 			},
 			FileTypeEncodingInformation::File => {
 				let buffered_chunk = buffer_chunk(&mut self.underlying_file, chunk_size)?;
 				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
-				buffered_chunk.buffer
+				buffered_chunk
 			},
 			// contains the rdev-id and a flag for the type of the special file 
 			// (0 if fifo-, 1 if char-, 2 if block-, and 3 if it is a socket-file).
@@ -196,18 +197,20 @@ impl FileEncoder {
 				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;
 				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
 				if buffered_chunk.bytes_read > 0 {
-					buffered_chunk.buffer
+					buffered_chunk
 				} else {
 					eof = true;
-					Vec::new()
+					BufferedChunk::default()
 				}
 			}
 		};
-		if buf.is_empty() && self.read_bytes_underlying_data != 0 || eof {
+
+		if buffered_chunk.buffer.is_empty() && self.read_bytes_underlying_data != 0 || eof {
 			//this case is the normal "file reader reached EOF".
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
-		} else if buf.is_empty() && self.read_bytes_underlying_data == 0 {
+		} else if buffered_chunk.buffer.is_empty() && self.read_bytes_underlying_data == 0 {
 			let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
+			chunk_header.flags.error = buffered_chunk.error_flag;
 			//this case ensures, that empty files will already get a chunk
 			chunk_header.flags.empty_file = true;
 			chunk_header.chunk_size = 0;
@@ -230,11 +233,11 @@ impl FileEncoder {
 		};
 
 		// Needed for the same byte check
-		let buf_len = buf.len() as u64;
+		let buf_len = buffered_chunk.buffer.len() as u64;
 
 		let mut encoding_thread_pool_manager = self.encoding_thread_pool_manager.borrow_mut();
 
-		encoding_thread_pool_manager.update(buf);
+		encoding_thread_pool_manager.update(buffered_chunk.buffer);
 
 		let encryption_algorithm = self.encryption_information.as_ref().map(|encryption_information| &encryption_information.algorithm);
 		let encryption_key = self.encryption_information.as_ref().map(|encryption_information| &encryption_information.encryption_key);

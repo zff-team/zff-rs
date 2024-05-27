@@ -89,7 +89,7 @@ pub(crate) fn buffer_chunk<R>(
 	chunk_size: usize,
 	) -> Result<BufferedChunk> 
 where
-	R: Read
+	R: Read,
 {
     let mut buffered_chunk = BufferedChunk::default();
     let mut interrupt_retries = 0;
@@ -113,7 +113,7 @@ where
                             warn!("The read operation was interrupted {} times.", interrupt_retries);
                             warn!("The appropriate chunk will be marked with error flag and the content will be zeroed");
                         }
-                        0
+                        chunk_size
                     }
                 },
         		_ => return Err(ZffError::from(e)),
@@ -130,7 +130,7 @@ where
     }
     if buffered_chunk.error_flag {
         buffered_chunk.buffer = vec![0; chunk_size];
-        buffered_chunk.bytes_read = 0;
+        buffered_chunk.bytes_read = chunk_size as u64;
     }
 
     /*let buffered_chunk.buffer = if bytes_read == chunk_size {
@@ -626,7 +626,7 @@ fn setup_logical_object(
 
         // handle files in current folder
         for inner_element in element_iterator {
-            #[allow(unused_variables)]
+            #[cfg_attr(not(feature = "log"), allow(unused_variables))]
             let inner_element = match inner_element {
                 Ok(element) => element,
                 Err(e) => {
@@ -637,7 +637,7 @@ fn setup_logical_object(
                 }
             };
 
-            let metadata = match check_and_get_metadata(&inner_element.path()) {
+            let metadata = match check_and_get_metadata(inner_element.path()) {
                 Ok(metadata) => metadata,
                 Err(_) => continue,
             };
@@ -665,7 +665,7 @@ fn setup_logical_object(
                 };
 
                 //test if file is readable and exists.
-                check_file_accessibility(&inner_element.path(), &mut file_header);
+                check_file_accessibility(inner_element.path(), &mut file_header);
                 
                 add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 
@@ -707,7 +707,7 @@ fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 	}
 }
 
-#[allow(unused_variables)]
+#[cfg_attr(not(feature = "log"), allow(unused_variables))]
 fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeader) {
 	match File::open(path.as_ref()) {
 		Ok(_) => (),
@@ -729,7 +729,7 @@ fn create_iterator<C: AsRef<Path>>(
 	directory_children: &mut HashMap::<u64, Vec<u64>>,
 	files: &mut Vec<(PathBuf, FileHeader)>,
 	) -> Result<std::fs::ReadDir> {
-	#[allow(unused_variables)]
+    #[cfg_attr(not(feature = "log"), allow(unused_variables))]
 	let metadata = match std::fs::symlink_metadata(current_dir.as_ref()) {
 		Ok(metadata) => metadata,
 		Err(e) => {

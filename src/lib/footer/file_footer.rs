@@ -50,7 +50,7 @@ pub struct FileFooter {
 	pub number_of_chunks: u64,
 	/// the original (uncompressed & unencrypted) length of the file.  
 	/// - If the file is a regular file, this method returns the original (uncompressed, unencrypted) size
-	/// of the file (without "filesystem-"metadata - just the size of the file content).  
+	///   of the file (without "filesystem-"metadata - just the size of the file content).  
 	/// - If the file is a hardlink, this method returns the size of the inner value (just the size of the appropriate filenumber: 8).  
 	/// - If the file is a directory, this method returns the size of the underlying vector of children.  
 	/// - If the file is a symlink, this method returns the length of the linked path.  
