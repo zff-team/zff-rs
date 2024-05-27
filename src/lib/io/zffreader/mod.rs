@@ -17,7 +17,6 @@ use crate::{
 	HeaderCoding,
 	ValueDecoder,
 	footer::{
-		MainFooter,
 		FileFooter,
 		SegmentFooter,
 		ObjectFooter,
