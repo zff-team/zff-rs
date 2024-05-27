@@ -3,7 +3,7 @@
 pub mod zffwriter;
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
 pub mod zffreader;
-/// TODO
+/// provides [ZffStreamer] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
 pub mod zffstreamer;
 
 // - STD
@@ -83,6 +83,16 @@ pub(crate) struct BufferedChunk {
     pub error_flag: bool,
 }
 
+impl BufferedChunk {
+    pub fn with_chunksize(chunk_size: usize) -> BufferedChunk {
+        Self {
+            buffer: vec![0; chunk_size],
+            bytes_read: 0,
+            error_flag: false,
+        }
+    } 
+}
+
 // returns the buffer with the read bytes and the number of bytes which was read.
 pub(crate) fn buffer_chunk<R>(
 	input: &mut R,
@@ -91,7 +101,7 @@ pub(crate) fn buffer_chunk<R>(
 where
 	R: Read,
 {
-    let mut buffered_chunk = BufferedChunk::default();
+    let mut buffered_chunk = BufferedChunk::with_chunksize(chunk_size);
     let mut interrupt_retries = 0;
 
     while (buffered_chunk.bytes_read as usize) < chunk_size {
@@ -124,7 +134,6 @@ where
         }
         buffered_chunk.bytes_read += r as u64;
     }
-
     if buffered_chunk.bytes_read as usize != chunk_size {
         buffered_chunk.buffer = buffered_chunk.buffer[..buffered_chunk.bytes_read as usize].to_vec();
     }

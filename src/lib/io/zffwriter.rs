@@ -369,10 +369,6 @@ impl<R: Read> ZffWriter<R> {
 		    				};	
 						}
 					},
-					ZffErrorKind::InterruptedInputStream => {
-						//todo: should be handled in any way...
-						break;
-					},
 					_ => return Err(e),
 				},
 			};
