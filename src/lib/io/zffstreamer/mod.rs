@@ -1,18 +1,12 @@
-// - STD
-use std::io::Read;
-use std::collections::HashMap;
-use std::path::PathBuf;
+// Parent
+use super::*;
 
 // - internal
 use crate::{
-    error::{ZffError, ZffErrorKind}, 
-    hashing::HashType, 
-    header::{ObjectHeader, SegmentHeader, ChunkMap, ChunkHeader},
-    footer::{SegmentFooter, MainFooter}, 
+    header::{SegmentHeader, ChunkMap, ChunkHeader},
+    footer::SegmentFooter, 
     HeaderCoding
 };
-
-use super::*;
 
 #[derive(Debug, Clone, Default)]
 enum ReadBytes {
