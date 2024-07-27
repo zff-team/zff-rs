@@ -61,9 +61,7 @@ xattr = "1"
 posix-acl = "1.1.0"
 
 [features]
-default = ["autodetect-cpu-instructions"]
-autodetect-cpu-instructions = [] # uses the CPU flags for AES, SSE2, SSE4.1, SSSE3, etc., if the appropriate CPU which builds the binary supports them
-force-cpu-instructions = [] # forces the use of the CPU flags for AES, SSE2, SSE4.1, SSSE3, etc., even if the CPU which builds the binary does not support them
+default = []
 serde = ["dep:serde", "dep:hex", "ordered-float/serde"]
 log = ["dep:log", "dep:hex"]
 
