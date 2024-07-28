@@ -73,7 +73,7 @@ pub fn buffer_to_hex<T, S>(buffer: &T, serializer: S) -> std::result::Result<S::
   where T: AsRef<[u8]>,
         S: serde::Serializer
 {
-  serializer.serialize_str(&hex::encode(&buffer))
+  serializer.serialize_str(&hex::encode(buffer))
 }
 
 #[cfg(feature = "serde")]
@@ -83,7 +83,7 @@ pub fn hex_to_buffer<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D:
 {
   use serde::de::Error;
   String::deserialize(deserializer)
-    .and_then(|string| Vec::from_hex(&string).map_err(|err| Error::custom(err.to_string())))
+    .and_then(|string| Vec::from_hex(string).map_err(|err| Error::custom(err.to_string())))
 }
 
 #[cfg(feature = "serde")]
@@ -93,7 +93,7 @@ where
     T: AsRef<[u8]>,
     S: serde::Serializer
 {
-    serializer.serialize_str(&base64engine.encode(&buffer))
+    serializer.serialize_str(&base64engine.encode(buffer))
 }
 
 #[cfg(feature = "serde")]
@@ -114,7 +114,7 @@ pub fn base64_to_buffer<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>,
   where D: serde::Deserializer<'de>
 {
     use serde::de::Error;
-    String::deserialize(deserializer).and_then(|string| base64engine.decode(&string).map_err(|err| Error::custom(err.to_string())))
+    String::deserialize(deserializer).and_then(|string| base64engine.decode(string).map_err(|err| Error::custom(err.to_string())))
 }
 
 
