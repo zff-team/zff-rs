@@ -32,6 +32,8 @@ use serde::{
 };
 #[cfg(feature = "serde")]
 use hex;
+#[cfg(feature = "serde")]
+use redb::ReadableTable;
 
 /// The Chunkmap stores the information where the each appropriate chunk could be found.
 #[derive(Debug,Clone,PartialEq,Eq)]
