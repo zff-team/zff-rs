@@ -386,10 +386,7 @@ fn get_xattr_metadata<P: AsRef<Path>>(xattrs: XAttrs, path: P) -> Result<HashMap
         if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) || ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL_DEFAULT) {
             continue;
         }
-        let value = match xattr::get(path.as_ref(), &ext_attr)? {
-            Some(value) => value,
-            None => Vec::new(),
-        };
+        let value = xattr::get(path.as_ref(), &ext_attr)?.unwrap_or_default();
         metadata_ext_map.insert(ext_attr, value.into());
     }
     Ok(metadata_ext_map)
