@@ -162,8 +162,8 @@ impl HashingThreadManager {
 	/// finalizes all hashing threads and returns a HashMap<HashType, Vec<u8>> with the appropriate hash values.
 	pub fn finalize_all(&mut self) -> HashMap<HashType, Vec<u8>> {
 		let mut result = HashMap::new();
-		for (hash_type, thread) in self.threads.drain() {
-			result.insert(hash_type, thread.finalize());
+		for (hash_type, thread) in &self.threads {
+			result.insert(hash_type.clone(), thread.finalize());
 		}
 		result
 	}
@@ -215,7 +215,7 @@ impl HashingThread {
 
 	/// returns the hash of the given data.
 	/// This function blocks until the hash is calculated.
-	pub fn finalize(self) -> Vec<u8> {
+	pub fn finalize(&self) -> Vec<u8> {
 		let wg = crossbeam::sync::WaitGroup::new();
 		self.trigger.send((wg.clone(), true)).unwrap();
 		wg.wait();
