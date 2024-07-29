@@ -263,18 +263,14 @@ impl FileEncoder {
 
 		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		let mut hash_values = Vec::new();
-	    for (hash_type, hash) in encoding_thread_pool_manager.finalize_all_hashing_threads() {
+		for (hash_type, hash) in encoding_thread_pool_manager.finalize_all_hashing_threads() {
 	        let mut hash_value = HashValue::new_empty(hash_type.clone());
 	        hash_value.set_hash(hash.to_vec());
-	        for (hash_type, hash) in encoding_thread_pool_manager.finalize_all_hashing_threads() {
-				let mut hash_value = HashValue::new_empty(hash_type.clone());
-				hash_value.set_hash(hash.to_vec());
-				if let Some(signing_key) = &self.signing_key {
-					let signature = Signature::sign(signing_key, &hash);
-					hash_value.set_ed25519_signature(signature);
-				}
-				hash_values.push(hash_value);
+			if let Some(signing_key) = &self.signing_key {
+				let signature = Signature::sign(signing_key, &hash);
+				hash_value.set_ed25519_signature(signature);
 			}
+	        hash_values.push(hash_value);
 	    }
 
 		#[cfg(feature = "log")]

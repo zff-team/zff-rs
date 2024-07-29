@@ -195,8 +195,7 @@ impl HashingThread {
 					drop(wg);
 					hasher.update(&r_data);
 				} else {
-					let hash = hasher.finalize();
-					hasher = Hash::new_hasher(&hash_type);
+					let hash = hasher.finalize_reset();
 					drop(wg);
 					hash_sender.send(hash.to_vec()).unwrap();
 				}
