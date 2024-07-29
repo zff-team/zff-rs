@@ -76,6 +76,12 @@ impl Signature {
 		signature.to_bytes()
 	}
 
+	/// verify the data with the given base64 encoded key (signing key or verifying keys are possible to use here).
+	pub fn verify_with_base64_key<K: Into<String>>(key: K, message: &[u8], signature: [u8; ED25519_DALEK_SIGNATURE_LEN]) -> Result<bool> {
+		let key = base64engine.decode(key.into())?;
+		Signature::verify(key, message, signature)
+	}
+
 	/// verify the data with the given key bytes (signing key or verifying keys are possible to use here).
 	pub fn verify<K>(key: K, message: &[u8], signature: [u8; ED25519_DALEK_SIGNATURE_LEN]) -> Result<bool> 
 	where
