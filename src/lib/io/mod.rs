@@ -780,7 +780,7 @@ fn create_iterator<C: AsRef<Path>>(
 fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: &mut Vec<(PathBuf, FileHeader)>) -> Result<HashMap<u64, u64>> {
 	let mut inner_hardlink_map = HashMap::new();
 	for (path, file_header) in files {
-		let metadata = metadata(&path)?;
+		let metadata = metadata(path)?;
 		if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
     		if let Some(fno) = inner_map.get(&metadata.ino()) {
 				if *fno != file_header.file_number {
