@@ -4,7 +4,7 @@ on: [ push, pull_request ]
 
 env:
   CARGO_TERM_COLOR: always
-  LLVM-MINGW-TOOLCHAIN-NAME: llvm-mingw-20220906-ucrt-ubuntu-18.04-x86_64
+  LLVM-MINGW-TOOLCHAIN-NAME: llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64
 
 jobs:
   build:
@@ -48,11 +48,11 @@ jobs:
     - name: Install LLVM MinGW toolchain (Windows aarch64)
       if: matrix.os == 'ubuntu-latest'
       run: |
-          curl -L -o ${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz
+          curl -L -o ${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz https://github.com/mstorsjo/llvm-mingw/releases/download/20240619/${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz
           tar -xf ${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz
-          echo "${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}/bin" >> $GITHUB_PATH
     
-    - name: Build
+    - name: Build ${{ matrix.target }}
       run: cargo clippy --verbose --all-features --target ${{ matrix.target }}
     
     - name: Run tests
