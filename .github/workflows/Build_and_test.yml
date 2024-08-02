@@ -1,0 +1,60 @@
+name: Build and test workflow
+
+on: [ push, pull_request ]
+
+env:
+  CARGO_TERM_COLOR: always
+  LLVM-MINGW-TOOLCHAIN-NAME: llvm-mingw-20220906-ucrt-ubuntu-18.04-x86_64
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-latest, macos-latest, ubuntu-latest] # ubuntu latest is only used for building the windows aarch64 binary
+        include:
+          - os: ubuntu-20.04
+            libacl: libacl1-dev
+            toolchain: stable
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            libacl: "" # no libacl on ubuntu-latest for windows aarch64
+            toolchain: nightly
+            target: aarch64-pc-windows-gnullvm
+          - os: windows-latest
+            libacl: ""
+            toolchain: nightly
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            libacl: ""
+            toolchain: stable
+            target: x86_64-apple-darwin
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.toolchain }}
+        target: ${{ matrix.target }}
+        components: clippy
+        default: true
+    
+    - name: Install acl-deps (Linux only)
+      if: matrix.os == 'ubuntu-20.04'
+      run: sudo apt-get install -y ${{ matrix.libacl }}
+    
+    - name: Install LLVM MinGW toolchain (Windows aarch64)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+          curl -L -o ${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz https://github.com/mstorsjo/llvm-mingw/releases/download/20220906/${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz
+          tar -xf ${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}.tar.xz
+          echo "${{ env.LLVM-MINGW-TOOLCHAIN-NAME }}/bin" >> $GITHUB_PATH
+    
+    - name: Build
+      run: cargo clippy --verbose --all-features --target ${{ matrix.target }}
+    
+    - name: Run tests
+      if: matrix.os != 'ubuntu-latest'
+      run: cargo test --verbose --all-features --target ${{ matrix.target }}
