@@ -5,12 +5,7 @@ use std::fmt;
 
 // - internal
 use crate::{
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER,
-	FOOTER_IDENTIFIER_SEGMENT_FOOTER
+	HeaderCoding, Result, ValueDecoder, ValueEncoder, DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER, FOOTER_IDENTIFIER_SEGMENT_FOOTER, INITIAL_CHUNK_NUMBER
 };
 
 // - external
@@ -58,7 +53,7 @@ impl SegmentFooter {
 			object_header_offsets: HashMap::new(),
 			object_footer_offsets: HashMap::new(),
 			chunk_map_table: BTreeMap::new(),
-			first_chunk_number: 0,
+			first_chunk_number: INITIAL_CHUNK_NUMBER,
 			footer_offset: 0,
 		}
 	}
