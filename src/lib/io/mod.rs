@@ -50,12 +50,30 @@ use xattr::XAttrs;
 #[cfg(feature = "log")]
 use log::{info, warn, debug};
 
+#[derive(Debug, Clone)]
 struct ZffExtenderParameter {
 	pub main_footer: MainFooter,
 	pub current_segment: PathBuf,
 	pub next_object_no: u64,
 	pub initial_chunk_number: u64,
 }
+
+impl ZffExtenderParameter {
+	fn with_data(
+		main_footer: MainFooter,
+		current_segment: PathBuf,
+		next_object_no: u64,
+		initial_chunk_number: u64,
+		) -> Self {
+		Self {
+			main_footer,
+			current_segment,
+			next_object_no,
+			initial_chunk_number,
+		}
+	}
+}
+
 
 /// This struct contains optional, additional parameter for the [ZffWriter](zffwriter::ZffWriter).
 #[derive(Default, Debug)]
@@ -256,6 +274,12 @@ impl<R: Read> ObjectEncoderInformation<R> {
             ObjectEncoder::Physical(obj) => obj.current_chunk_number(),
             ObjectEncoder::Logical(obj) => obj.current_chunk_number(),
         }
+    }
+
+    /// returns the total number of files which will be touched by the logical object encoder.
+    /// will return None, if the object encoder is a physical object encoder.
+    pub fn files_left(&self) -> Option<u64> {
+        self.object_encoder.files_left()
     }
 }
 

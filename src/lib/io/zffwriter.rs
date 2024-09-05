@@ -33,22 +33,6 @@ pub enum ZffWriterOutput {
 	ExtendContainer(Vec<PathBuf>),
 }
 
-impl ZffExtenderParameter {
-	fn with_data(
-		main_footer: MainFooter,
-		current_segment: PathBuf,
-		next_object_no: u64,
-		initial_chunk_number: u64,
-		) -> Self {
-		Self {
-			main_footer,
-			current_segment,
-			next_object_no,
-			initial_chunk_number,
-		}
-	}
-}
-
 /// The ZffWriter can be used to create a new zff container by the given files/values.
 pub struct ZffWriter<R: Read> {
 	object_encoder: Vec<ObjectEncoderInformation<R>>,
@@ -518,6 +502,7 @@ impl<R: Read> ZffWriter<R> {
 
 	    Ok(())
 	}
+
 }
 
 fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter> {
