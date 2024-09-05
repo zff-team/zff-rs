@@ -4,8 +4,17 @@ use std::borrow::Borrow;
 
 // - internal
 use crate::{
-	header::{ChunkHeader, EncryptedChunkHeader}, HeaderCoding, Result, EncryptionAlgorithm, Encryption, CompressionAlgorithm,
-};
+	header::{
+		ChunkHeader, 
+		EncryptedChunkHeader
+	}, 
+	CompressionAlgorithm, 
+	Encryption, 
+	EncryptionAlgorithm, 
+	HeaderCoding, 
+	Result, 
+	ZffError, 
+	ZffErrorKind};
 
 /// This struct represents a full [Chunk], including the appriopriate [crate::header::ChunkHeader] and the chunked data (encoded; compressed and/or encrypted, if set).
 pub struct Chunk {
@@ -41,17 +50,22 @@ impl Chunk {
 	}
 
 	/// Checks the integrity of the chunk data by calculating the appropriate crc32 hash.
-	/// Returns true if the crc32 hash is equal to the hash in the header, otherwise false.
-	pub fn check_integrity<C>(&self, object_compression_algorithm: C) -> Result<bool> 
+	///
+	/// Returns true if the crc32 hash is equal to the hash in the header, otherwise false. 
+	pub fn check_integrity<C>(&self, object_compression_algorithm: C, original_size: u64) -> Result<bool> 
 	where
 		C: Borrow<CompressionAlgorithm>,
 	{
 		// decompress inner data if neccessary.
 		let data = if self.header.flags.compression {
 			crate::compression::decompress_buffer(&self.data, object_compression_algorithm.borrow())?
+		} else if self.header.flags.same_bytes {
+			let same_byte = self.data.iter().next().ok_or_else(|| ZffError::new(ZffErrorKind::MalformedHeader, "No same byte found".to_string()))?;
+			vec![*same_byte; original_size as usize]
 		} else {
 			self.data.clone()
 		};
+
 		let mut hasher = crc32fast::Hasher::new();
 		hasher.update(&data);
 		let crc32 = hasher.finalize();
