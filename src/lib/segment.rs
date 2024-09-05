@@ -22,7 +22,9 @@ use crate::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 };
 
-/// Represents a full [Segment], containing a [crate::header::SegmentHeader],
+/// Represents a full [Segment]
+/// 
+/// The [Segment] struct contains a [crate::header::SegmentHeader],
 /// a [crate::footer::SegmentFooter], a [Read](std::io::Read)er to the appropriate
 /// segmented data and a position marker for this [Read](std::io::Read)er.
 #[derive(Debug)]

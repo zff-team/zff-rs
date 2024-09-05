@@ -30,8 +30,8 @@ use serde::{
 	Deserialize,
 };
 
-/// The description header contains all data,
-/// which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).\
+/// The description header contains all data, which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).
+/// 
 /// The description information are stored in a HashMap (e.g. like ["acquisition tool", "zffacquire"]).
 /// Some fields are predefined, to be able to ensure a certain degree of compatibility between different tools.
 /// The following fields are predefined:

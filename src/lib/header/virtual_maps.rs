@@ -195,6 +195,7 @@ impl VirtualMappingInformation {
 }
 
 /// The [VirtualObjectMap] contains the appropriate offset map to find the counterpart [VirtualMappingInformation].
+/// 
 /// As the name of this struct already suggests, this structure can be layered multiple times.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]

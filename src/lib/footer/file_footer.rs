@@ -30,6 +30,7 @@ use serde::Serialize;
 
 
 /// The file footer is written at the end of each acquired file.
+/// 
 /// The file footer contains several metadata about the acquisition process itself: e.g. the acquisition start/end time of the appropriate file,
 /// hash values, or size information.
 /// The general structure of the file footer is the same for all file types.

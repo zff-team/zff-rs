@@ -177,7 +177,9 @@ pub fn calculate_crc32(buffer: &[u8]) -> u32 {
     crc32_hasher.finalize()
 }
 
-/// This function takes the buffered bytes and tries to compress them. If the compression rate is greater than the threshold value of the given
+/// This function takes the buffered bytes and tries to compress them. 
+/// 
+/// If the compression rate is greater than the threshold value of the given
 /// [CompressionHeader], the function returns a tuple of compressed bytes and the flag, if the bytes was compressed or not.
 pub fn compress_buffer(buf: Vec<u8>, chunk_size: usize, compression_header: &CompressionHeader) -> Result<(Vec<u8>, bool)> {
     let mut compression_flag = false;

@@ -34,7 +34,8 @@ use serde::{
 	Serialize,
 };
 
-/// The pbe header contains all informations for the encryption of the encryption key.\
+/// The pbe header contains all informations for the encryption of the encryption key.
+/// 
 /// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
 /// encrypted with an user password.\
 /// This encryption of the encryption key is done via a password-based encryption (PBE).\

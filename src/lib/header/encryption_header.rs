@@ -102,7 +102,8 @@ impl EncryptionInformation {
 	}
 }
 
-/// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.\
+/// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.
+/// 
 /// The encryption header is the only optional header part of the main header
 /// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
 /// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password based encryption method,

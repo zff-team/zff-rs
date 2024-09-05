@@ -61,7 +61,9 @@ impl ZffStreamerInProgressData {
 }
 
 /// ZffStreamer is a struct that is used to create a new zff container while using the appropriate Read implementation of this struct.
-/// ZffStreamer only supports to create a new zff container in a single segment. For creating a multi-segment zff container, or extending an existing one, use the ZffWriter struct.
+/// 
+/// ZffStreamer only supports to create a new zff container in a single segment.
+/// For creating a multi-segment zff container, or extending an existing one, use the ZffWriter struct.
 pub struct ZffStreamer<R: Read> {
     object_encoder: Vec<ObjectEncoderInformation<R>>,
 	current_object_encoder: ObjectEncoderInformation<R>, //the current object encoder

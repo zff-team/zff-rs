@@ -18,6 +18,7 @@ use serde::{
 
 
 /// The SegmentFooter is a footer which is be written at the end of each segment.
+/// 
 /// The footer contains a table on the chunks, present in the appropriate segment.
 /// The offset table is internally managed as a ```HashMap<u64, u64>```.
 #[derive(Debug,Clone, PartialEq, Eq)]

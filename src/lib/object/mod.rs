@@ -41,8 +41,13 @@ pub(crate) enum CompressedData {
 	Err(ZffError),
 }
 
-/// creates a EncodingThreadPoolManager which contains a HashingThreadManager and a CompressionThread and a Crc32Thread.
 /// The EncodingThreadPoolManager is used to manage the threads and to ensure that the threads will use the given data in zero-copy way.
+/// 
+/// The EncodingThreadPoolManager contains the following threads:
+/// - HashingThreadManager: The HashingThreadManager is used to manage the hashing threads.
+/// - CompressionThread: The CompressionThread is used to compress the data.
+/// - Crc32Thread: The Crc32Thread is used to calculate the crc32 of the data.
+/// - SameBytesThread: The SameBytesThread is used to check if the data are same bytes or not.
 #[derive(Debug)]
 pub struct EncodingThreadPoolManager {
     /// the hashing threads.

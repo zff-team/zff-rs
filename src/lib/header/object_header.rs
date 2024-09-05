@@ -362,7 +362,8 @@ impl fmt::Display for ObjectType {
 	}
 }
 
-
+/// The [EncryptedObjectHeader] represents (as the name suggests) an encrypted object header.
+///
 /// An [EncryptedObjectHeader] contains the appropriate object number, the [ObjectFlags], 
 /// the [crate::header::EncryptionHeader] and 
 /// the encrypted blob containing the other header values (in encrypted form).
