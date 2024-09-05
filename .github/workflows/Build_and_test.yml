@@ -1,10 +1,6 @@
 name: Build and test workflow
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
+on: [ push, pull_request ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,26 +9,35 @@ env:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-latest, ubuntu-latest] # ubuntu latest is only used for building the windows aarch64 binary
+        os:
+          - ubuntu-20.04
+          - ubuntu-latest # only used for building the windows aarch64 binary
+          - windows-latest
+          - macos-latest
         include:
           - os: ubuntu-20.04
             libacl: libacl1-dev
             toolchain: stable
             target: x86_64-unknown-linux-gnu
+            name: Linux (Ubuntu 20.04)
           - os: ubuntu-latest
             libacl: "" # no libacl on ubuntu-latest for windows aarch64
             toolchain: nightly
             target: aarch64-pc-windows-gnullvm
+            name: Windows aarch64 (cross-compiled on Ubuntu 24.04)
           - os: windows-latest
             libacl: ""
             toolchain: nightly
             target: x86_64-pc-windows-msvc
+            name: Windows x86_64 (MSVC)
           - os: macos-latest
             libacl: ""
             toolchain: stable
-            target: x86_64-apple-darwin
+            target: aarch64-apple-darwin
+            name: macOS (arm64)
     
     steps:
     - uses: actions/checkout@v2
