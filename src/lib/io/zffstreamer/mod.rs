@@ -23,6 +23,7 @@ enum ReadState {
     ObjectHeader,
     Chunking,
     ChunkMap,
+    LastChunkMapOfObject,
     ObjectFooter,
     SegmentFooter,
     MainFooter,
@@ -118,6 +119,37 @@ impl<R: Read> ZffStreamer<R> {
         })
     }
 
+    /// Returns the current chunk number.
+    pub fn current_chunk_number(&self) -> u64 {
+        self.current_object_encoder.current_chunk_number()
+    }
+
+    /// Returns the number of left files of the inner logical object (if the given object number refers to a logical object).
+    pub fn files_left(&self, object_number: u64) -> Option<u64> {
+        if self.current_object_encoder.obj_number() == object_number {
+            return self.current_object_encoder.files_left();
+        }
+        for obj_encoder in &self.object_encoder {
+            if obj_encoder.obj_number() == object_number {
+                return obj_encoder.files_left();
+            }
+        }
+        None
+    }
+
+    /// Returns the number of left files of the current object encoder.
+    pub fn files_left_current(&self) -> Option<u64> {
+        self.current_object_encoder.files_left()
+    }
+
+    /// Returns the number of left files of all inner logical objects.
+    pub fn files_left_total(&self) -> u64 {
+        let mut total_files = self.current_object_encoder.files_left().unwrap_or(0);
+        for obj_encoder in &self.object_encoder {
+            total_files += obj_encoder.files_left().unwrap_or(0);
+        }
+        total_files
+    }
 
 }
 
@@ -127,7 +159,6 @@ impl<R: Read> Read for ZffStreamer<R> {
 
         // may improve performance in different cases.
         let buf_len = buf.len();
-
         loop {
             match self.read_state {
                 ReadState::SegmentHeader => {
@@ -137,12 +168,11 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &self.in_progress_data.encoded_segment_header, 
                         &mut self.in_progress_data.encoded_segment_header_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
-                    if read_bytes >= buf_len {
+                    if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
-                    bytes_written_to_buffer += read_bytes;
                     
                     // switch to the next state
                     self.read_state = ReadState::ObjectHeader;
@@ -158,12 +188,14 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &self.in_progress_data.current_encoded_object_header, 
                         &mut self.in_progress_data.current_encoded_object_header_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
-                    if read_bytes >= buf_len {
+                    if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
-                    bytes_written_to_buffer += read_bytes;
+
+                    // switch to the next state
+                    self.read_state = ReadState::ChunkMap;
                 },
                 ReadState::ChunkMap => {
                     // reads the chunkmap if not already read
@@ -171,28 +203,52 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &self.in_progress_data.current_encoded_chunkmap, 
                         &mut self.in_progress_data.current_encoded_chunkmap_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
-                    if read_bytes >= buf_len {
+                    if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
-                    bytes_written_to_buffer += read_bytes;
 
                     // switch to the next state
                     self.read_state = ReadState::Chunking;
                 },
+
+                ReadState::LastChunkMapOfObject => {
+                    // reads the chunkmap if not already read
+                    let read_bytes = fill_buffer(
+                        &self.in_progress_data.current_encoded_chunkmap, 
+                        &mut self.in_progress_data.current_encoded_chunkmap_read_bytes, 
+                        buf, 
+                        &mut bytes_written_to_buffer)?;
+                    self.in_progress_data.bytes_read += read_bytes as u64;
+                    if bytes_written_to_buffer >= buf_len {
+                        return Ok(bytes_written_to_buffer);
+                    };
+                    // switch to the next state
+                    // this will only fail in case of encryption errrors - which should be happend before
+                    let object_footer = match self.current_object_encoder.get_encoded_footer() {
+                        Ok(obj_footer) => obj_footer,
+                        Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
+                    };
+                    self.in_progress_data.segment_footer.add_object_footer_offset(
+                        self.current_object_encoder.obj_number(), 
+                        self.in_progress_data.bytes_read);
+                    self.in_progress_data.current_encoded_object_footer = object_footer;
+                    self.in_progress_data.current_encoded_object_footer_read_bytes = ReadBytes::NotRead;
+                    self.read_state = ReadState::ObjectFooter;
+                },
+
                 ReadState::Chunking => {
                     // reads the chunking data
                     let read_bytes = fill_buffer(
                         &self.in_progress_data.current_encoded_chunked_data, 
                         &mut self.in_progress_data.current_encoded_chunked_data_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
-                    if read_bytes >= buf_len {
+                    if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
-                    bytes_written_to_buffer += read_bytes;
 
                     // check if the chunkmap is full - this lines are necessary to ensure
                     // the correct file footer offset is set while e.g. reading a bunch of empty files.
@@ -218,15 +274,16 @@ impl<R: Read> Read for ZffStreamer<R> {
                             Ok(data) => data,
                             Err(e) => match e.get_kind() {
                                 ZffErrorKind::ReadEOF => {
-                                    // this will only fail in case of encryption errrors - which should be happend before
-                                    let object_footer = match self.current_object_encoder.get_encoded_footer() {
-                                        Ok(obj_footer) => obj_footer,
-                                        Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
-                                    };
-                                    self.in_progress_data.segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), self.in_progress_data.bytes_read);
-                                    self.in_progress_data.current_encoded_object_footer = object_footer;
-                                    self.in_progress_data.current_encoded_object_footer_read_bytes = ReadBytes::NotRead;
-                                    self.read_state = ReadState::ObjectFooter;
+                                    // write the chunkmap even there is some space left in map to ensure
+                                    // that this map will be written if there is no next object.
+                                    if let Some(chunk_no) = self.in_progress_data.chunkmap.chunkmap().keys().max() {
+                                        self.in_progress_data.main_footer.chunk_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
+                                        self.in_progress_data.segment_footer.chunk_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                                    }
+                                    self.in_progress_data.current_encoded_chunkmap = self.in_progress_data.chunkmap.encode_directly();
+                                    self.in_progress_data.current_encoded_chunkmap_read_bytes = ReadBytes::NotRead;
+                                    self.in_progress_data.chunkmap.flush();
+                                    self.read_state = ReadState::LastChunkMapOfObject;
                                     continue;
                                 },
                                 _ => {
@@ -257,12 +314,11 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &self.in_progress_data.current_encoded_object_footer, 
                         &mut self.in_progress_data.current_encoded_object_footer_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
-                    if read_bytes >= buf_len {
+                    if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
-                    bytes_written_to_buffer += read_bytes;
 
                     // switch to the next state
                     self.in_progress_data.main_footer.object_header.insert(self.current_object_encoder.obj_number(), INITIAL_SEGMENT_NUMBER);
@@ -293,12 +349,11 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &self.in_progress_data.current_encoded_segment_footer, 
                         &mut self.in_progress_data.current_encoded_segment_footer_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
-                    if read_bytes >= buf_len {
+                    if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
-                    bytes_written_to_buffer += read_bytes;
 
                     // switch to the next state
                     self.in_progress_data.main_footer.set_footer_offset(self.in_progress_data.bytes_read);
@@ -314,7 +369,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &self.in_progress_data.encoded_main_footer, 
                         &mut self.in_progress_data.encoded_main_footer_read_bytes, 
                         buf, 
-                        bytes_written_to_buffer)?;
+                        &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
                     return Ok(bytes_written_to_buffer);
                 }
@@ -338,14 +393,15 @@ fn build_in_progress_data(params: &ZffCreationParameters) -> ZffStreamerInProgre
     in_progress_data
 }
 
-fn fill_buffer(in_progress_data: &[u8], in_progress_data_read_bytes: &mut ReadBytes, buf: &mut [u8], bytes_written_to_buffer: usize) -> std::io::Result<usize> {
+fn fill_buffer(in_progress_data: &[u8], in_progress_data_read_bytes: &mut ReadBytes, buf: &mut [u8], bytes_written_to_buffer: &mut usize) -> std::io::Result<usize> {
     let mut bytes_read = 0;
     match in_progress_data_read_bytes {
         ReadBytes::NotRead => {
             let data_length = in_progress_data.len();
-            let bytes_to_read = (buf.len()-bytes_written_to_buffer).min(data_length);
-            buf[bytes_written_to_buffer..bytes_to_read].copy_from_slice(&in_progress_data[..bytes_to_read]);
+            let bytes_to_read = (buf.len()-*bytes_written_to_buffer).min(data_length);
+            buf[*bytes_written_to_buffer..bytes_to_read+*bytes_written_to_buffer].copy_from_slice(&in_progress_data[..bytes_to_read]);
             bytes_read = bytes_to_read;
+            *bytes_written_to_buffer += bytes_to_read;
             *in_progress_data_read_bytes = if bytes_to_read == data_length {
                 ReadBytes::Finished
             } else {
@@ -354,9 +410,10 @@ fn fill_buffer(in_progress_data: &[u8], in_progress_data_read_bytes: &mut ReadBy
         }
         ReadBytes::Read(read) => {
             let data_length = in_progress_data.len();
-            let bytes_to_read = (buf.len()-bytes_written_to_buffer).min(data_length - *read as usize);
-            buf[bytes_written_to_buffer..bytes_to_read].copy_from_slice(&in_progress_data[*read as usize..*read as usize + bytes_to_read]);
+            let bytes_to_read = (buf.len()-*bytes_written_to_buffer).min(data_length - *read as usize);
+            buf[*bytes_written_to_buffer..bytes_to_read+*bytes_written_to_buffer].copy_from_slice(&in_progress_data[*read as usize..*read as usize + bytes_to_read]);
             bytes_read = bytes_to_read;
+            *bytes_written_to_buffer += bytes_to_read;
             *in_progress_data_read_bytes = if *read + bytes_to_read as u64 == data_length as u64 {
                 ReadBytes::Finished
             } else {

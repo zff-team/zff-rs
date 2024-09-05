@@ -118,6 +118,15 @@ impl<R: Read> ObjectEncoder<R> {
 			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),
 		}
 	}
+
+	/// Returns the total number of files left in the object encoder.
+	/// Will return None if the object encoder is not a logical object encoder.
+	pub fn files_left(&self) -> Option<u64> {
+		match self {
+			ObjectEncoder::Physical(_) => None,
+			ObjectEncoder::Logical(obj) => Some(obj.files.len() as u64),
+		}
+	}
 }
 
 /// The [PhysicalObjectEncoder] can be used to encode a physical object.
