@@ -12,6 +12,7 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::FileTypeExt;
 
+use crate::PreparedChunk;
 #[cfg(target_family = "unix")]
 use crate::SpecialFileEncodingInformation;
 // - internal
@@ -48,6 +49,12 @@ use super::chunking;
 // - external
 use ed25519_dalek::SigningKey;
 use time::OffsetDateTime;
+
+pub enum PreparedData {
+	PreparedChunk(PreparedChunk),
+	PreparedFileHeader(Vec<u8>),
+	PreparedFileFooter(Vec<u8>),
+}
 
 /// An encoder for each object. This is a wrapper Enum for [PhysicalObjectEncoder] and [LogicalObjectEncoder].
 pub enum ObjectEncoder<R: Read> {
@@ -112,7 +119,7 @@ impl<R: Read> ObjectEncoder<R> {
 		current_offset: u64, 
 		current_segment_no: u64, 
 		deduplication_map: Option<&mut DeduplicationChunkMap>
-		) -> Result<Vec<u8>> {
+		) -> Result<PreparedData> {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.get_next_chunk(deduplication_map),
 			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),
@@ -217,7 +224,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	pub fn get_next_chunk(
 		&mut self,
 		deduplication_map: Option<&mut DeduplicationChunkMap>,
-		) -> Result<Vec<u8>> {
+		) -> Result<PreparedData> {
 			
 		// checks and adds a deduplication thread to the internal thread manager (check is included in the add_deduplication_thread method)
 		if deduplication_map.is_some() {
@@ -252,10 +259,11 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			deduplication_map,
 			encryption_key,
 			encryption_algorithm,
+			false, // there is no empty file flag for a physical object
 		)?;
 	    
 		self.current_chunk_number += 1;
-	    Ok(chunk)
+	    Ok(PreparedData::PreparedChunk(chunk))
 	}
 
 	/// Generates a appropriate footer. Attention: A call of this method ...
@@ -512,7 +520,7 @@ impl LogicalObjectEncoder {
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64,
-		deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<Vec<u8>> {
+		deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<PreparedData> {
 		match self.current_file_encoder {
 			Some(ref mut file_encoder) => {
 				// return file header
@@ -523,28 +531,17 @@ impl LogicalObjectEncoder {
 					}
 					self.object_footer.add_file_header_segment_number(self.current_file_number, current_segment_no);
 					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
-					return Ok(file_encoder.get_encoded_header());
+					return Ok(PreparedData::PreparedFileHeader(file_encoder.get_encoded_header()));
 				}
 				
-				let mut data = Vec::new();
 				// return next chunk
 				if !self.empty_file_eof {
 					match file_encoder.get_next_chunk(deduplication_map) {
 						Ok(data) => {
 							self.current_chunk_number += 1;
-							return Ok(data);
+							return Ok(PreparedData::PreparedChunk(data));
 						},
 						Err(e) => match e.get_kind() {
-							ZffErrorKind::EmptyFile(empty_file_data) => {
-								// increment the current chunk number as we write a empty chunk as placeholder
-								self.current_chunk_number += 1;
-								// append "empty" placeholder chunk (header) to the bytes which will be returned
-								data.append(&mut empty_file_data.clone());
-								// re-calculate the "current_offset" (append the bytes from the placeholder chunk)
-								//current_offset += data.len() as u64;
-								self.empty_file_eof = true;
-								return Ok(data);
-							},
 							ZffErrorKind::ReadEOF => (),
 							ZffErrorKind::NotAvailableForFileType => (),
 							_ => return Err(e)
@@ -556,7 +553,7 @@ impl LogicalObjectEncoder {
 	
 
 				//return file footer, set next file_encoder
-				data.append(&mut file_encoder.get_encoded_footer()?);
+				let prepared_file_footer = PreparedData::PreparedFileFooter(file_encoder.get_encoded_footer()?);
 
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
@@ -568,7 +565,7 @@ impl LogicalObjectEncoder {
 						// The appropriate file footer will be returned.
 						self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
 						self.current_file_encoder = None;
-						return Ok(data);
+						return Ok(prepared_file_footer);
 					}
 				};
 
@@ -635,7 +632,7 @@ impl LogicalObjectEncoder {
 					encryption_information, 
 					self.current_chunk_number, 
 					filetype_encoding_information)?);
-				Ok(data)
+				Ok(prepared_file_footer)
 			},
 			None => {
 				self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);

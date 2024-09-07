@@ -22,6 +22,7 @@ use std::fs::metadata;
 #[cfg(target_family = "windows")]
 use std::os::windows::fs::MetadataExt;
 
+use crate::PreparedData;
 // - internal
 use crate::{
     Result,
@@ -263,7 +264,7 @@ impl<R: Read> ObjectEncoderInformation<R> {
         &mut self, 
         current_offset: u64, 
         current_segment_no: u64,
-        deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<Vec<u8>> {
+        deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<PreparedData> {
         match self.object_encoder {
             ObjectEncoder::Physical(ref mut obj) => obj.get_next_chunk(deduplication_map),
             ObjectEncoder::Logical(ref mut obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),

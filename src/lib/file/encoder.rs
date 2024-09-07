@@ -7,9 +7,10 @@ use std::cell::RefCell;
 use std::time::SystemTime;
 
 use crate::io::BufferedChunk;
+use crate::PreparedChunk;
 // - internal
 use crate::{
-	header::{FileHeader, HashHeader, ChunkHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
+	header::{FileHeader, HashHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
 	footer::FileFooter,
 };
 use crate::{
@@ -132,9 +133,10 @@ impl FileEncoder {
 	pub fn get_next_chunk(
 		&mut self, 
 		deduplication_map: Option<&mut DeduplicationChunkMap>,
-		) -> Result<Vec<u8>> {
+		) -> Result<PreparedChunk> {
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
+		let mut empty_file_flag = false;
 
 		let buffered_chunk = match &self.filetype_encoding_information {
 			FileTypeEncodingInformation::Directory(directory_children) => {
@@ -209,27 +211,8 @@ impl FileEncoder {
 			//this case is the normal "file reader reached EOF".
 			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 		} else if buffered_chunk.buffer.is_empty() && self.read_bytes_underlying_data == 0 {
-			let mut chunk_header = ChunkHeader::new_empty(self.current_chunk_number);
-			chunk_header.flags.error = buffered_chunk.error_flag;
-			//this case ensures, that empty files will already get a chunk
-			chunk_header.flags.empty_file = true;
-			chunk_header.chunk_size = 0;
-			chunk_header.crc32 = 0;
-			let mut chunk = Vec::new();
-
-			let mut encoded_header = if let Some(enc_header) = &self.object_header.encryption_header {
-				let key = match enc_header.get_encryption_key_ref() {
-					Some(key) => key,
-					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.current_chunk_number.to_string()))
-				};
-				chunk_header.encrypt_and_consume(key, &enc_header.algorithm)?.encode_directly()
-			} else {
-				chunk_header.encode_directly()
-			};
-
-			chunk.append(&mut encoded_header);
-			self.current_chunk_number += 1;
-	   	 	return Err(ZffError::new(ZffErrorKind::EmptyFile(chunk), (self.current_chunk_number-1).to_string()))
+			//this case is the "file is empty".
+			empty_file_flag = true;
 		};
 
 		// Needed for the same byte check
@@ -250,6 +233,7 @@ impl FileEncoder {
 			deduplication_map,
 			encryption_key,
 			encryption_algorithm,
+			empty_file_flag
 		)?;
 
 		self.current_chunk_number += 1;

@@ -23,8 +23,14 @@ pub const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7A666648;
 pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
 /// The identifier of the [FileHeader](crate::header::FileHeader).
 pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
-/// The identifier of the [ChunkMap](crate::header::ChunkMap).
-pub const HEADER_IDENTIFIER_CHUNK_MAP: u32 = 0x7A666678;
+/// The identifier of the [ChunkOffsetMap](crate::header::ChunkOffsetMap).
+pub const HEADER_IDENTIFIER_CHUNK_OFFSET_MAP: u32 = 0x7A666678;
+/// The identifier of the [ChunkSizeMap](crate::header::ChunkSizeMap).
+pub const HEADER_IDENTIFIER_CHUNK_SIZE_MAP: u32 = 0x7A666679;
+/// The identifier of the [ChunkFlagMap](crate::header::ChunkFlagMap).
+pub const HEADER_IDENTIFIER_CHUNK_FLAG_MAP: u32 = 0x7A66667A;
+/// The identifier of the [ChunkFlagMap](crate::header::ChunkFlagMap).
+pub const HEADER_IDENTIFIER_CHUNK_CRC_MAP: u32 = 0x7a666669;
 /// The identifier of the [VirtualMappingInformation](crate::header::VirtualMappingInformation).
 pub const HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION: u32 = 0x7a666676;
 /// The identifier of the [VirtualLayer](crate::header::VirtualObjectMap).
@@ -150,13 +156,18 @@ pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 3;
 pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 2;
 /// current header version for the [ObjectHeader](crate::header::ObjectHeader).
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 2;
-/// current header version for the [ChunkMap](crate::header::ChunkMap) structure.
-pub const DEFAULT_HEADER_VERSION_CHUNK_MAP: u8 = 1;
+/// current header version for the [ChunkOffsetMap](crate::header::ChunkOffsetMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_OFFSET_MAP: u8 = 1;
+/// current header version for the [ChunkSizeMap](crate::header::ChunkSizeMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_SIZE_MAP: u8 = 1;
+/// current header version for the [ChunkFlagMap](crate::header::ChunkFlagMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_FLAG_MAP: u8 = 1;
+/// current header version for the [ChunkCRCMap](crate::header::ChunkCRCMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_CRC_MAP: u8 = 1;
 /// current header version for the [VirtualMappingInformation](crate::header::VirtualMappingInformation) structure.
 pub const DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION: u8 = 1;
 /// current header version for the [VirtualLayer](crate::header::VirtualObjectMap) structure.
 pub const DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP: u8 = 1;
-
 /// current footer version for the [ObjectFooterPhysical](crate::footer::ObjectFooterPhysical).
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 2;
 /// current footer version for the [ObjectFooterLogical](crate::footer::ObjectFooterLogical).
@@ -210,6 +221,12 @@ pub const METADATA_BTIME: &str = "btime";
 pub const CHUNK_MAP_TABLE: TableDefinition<&[u8; 32], u64> = TableDefinition::new("map");
 /// Table name for the redb preloaded chunkmap
 pub const PRELOADED_CHUNK_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_map");
+/// Table name for the redb preloaded chunk header
+pub const PRELOADED_CHUNK_HEADER_TABLE: TableDefinition<u64, Vec<u8>> = TableDefinition::new("preloaded_chunk_header");
+/// Table name for the redb preloaded same byte data
+pub const PRELOADED_CHUNK_SAME_BYTES_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
+/// Table name for the redb preloaded chunk duplication map
+pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_dedup_map");
 
 // - Encryption parameters
 pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes

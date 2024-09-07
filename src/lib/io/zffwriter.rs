@@ -5,15 +5,14 @@ use std::fs::{OpenOptions, remove_file, metadata};
 
 // - internal
 use crate::{
+	Result,
+	header::{SegmentHeader, ChunkOffsetMap, ChunkSizeMap, ChunkFlagMap, ChunkCRCMap},
+	footer::{SegmentFooter, MainFooter},
+	ValueDecoder,
+	Segment,
 	HeaderCoding,
 	file_extension_next_value,
 	file_extension_previous_value
-};
-use crate::{
-	header::{SegmentHeader, ChunkMap, ChunkHeader},
-	footer::SegmentFooter,
-	ValueDecoder,
-	Segment,
 };
 
 use crate::constants::*;
@@ -91,7 +90,7 @@ impl<R: Read> ZffWriter<R> {
 				
 				let segment = Segment::new_from_reader(&raw_segment)?;
 				let current_segment_no = segment.header().segment_number;
-				let initial_chunk_number = match segment.footer().chunk_map_table.keys().max() {
+				let initial_chunk_number = match segment.footer().chunk_offset_map_table.keys().max() {
 					Some(x) => *x + 1,
 					None => return Err(ZffError::new(ZffErrorKind::NoChunksLeft, ""))
 				};
@@ -208,7 +207,10 @@ impl<R: Read> ZffWriter<R> {
 		&mut self,
 		output: &mut O,
 		seek_value: u64, // The seek value is a value of bytes you need to skip (e.g. in case of an extension).
-		main_footer_chunk_map: &mut BTreeMap<u64, u64>,
+		main_footer_chunk_offset_map: &mut BTreeMap<u64, u64>,
+		main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
+		main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
+		main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
 		extend: bool
 		) -> Result<u64> {
 
@@ -275,8 +277,17 @@ impl<R: Read> ZffWriter<R> {
 		};
 
 
-		let mut chunkmap = ChunkMap::new_empty();
-		chunkmap.set_target_size(chunkmap_size as usize);
+		let mut chunk_offset_map = ChunkOffsetMap::new_empty();
+		chunk_offset_map.set_target_size(chunkmap_size as usize);
+
+		let mut chunk_size_map = ChunkSizeMap::new_empty();
+		chunk_offset_map.set_target_size(chunkmap_size as usize);
+
+		let mut chunk_flags_map = ChunkFlagMap::new_empty();
+		chunk_offset_map.set_target_size(chunkmap_size as usize);
+
+		let mut chunk_crc_map = ChunkCRCMap::new_empty();
+		chunk_offset_map.set_target_size(chunkmap_size as usize);
 
 		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 
@@ -285,38 +296,86 @@ impl<R: Read> ZffWriter<R> {
 			if (written_bytes +
 				segment_footer_len +
 				target_chunk_size as u64 +
-				chunkmap.current_size() as u64) > target_segment_size-seek_value {
+				chunk_offset_map.current_size() as u64) +
+				chunk_size_map.current_size() as u64 +
+				chunk_flags_map.current_size() as u64 +
+				chunk_crc_map.current_size() as u64
+				> target_segment_size-seek_value {
 				
 				if written_bytes == segment_header.encode_directly().len() as u64 {
 					return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
 				} else {
-					//finish segment chunkmap
-					if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
-						main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-						segment_footer.chunk_map_table.insert(*chunk_no, written_bytes + seek_value);
-						written_bytes += output.write(&chunkmap.encode_directly())? as u64;
-						chunkmap.flush();
-					}
+					//finish segment chunkmaps (chunk offset map, chunk size map, chunk flag map, chunk crc map)
+					
+					// flush the chunkmaps
+					written_bytes += flush_chunkmaps(
+						&mut chunk_offset_map,
+						&mut chunk_size_map,
+						&mut chunk_flags_map,
+						&mut chunk_crc_map,
+						main_footer_chunk_offset_map,
+						main_footer_chunk_size_map,
+						main_footer_chunk_flags_map,
+						main_footer_chunk_crc_map,
+						&mut segment_footer,
+						self.current_segment_no,
+						seek_value,
+						output)?;
+				
 					break;
 				}
 			};
 			let current_chunk_number = self.current_object_encoder.current_chunk_number();
 
-			// check if the chunkmap is full - this lines are necessary to ensure
+			// check if the chunkmaps are full - this lines are necessary to ensure
 			// the correct file footer offset is set while e.g. reading a bunch of empty files.
-			if chunkmap.is_full() {
-				if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
-					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
-					segment_footer_len += 16; //append 16 bytes to segment footer len
-				}
-				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
-				chunkmap.flush();
-   			};
+			if let Ok(flush_written_bytes) = flush_chunk_offset_map_checked(
+				&mut chunk_offset_map,
+				main_footer_chunk_offset_map,
+				&mut segment_footer,
+				self.current_segment_no,
+				seek_value + written_bytes,
+				output) {
+				written_bytes += flush_written_bytes;
+				segment_footer_len += 16; //append 16 bytes to segment footer len
+			}
+
+			if let Ok(flush_written_bytes) = flush_chunk_size_map_checked(
+				&mut chunk_size_map,
+				main_footer_chunk_size_map,
+				&mut segment_footer,
+				self.current_segment_no,
+				seek_value + written_bytes,
+				output) {
+				written_bytes += flush_written_bytes;
+				segment_footer_len += 16; //append 16 bytes to segment footer len
+			}
+
+			if let Ok(flush_written_bytes) = flush_chunk_flags_map_checked(
+				&mut chunk_flags_map,
+				main_footer_chunk_flags_map,
+				&mut segment_footer,
+				self.current_segment_no,
+				seek_value + written_bytes,
+				output) {
+				written_bytes += flush_written_bytes;
+				segment_footer_len += 16; //append 16 bytes to segment footer len
+			}
+
+			if let Ok(flush_written_bytes) = flush_chunk_crc_map_checked(
+				&mut chunk_crc_map,
+				main_footer_chunk_crc_map,
+				&mut segment_footer,
+				self.current_segment_no,
+				seek_value + written_bytes,
+				output) {
+				written_bytes += flush_written_bytes;
+				segment_footer_len += 16; //append 16 bytes to segment footer len
+			}
 
    			let current_offset = seek_value + written_bytes;
 
-			let data = match self.current_object_encoder.get_next_data(
+			let prepared_data = match self.current_object_encoder.get_next_data(
 				current_offset, 
 				self.current_segment_no,
 				self.optional_parameter.deduplication_chunkmap.as_mut()) {
@@ -326,14 +385,21 @@ impl<R: Read> ZffWriter<R> {
 						if written_bytes == segment_header.encode_directly().len() as u64 {
 							return Err(e);
 						} else {
-							// flush the chunkmap 
-							if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
-								main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-								segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
-								segment_footer_len += 16; //append 16 bytes to segment footer len
-								written_bytes += output.write(&chunkmap.encode_directly())? as u64;
-								chunkmap.flush();
-							}
+							// flush the chunkmaps 
+							written_bytes += flush_chunkmaps(
+								&mut chunk_offset_map,
+								&mut chunk_size_map,
+								&mut chunk_flags_map,
+								&mut chunk_crc_map,
+								main_footer_chunk_offset_map,
+								main_footer_chunk_size_map,
+								main_footer_chunk_flags_map,
+								main_footer_chunk_crc_map,
+								&mut segment_footer,
+								self.current_segment_no,
+								seek_value,
+								output)?;
+							segment_footer_len += 64; //append 64 bytes to segment footer len
 							//write the appropriate object footer
 							self.object_footer_segment_numbers.insert(self.current_object_encoder.obj_number(), self.current_segment_no);
 							segment_footer.add_object_footer_offset(self.current_object_encoder.obj_number(), seek_value + written_bytes);
@@ -357,19 +423,67 @@ impl<R: Read> ZffWriter<R> {
 				},
 			};
 
-			if ChunkHeader::check_identifier(&mut data.as_slice()) && // <-- checks if this is a chunk (and not e.g. a file footer or file header)
-			!chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes) {
-				if let Some(chunk_no) = chunkmap.chunkmap().keys().max() {
-					main_footer_chunk_map.insert(*chunk_no, self.current_segment_no);
-					segment_footer.chunk_map_table.insert(*chunk_no, seek_value + written_bytes);
-					segment_footer_len += 16; //append 16 bytes to segment footer len
-				}
-				written_bytes += output.write(&chunkmap.encode_directly())? as u64;
+			//checks if this is a chunk (and not e.g. a file footer or file header)
+			match prepared_data {
+				PreparedData::PreparedChunk(prepared_chunk) => {
+					// adds entry to the chunk offset map
+					if !chunk_offset_map.add_chunk_entry(current_chunk_number, seek_value + written_bytes) {
+						//flush the chunk offset map
+						written_bytes += flush_chunk_offset_map(
+							&mut chunk_offset_map, 
+							main_footer_chunk_offset_map, 
+							&mut segment_footer, 
+							self.current_segment_no, 
+							seek_value + written_bytes, 
+							output)?;
+						chunk_offset_map.add_chunk_entry(current_chunk_number, seek_value + written_bytes);
+					};
 
-				chunkmap.flush();
-				chunkmap.add_chunk_entry(current_chunk_number, seek_value + written_bytes);
-   			};
-   			written_bytes += output.write(&data)? as u64;
+					// adds entry to the chunk size map
+					if !chunk_size_map.add_chunk_entry(current_chunk_number, prepared_chunk.size()) {
+						//flush the chunk size map
+						written_bytes += flush_chunk_size_map(
+							&mut chunk_size_map, 
+							main_footer_chunk_size_map, 
+							&mut segment_footer, 
+							self.current_segment_no, 
+							seek_value + written_bytes, 
+							output)?;
+						chunk_size_map.add_chunk_entry(current_chunk_number, prepared_chunk.size());
+					};
+
+					// adds entry to the chunk flags map
+					if !chunk_flags_map.add_chunk_entry(current_chunk_number, prepared_chunk.flags().clone()) {
+						//flush the chunk flags map
+						written_bytes += flush_chunk_flags_map(
+							&mut chunk_flags_map, 
+							main_footer_chunk_flags_map, 
+							&mut segment_footer, 
+							self.current_segment_no, 
+							seek_value + written_bytes, 
+							output)?;
+						chunk_flags_map.add_chunk_entry(current_chunk_number, prepared_chunk.flags().clone());
+					};
+
+					// adds entry to the chunk crc map
+					if !chunk_crc_map.add_chunk_entry(current_chunk_number, prepared_chunk.crc().clone()) {
+						//flush the chunk crc map
+						written_bytes += flush_chunk_crc_map(
+							&mut chunk_crc_map, 
+							main_footer_chunk_crc_map, 
+							&mut segment_footer, 
+							self.current_segment_no, 
+							seek_value + written_bytes, 
+							output)?;
+						chunk_crc_map.add_chunk_entry(current_chunk_number, prepared_chunk.crc().clone());
+					};
+
+					// writes the prepared chunk into the Writer
+					written_bytes += output.write(&prepared_chunk.data())? as u64;
+				},
+				PreparedData::PreparedFileFooter(data) => written_bytes += output.write(&data)? as u64,
+				PreparedData::PreparedFileHeader(data) => written_bytes += output.write(&data)? as u64,
+			};
 		}
 
 		// finish the segment footer and write the encoded footer into the Writer.
@@ -381,7 +495,10 @@ impl<R: Read> ZffWriter<R> {
 					self.current_segment_no, 
 					self.object_header_segment_numbers.clone(), 
 					self.object_footer_segment_numbers.clone(), 
-					main_footer_chunk_map.clone(),
+					main_footer_chunk_offset_map.clone(),
+					main_footer_chunk_size_map.clone(),
+					main_footer_chunk_flags_map.clone(),
+					main_footer_chunk_crc_map.clone(),
 					params.main_footer.description_notes().map(|s| s.to_string()), 
 					0)
 				} else {
@@ -393,7 +510,10 @@ impl<R: Read> ZffWriter<R> {
 				self.current_segment_no, 
 				self.object_header_segment_numbers.clone(), 
 				self.object_footer_segment_numbers.clone(), 
-				main_footer_chunk_map.clone(),
+				main_footer_chunk_offset_map.clone(),
+				main_footer_chunk_size_map.clone(),
+				main_footer_chunk_flags_map.clone(),
+				main_footer_chunk_crc_map.clone(),
 				self.optional_parameter.description_notes.clone(), 
 				0)
 			};
@@ -414,7 +534,12 @@ impl<R: Read> ZffWriter<R> {
 	    let mut seek_value = 0;
 	    //prepare the current segment no for initial looping
 	    self.current_segment_no -= 1;
-	    let mut chunk_map = BTreeMap::new(); //: check if this main footer chunkmap is filled while you use the extend...
+	    
+		let mut main_footer_chunk_offset_map = BTreeMap::new(); //TODO: check if this main footer chunkmap is filled while you use the extend...
+		let mut main_footer_chunk_size_map = BTreeMap::new();
+		let mut main_footer_chunk_flags_map = BTreeMap::new();
+		let mut main_footer_chunk_crc_map = BTreeMap::new();
+
 
 	    let mut extend = self.extender_parameter.is_some();
 	    loop {
@@ -450,7 +575,14 @@ impl<R: Read> ZffWriter<R> {
 	    	} else {
 	    		File::create(&segment_filename)?
 	    	};
-	    	current_offset = match self.write_next_segment(&mut output_file, seek_value, &mut chunk_map, extend) {
+	    	current_offset = match self.write_next_segment(
+				&mut output_file, 
+				seek_value, 
+				&mut main_footer_chunk_offset_map,
+				&mut main_footer_chunk_size_map,
+				&mut main_footer_chunk_flags_map,
+				&mut main_footer_chunk_crc_map, 
+				extend) {
 	    		Ok(written_bytes) => {
 	    			#[cfg(feature = "log")]
 					info!("Segment {} was written successfully.", segment_filename.display());
@@ -475,7 +607,10 @@ impl<R: Read> ZffWriter<R> {
 			self.current_segment_no, 
 			self.object_header_segment_numbers.clone(), 
 			self.object_footer_segment_numbers.clone(), 
-			chunk_map,
+			main_footer_chunk_offset_map,
+			main_footer_chunk_size_map,
+			main_footer_chunk_flags_map,
+			main_footer_chunk_crc_map,
 			params.main_footer.description_notes().map(|s| s.to_string()), 
 			current_offset)
 		} else {
@@ -483,7 +618,10 @@ impl<R: Read> ZffWriter<R> {
 			self.current_segment_no, 
 			self.object_header_segment_numbers.clone(), 
 			self.object_footer_segment_numbers.clone(), 
-			chunk_map,
+			main_footer_chunk_offset_map,
+			main_footer_chunk_size_map,
+			main_footer_chunk_flags_map,
+			main_footer_chunk_crc_map,
 			self.optional_parameter.description_notes.clone(), 
 			current_offset)
 		};
@@ -549,4 +687,278 @@ fn file_exists_or_creatable(path: &PathBuf) -> Result<()> {
     	return Err(e.into());
     }
     Ok(())
+}
+
+// flush the chunkmaps and writes them into the output - but check if the chunkmaps are full.
+fn flush_chunkmaps_checked<W: Write>(
+	chunk_offset_map: &mut ChunkOffsetMap,
+	chunk_size_map: &mut ChunkSizeMap,
+	chunk_flags_map: &mut ChunkFlagMap,
+	chunk_crc_map: &mut ChunkCRCMap,
+	main_footer_chunk_offset_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	// flush the chunk offset map
+	if chunk_offset_map.is_full() {
+		written_bytes += flush_chunk_offset_map(
+			chunk_offset_map, 
+			main_footer_chunk_offset_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+
+	// flush the chunk size map
+	if chunk_size_map.is_full() {
+		written_bytes += flush_chunk_size_map(
+			chunk_size_map, 
+			main_footer_chunk_size_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+
+	// flush the chunk size map
+	if chunk_flags_map.is_full() {
+		written_bytes += flush_chunk_flags_map(
+			chunk_flags_map, 
+			main_footer_chunk_flags_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+
+	// flush the chunk crc map
+	if chunk_crc_map.is_full() {
+		written_bytes += flush_chunk_crc_map(
+			chunk_crc_map, 
+			main_footer_chunk_crc_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+
+	Ok(written_bytes)
+}
+
+// flushs the chunkmaps and writes them into the output.
+fn flush_chunkmaps<W: Write>(
+	chunk_offset_map: &mut ChunkOffsetMap,
+	chunk_size_map: &mut ChunkSizeMap,
+	chunk_flags_map: &mut ChunkFlagMap,
+	chunk_crc_map: &mut ChunkCRCMap,
+	main_footer_chunk_offset_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> { // returns the written bytes
+	let mut written_bytes = 0;
+	// flush the chunk offset map
+	written_bytes += flush_chunk_offset_map(
+		chunk_offset_map, 
+		main_footer_chunk_offset_map, 
+		segment_footer, 
+		current_segment_no, 
+		seek_value, 
+		output)?;
+
+	// flush the chunk size map
+	written_bytes += flush_chunk_size_map(
+		chunk_size_map, 
+		main_footer_chunk_size_map, 
+		segment_footer, 
+		current_segment_no, 
+		seek_value, 
+		output)?;
+
+	// flush the chunk size map
+	written_bytes += flush_chunk_flags_map(
+		chunk_flags_map, 
+		main_footer_chunk_flags_map, 
+		segment_footer, 
+		current_segment_no, 
+		seek_value, 
+		output)?;
+
+	// flush the chunk crc map
+	written_bytes += flush_chunk_crc_map(
+		chunk_crc_map, 
+		main_footer_chunk_crc_map, 
+		segment_footer, 
+		current_segment_no, 
+		seek_value, 
+		output)?;
+
+	Ok(written_bytes)
+}
+
+fn flush_chunk_offset_map<W: Write>(
+	chunk_offset_map: &mut ChunkOffsetMap,
+	main_footer_chunk_offset_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if let Some(chunk_no) = chunk_offset_map.chunkmap().keys().max() {
+		main_footer_chunk_offset_map.insert(*chunk_no, current_segment_no);
+		segment_footer.chunk_offset_map_table.insert(*chunk_no, written_bytes + seek_value);
+		written_bytes += output.write(&chunk_offset_map.encode_directly())? as u64;
+		chunk_offset_map.flush();
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_offset_map_checked<W: Write>(
+	chunk_offset_map: &mut ChunkOffsetMap,
+	main_footer_chunk_offset_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if chunk_offset_map.is_full() {
+		written_bytes += flush_chunk_offset_map(
+			chunk_offset_map, 
+			main_footer_chunk_offset_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_size_map<W: Write>(
+	chunk_size_map: &mut ChunkSizeMap,
+	main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if let Some(chunk_no) = chunk_size_map.chunkmap().keys().max() {
+		main_footer_chunk_size_map.insert(*chunk_no, current_segment_no);
+		segment_footer.chunk_size_map_table.insert(*chunk_no, written_bytes + seek_value);
+		written_bytes += output.write(&chunk_size_map.encode_directly())? as u64;
+		chunk_size_map.flush();
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_size_map_checked<W: Write>(
+	chunk_size_map: &mut ChunkSizeMap,
+	main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if chunk_size_map.is_full() {
+		written_bytes += flush_chunk_size_map(
+			chunk_size_map, 
+			main_footer_chunk_size_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_flags_map<W: Write>(
+	chunk_flags_map: &mut ChunkFlagMap,
+	main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if let Some(chunk_no) = chunk_flags_map.chunkmap().keys().max() {
+		main_footer_chunk_flags_map.insert(*chunk_no, current_segment_no);
+		segment_footer.chunk_flags_map_table.insert(*chunk_no, written_bytes + seek_value);
+		written_bytes += output.write(&chunk_flags_map.encode_directly())? as u64;
+		chunk_flags_map.flush();
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_flags_map_checked<W: Write>(
+	chunk_flags_map: &mut ChunkFlagMap,
+	main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if chunk_flags_map.is_full() {
+		written_bytes += flush_chunk_flags_map(
+			chunk_flags_map, 
+			main_footer_chunk_flags_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_crc_map<W: Write>(
+	chunk_crc_map: &mut ChunkCRCMap,
+	main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if let Some(chunk_no) = chunk_crc_map.chunkmap().keys().max() {
+		main_footer_chunk_crc_map.insert(*chunk_no, current_segment_no);
+		segment_footer.chunk_crc_map_table.insert(*chunk_no, written_bytes + seek_value);
+		written_bytes += output.write(&chunk_crc_map.encode_directly())? as u64;
+		chunk_crc_map.flush();
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_crc_map_checked<W: Write>(
+	chunk_crc_map: &mut ChunkCRCMap,
+	main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	seek_value: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if chunk_crc_map.is_full() {
+		written_bytes += flush_chunk_crc_map(
+			chunk_crc_map, 
+			main_footer_chunk_crc_map, 
+			segment_footer, 
+			current_segment_no, 
+			seek_value, 
+			output)?;
+	}
+	Ok(written_bytes)
 }

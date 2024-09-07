@@ -32,7 +32,13 @@ pub struct SegmentFooter {
 	/// A [HashMap] containing the object number and the appropriate offset of the [crate::footer::ObjectFooter].
 	pub object_footer_offsets: HashMap<u64, u64>, //<object number, offset>,
 	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
-	pub chunk_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	pub chunk_offset_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
+	pub chunk_size_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
+	pub chunk_flags_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
+	pub chunk_crc_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
 	/// The first chunk number which was used in this segment.
 	pub first_chunk_number: u64,
 	/// The offset where the footer starts.
@@ -53,7 +59,10 @@ impl SegmentFooter {
 			length_of_segment: 0,
 			object_header_offsets: HashMap::new(),
 			object_footer_offsets: HashMap::new(),
-			chunk_map_table: BTreeMap::new(),
+			chunk_offset_map_table: BTreeMap::new(),
+			chunk_size_map_table: BTreeMap::new(),
+			chunk_flags_map_table: BTreeMap::new(),
+			chunk_crc_map_table: BTreeMap::new(),
 			first_chunk_number: INITIAL_CHUNK_NUMBER,
 			footer_offset: 0,
 		}
@@ -64,14 +73,20 @@ impl SegmentFooter {
 		length_of_segment: u64, 
 		object_header_offsets: HashMap<u64, u64>, 
 		object_footer_offsets: HashMap<u64, u64>, 
-		chunk_map_table: BTreeMap<u64, u64>,
+		chunk_offset_map_table: BTreeMap<u64, u64>,
+		chunk_size_map_table: BTreeMap<u64, u64>,
+		chunk_flags_map_table: BTreeMap<u64, u64>,
+		chunk_crc_map_table: BTreeMap<u64, u64>,
 		first_chunk_number: u64,
 		footer_offset: u64) -> SegmentFooter {
 		Self {
 			length_of_segment,
 			object_header_offsets,
 			object_footer_offsets,
-			chunk_map_table,
+			chunk_offset_map_table,
+			chunk_size_map_table,
+			chunk_flags_map_table,
+			chunk_crc_map_table,
 			first_chunk_number,
 			footer_offset,
 		}
@@ -126,7 +141,10 @@ impl HeaderCoding for SegmentFooter {
 		vec.append(&mut self.length_of_segment.encode_directly());
 		vec.append(&mut self.object_header_offsets.encode_directly());
 		vec.append(&mut self.object_footer_offsets.encode_directly());
-		vec.append(&mut self.chunk_map_table.encode_directly());
+		vec.append(&mut self.chunk_offset_map_table.encode_directly());
+		vec.append(&mut self.chunk_size_map_table.encode_directly());
+		vec.append(&mut self.chunk_flags_map_table.encode_directly());
+		vec.append(&mut self.chunk_crc_map_table.encode_directly());
 		vec.append(&mut self.first_chunk_number.encode_directly());
 		vec.append(&mut self.footer_offset.encode_directly());
 		vec
@@ -138,10 +156,22 @@ impl HeaderCoding for SegmentFooter {
 		let length_of_segment = u64::decode_directly(&mut cursor)?;
 		let object_header_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let object_footer_offsets = HashMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_offset_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_size_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_flags_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_crc_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let first_chunk_number = u64::decode_directly(&mut cursor)?;
 		let footer_offset = u64::decode_directly(&mut cursor)?;
-		Ok(SegmentFooter::new(length_of_segment, object_header_offsets, object_footer_offsets, chunk_map_table, first_chunk_number, footer_offset))
+		Ok(SegmentFooter::new(
+			length_of_segment, 
+			object_header_offsets, 
+			object_footer_offsets, 
+			chunk_offset_map_table,
+			chunk_size_map_table,
+			chunk_flags_map_table,
+			chunk_crc_map_table,
+			first_chunk_number, 
+			footer_offset))
 	}
 }
 

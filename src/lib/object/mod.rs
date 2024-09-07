@@ -4,7 +4,7 @@ use std::sync::{
     RwLock, RwLockReadGuard,
 };
 use std::collections::HashMap;
-use std::thread;
+use std::thread::{self};
 use std::io::copy as io_copy;
 
 // - modules
@@ -16,13 +16,13 @@ pub use encoder::*;
 // - internal
 use crate::{
     Result,
-	HeaderCoding,
     header::CompressionHeader,
     HashType,
     Hash,
     CompressionAlgorithm,
+	PreparedChunk,
     io::{buffer_chunk, check_same_byte},
-	header::{ChunkHeader, DeduplicationChunkMap},
+	header::{ChunkFlags, CRC32Value, DeduplicationChunkMap},
 	error::{ZffError, ZffErrorKind},
 	encryption::{Encryption, EncryptionAlgorithm},
 	ChunkContent,
@@ -481,23 +481,26 @@ pub(crate) fn chunking(
 	deduplication_map: Option<&mut DeduplicationChunkMap>,
 	encryption_key: Option<&Vec<u8>>,
 	encryption_algorithm: Option<&EncryptionAlgorithm>,
-) -> Result<Vec<u8>> {
-	let mut chunk = Vec::new();
-	// create chunk header
-	let mut chunk_header = ChunkHeader::new_empty(current_chunk_number);
+	empty_file_flag: bool,
+) -> Result<PreparedChunk> {
+	let mut flags = ChunkFlags::default();
+	flags.empty_file = empty_file_flag;
+	if empty_file_flag {
+		return Ok(PreparedChunk::new(Vec::new(), flags, 0, CRC32Value::Unencrypted(0)));
+	}
 
 	// check same byte
 	// if the length of the buffer is not equal the target chunk size, 
 	// the condition failed and same byte flag can not be set.
 	let chunk_content = if samebyte_checklen_value == chunk_size && *encoding_thread_pool_manager.same_bytes_thread.get_result() {
-		chunk_header.flags.same_bytes = true;
+		flags.same_bytes = true;
 		let first_byte = encoding_thread_pool_manager.data.read().unwrap()[0];
 		ChunkContent::SameBytes(first_byte)
 	} else if let Some(deduplication_map) = deduplication_map {
 		// unwrap should be safe here, because we have already testet this before.
 		let b3h = encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
 		if let Ok(chunk_no) = deduplication_map.get_chunk_number(*b3h) {
-			chunk_header.flags.duplicate = true;
+			flags.duplicate = true;
 			ChunkContent::Duplicate(chunk_no)
 		} else {
 			deduplication_map.append_entry(current_chunk_number, *b3h)?;
@@ -519,12 +522,30 @@ pub(crate) fn chunking(
 		},
 	};
 
-	// prepare chunk header:
-	chunk_header.crc32 = *encoding_thread_pool_manager.crc32_thread.get_result();
+	// get crc32 (and encrypt the value, if necessary)
+	let crc32 = {
+		let unencrypted_value = *encoding_thread_pool_manager.crc32_thread.get_result();
+		match encryption_key {
+			Some(encryption_key) => {
+				let encryption_algorithm = match encryption_algorithm {
+					Some(algorithm) => algorithm,
+					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+				};
+				CRC32Value::Encrypted(
+					Encryption::encrypt_chunk_header_crc32(
+						encryption_key, 
+						unencrypted_value.to_le_bytes(), 
+						current_chunk_number, 
+						encryption_algorithm)?)
+			},
+			None => CRC32Value::Unencrypted(unencrypted_value),
+		}
+	};
+
 	if compression_flag {
-		chunk_header.flags.compression = true;
+		flags.compression = true;
 	}
-	let mut chunked_data = match &encryption_key {
+	let chunked_data = match &encryption_key {
 		Some(encryption_key) => {
 			let encryption_algorithm = match encryption_algorithm {
 				Some(algorithm) => algorithm,
@@ -534,25 +555,17 @@ pub(crate) fn chunking(
 			Encryption::encrypt_chunk_content(
 				encryption_key,
 				&chunked_data,
-				chunk_header.chunk_number,
+				current_chunk_number,
 				encryption_algorithm)?
 		},
 		None => chunked_data,
 	};
 	
-	chunk_header.chunk_size = chunked_data.len() as u64;
+	let size = chunked_data.len() as u64;
 
-	let mut encoded_header = if let Some(key) = encryption_key {
-		let encryption_algorithm = match encryption_algorithm {
-			Some(algorithm) => algorithm,
-			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-		};
-		chunk_header.encrypt_and_consume(key, encryption_algorithm)?.encode_directly()
-	} else {
-		chunk_header.encode_directly()
-	};
-
-	chunk.append(&mut encoded_header);
-	chunk.append(&mut chunked_data);
-	Ok(chunk)
+	Ok(PreparedChunk::new(
+		chunked_data, 
+		flags, 
+		size, 
+		crc32))
 }

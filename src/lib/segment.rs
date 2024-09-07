@@ -10,11 +10,10 @@ use crate::{
 	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
-	Chunk,
 	Encryption,
 	CompressionAlgorithm,
 	decompress_buffer,
-	header::{SegmentHeader, ObjectHeader, ChunkHeader, EncryptedChunkHeader, EncryptionInformation, EncryptedObjectHeader},
+	header::{SegmentHeader, ObjectHeader, EncryptionInformation, EncryptedObjectHeader, ChunkFlags},
 	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
 	ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT,
 	ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT,
@@ -77,19 +76,12 @@ impl<R: Read + Seek> Segment<R> {
 		&self.footer
 	}
 
-	/// Returns the raw chunk (and if so present, then also in encrypted and/or compressed form).
-	pub fn raw_chunk(&mut self, chunk_number: u64) -> Result<Chunk> {
-		let chunk_offset = self.get_chunk_offset(&chunk_number)?;
-		self.data.seek(SeekFrom::Start(chunk_offset))?;
-		Chunk::new_from_reader(&mut self.data)
-	}
-
 	/// Returns the offset of the appropriate chunk (number).
 	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
-		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_map_table, *chunk_number)?;
+		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_offset_map_table, *chunk_number)?;
 		//get the first chunk number of the specific chunk map
 		let first_chunk_number_of_map = get_first_chunknumber(
-			&self.footer.chunk_map_table, *chunk_number, self.footer.first_chunk_number)?;
+			&self.footer.chunk_offset_map_table, *chunk_number, self.footer.first_chunk_number)?;
 
 		// skips the chunk map header and the other chunk entries.
 		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
@@ -107,13 +99,61 @@ impl<R: Read + Seek> Segment<R> {
 		Ok(offset)
 	}
 
+	/// Returns the size of the appropriate (encrypted, compressed, ...) chunk (number)
+	pub fn get_chunk_size(&mut self, chunk_number: &u64) -> Result<u64> {
+		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_size_map_table, *chunk_number)?;
+		//get the first chunk number of the specific chunk map
+		let first_chunk_number_of_map = get_first_chunknumber(
+			&self.footer.chunk_size_map_table, *chunk_number, self.footer.first_chunk_number)?;
+
+		// skips the chunk map header and the other chunk entries.
+		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
+					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
+						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
+						  1 + // skip the ChunkMap header version
+						  8 + // skip the length of the map
+						  8 + // skip the chunk number itself
+						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
+
+		//go to the appropriate chunk map.
+		self.data.seek(SeekFrom::Start(seek_offset))?;
+		// read the appropriate offset
+		let size = u64::decode_directly(&mut self.data)?;
+		Ok(size)
+	}
+
+	/// Returns the flags of the appropriate (encrypted, compressed, ...) chunk (number)
+	pub fn get_chunk_flags(&mut self, chunk_number: &u64) -> Result<ChunkFlags> {
+		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_flags_map_table, *chunk_number)?;
+		//get the first chunk number of the specific chunk map
+		let first_chunk_number_of_map = get_first_chunknumber(
+			&self.footer.chunk_flags_map_table, *chunk_number, self.footer.first_chunk_number)?;
+
+		// skips the chunk map header and the other chunk entries.
+		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
+					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
+						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
+						  1 + // skip the ChunkMap header version
+						  8 + // skip the length of the map
+						  8 + // skip the chunk number itself
+						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
+
+		//go to the appropriate chunk map.
+		self.data.seek(SeekFrom::Start(seek_offset))?;
+		// read the appropriate offset
+		let flags = ChunkFlags::decode_directly(&mut self.data)?;
+		Ok(flags)
+	}
+
 	/// Returns the chunked data, uncompressed and unencrypted.
-	/// The chunk offset could be optionally assigned directly, e.g. from a preloaded chunk map.
+	/// Chunk metadata could be optionally attached, e.g. from a precached chunk map.
 	pub(crate) fn chunk_data<E, C>(&mut self, 
 		chunk_number: u64, 
 		encryption_information: &Option<E>, 
 		compression_algorithm: C,
-		chunk_offset: Option<u64>) -> Result<ChunkContent>
+		chunk_offset: Option<u64>,
+		chunk_size: Option<u64>,
+		flags: Option<ChunkFlags>,) -> Result<ChunkContent>
 	where
 		E: Borrow<EncryptionInformation>,
 		C: Borrow<CompressionAlgorithm>,
@@ -122,24 +162,18 @@ impl<R: Read + Seek> Segment<R> {
 			None => self.get_chunk_offset(&chunk_number)?,
 			Some(offset) => offset
 		};
-		self.data.seek(SeekFrom::Start(chunk_offset))?;
-		let (compression_flag, chunk_size, same_bytes, deduplication) = if encryption_information.is_some() {
-			let chunk_header = EncryptedChunkHeader::decode_directly(&mut self.data)?;
-			let compression_flag = chunk_header.flags.compression;
-			let same_bytes = chunk_header.flags.same_bytes;
-			let deduplication = chunk_header.flags.duplicate;
-			let chunk_size = chunk_header.chunk_size;
-			self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-			(compression_flag, chunk_size, same_bytes, deduplication)
-		} else {
-			let chunk_header = ChunkHeader::decode_directly(&mut self.data)?;
-			let compression_flag = chunk_header.flags.compression;
-			let same_bytes = chunk_header.flags.same_bytes;
-			let deduplication = chunk_header.flags.duplicate;
-			let chunk_size = chunk_header.chunk_size;
-			self.data.seek(SeekFrom::Start(chunk_header.header_size() as u64 + chunk_offset))?;
-			(compression_flag, chunk_size, same_bytes, deduplication)
+		let chunk_size = match chunk_size {
+			None => self.get_chunk_size(&chunk_number)?,
+			Some(size) => size
 		};
+		let flags = match flags {
+			None => self.get_chunk_flags(&chunk_number)?,
+			Some(flags) => flags
+		};
+
+
+		self.data.seek(SeekFrom::Start(chunk_offset))?;
+
 		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
 		self.data.read_exact(&mut raw_data_buffer)?;
 
@@ -151,19 +185,19 @@ impl<R: Read + Seek> Segment<R> {
 				chunk_number, 
 				&enc_info.algorithm)?;
 		}
-		let chunk_content = if compression_flag {
+		let chunk_content = if flags.compression {
 			decompress_buffer(&raw_data_buffer, compression_algorithm.borrow())?
 		} else {
 			raw_data_buffer
 		};
 
-		if same_bytes {
+		if flags.same_bytes {
 			let single_byte = match chunk_content.first() {
 				Some(data) => data,
 				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
 			};
 			Ok(ChunkContent::SameBytes(*single_byte))
-		} else if deduplication {
+		} else if flags.duplicate {
 			let mut arr: [u8; 8] = Default::default();
 			arr.copy_from_slice(&chunk_content);
 			Ok(ChunkContent::Duplicate(u64::from_le_bytes(arr)))
