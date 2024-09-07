@@ -4,12 +4,15 @@ use std::borrow::Borrow;
 use std::io::{Read, Seek, SeekFrom};
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
+use std::rc::Rc;
 
 // - modules
 mod zffobjectreader;
+mod redb_handling;
 
 // - re-exports
 pub use zffobjectreader::*;
+pub(crate) use redb_handling::*;
 
 // - internal
 use crate::{
@@ -22,7 +25,13 @@ use crate::{
 		ObjectFooter,
 	},
 	helper::get_segment_of_chunk_no,
-	header::{EncryptionInformation, SegmentHeader, ObjectType as HeaderObjectType},
+	header::{
+		EncryptionInformation, 
+		SegmentHeader, 
+		ObjectType as HeaderObjectType,
+		ChunkFlags,
+		CRC32Value,
+	},
 	ChunkContent,
 };
 
@@ -30,7 +39,6 @@ use super::*;
 
 // - external
 use redb::{Database, ReadableTable};
-
 #[cfg(feature = "log")]
 use log::debug;
 
@@ -59,15 +67,81 @@ impl fmt::Display for ObjectType {
     }
 }
 
-/// Several types of a preloaded chunkmap.
-#[derive(Debug)]
-pub enum PreloadedChunkMap {
-	/// No chunkmap is preloaded.
+#[derive(Debug, Default)]
+pub struct PreloadedChunkMapsInMemory {
+	offsets: HashMap<u64, u64>,
+	sizes: HashMap<u64, u64>,
+	flags: HashMap<u64, ChunkFlags>,
+	crcs: HashMap<u64, CRC32Value>,
+	same_bytes: HashMap<u64, u8>,
+	duplicate_chunks: HashMap<u64, u64>,
+}
+
+impl PreloadedChunkMapsInMemory {
+	fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn with_data(offsets: HashMap<u64, u64>, 
+		sizes: HashMap<u64, u64>, 
+		flags: HashMap<u64, ChunkFlags>, 
+		crcs: HashMap<u64, CRC32Value>, 
+		same_bytes: HashMap<u64, u8>, 
+		duplicate_chunks: HashMap<u64, u64>
+	) -> Self {
+		Self {
+			offsets,
+			sizes,
+			flags,
+			crcs,
+			same_bytes,
+			duplicate_chunks,
+		}
+	}
+}
+
+#[derive(Debug, Default)]
+pub enum PreloadedChunkMaps {
+	#[default]
 	None,
-	/// Contains a in-memory preloaded chunkmap.
-	InMemory(HashMap<u64, u64>), //<Chunknumber, offset>,
-	/// Contains a chunkmap, cached in the given Redb.
+	InMemory(PreloadedChunkMapsInMemory),
 	Redb(Database),
+}
+
+impl PreloadedChunkMaps {
+	/// Defines a new preload chunkmap which will be held in memory, if none exists up to this point.
+	/// This method will (then) only "initialize" a new preload chunkmap. You have to fill this map by using  
+	/// methods like self::preloaded_chunkmap() or self::preload_chunkmap_full().  
+	/// If there is already a preloaded chunkmap, then this method will
+	///   - do nothing, if the existing preloaded chunkmap is an in-memory map.
+	///   - convert the existing preloaded chunkmap to an in-memory chunkmap, if the existing preloaded chunkmap is a redb-based preloaded chunkmap.
+	fn set_mode_in_memory(&mut self) -> Result<()> {
+		match self {
+			PreloadedChunkMaps::None => *self = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory::default()),
+			PreloadedChunkMaps::InMemory(_) => (),
+			PreloadedChunkMaps::Redb(ref mut db) => *self = PreloadedChunkMaps::InMemory(convert_redb_into_in_memory_preloaded_chunkmaps(db)?),
+		}
+		Ok(())
+	}
+
+	/// Defines a new preload chunkmap which will be cached to a external Redb, if none exists up to this point.
+	/// This method will (then) only "initialize" a new preload chunkmap. You have to fill this map by using  
+	/// methods like self::preloaded_chunkmap() or self::preload_chunkmap_full().  
+	/// If there is already a preloaded chunkmap, then this method will
+	///   - Copy the content of the existing Redb to the new given Redb and use the given Redb as the new one.
+	///   - Initialize a empty Redb and use this.
+	///   - convert the existing preloaded (in-memory) chunkmap to the Redb (copy the content) and use the Redb as the appropriate preloaded chunkmap.
+	fn set_mode_redb(&mut self, mut db: Database) -> Result<()> {
+		match self {
+			PreloadedChunkMaps::None => *self = PreloadedChunkMaps::Redb(db),
+			PreloadedChunkMaps::InMemory(map) => convert_in_memory_preloaded_chunkmaps_into_redb(&mut db, map)?,
+			PreloadedChunkMaps::Redb(old_db) => {
+				copy_redb(old_db, &mut db)?;
+				*self = PreloadedChunkMaps::Redb(db);
+			},
+		};
+		Ok(())
+	}
 }
 
 /// The [ZffReader] can be used to read the data of a zff container in a proper way.  
@@ -99,8 +173,9 @@ pub struct ZffReader<R: Read + Seek> {
 	segments: HashMap<u64, Segment<R>>, //<segment number, Segment>
 	object_reader: HashMap<u64, ZffObjectReader>, //<object_number, ZffObjectReader>,
 	main_footer: MainFooter,
-	chunk_map: PreloadedChunkMap,
+	chunk_maps: PreloadedChunkMaps,
 	active_object: u64, //the number of the active object.
+	global_chunkmap: Rc<BTreeMap<u64, u64>>,
 }
 
 impl<R: Read + Seek> ZffReader<R> {
@@ -141,8 +216,9 @@ impl<R: Read + Seek> ZffReader<R> {
 			segments,
 			object_reader: HashMap::new(),
 			main_footer,
-			chunk_map: PreloadedChunkMap::None,
+			chunk_maps: PreloadedChunkMaps::default(),
 			active_object: 0,
+			global_chunkmap: Rc::new(BTreeMap::new()),
 		})
 	}
 
@@ -207,7 +283,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// # Error
 	/// May fail due to various conditions, e.g. corrupted or missing segments.
 	pub fn initialize_object(&mut self, object_number: u64) -> Result<()> {
-		let object_reader = initialize_object_reader(object_number, &mut self.segments, &self.main_footer)?;
+		let object_reader = initialize_object_reader(
+			object_number, &mut self.segments, &self.main_footer, Rc::clone(&self.global_chunkmap))?;
 		self.object_reader.insert(object_number, object_reader);
 		Ok(())
 	}
@@ -216,14 +293,15 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// # Error
 	/// May fail due to various conditions, e.g. corrupted or missing segments.
 	pub fn initialize_objects_all(&mut self) -> Result<()> {
-		let object_reader_map = initialize_object_reader_all(&mut self.segments, &self.main_footer)?;
+		let object_reader_map = initialize_object_reader_all(
+			&mut self.segments, &self.main_footer, Rc::clone(&self.global_chunkmap))?;
 		self.object_reader = object_reader_map;
 		Ok(())
 	}
 
 	/// Lists the number of chunks of this zff container.
 	pub fn number_of_chunks(&self) -> u64 {
-		let (chunk_number, _) = self.main_footer.chunk_maps().last_key_value().unwrap_or((&0, &0));
+		let (chunk_number, _) = self.main_footer.chunk_offset_maps().last_key_value().unwrap_or((&0, &0));
 		*chunk_number
 	}
 
@@ -259,12 +337,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// If there is already a preloaded chunkmap, then this method will
 	///   - do nothing, if the existing preloaded chunkmap is an in-memory map.
 	///   - convert the existing preloaded chunkmap to an in-memory chunkmap, if the existing preloaded chunkmap is a redb-based preloaded chunkmap.
-	pub fn set_preload_chunkmap_mode_in_memory(&mut self) -> Result<()> {
-		match &mut self.chunk_map {
-			PreloadedChunkMap::None => self.chunk_map = PreloadedChunkMap::InMemory(HashMap::new()),
-			PreloadedChunkMap::InMemory(_) => (),
-			PreloadedChunkMap::Redb(ref mut db) => self.chunk_map = PreloadedChunkMap::InMemory(extract_redb_map(db)?),
-		}
+	pub fn set_preload_chunkmaps_mode_in_memory(&mut self) -> Result<()> {
+		self.chunk_maps.set_mode_in_memory()?;
 		Ok(())
 	}
 
@@ -275,49 +349,40 @@ impl<R: Read + Seek> ZffReader<R> {
 	///   - Copy the content of the existing Redb to the new given Redb and use the given Redb as the new one.
 	///   - Initialize a empty Redb and use this.
 	///   - convert the existing preloaded (in-memory) chunkmap to the Redb (copy the content) and use the Redb as the appropriate preloaded chunkmap.
-	pub fn set_preload_chunkmap_mode_redb(&mut self, mut db: Database) -> Result<()> {
-		match &self.chunk_map {
-			PreloadedChunkMap::Redb(old_db) => copy_redb_map(old_db, &mut db)?,
-			PreloadedChunkMap::None => initialize_redb_chunkmap(&mut db, &HashMap::new())?,
-			PreloadedChunkMap::InMemory(map) => initialize_redb_chunkmap(&mut db, map)?,
-		}
-		self.chunk_map = PreloadedChunkMap::Redb(db);
-		Ok(())
+	pub fn set_preload_chunkmap_mode_redb(&mut self, db: Database) -> Result<()> {
+		self.chunk_maps.set_mode_redb(db)
 	}
 	
 	/// Preloads the offsets of the given [Range] of chunks.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
-	pub fn preload_chunkmap(&mut self, chunk_numbers: &Range<u64>) -> Result<()> {
+	pub fn preload_chunk_offset_map(&mut self, chunk_numbers: &Range<u64>) -> Result<()> {
 		// check if chunk numbers are valid.
-		if chunk_numbers.start == 0 {
-			return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, chunk_numbers.start.to_string()));
-		} else if chunk_numbers.start > chunk_numbers.end {
-			return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, ERROR_LAST_GREATER_FIRST));
-		} else if chunk_numbers.end > self.number_of_chunks() {
-			return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, chunk_numbers.end.to_string()));	
-		}
+		check_chunk_number_range(chunk_numbers, self.number_of_chunks())?;
 
-		//try to reserve the additional size, if PreloadedChunkMap::InMemory is used.
+		
 		let mut size = chunk_numbers.end - chunk_numbers.start;
-		match &mut self.chunk_map {
-			PreloadedChunkMap::None => {
+		match &mut self.chunk_maps {
+			PreloadedChunkMaps::None => {
 				let mut map = HashMap::new();
 				map.try_reserve(size as usize)?;
-				self.chunk_map = PreloadedChunkMap::InMemory(map)
+				self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
+					offsets: map,
+					..Default::default()
+				});
 			},
-			PreloadedChunkMap::Redb(_) => (),
-			PreloadedChunkMap::InMemory(map) => {
+			PreloadedChunkMaps::Redb(_) => (),
+			PreloadedChunkMaps::InMemory(maps) => {
 				for chunk_no in chunk_numbers.start..=chunk_numbers.end {
-					if map.contains_key(&chunk_no) {
+					if maps.offsets.contains_key(&chunk_no) {
 						size -= 1;
 					}
 				}
-				map.try_reserve(size as usize)?;
+				maps.offsets.try_reserve(size as usize)?;
 			}
 		}
 
 		for chunk_no in chunk_numbers.start..=chunk_numbers.end {
-			let segment = match get_segment_of_chunk_no(chunk_no, self.main_footer.chunk_maps()) {
+			let segment = match get_segment_of_chunk_no(chunk_no, &self.global_chunkmap) {
 				Some(segment_no) => match self.segments.get_mut(&segment_no) {
 					Some(segment) => segment,
 					None => return Err(ZffError::new(
@@ -327,22 +392,22 @@ impl<R: Read + Seek> ZffReader<R> {
 					ZffErrorKind::InvalidChunkNumber, chunk_no.to_string())),
 			};
 			let offset = segment.get_chunk_offset(&chunk_no)?;
-			match &mut self.chunk_map {
-				PreloadedChunkMap::None => unreachable!(),
-				PreloadedChunkMap::InMemory(map) => { map.insert(chunk_no, offset); },
-				PreloadedChunkMap::Redb(db) => preloaded_redb_chunkmap_add_entry(db, chunk_no, offset)?,
+			match &mut self.chunk_maps {
+				PreloadedChunkMaps::None => unreachable!(),
+				PreloadedChunkMaps::InMemory(maps) => { maps.offsets.insert(chunk_no, offset); },
+				PreloadedChunkMaps::Redb(db) => preloaded_redb_chunk_offset_map_add_entry(db, chunk_no, offset)?,
 			};
 		}
 
-		if let PreloadedChunkMap::InMemory(map) = &mut self.chunk_map { map.shrink_to_fit() }
+		if let PreloadedChunkMaps::InMemory(maps) = &mut self.chunk_maps { maps.offsets.shrink_to_fit() }
 		Ok(())
 	}
 
 	/// Preloads all offsets of the chunks of the appropriate zff container.
-	pub fn preload_chunkmap_full(&mut self) -> Result<()> {
+	pub fn preload_chunk_offset_map_full(&mut self) -> Result<()> {
 		let first = 1;
 		let last = self.number_of_chunks();
-		self.preload_chunkmap(&Range{start: first, end: last})
+		self.preload_chunk_offset_map(&Range{start: first, end: last})
 	}
 
 	/// Returns the [FileMetadata] of the appropriate active file.
@@ -455,10 +520,10 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 			};
 			match object_reader {
-				ZffObjectReader::Physical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps),
-				ZffObjectReader::Logical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps),
+				ZffObjectReader::Physical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps),
+				ZffObjectReader::Logical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps),
 				ZffObjectReader::Encrypted(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps); },
+				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps); },
 			}
 		}
 
@@ -495,7 +560,7 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 		match object_reader {
 			ZffObjectReader::Virtual(reader) => { 
 				reader.update_passive_object_header_map(passive_objects_map); 
-				reader.read_with_segments(buffer, &mut self.segments, &self.chunk_map, &self.main_footer.chunk_maps)
+				reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps)
 			},
 			_ => unreachable!(),
 		}		
@@ -585,14 +650,22 @@ fn get_chunk_data<C, R>(
 	current_chunk_number: u64, 
 	enc_information: &Option<EncryptionInformation>,
 	compression_algorithm: C,
-	chunk_size: u64,
+	original_chunk_size: u64, // size of the uncompressed data
 	chunk_offset: Option<u64>,
+	chunk_size: Option<u64>, // size of the compressed chunk
+	chunk_flags: Option<ChunkFlags>,
 	) -> std::result::Result<Vec<u8>, std::io::Error>
 where
 	C: Borrow<CompressionAlgorithm> + std::marker::Copy,
 	R: Read + Seek
 {
-	let chunk_content = match segment.chunk_data(current_chunk_number, enc_information, compression_algorithm, chunk_offset) {
+	let chunk_content = match segment.chunk_data(
+		current_chunk_number, 
+		enc_information, 
+		compression_algorithm, 
+		chunk_offset,
+		chunk_size,
+		chunk_flags.clone()) {
 		Ok(data) => data,
 		Err(e) => match e.unwrap_kind() {
 			ZffErrorKind::IoError(io_error) => return Err(io_error),
@@ -601,9 +674,17 @@ where
 	};
 	match chunk_content {
 		ChunkContent::Raw(data) => Ok(data),
-		ChunkContent::SameBytes(single_byte) => Ok(vec![single_byte; chunk_size as usize]),
+		ChunkContent::SameBytes(single_byte) => Ok(vec![single_byte; original_chunk_size as usize]),
 		ChunkContent::Duplicate(dup_chunk_no) => {
-			get_chunk_data(segment, dup_chunk_no, enc_information, compression_algorithm, chunk_size, chunk_offset)
+			get_chunk_data(
+				segment, 
+				dup_chunk_no, 
+				enc_information, 
+				compression_algorithm,
+				original_chunk_size, 
+				chunk_offset,
+				chunk_size,
+				chunk_flags)
 		}
 	}
 }
@@ -611,12 +692,13 @@ where
 
 fn initialize_object_reader_all<R: Read + Seek>(
 	segments: &mut HashMap<u64, Segment<R>>, 
-	main_footer: &MainFooter
+	main_footer: &MainFooter,
+	global_chunkmap: Rc<BTreeMap<u64, u64>>,
 	) -> Result<HashMap<u64, ZffObjectReader>> {
 
 	let mut obj_reader_map = HashMap::new();
 	for obj_no in main_footer.object_footer().keys() {
-		let obj_reader = initialize_object_reader(*obj_no, segments, main_footer)?;
+		let obj_reader = initialize_object_reader(*obj_no, segments, main_footer, Rc::clone(&global_chunkmap))?;
 		obj_reader_map.insert(*obj_no, obj_reader);
 	}
 	Ok(obj_reader_map)
@@ -626,6 +708,7 @@ fn initialize_object_reader<R: Read + Seek>(
 	object_number: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
 	main_footer: &MainFooter,
+	global_chunkmap: Rc<BTreeMap<u64, u64>>
 	) -> Result<ZffObjectReader> {
 	let segment_no_footer = match main_footer.object_footer().get(&object_number) {
 		None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
@@ -643,13 +726,15 @@ fn initialize_object_reader<R: Read + Seek>(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
-								segments)
+								segments,
+								Rc::clone(&global_chunkmap))
 						} else {
 							initialize_encrypted_object_reader(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
-								segments)
+								segments,
+								Rc::clone(&global_chunkmap))
 						},
 	}
 }
@@ -659,6 +744,7 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	header_segment_no: u64,
 	footer_segment_no: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
+	global_chunkmap: Rc<BTreeMap<u64, u64>>,
 	) -> Result<ZffObjectReader> {
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {}", obj_number);
@@ -674,9 +760,9 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	};
 
 	let obj_reader = match footer {
-		ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(ZffObjectReaderPhysical::with_obj_metadata(header, physical))),
-		ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(ZffObjectReaderLogical::with_obj_metadata_recommended(header, logical, segments)?)),
-		ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(ZffObjectReaderVirtual::with_data(header, virt))),
+		ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(ZffObjectReaderPhysical::with_obj_metadata(header, physical, global_chunkmap))),
+		ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(ZffObjectReaderLogical::with_obj_metadata_recommended(header, logical, segments, global_chunkmap)?)),
+		ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(ZffObjectReaderVirtual::with_data(header, virt, global_chunkmap))),
 	};
 	Ok(obj_reader)
 }
@@ -686,6 +772,7 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 	header_segment_no: u64,
 	footer_segment_no: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
+	global_chunkmap: Rc<BTreeMap<u64, u64>>
 	) -> Result<ZffObjectReader> {
 
 	let header = match segments.get_mut(&header_segment_no) {
@@ -696,56 +783,15 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_encrypted_object_footer(obj_number)?,
 	};
-	let obj_reader = ZffObjectReader::Encrypted(Box::new(ZffObjectReaderEncrypted::with_data(header, footer)));
+	let obj_reader = ZffObjectReader::Encrypted(
+		Box::new(ZffObjectReaderEncrypted::with_data(header, footer, Rc::clone(&global_chunkmap))));
 	Ok(obj_reader)
 }
 
-fn extract_redb_map(db: &mut Database) -> Result<HashMap<u64, u64>> {
-	 let mut new_map = HashMap::new();
-	 let read_txn = db.begin_read()?;
-	 let table = read_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
-	 let mut table_iterator = table.iter()?;
-	 while let Some(data) = table_iterator.next_back() {
-	 	let (key, value) = data?;
-	 	new_map.insert(key.value(), value.value());
-	 }
-	 Ok(new_map)
-}
-
-// Will copy a redb to another redb.
-fn copy_redb_map(input_db: &Database, output_db: &mut Database) -> Result<()> {
-	// prepare read context of input_db
-	let read_txn = input_db.begin_read()?;
-	let read_table = read_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
-	let mut table_iterator = read_table.iter()?;
-
-	// prepare write context of output_db
-	let write_txn = output_db.begin_write()?;
-	let mut write_table = write_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
-
-	while let Some(data) = table_iterator.next_back() {
-		let (key, value) = data?;
-		write_table.insert(key.value(), value.value())?;
-	}
-	Ok(())
-}
-
-fn initialize_redb_chunkmap(db: &mut Database, map: &HashMap<u64, u64>) -> Result<()> {
+fn preloaded_redb_chunk_offset_map_add_entry(db: &mut Database, chunk_no: u64, offset: u64) -> Result<()> {
 	let write_txn = db.begin_write()?;
 	{
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
-		for (key, value) in map {
-			table.insert(key, value)?;
-		}
-	}
-	write_txn.commit()?;
-	Ok(())
-}
-
-fn preloaded_redb_chunkmap_add_entry(db: &mut Database, chunk_no: u64, offset: u64) -> Result<()> {
-	let write_txn = db.begin_write()?;
-	{
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_MAP_TABLE)?;
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE)?;
 		table.insert(chunk_no, offset)?;
 	}
 	write_txn.commit()?;
@@ -754,15 +800,64 @@ fn preloaded_redb_chunkmap_add_entry(db: &mut Database, chunk_no: u64, offset: u
 
 // tries to extract the appropriate offset of the given chunk number.
 // returns a None in case of error or if the chunkmap is a [PreloadedChunkmap::None].
-fn extract_offset_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMap, chunk_number: u64) -> Option<u64> {
+fn extract_offset_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<u64> {
 	match preloaded_chunkmap {
-		PreloadedChunkMap::None => None,
-		PreloadedChunkMap::InMemory(map) => map.get(&chunk_number).copied(),
-		PreloadedChunkMap::Redb(db) => {
+		PreloadedChunkMaps::None => None,
+		PreloadedChunkMaps::InMemory(preloaded_maps) => {
+			preloaded_maps.offsets.get(&chunk_number).copied()
+		},
+		PreloadedChunkMaps::Redb(db) => {
 			let read_txn = db.begin_read().ok()?;
-    		let table = read_txn.open_table(PRELOADED_CHUNK_MAP_TABLE).ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE).ok()?;
     		let value = table.get(&chunk_number).ok()??.value();
     		Some(value)
 		}
 	}
+}
+
+// tries to extract the appropriate size (size of the compressed chunk) of the given chunk number.
+// returns a None in case of error or if the chunkmap is a [PreloadedChunkmaps::None].
+fn extract_size_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<u64> {
+	match preloaded_chunkmap {
+		PreloadedChunkMaps::None => None,
+		PreloadedChunkMaps::InMemory(preloaded_maps) => {
+			preloaded_maps.sizes.get(&chunk_number).copied()
+		},
+		PreloadedChunkMaps::Redb(db) => {
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE).ok()?;
+    		let value = table.get(&chunk_number).ok()??.value();
+    		Some(value)
+		}
+	}
+}
+
+// tries to extract the appropriate flags of the given chunk number.
+// returns a None in case of error or if the chunkmap is a [PreloadedChunkmaps::None].
+fn extract_flags_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<ChunkFlags> {
+	match preloaded_chunkmap {
+		PreloadedChunkMaps::None => None,
+		PreloadedChunkMaps::InMemory(preloaded_maps) => {
+			preloaded_maps.flags.get(&chunk_number).cloned()
+		},
+		PreloadedChunkMaps::Redb(db) => {
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE).ok()?;
+    		let value = table.get(&chunk_number).ok()??.value();
+    		Some(value.into())
+		}
+	}
+}
+
+// checks if the given range of chunk numbers are present in the appropriate zff container.
+fn check_chunk_number_range(chunk_numbers: &Range<u64>, highest_chunk: u64) -> Result<()> {
+	// check if chunk numbers are valid.
+	if chunk_numbers.start == 0 {
+		return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, chunk_numbers.start.to_string()));
+	} else if chunk_numbers.start > chunk_numbers.end {
+		return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, ERROR_LAST_GREATER_FIRST));
+	} else if chunk_numbers.end > highest_chunk {
+		return Err(ZffError::new(ZffErrorKind::InvalidChunkNumber, chunk_numbers.end.to_string()));	
+	}
+	Ok(())
 }
