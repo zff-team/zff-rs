@@ -219,12 +219,16 @@ pub const METADATA_BTIME: &str = "btime";
 // - ChunkMap
 /// Table name for the redb chunkmap
 pub const CHUNK_MAP_TABLE: TableDefinition<&[u8; 32], u64> = TableDefinition::new("map");
-/// Table name for the redb preloaded chunkmap
-pub const PRELOADED_CHUNK_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_map");
-/// Table name for the redb preloaded chunk header
-pub const PRELOADED_CHUNK_HEADER_TABLE: TableDefinition<u64, Vec<u8>> = TableDefinition::new("preloaded_chunk_header");
+/// Table name for the redb preloaded chunk offset map
+pub const PRELOADED_CHUNK_OFFSET_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_offset_map");
+/// Table name for the redb preloaded chunk size map
+pub const PRELOADED_CHUNK_SIZE_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_size_map");
+/// Table name for the redb preloaded chunk flags map
+pub const PRELOADED_CHUNK_FLAGS_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_flags_map");
+/// Table name for the redb preloaded chunk flags map
+pub const PRELOADED_CHUNK_CRC_MAP_TABLE: TableDefinition<u64, Vec<u8>> = TableDefinition::new("preloaded_crc_map");
 /// Table name for the redb preloaded same byte data
-pub const PRELOADED_CHUNK_SAME_BYTES_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
+pub const PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
 /// Table name for the redb preloaded chunk duplication map
 pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_dedup_map");
 

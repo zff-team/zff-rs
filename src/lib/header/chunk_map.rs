@@ -100,6 +100,19 @@ impl ChunkFlags {
 		Self::default()
 	}
 
+	/// Returns the byte representation of the flags.
+	pub fn as_bytes(&self) -> u8 {
+		let mut flag_value: u8 = 0;
+		if self.error { flag_value |= ERROR_FLAG_VALUE; }
+		if self.compression { flag_value |= COMPRESSION_FLAG_VALUE; }
+		if self.same_bytes { flag_value |= SAME_BYTES_FLAG_VALUE; }
+		if self.duplicate { flag_value |= DUPLICATION_FLAG_VALUE; }
+		if self.encryption { flag_value |= ENCRYPTION_FLAG_VALUE; }
+		if self.empty_file { flag_value |= EMPTY_FILE_FLAG_VALUE; }
+		if self.virtual_chunk { flag_value |= VIRTUAL_FLAG_VALUE; }
+		flag_value
+	}
+
 	fn struct_name(&self) -> &'static str {
 		"ChunkHeaderFlags"
 	}
