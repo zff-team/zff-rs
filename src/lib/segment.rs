@@ -136,7 +136,7 @@ impl<R: Read + Seek> Segment<R> {
 						  1 + // skip the ChunkMap header version
 						  8 + // skip the length of the map
 						  8 + // skip the chunk number itself
-						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
+						  ((chunk_number - first_chunk_number_of_map) * (8 + 1)); //skip the other chunk entries
 
 		//go to the appropriate chunk map.
 		self.data.seek(SeekFrom::Start(seek_offset))?;
