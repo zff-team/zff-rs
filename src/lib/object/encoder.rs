@@ -50,9 +50,14 @@ use super::chunking;
 use ed25519_dalek::SigningKey;
 use time::OffsetDateTime;
 
+/// Contains a prepared data object. This can be a [PreparedChunk], a [PreparedFileHeader] or a [PreparedFileFooter].
+#[derive(Debug, Clone)]
 pub enum PreparedData {
+	/// A prepared chunk.
 	PreparedChunk(PreparedChunk),
+	/// A prepared file header.
 	PreparedFileHeader(Vec<u8>),
+	/// A prepared file footer.
 	PreparedFileFooter(Vec<u8>),
 }
 
