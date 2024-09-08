@@ -145,10 +145,20 @@ impl ValueDecoder for ChunkFlags {
 	}
 }
 
+pub(crate) enum ChunkMapType {
+	OffsetMap,
+	SizeMap,
+	FlagsMap,
+	CRCMap,
+}
+
+/// Contains the CRC32 value of a chunk (encrypted or unencrypted).
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CRC32Value {
+	/// The unencrypted CRC32 value.
 	Unencrypted(u32),
+	/// The encrypted CRC32 value.
 	Encrypted(Vec<u8>),
 }
 
@@ -189,6 +199,19 @@ impl ValueDecoder for CRC32Value {
 			val => Err(ZffError::new(crate::ZffErrorKind::InvalidOption, format!("{val}"))),
 		}
 	}
+}
+
+/// The ChunkMaps struct contains all chunk maps.
+#[derive(Debug,Clone,PartialEq,Eq,Default)]
+pub struct ChunkMaps {
+	/// The offset map.
+	pub offset_map: ChunkOffsetMap,
+	/// The size map.
+	pub size_map: ChunkSizeMap,
+	/// The flags map.
+	pub flags_map: ChunkFlagMap,
+	/// The CRC map.
+	pub crc_map: ChunkCRCMap,
 }
 
 
@@ -500,18 +523,18 @@ impl ChunkFlagMap {
 	/// Tries to add a chunk entry.  
 	/// Returns true, if the chunk no / ChunkFlags pair was added to the map.  
 	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
-	pub fn add_chunk_entry(&mut self, chunk_no: u64, flag: ChunkFlags) -> bool {
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, flag: &ChunkFlags) -> bool {
 		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
-			self.chunkmap.entry(chunk_no).or_insert(flag);
+			self.chunkmap.entry(chunk_no).or_insert(flag.clone());
 			true
 		}
 	}
 
 	/// Checks if the map is full (returns true if, returns false if not).
 	pub fn is_full(&self) -> bool {
-		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
+		if self.target_size < self.current_size() + 17 { //17 -> 8bytes for next chunk_no, 1 byte for flag, 8 bytes for the size of the encoded BTreeMap
 			true
 		} else {
 			false
@@ -638,18 +661,18 @@ impl ChunkCRCMap {
 	/// Tries to add a chunk entry.  
 	/// Returns true, if the chunk no / crc value pair was added to the map.  
 	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
-	pub fn add_chunk_entry(&mut self, chunk_no: u64, crc: CRC32Value) -> bool {
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, crc: &CRC32Value) -> bool {
 		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
-			self.chunkmap.entry(chunk_no).or_insert(crc);
+			self.chunkmap.entry(chunk_no).or_insert(crc.clone());
 			true
 		}
 	}
 
 	/// Checks if the map is full (returns true if, returns false if not).
 	pub fn is_full(&self) -> bool {
-		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
+		if self.target_size < self.current_size() + 20 { //20 -> 8bytes for next chunk_no, 4 bytes for crc, 8 bytes for the size of the encoded BTreeMap
 			true
 		} else {
 			false
