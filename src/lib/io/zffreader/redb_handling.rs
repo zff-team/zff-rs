@@ -4,58 +4,6 @@ use crate::ValueEncoder;
 
 // - external
 
-
-pub(crate) fn initialize_empty_redb(db: &mut Database) -> Result<()> {
-	let write_txn = db.begin_write()?;
-	{
-		// initialize chunk offset map.
-		let map: HashMap<u64, u64> = HashMap::new();
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE)?;
-		for (key, value) in map {
-			table.insert(key, value)?;
-		}
-
-		// initialize chunk size map.
-		let map: HashMap<u64, u64> = HashMap::new();
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE)?;
-		for (key, value) in map {
-			table.insert(key, value)?;
-		}
-
-		// initialize chunk flags map.
-		let map: HashMap<u64, u8> = HashMap::new();
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE)?;
-		for (key, value) in map {
-			table.insert(key, value)?;
-		}
-
-		// initialize chunk crc map.
-		let map: HashMap<u64, CRC32Value> = HashMap::new();
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_CRC_MAP_TABLE)?;
-		for (key, value) in map {
-			let buf = value.encode_directly();
-			table.insert(key, buf)?;
-		}
-
-		// initialize chunk same bytes map.
-		let map: HashMap<u64, u8> = HashMap::new();
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?;
-		for (key, value) in map {
-			table.insert(key, value)?;
-		}
-
-		// initialize chunk duplication map.
-		let map: HashMap<u64, u64> = HashMap::new();
-		let mut table = write_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?;
-		for (key, value) in map {
-			table.insert(key, value)?;
-		}
-
-	}
-	write_txn.commit()?;
-	Ok(())
-}
-
 // Will copy a redb to another redb.
 pub(crate) fn copy_redb(input_db: &Database, output_db: &mut Database) -> Result<()> {
 	// prepare read context of input_db

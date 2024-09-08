@@ -4,7 +4,7 @@ use std::borrow::Borrow;
 use std::io::{Read, Seek, SeekFrom};
 use std::collections::{HashMap, BTreeMap};
 use std::ops::Range;
-use std::rc::Rc;
+use std::sync::Arc;
 
 // - modules
 mod zffobjectreader;
@@ -67,8 +67,9 @@ impl fmt::Display for ObjectType {
     }
 }
 
+/// The preloaded chunkmaps which can be used by the [ZffReader] to speed up the reading process.
 #[derive(Debug, Default)]
-pub struct PreloadedChunkMapsInMemory {
+pub(crate) struct PreloadedChunkMapsInMemory {
 	offsets: HashMap<u64, u64>,
 	sizes: HashMap<u64, u64>,
 	flags: HashMap<u64, ChunkFlags>,
@@ -78,10 +79,6 @@ pub struct PreloadedChunkMapsInMemory {
 }
 
 impl PreloadedChunkMapsInMemory {
-	fn new() -> Self {
-		Self::default()
-	}
-
 	pub fn with_data(offsets: HashMap<u64, u64>, 
 		sizes: HashMap<u64, u64>, 
 		flags: HashMap<u64, ChunkFlags>, 
@@ -100,8 +97,9 @@ impl PreloadedChunkMapsInMemory {
 	}
 }
 
+/// The preloaded chunkmaps which can be used by the [ZffReader] to speed up the reading process.
 #[derive(Debug, Default)]
-pub enum PreloadedChunkMaps {
+pub(crate) enum PreloadedChunkMaps {
 	#[default]
 	None,
 	InMemory(PreloadedChunkMapsInMemory),
@@ -175,7 +173,7 @@ pub struct ZffReader<R: Read + Seek> {
 	main_footer: MainFooter,
 	chunk_maps: PreloadedChunkMaps,
 	active_object: u64, //the number of the active object.
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
 impl<R: Read + Seek> ZffReader<R> {
@@ -211,14 +209,16 @@ impl<R: Read + Seek> ZffReader<R> {
 			Some(footer) => footer,
 			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER)),
 		};
-		
+
+		let global_chunkmap = Arc::new(main_footer.chunk_offset_maps().clone());
+
 		Ok(Self {
 			segments,
 			object_reader: HashMap::new(),
 			main_footer,
 			chunk_maps: PreloadedChunkMaps::default(),
 			active_object: 0,
-			global_chunkmap: Rc::new(BTreeMap::new()),
+			global_chunkmap,
 		})
 	}
 
@@ -284,7 +284,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// May fail due to various conditions, e.g. corrupted or missing segments.
 	pub fn initialize_object(&mut self, object_number: u64) -> Result<()> {
 		let object_reader = initialize_object_reader(
-			object_number, &mut self.segments, &self.main_footer, Rc::clone(&self.global_chunkmap))?;
+			object_number, &mut self.segments, &self.main_footer, Arc::clone(&self.global_chunkmap))?;
 		self.object_reader.insert(object_number, object_reader);
 		Ok(())
 	}
@@ -294,7 +294,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// May fail due to various conditions, e.g. corrupted or missing segments.
 	pub fn initialize_objects_all(&mut self) -> Result<()> {
 		let object_reader_map = initialize_object_reader_all(
-			&mut self.segments, &self.main_footer, Rc::clone(&self.global_chunkmap))?;
+			&mut self.segments, &self.main_footer, Arc::clone(&self.global_chunkmap))?;
 		self.object_reader = object_reader_map;
 		Ok(())
 	}
@@ -693,12 +693,12 @@ where
 fn initialize_object_reader_all<R: Read + Seek>(
 	segments: &mut HashMap<u64, Segment<R>>, 
 	main_footer: &MainFooter,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 	) -> Result<HashMap<u64, ZffObjectReader>> {
 
 	let mut obj_reader_map = HashMap::new();
 	for obj_no in main_footer.object_footer().keys() {
-		let obj_reader = initialize_object_reader(*obj_no, segments, main_footer, Rc::clone(&global_chunkmap))?;
+		let obj_reader = initialize_object_reader(*obj_no, segments, main_footer, Arc::clone(&global_chunkmap))?;
 		obj_reader_map.insert(*obj_no, obj_reader);
 	}
 	Ok(obj_reader_map)
@@ -708,7 +708,7 @@ fn initialize_object_reader<R: Read + Seek>(
 	object_number: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
 	main_footer: &MainFooter,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>
+	global_chunkmap: Arc<BTreeMap<u64, u64>>
 	) -> Result<ZffObjectReader> {
 	let segment_no_footer = match main_footer.object_footer().get(&object_number) {
 		None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
@@ -727,14 +727,14 @@ fn initialize_object_reader<R: Read + Seek>(
 								*segment_no_header,
 								*segment_no_footer,
 								segments,
-								Rc::clone(&global_chunkmap))
+								Arc::clone(&global_chunkmap))
 						} else {
 							initialize_encrypted_object_reader(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
 								segments,
-								Rc::clone(&global_chunkmap))
+								Arc::clone(&global_chunkmap))
 						},
 	}
 }
@@ -744,7 +744,7 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	header_segment_no: u64,
 	footer_segment_no: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 	) -> Result<ZffObjectReader> {
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {}", obj_number);
@@ -772,7 +772,7 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 	header_segment_no: u64,
 	footer_segment_no: u64,
 	segments: &mut HashMap<u64, Segment<R>>,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>
+	global_chunkmap: Arc<BTreeMap<u64, u64>>
 	) -> Result<ZffObjectReader> {
 
 	let header = match segments.get_mut(&header_segment_no) {
@@ -784,7 +784,7 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 		Some(segment) => segment.read_encrypted_object_footer(obj_number)?,
 	};
 	let obj_reader = ZffObjectReader::Encrypted(
-		Box::new(ZffObjectReaderEncrypted::with_data(header, footer, Rc::clone(&global_chunkmap))));
+		Box::new(ZffObjectReaderEncrypted::with_data(header, footer, Arc::clone(&global_chunkmap))));
 	Ok(obj_reader)
 }
 

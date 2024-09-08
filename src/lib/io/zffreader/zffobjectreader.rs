@@ -1,7 +1,7 @@
 // - STD
 use std::io::Cursor;
 use std::collections::BTreeSet;
-use std::rc::Rc;
+use std::sync::Arc;
 
 
 // - internal
@@ -51,7 +51,7 @@ impl Seek for ZffObjectReader {
 pub struct ZffObjectReaderPhysical {
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterPhysical,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 	position: u64
 }
 
@@ -60,7 +60,7 @@ impl ZffObjectReaderPhysical {
 	pub fn with_obj_metadata(
 		object_header: ObjectHeader, 
 		object_footer: ObjectFooterPhysical,
-		global_chunkmap: Rc<BTreeMap<u64, u64>>,
+		global_chunkmap: Arc<BTreeMap<u64, u64>>,
 		) -> Self {
 		Self {
 			object_header,
@@ -81,7 +81,7 @@ impl ZffObjectReaderPhysical {
 	}
 
 	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.  
-	pub fn read_with_segments<R: Read + Seek>(
+	pub(crate) fn read_with_segments<R: Read + Seek>(
 		&mut self, 
 		buffer: &mut [u8], 
 		segments: &mut HashMap<u64, Segment<R>>,
@@ -111,7 +111,6 @@ impl ZffObjectReaderPhysical {
 			let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
 			let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
 			let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-
 			let chunk_data = get_chunk_data(
 				segment, 
 				current_chunk_number, 
@@ -165,7 +164,7 @@ pub struct ZffObjectReaderLogical {
 	object_footer: ObjectFooterLogical,
 	active_file: u64, // filenumber of active file
 	files: HashMap<u64, FileMetadata>,//<filenumber, metadata>,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
 impl ZffObjectReaderLogical {
@@ -174,9 +173,9 @@ impl ZffObjectReaderLogical {
 		object_header: ObjectHeader, 
 		object_footer: ObjectFooterLogical,
 		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		global_chunkmap: Rc<BTreeMap<u64, u64>>,
+		global_chunkmap: Arc<BTreeMap<u64, u64>>,
 		) -> Result<Self> {
-		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::Minimal, Rc::clone(&global_chunkmap))
+		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::Minimal, Arc::clone(&global_chunkmap))
 	}
 
 	/// Initialize the [ZffObjectReaderLogical] with the recommended set of metadata which will be stored in memory.
@@ -184,9 +183,9 @@ impl ZffObjectReaderLogical {
 		object_header: ObjectHeader, 
 		object_footer: ObjectFooterLogical,
 		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		global_chunkmap: Rc<BTreeMap<u64, u64>>, 
+		global_chunkmap: Arc<BTreeMap<u64, u64>>, 
 		) -> Result<Self> {
-		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::Recommended, Rc::clone(&global_chunkmap))
+		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::Recommended, Arc::clone(&global_chunkmap))
 	}
 
 	/// Initialize the [ZffObjectReaderLogical] which will store all metadata in memory.
@@ -194,9 +193,9 @@ impl ZffObjectReaderLogical {
 		object_header: ObjectHeader, 
 		object_footer: ObjectFooterLogical,
 		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		global_chunkmap: Rc<BTreeMap<u64, u64>>,
+		global_chunkmap: Arc<BTreeMap<u64, u64>>,
 		) -> Result<Self> {
-		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::All, Rc::clone(&global_chunkmap))
+		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::All, Arc::clone(&global_chunkmap))
 	}
 
 	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader).
@@ -280,7 +279,7 @@ impl ZffObjectReaderLogical {
 		object_footer: ObjectFooterLogical,
 		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
 		degree_value: PreloadDegree,
-		global_chunkmap: Rc<BTreeMap<u64, u64>>,
+		global_chunkmap: Arc<BTreeMap<u64, u64>>,
 		) -> Result<Self> {
 		#[cfg(feature = "log")]
 		debug!("Initialize logical object {}", object_header.object_number);
@@ -354,7 +353,7 @@ impl ZffObjectReaderLogical {
 			object_footer,
 			active_file: 1,
 			files,
-			global_chunkmap: Rc::clone(&global_chunkmap),
+			global_chunkmap: Arc::clone(&global_chunkmap),
 		})
 	}
 
@@ -380,7 +379,7 @@ impl ZffObjectReaderLogical {
 	}
 
 	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.
-	pub fn read_with_segments<R: Read + Seek>(
+	pub(crate) fn read_with_segments<R: Read + Seek>(
 		&mut self, 
 		buffer: &mut [u8], 
 		segments: &mut HashMap<u64, Segment<R>>,
@@ -487,7 +486,7 @@ pub struct ZffObjectReaderVirtual {
 	/// the internal reader position
 	position: u64,
 	/// The global chunkmap
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
 impl ZffObjectReaderVirtual {
@@ -495,7 +494,7 @@ impl ZffObjectReaderVirtual {
 	pub fn with_data(
 		object_header: ObjectHeader,
 		object_footer: ObjectFooterVirtual,
-		global_chunkmap: Rc<BTreeMap<u64, u64>>
+		global_chunkmap: Arc<BTreeMap<u64, u64>>
 	) -> Self {
 		Self {
 			object_header,
@@ -503,7 +502,7 @@ impl ZffObjectReaderVirtual {
 			passive_object_header: BTreeMap::new(),
 			virtual_object_map: BTreeSet::new(), //TODO: Fill this map with the appropriate data :D !!!
 			position: 0,
-			global_chunkmap: Rc::clone(&global_chunkmap)
+			global_chunkmap: Arc::clone(&global_chunkmap)
 		}
 	}
 
@@ -538,7 +537,7 @@ impl ZffObjectReaderVirtual {
 	}
 
 	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.
-	pub fn read_with_segments<R: Read + Seek>(
+	pub(crate) fn read_with_segments<R: Read + Seek>(
 		&mut self, 
 		buffer: &mut [u8], 
 		segments: &mut HashMap<u64, Segment<R>>,
@@ -678,7 +677,7 @@ enum PreloadDegree {
 pub struct ZffObjectReaderEncrypted {
 	encrypted_header: EncryptedObjectHeader,
 	encrypted_footer: EncryptedObjectFooter,
-	global_chunkmap: Rc<BTreeMap<u64, u64>>,
+	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
 impl ZffObjectReaderEncrypted {
@@ -686,7 +685,7 @@ impl ZffObjectReaderEncrypted {
 	pub fn with_data(
 		encrypted_header: EncryptedObjectHeader, 
 		encrypted_footer: EncryptedObjectFooter, 
-		global_chunkmap: Rc<BTreeMap<u64, u64>>) -> Self {
+		global_chunkmap: Arc<BTreeMap<u64, u64>>) -> Self {
 		Self {
 			encrypted_header,
 			encrypted_footer,
@@ -709,13 +708,13 @@ impl ZffObjectReaderEncrypted {
 		let obj_reader = match decrypted_footer {
 			ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(
 				ZffObjectReaderPhysical::with_obj_metadata(
-					decrypted_object_header, physical, Rc::clone(&self.global_chunkmap)))),
+					decrypted_object_header, physical, Arc::clone(&self.global_chunkmap)))),
 			ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(
 				ZffObjectReaderLogical::with_obj_metadata_recommended(
-					decrypted_object_header, logical, segments, Rc::clone(&self.global_chunkmap))?)),
+					decrypted_object_header, logical, segments, Arc::clone(&self.global_chunkmap))?)),
 			ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(
 				ZffObjectReaderVirtual::with_data(
-					decrypted_object_header, virt, Rc::clone(&self.global_chunkmap))))
+					decrypted_object_header, virt, Arc::clone(&self.global_chunkmap))))
 		};
 
 		Ok(obj_reader)
