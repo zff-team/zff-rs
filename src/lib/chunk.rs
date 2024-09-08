@@ -30,6 +30,16 @@ impl Chunk {
 		&self.data
 	}
 
+	/// Returns the flags.
+	pub fn flags(&self) -> &ChunkFlags {
+		&self.flags
+	}
+
+	/// Returns the size.
+	pub fn size(&self) -> u64 {
+		self.size
+	}
+
 	/// Checks the integrity of the chunk data by calculating the appropriate crc32 hash.
 	///
 	/// Returns true if the crc32 hash is equal to the hash in the header, otherwise false. 
@@ -42,6 +52,7 @@ impl Chunk {
 }
 
 /// This struct represents a prepared [Chunk] (encrypted and compressed).
+#[derive(Debug, Clone)]
 pub struct PreparedChunk {
 	data: Vec<u8>,
 	flags: ChunkFlags,
@@ -75,7 +86,7 @@ impl PreparedChunk {
 		self.size
 	}
 
-	// Returns the crc32 value.
+	/// Returns the crc32 value.
 	pub fn crc(&self) -> &CRC32Value {
 		&self.crc
 	}
