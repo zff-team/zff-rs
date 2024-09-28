@@ -6,7 +6,7 @@ use std::fs::{OpenOptions, remove_file, metadata};
 // - internal
 use crate::{
 	Result,
-	header::{SegmentHeader, ChunkOffsetMap, ChunkSizeMap, ChunkFlagMap, ChunkCRCMap},
+	header::{SegmentHeader, ChunkOffsetMap, ChunkSizeMap, ChunkFlagMap, ChunkCRCMap, ChunkSamebytesMap, ChunkDeduplicationMap},
 	footer::{SegmentFooter, MainFooter},
 	ValueDecoder,
 	Segment,
@@ -211,6 +211,8 @@ impl<R: Read> ZffWriter<R> {
 		main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
 		main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
 		main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
+		main_footer_samebytes_map: &mut BTreeMap<u64, u64>,
+		main_footer_deduplication_map: &mut BTreeMap<u64, u64>,
 		extend: bool
 		) -> Result<u64> {
 
@@ -289,6 +291,12 @@ impl<R: Read> ZffWriter<R> {
 		let mut chunk_crc_map = ChunkCRCMap::new_empty();
 		chunk_crc_map.set_target_size(chunkmap_size as usize);
 
+		let mut samebytes_map = ChunkSamebytesMap::new_empty();
+		samebytes_map.set_target_size(chunkmap_size as usize);
+
+		let mut deduplication_map = ChunkDeduplicationMap::new_empty();
+		deduplication_map.set_target_size(chunkmap_size as usize);
+
 		let mut segment_footer_len = segment_footer.encode_directly().len() as u64;
 
 		// read chunks and write them into the Writer.
@@ -313,10 +321,14 @@ impl<R: Read> ZffWriter<R> {
 						&mut chunk_size_map,
 						&mut chunk_flags_map,
 						&mut chunk_crc_map,
+						&mut samebytes_map,
+						&mut deduplication_map,
 						main_footer_chunk_offset_map,
 						main_footer_chunk_size_map,
 						main_footer_chunk_flags_map,
 						main_footer_chunk_crc_map,
+						main_footer_samebytes_map,
+						main_footer_deduplication_map,
 						&mut segment_footer,
 						self.current_segment_no,
 						written_bytes + seek_value,
@@ -373,6 +385,28 @@ impl<R: Read> ZffWriter<R> {
 				segment_footer_len += 16; //append 16 bytes to segment footer len
 			}
 
+			if let Ok(flush_written_bytes) = flush_chunk_samebytes_map_checked(
+				&mut samebytes_map,
+				main_footer_samebytes_map,
+				&mut segment_footer,
+				self.current_segment_no,
+				seek_value + written_bytes,
+				output) {
+				written_bytes += flush_written_bytes;
+				segment_footer_len += 16; //append 16 bytes to segment footer len
+			}
+
+			if let Ok(flush_written_bytes) = flush_chunk_dedup_map_checked(
+				&mut deduplication_map,
+				main_footer_deduplication_map,
+				&mut segment_footer,
+				self.current_segment_no,
+				seek_value + written_bytes,
+				output) {
+				written_bytes += flush_written_bytes;
+				segment_footer_len += 16; //append 16 bytes to segment footer len
+			}
+
    			let current_offset = seek_value + written_bytes;
 
 			let prepared_data = match self.current_object_encoder.get_next_data(
@@ -391,10 +425,14 @@ impl<R: Read> ZffWriter<R> {
 								&mut chunk_size_map,
 								&mut chunk_flags_map,
 								&mut chunk_crc_map,
+								&mut samebytes_map,
+								&mut deduplication_map,
 								main_footer_chunk_offset_map,
 								main_footer_chunk_size_map,
 								main_footer_chunk_flags_map,
 								main_footer_chunk_crc_map,
+								main_footer_samebytes_map,
+								main_footer_deduplication_map,
 								&mut segment_footer,
 								self.current_segment_no,
 								written_bytes + seek_value,
@@ -478,6 +516,38 @@ impl<R: Read> ZffWriter<R> {
 						chunk_crc_map.add_chunk_entry(current_chunk_number, prepared_chunk.crc());
 					};
 
+					// checks if the chunk is a samebyte chunk
+					if let Some(samebyte) = prepared_chunk.samebytes() {
+						// adds entry to the samebytes map
+						if !samebytes_map.add_chunk_entry(current_chunk_number, samebyte) {
+							//flush the samebytes map
+							written_bytes += flush_chunk_samebytes_map(
+								&mut samebytes_map, 
+								main_footer_samebytes_map, 
+								&mut segment_footer, 
+								self.current_segment_no, 
+								seek_value + written_bytes, 
+								output)?;
+							samebytes_map.add_chunk_entry(current_chunk_number, samebyte);
+						};
+					};
+
+					// checks if the chunk is a duplicated chunk
+					if let Some(dedup_chunk_no) = prepared_chunk.duplicated() {
+						// adds entry to the deduplication map
+						if !deduplication_map.add_chunk_entry(current_chunk_number, dedup_chunk_no) {
+							//flush the deduplication map
+							written_bytes += flush_chunk_dedup_map(
+								&mut deduplication_map, 
+								main_footer_deduplication_map, 
+								&mut segment_footer, 
+								self.current_segment_no, 
+								seek_value + written_bytes, 
+								output)?;
+							deduplication_map.add_chunk_entry(current_chunk_number, dedup_chunk_no);
+						};
+					};
+
 					// writes the prepared chunk into the Writer
 					written_bytes += output.write(prepared_chunk.data())? as u64;
 				},
@@ -499,6 +569,8 @@ impl<R: Read> ZffWriter<R> {
 					main_footer_chunk_size_map.clone(),
 					main_footer_chunk_flags_map.clone(),
 					main_footer_chunk_crc_map.clone(),
+					main_footer_samebytes_map.clone(),
+					main_footer_deduplication_map.clone(),
 					params.main_footer.description_notes().map(|s| s.to_string()), 
 					0)
 				} else {
@@ -514,6 +586,8 @@ impl<R: Read> ZffWriter<R> {
 				main_footer_chunk_size_map.clone(),
 				main_footer_chunk_flags_map.clone(),
 				main_footer_chunk_crc_map.clone(),
+				main_footer_samebytes_map.clone(),
+				main_footer_deduplication_map.clone(),
 				self.optional_parameter.description_notes.clone(), 
 				0)
 			};
@@ -538,6 +612,8 @@ impl<R: Read> ZffWriter<R> {
 		let mut main_footer_chunk_size_map = BTreeMap::new();
 		let mut main_footer_chunk_flags_map = BTreeMap::new();
 		let mut main_footer_chunk_crc_map = BTreeMap::new();
+		let mut main_footer_samebytes_map = BTreeMap::new();
+		let mut main_footer_deduplication_map = BTreeMap::new();
 
 
 	    let mut extend = self.extender_parameter.is_some();
@@ -580,7 +656,9 @@ impl<R: Read> ZffWriter<R> {
 				&mut main_footer_chunk_offset_map,
 				&mut main_footer_chunk_size_map,
 				&mut main_footer_chunk_flags_map,
-				&mut main_footer_chunk_crc_map, 
+				&mut main_footer_chunk_crc_map,
+				&mut main_footer_samebytes_map,
+				&mut main_footer_deduplication_map,
 				extend) {
 	    		Ok(written_bytes) => {
 	    			#[cfg(feature = "log")]
@@ -610,6 +688,8 @@ impl<R: Read> ZffWriter<R> {
 			main_footer_chunk_size_map,
 			main_footer_chunk_flags_map,
 			main_footer_chunk_crc_map,
+			main_footer_samebytes_map,
+			main_footer_deduplication_map,
 			params.main_footer.description_notes().map(|s| s.to_string()), 
 			current_offset)
 		} else {
@@ -621,6 +701,8 @@ impl<R: Read> ZffWriter<R> {
 			main_footer_chunk_size_map,
 			main_footer_chunk_flags_map,
 			main_footer_chunk_crc_map,
+			main_footer_samebytes_map,
+			main_footer_deduplication_map,
 			self.optional_parameter.description_notes.clone(), 
 			current_offset)
 		};
@@ -694,10 +776,14 @@ fn flush_chunkmaps<W: Write>(
 	chunk_size_map: &mut ChunkSizeMap,
 	chunk_flags_map: &mut ChunkFlagMap,
 	chunk_crc_map: &mut ChunkCRCMap,
+	chunk_samebytes_map: &mut ChunkSamebytesMap,
+	chunk_deduplication_map: &mut ChunkDeduplicationMap,
 	main_footer_chunk_offset_map: &mut BTreeMap<u64, u64>,
 	main_footer_chunk_size_map: &mut BTreeMap<u64, u64>,
 	main_footer_chunk_flags_map: &mut BTreeMap<u64, u64>,
 	main_footer_chunk_crc_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_samebytes_map: &mut BTreeMap<u64, u64>,
+	main_footer_chunk_deduplication_map: &mut BTreeMap<u64, u64>,
 	segment_footer: &mut SegmentFooter,
 	current_segment_no: u64,
 	offset: u64,
@@ -735,6 +821,24 @@ fn flush_chunkmaps<W: Write>(
 	written_bytes += flush_chunk_crc_map(
 		chunk_crc_map, 
 		main_footer_chunk_crc_map, 
+		segment_footer, 
+		current_segment_no, 
+		offset + written_bytes, 
+		output)?;
+
+	// flush the chunk samebytes map
+	written_bytes += flush_chunk_samebytes_map(
+		chunk_samebytes_map, 
+		main_footer_chunk_samebytes_map, 
+		segment_footer, 
+		current_segment_no, 
+		offset + written_bytes, 
+		output)?;
+	
+	// flush the chunk deduplication map
+	written_bytes += flush_chunk_dedup_map(
+		chunk_deduplication_map, 
+		main_footer_chunk_deduplication_map, 
 		segment_footer, 
 		current_segment_no, 
 		offset + written_bytes, 
@@ -891,6 +995,84 @@ fn flush_chunk_crc_map_checked<W: Write>(
 		written_bytes += flush_chunk_crc_map(
 			chunk_crc_map, 
 			main_footer_chunk_crc_map, 
+			segment_footer, 
+			current_segment_no, 
+			offset, 
+			output)?;
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_samebytes_map<W: Write>(
+	chunk_samebytes_map: &mut ChunkSamebytesMap,
+	main_footer_chunk_samebytes_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	offset: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if let Some(chunk_no) = chunk_samebytes_map.chunkmap().keys().max() {
+		main_footer_chunk_samebytes_map.insert(*chunk_no, current_segment_no);
+		segment_footer.chunk_samebytes_map_table.insert(*chunk_no, offset);
+		written_bytes += output.write(&chunk_samebytes_map.encode_directly())? as u64;
+		chunk_samebytes_map.flush();
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_samebytes_map_checked<W: Write>(
+	chunk_samebytes_map: &mut ChunkSamebytesMap,
+	main_footer_chunk_samebytes_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	offset: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if chunk_samebytes_map.is_full() {
+		written_bytes += flush_chunk_samebytes_map(
+			chunk_samebytes_map, 
+			main_footer_chunk_samebytes_map, 
+			segment_footer, 
+			current_segment_no, 
+			offset, 
+			output)?;
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_dedup_map<W: Write>(
+	chunk_dedup_map: &mut ChunkDeduplicationMap,
+	main_footer_chunk_dedup_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	offset: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if let Some(chunk_no) = chunk_dedup_map.chunkmap().keys().max() {
+		main_footer_chunk_dedup_map.insert(*chunk_no, current_segment_no);
+		segment_footer.chunk_dedup_map_table.insert(*chunk_no, offset);
+		written_bytes += output.write(&chunk_dedup_map.encode_directly())? as u64;
+		chunk_dedup_map.flush();
+	}
+	Ok(written_bytes)
+}
+
+fn flush_chunk_dedup_map_checked<W: Write>(
+	chunk_dedup_map: &mut ChunkDeduplicationMap,
+	main_footer_chunk_dedup_map: &mut BTreeMap<u64, u64>,
+	segment_footer: &mut SegmentFooter,
+	current_segment_no: u64,
+	offset: u64,
+	output: &mut W,
+) -> Result<u64> {
+	let mut written_bytes = 0;
+	if chunk_dedup_map.is_full() {
+		written_bytes += flush_chunk_dedup_map(
+			chunk_dedup_map, 
+			main_footer_chunk_dedup_map, 
 			segment_footer, 
 			current_segment_no, 
 			offset, 
