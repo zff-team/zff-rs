@@ -713,10 +713,10 @@ impl<R: Read> Read for ZffStreamer<R> {
                                     },
                                     None => unreachable!(),
                                 };
-                                if !self.in_progress_data.chunkmaps.crc_map.add_chunk_entry(current_chunk_number, &crc) {
+                                if !self.in_progress_data.chunkmaps.crc_map.add_chunk_entry(current_chunk_number, crc) {
                                     self.flush_chunkmap(ChunkMapType::CRCMap);
                                     self.read_state = ReadState::ChunkCrcMap;
-                                    self.in_progress_data.chunkmaps.crc_map.add_chunk_entry(current_chunk_number, &crc);
+                                    self.in_progress_data.chunkmaps.crc_map.add_chunk_entry(current_chunk_number, crc);
                                     continue 'read_loop;
                                 }
                                 self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::SameBytes;

@@ -1,6 +1,6 @@
 // - internal
 use crate::{
-	header::{CRC32Value, ChunkFlags}, 
+	header::ChunkFlags, 
 	io::calculate_crc32, 
 	Result,
 };
@@ -52,14 +52,14 @@ pub struct PreparedChunk {
 	data: Vec<u8>,
 	flags: ChunkFlags,
 	size: u64,
-	crc: CRC32Value,
+	crc: u32,
 	samebytes: Option<u8>,
 	duplicated: Option<u64>,
 }
 
 impl PreparedChunk {
 	/// Returns a new [PreparedChunk] with the given values.
-	pub fn new(data: Vec<u8>, flags: ChunkFlags, size: u64, crc: CRC32Value, samebytes: Option<u8>, duplicated: Option<u64>) -> PreparedChunk {
+	pub fn new(data: Vec<u8>, flags: ChunkFlags, size: u64, crc: u32, samebytes: Option<u8>, duplicated: Option<u64>) -> PreparedChunk {
 		Self {
 			data,
 			flags,
@@ -86,8 +86,8 @@ impl PreparedChunk {
 	}
 
 	/// Returns the crc32 value.
-	pub fn crc(&self) -> &CRC32Value {
-		&self.crc
+	pub fn crc(&self) -> u32 {
+		self.crc
 	}
 
 	/// Returns true if the samebytes flag is set, otherwise false.

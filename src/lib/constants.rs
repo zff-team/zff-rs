@@ -234,7 +234,7 @@ pub const PRELOADED_CHUNK_SIZE_MAP_TABLE: TableDefinition<u64, u64> = TableDefin
 /// Table name for the redb preloaded chunk flags map
 pub const PRELOADED_CHUNK_FLAGS_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_flags_map");
 /// Table name for the redb preloaded chunk flags map
-pub const PRELOADED_CHUNK_CRC_MAP_TABLE: TableDefinition<u64, Vec<u8>> = TableDefinition::new("preloaded_crc_map");
+pub const PRELOADED_CHUNK_CRC_MAP_TABLE: TableDefinition<u64, u32> = TableDefinition::new("preloaded_crc_map");
 /// Table name for the redb preloaded same byte data
 pub const PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
 /// Table name for the redb preloaded chunk duplication map

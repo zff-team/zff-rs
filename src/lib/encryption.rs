@@ -4,8 +4,6 @@ use std::fmt;
 // - internal
 use crate::{
 	Result,
-	ZffError,
-	ZffErrorKind,
 	SCRYPT_DERIVED_KEY_LENGTH_AES_128,
 	SCRYPT_DERIVED_KEY_LENGTH_AES_256
 };
@@ -120,7 +118,6 @@ impl fmt::Display for PBEScheme {
 #[derive(Debug,Clone,Eq,PartialEq)]
 enum MessageType {
 	ChunkData,
-	ChunkHeaderCRC32,
 	FileHeader,
 	FileFooter,
 	ObjectHeader,
@@ -360,36 +357,6 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
 	}
 
-	/// Method to encrypt the crc32 value of a chunk header with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given crc32 value.
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	/// # Example
-	/// ```
-	/// use zff::*;
-	/// use hex::ToHex;
-	///
-	/// fn main() -> Result<()> {
-	///        let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
-	///        let chunk_no = 1; // 12Byte/96Bit Key
-	///        let message = "My message";
-	/// 
-	///        let ciphertext = Encryption::encrypt_chunk_header_crc32(key, message, chunk_no, EncryptionAlgorithm::AES256GCM)?;
-	/// 
-	///        assert_eq!(ciphertext.encode_hex::<String>(), "b1c69e9d1d2063327fbe887a1b94baf99a82669d0bff6b9f4f79".to_string());
-	///        Ok(())
-	/// }
-	/// ```
-	/// # Error
-	/// This method will fail, if the encryption fails.
-	pub fn encrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)
-	}
-
 	/// Method to encrypt a [crate::header::VirtualMappingInformation] with a key and and the given offset. This method should primary used to encrypt
 	/// the given [crate::header::VirtualMappingInformation].
 	/// Returns a the cipthertext as ```Vec<u8>```.
@@ -475,25 +442,6 @@ impl Encryption {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
-	}
-
-	/// Method to decrypt the crc32 value of a chunk header with a key and and the given chunk number. This method should primary used to decrypt
-	/// a crc32 value.
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_header_crc32<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<u32>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let bytes: [u8; 4] = match Encryption::decrypt_message(
-			key, message, chunk_no, algorithm, MessageType::ChunkHeaderCRC32)?.try_into() {
-			Ok(bytes) => bytes,
-			Err(_) => return Err(ZffError::new(ZffErrorKind::Custom, "")),
-		};
-		Ok(u32::from_le_bytes(bytes))
 	}
 
 	/// Method to decrypt a [crate::header::VirtualMappingInformation] with a key and and the given offset. This method should primary used to decrypt
@@ -589,7 +537,6 @@ impl Encryption {
 	{
 		let nonce = match message_type.borrow() {
 			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
-			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(nonce_value)?,
 			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
 			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
 			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
@@ -622,7 +569,6 @@ impl Encryption {
 	{
 		let nonce = match message_type.borrow() {
 			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
-			MessageType::ChunkHeaderCRC32 => Encryption::gen_crypto_nonce_chunk_crc32(nonce_value)?,
 			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
 			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
 			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
@@ -697,9 +643,9 @@ impl Encryption {
 
 	/// Method to generate a 96-bit nonce for the chunk crc32 value. Will use the chunk number as nonce and fills the
 	/// missing bits with zeros - except the last bit (the last bit is set).
-	fn gen_crypto_nonce_chunk_crc32(chunk_no: u64) -> Result<Nonce> {
+	fn gen_crypto_nonce_chunk_offset_map(object_no: u64) -> Result<Nonce> {
 		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(chunk_no)?;
+		buffer.write_u64::<LittleEndian>(object_no)?;
 		buffer.append(&mut vec!(0u8; 4));
 		let buffer_len = buffer.len();
 		buffer[buffer_len - 1] |= 0b00000001;

@@ -149,20 +149,21 @@ impl ValueDecoder for ChunkFlags {
 	}
 }
 
+#[repr(C)]
 /// The appropriate Chunkmap type.
 pub enum ChunkMapType {
 	/// The offset map.
-	OffsetMap,
+	OffsetMap = 0,
 	/// The size map.
-	SizeMap,
+	SizeMap = 1,
 	/// The flags map.
-	FlagsMap,
+	FlagsMap = 2,
 	/// The CRC map.
-	CRCMap,
+	CRCMap = 3,
 	/// The sambebytes map.
-	SamebytesMap,
+	SamebytesMap = 4,
 	/// The deduplication map.
-	DeduplicationMap,
+	DeduplicationMap = 5,
 }
 
 /// The ChunkMaps struct contains all chunk maps.
@@ -585,7 +586,7 @@ impl Serialize for ChunkFlagMap {
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkCRCMap {
-	chunkmap: BTreeMap<u64, CRC32Value>, //<chunk no, offset in segment>
+	chunkmap: BTreeMap<u64, u32>, //<chunk no, offset in segment>
 	target_size: usize,
 }
 
@@ -597,7 +598,7 @@ impl Default for ChunkCRCMap {
 
 impl ChunkCRCMap {
 	/// returns a new [ChunkCRCMap] with the given values.
-	pub fn with_data(chunkmap: BTreeMap<u64, CRC32Value>) -> Self {
+	pub fn with_data(chunkmap: BTreeMap<u64, u32>) -> Self {
 		Self {
 			chunkmap,
 			target_size: 0,
@@ -605,20 +606,14 @@ impl ChunkCRCMap {
 	}
 
 	/// Returns a reference to the inner map
-	pub fn chunkmap(&self) -> &BTreeMap<u64, CRC32Value> {
+	pub fn chunkmap(&self) -> &BTreeMap<u64, u32> {
 		&self.chunkmap
 	}
 
 	/// The encoded size of this map.
 	pub fn current_size(&self) -> usize {
 		match self.chunkmap.first_key_value() {
-			Some(entry) => {
-				let value_size = match entry.1 {
-					CRC32Value::Unencrypted(_) => 4,
-					CRC32Value::Encrypted(value) => value.len(),
-				};
-				self.chunkmap.len() * (8 + value_size) + 8
-			}
+			Some(_) => self.chunkmap.len() * (8 + 4) + 8, //8 -> 8bytes for the chunk no, 4 bytes for the crc
 			None => return 0,
 		}
 	}
@@ -639,7 +634,7 @@ impl ChunkCRCMap {
 	/// Tries to add a chunk entry.  
 	/// Returns true, if the chunk no / crc value pair was added to the map.  
 	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
-	pub fn add_chunk_entry(&mut self, chunk_no: u64, crc: &CRC32Value) -> bool {
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, crc: u32) -> bool {
 		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
@@ -658,7 +653,7 @@ impl ChunkCRCMap {
 	}
 
 	/// Returns the inner map and replaces it with an empty map.
-	pub fn flush(&mut self) -> BTreeMap<u64, CRC32Value> {
+	pub fn flush(&mut self) -> BTreeMap<u64, u32> {
 		std::mem::take(&mut self.chunkmap)
 	}
 }
@@ -684,7 +679,7 @@ impl HeaderCoding for ChunkCRCMap {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
-		let chunkmap = BTreeMap::<u64, CRC32Value>::decode_directly(&mut cursor)?;
+		let chunkmap = BTreeMap::<u64, u32>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
 }

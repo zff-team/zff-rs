@@ -22,7 +22,7 @@ use crate::{
     CompressionAlgorithm,
 	PreparedChunk,
     io::{buffer_chunk, check_same_byte},
-	header::{ChunkFlags, CRC32Value, DeduplicationChunkMap},
+	header::{ChunkFlags, DeduplicationChunkMap},
 	error::{ZffError, ZffErrorKind},
 	encryption::{Encryption, EncryptionAlgorithm},
 	ChunkContent,
@@ -486,7 +486,7 @@ pub(crate) fn chunking(
 	let mut flags = ChunkFlags::default();
 	flags.empty_file = empty_file_flag;
 	if empty_file_flag {
-		return Ok(PreparedChunk::new(Vec::new(), flags, 0, CRC32Value::Unencrypted(0), None, None));
+		return Ok(PreparedChunk::new(Vec::new(), flags, 0, 0, None, None));
 	}
 
 	let mut sambebyte = None;
@@ -531,25 +531,8 @@ pub(crate) fn chunking(
 		},
 	};
 
-	// get crc32 (and encrypt the value, if necessary)
-	let crc32 = {
-		let unencrypted_value = *encoding_thread_pool_manager.crc32_thread.get_result();
-		match encryption_key {
-			Some(encryption_key) => {
-				let encryption_algorithm = match encryption_algorithm {
-					Some(algorithm) => algorithm,
-					None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
-				};
-				CRC32Value::Encrypted(
-					Encryption::encrypt_chunk_header_crc32(
-						encryption_key, 
-						unencrypted_value.to_le_bytes(), 
-						current_chunk_number, 
-						encryption_algorithm)?)
-			},
-			None => CRC32Value::Unencrypted(unencrypted_value),
-		}
-	};
+	// get crc32
+	let crc32 = *encoding_thread_pool_manager.crc32_thread.get_result();
 
 	if compression_flag {
 		flags.compression = true;

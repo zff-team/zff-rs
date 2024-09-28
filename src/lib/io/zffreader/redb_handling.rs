@@ -1,6 +1,5 @@
 // - Parent
 use super::*;
-use crate::ValueEncoder;
 
 // - external
 
@@ -120,13 +119,12 @@ pub(crate) fn initialize_redb_table_flags_map(db: &mut Database, map: &HashMap<u
 	Ok(())
 }
 
-pub(crate) fn initialize_redb_table_crc_map(db: &mut Database, map: &HashMap<u64, CRC32Value>) -> Result<()> {
+pub(crate) fn initialize_redb_table_crc_map(db: &mut Database, map: &HashMap<u64, u32>) -> Result<()> {
 	let write_txn = db.begin_write()?;
 	{
 		let mut table = write_txn.open_table(PRELOADED_CHUNK_CRC_MAP_TABLE)?;
 		for (key, value) in map {
-			let buf = value.encode_directly();
-			table.insert(key, buf)?;
+			table.insert(key, value)?;
 		}
 	}
 	write_txn.commit()?;
@@ -205,15 +203,14 @@ pub(crate) fn extract_redb_flags_map(db: &mut Database) -> Result<HashMap<u64, C
 	Ok(new_map)
 }
 
-pub(crate) fn extract_redb_crc_map(db: &mut Database) -> Result<HashMap<u64, CRC32Value>> {
+pub(crate) fn extract_redb_crc_map(db: &mut Database) -> Result<HashMap<u64, u32>> {
 	let mut new_map = HashMap::new();
 	let read_txn = db.begin_read()?;
 	let table = read_txn.open_table(PRELOADED_CHUNK_CRC_MAP_TABLE)?;
 	let mut table_iterator = table.iter()?;
 	while let Some(data) = table_iterator.next_back() {
 		let (key, value) = data?;
-		let crc = CRC32Value::decode_directly(&mut value.value().as_slice())?;
-		new_map.insert(key.value(), crc);
+		new_map.insert(key.value(), value.value());
 	}
 	Ok(new_map)
 }

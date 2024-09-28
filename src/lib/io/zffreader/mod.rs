@@ -30,7 +30,6 @@ use crate::{
 		SegmentHeader, 
 		ObjectType as HeaderObjectType,
 		ChunkFlags,
-		CRC32Value,
 		ChunkOffsetMap,
 		ChunkSizeMap,
 		ChunkFlagMap,
@@ -78,7 +77,7 @@ pub(crate) struct PreloadedChunkMapsInMemory {
 	offsets: HashMap<u64, u64>,
 	sizes: HashMap<u64, u64>,
 	flags: HashMap<u64, ChunkFlags>,
-	crcs: HashMap<u64, CRC32Value>,
+	crcs: HashMap<u64, u32>,
 	same_bytes: HashMap<u64, u8>,
 	duplicate_chunks: HashMap<u64, u64>,
 }
@@ -87,7 +86,7 @@ impl PreloadedChunkMapsInMemory {
 	pub fn with_data(offsets: HashMap<u64, u64>, 
 		sizes: HashMap<u64, u64>, 
 		flags: HashMap<u64, ChunkFlags>, 
-		crcs: HashMap<u64, CRC32Value>, 
+		crcs: HashMap<u64, u32>, 
 		same_bytes: HashMap<u64, u8>, 
 		duplicate_chunks: HashMap<u64, u64>
 	) -> Self {
