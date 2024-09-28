@@ -42,6 +42,10 @@ pub struct MainFooter {
 	pub chunk_flags_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
 	/// the segment numbers where the appropriate chunkmap can be found.
 	pub chunk_crc_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+	/// The segment numbers where the appropriate chunkmap can be found.
+	pub chunk_samebytes_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+	/// The segment numbers where the appropriate chunkmap can be found.
+	pub chunk_dedup_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
 	/// some optional (globally) description notes for the container.
 	pub description_notes: Option<String>,
 	/// offset in the current segment, where the footer starts.
@@ -58,6 +62,8 @@ impl MainFooter {
 		chunk_size_maps: BTreeMap<u64, u64>,
 		chunk_flags_maps: BTreeMap<u64, u64>,
 		chunk_crc_maps: BTreeMap<u64, u64>,
+		chunk_samebytes_maps: BTreeMap<u64, u64>,
+		chunk_dedup_maps: BTreeMap<u64, u64>,
 		description_notes: Option<String>,
 		footer_offset: u64) -> MainFooter {
 		Self {
@@ -68,6 +74,8 @@ impl MainFooter {
 			chunk_size_maps,
 			chunk_flags_maps,
 			chunk_crc_maps,
+			chunk_samebytes_maps,
+			chunk_dedup_maps,
 			description_notes,
 			footer_offset,
 		}
@@ -137,6 +145,16 @@ impl MainFooter {
 	pub fn chunk_crc_maps(&self) -> &BTreeMap<u64, u64> {
 		&self.chunk_crc_maps
 	}
+
+	/// Returns a reference of the global chunk samebytes table.
+	pub fn chunk_samebytes_maps(&self) -> &BTreeMap<u64, u64> {
+		&self.chunk_samebytes_maps
+	}
+
+	/// Returns a reference of the global chunk deduplication table.
+	pub fn chunk_dedup_maps(&self) -> &BTreeMap<u64, u64> {
+		&self.chunk_dedup_maps
+	}
 }
 
 impl HeaderCoding for MainFooter {
@@ -160,6 +178,8 @@ impl HeaderCoding for MainFooter {
 		vec.append(&mut self.chunk_size_maps.encode_directly());
 		vec.append(&mut self.chunk_flags_maps.encode_directly());
 		vec.append(&mut self.chunk_crc_maps.encode_directly());
+		vec.append(&mut self.chunk_samebytes_maps.encode_directly());
+		vec.append(&mut self.chunk_dedup_maps.encode_directly());
 		if let Some(description_notes) = &self.description_notes {
 			vec.append(&mut description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
 		};
@@ -177,6 +197,8 @@ impl HeaderCoding for MainFooter {
 		let chunk_size_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_flags_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_crc_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_samebytes_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_dedup_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let position = cursor.position();
 		let description_notes = match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
 			Ok(value) => Some(value),
@@ -197,6 +219,8 @@ impl HeaderCoding for MainFooter {
 			chunk_size_maps,
 			chunk_flags_maps,
 			chunk_crc_maps,
+			chunk_samebytes_maps,
+			chunk_dedup_maps,
 			description_notes, 
 			footer_offset))
 	}

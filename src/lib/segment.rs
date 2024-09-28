@@ -12,6 +12,7 @@ use crate::{
 	ZffErrorKind,
 	Encryption,
 	CompressionAlgorithm,
+	ChunkContent,
 	decompress_buffer,
 	header::{SegmentHeader, ObjectHeader, EncryptionInformation, EncryptedObjectHeader, ChunkFlags},
 	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
@@ -144,7 +145,7 @@ impl<R: Read + Seek> Segment<R> {
 		let flags = ChunkFlags::decode_directly(&mut self.data)?;
 		Ok(flags)
 	}
-
+	
 	/// Returns the chunked data, uncompressed and unencrypted.
 	/// Chunk metadata could be optionally attached, e.g. from a precached chunk map.
 	pub(crate) fn chunk_data<E, C>(&mut self, 
@@ -302,18 +303,6 @@ impl<R: Read + Seek> Seek for Segment<R> {
 		Ok(position)
 	}
 }
-
-/// The data of the chunk.
-pub(crate) enum ChunkContent {
-		/// The unencrypted and uncompressed original data of the chunk.
-		Raw(Vec<u8>),
-		/// The appropriate byte, if the same byte flag is set.
-		SameBytes(u8),
-		/// The appropriate chunk, if this chunk is a duplication.
-		Duplicate(u64),
-}
-
-
 
 fn get_chunkmap_offset(map: &BTreeMap<u64, u64>, chunk_number: u64) -> Result<u64> {
     match map.range(chunk_number..).next() {

@@ -39,6 +39,10 @@ pub struct SegmentFooter {
 	pub chunk_flags_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
 	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
 	pub chunk_crc_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
+	pub chunk_samebytes_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
+	/// [BTreeMap] containing the chunk number and the appropriate offset of the chunkmaps.
+	pub chunk_dedup_map_table: BTreeMap<u64, u64>, //<highest chunk number, offset>
 	/// The first chunk number which was used in this segment.
 	pub first_chunk_number: u64,
 	/// The offset where the footer starts.
@@ -63,6 +67,8 @@ impl SegmentFooter {
 			chunk_size_map_table: BTreeMap::new(),
 			chunk_flags_map_table: BTreeMap::new(),
 			chunk_crc_map_table: BTreeMap::new(),
+			chunk_samebytes_map_table: BTreeMap::new(),
+			chunk_dedup_map_table: BTreeMap::new(),
 			first_chunk_number: INITIAL_CHUNK_NUMBER,
 			footer_offset: 0,
 		}
@@ -77,6 +83,8 @@ impl SegmentFooter {
 		chunk_size_map_table: BTreeMap<u64, u64>,
 		chunk_flags_map_table: BTreeMap<u64, u64>,
 		chunk_crc_map_table: BTreeMap<u64, u64>,
+		chunk_samebytes_map_table: BTreeMap<u64, u64>,
+		chunk_dedup_map_table: BTreeMap<u64, u64>,
 		first_chunk_number: u64,
 		footer_offset: u64) -> SegmentFooter {
 		Self {
@@ -87,6 +95,8 @@ impl SegmentFooter {
 			chunk_size_map_table,
 			chunk_flags_map_table,
 			chunk_crc_map_table,
+			chunk_samebytes_map_table,
+			chunk_dedup_map_table,
 			first_chunk_number,
 			footer_offset,
 		}
@@ -145,6 +155,8 @@ impl HeaderCoding for SegmentFooter {
 		vec.append(&mut self.chunk_size_map_table.encode_directly());
 		vec.append(&mut self.chunk_flags_map_table.encode_directly());
 		vec.append(&mut self.chunk_crc_map_table.encode_directly());
+		vec.append(&mut self.chunk_samebytes_map_table.encode_directly());
+		vec.append(&mut self.chunk_dedup_map_table.encode_directly());
 		vec.append(&mut self.first_chunk_number.encode_directly());
 		vec.append(&mut self.footer_offset.encode_directly());
 		vec
@@ -160,6 +172,8 @@ impl HeaderCoding for SegmentFooter {
 		let chunk_size_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_flags_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_crc_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_samebytes_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_dedup_map_table = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let first_chunk_number = u64::decode_directly(&mut cursor)?;
 		let footer_offset = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentFooter::new(
@@ -170,6 +184,8 @@ impl HeaderCoding for SegmentFooter {
 			chunk_size_map_table,
 			chunk_flags_map_table,
 			chunk_crc_map_table,
+			chunk_samebytes_map_table,
+			chunk_dedup_map_table,
 			first_chunk_number, 
 			footer_offset))
 	}

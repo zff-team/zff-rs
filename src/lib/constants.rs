@@ -29,8 +29,12 @@ pub const HEADER_IDENTIFIER_CHUNK_OFFSET_MAP: u32 = 0x7A666678;
 pub const HEADER_IDENTIFIER_CHUNK_SIZE_MAP: u32 = 0x7A666679;
 /// The identifier of the [ChunkFlagMap](crate::header::ChunkFlagMap).
 pub const HEADER_IDENTIFIER_CHUNK_FLAG_MAP: u32 = 0x7A66667A;
-/// The identifier of the [ChunkFlagMap](crate::header::ChunkFlagMap).
+/// The identifier of the [ChunkCRCMap](crate::header::ChunkFlagMap).
 pub const HEADER_IDENTIFIER_CHUNK_CRC_MAP: u32 = 0x7a666669;
+/// The identifier of the [ChunkSamebytesMap](crate::header::ChunkFlagMap).
+pub const HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP: u32 = 0x7a666653;
+/// The identifier of the [ChunkDeduplicationMap](crate::header::ChunkFlagMap).
+pub const HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP: u32 = 0x7a666644;
 /// The identifier of the [VirtualMappingInformation](crate::header::VirtualMappingInformation).
 pub const HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION: u32 = 0x7a666676;
 /// The identifier of the [VirtualLayer](crate::header::VirtualObjectMap).
@@ -164,6 +168,10 @@ pub const DEFAULT_HEADER_VERSION_CHUNK_SIZE_MAP: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_CHUNK_FLAG_MAP: u8 = 1;
 /// current header version for the [ChunkCRCMap](crate::header::ChunkCRCMap) structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_CRC_MAP: u8 = 1;
+/// current header version for the [ChunkSamebytesMap](crate::header::ChunkSamebytesMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP: u8 = 1;
+/// current header version for the [ChunkDedeuplicationMap](crate::header::ChunkDedeuplicationMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_DEDUPLICATION_MAP: u8 = 1;
 /// current header version for the [VirtualMappingInformation](crate::header::VirtualMappingInformation) structure.
 pub const DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION: u8 = 1;
 /// current header version for the [VirtualLayer](crate::header::VirtualObjectMap) structure.

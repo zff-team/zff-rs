@@ -21,6 +21,10 @@ use crate::{
 	DEFAULT_HEADER_VERSION_CHUNK_FLAG_MAP,
 	HEADER_IDENTIFIER_CHUNK_CRC_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_CRC_MAP,
+	HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP,
+	DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP,
+	HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP,
+	DEFAULT_HEADER_VERSION_CHUNK_DEDUPLICATION_MAP,
 	CHUNK_MAP_TABLE,
 	ERROR_FLAG_VALUE,
 	COMPRESSION_FLAG_VALUE,
@@ -145,64 +149,25 @@ impl ValueDecoder for ChunkFlags {
 	}
 }
 
-pub(crate) enum ChunkMapType {
+/// The appropriate Chunkmap type.
+pub enum ChunkMapType {
+	/// The offset map.
 	OffsetMap,
+	/// The size map.
 	SizeMap,
+	/// The flags map.
 	FlagsMap,
+	/// The CRC map.
 	CRCMap,
-}
-
-/// Contains the CRC32 value of a chunk (encrypted or unencrypted).
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum CRC32Value {
-	/// The unencrypted CRC32 value.
-	Unencrypted(u32),
-	/// The encrypted CRC32 value.
-	Encrypted(Vec<u8>),
-}
-
-impl ValueEncoder for CRC32Value {
-	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let enc_identifier_byte = match self {
-			CRC32Value::Unencrypted(_) => 0,
-			CRC32Value::Encrypted(_) => 1,
-		};
-		vec.append(&mut enc_identifier_byte.encode_directly());
-		match self {
-			CRC32Value::Unencrypted(value) => vec.append(&mut value.encode_directly()),
-			CRC32Value::Encrypted(value) => vec.append(&mut value.encode_directly()),
-		};
-		vec
-	}
-
-	fn identifier(&self) -> u8 {
-		METADATA_EXT_TYPE_IDENTIFIER_U8
-	}
-}
-
-impl ValueDecoder for CRC32Value {
-	type Item = Self;
-	
-	fn decode_directly<R: Read>(data: &mut R) -> Result<Self> {
-		let enc_identifier_byte = u8::decode_directly(data)?;
-		match enc_identifier_byte {
-			0 => {
-				let value = u32::decode_directly(data)?;
-				Ok(CRC32Value::Unencrypted(value))
-			},
-			1 => {
-				let value = Vec::<u8>::decode_directly(data)?;
-				Ok(CRC32Value::Encrypted(value))
-			},
-			val => Err(ZffError::new(crate::ZffErrorKind::InvalidOption, format!("{val}"))),
-		}
-	}
+	/// The sambebytes map.
+	SamebytesMap,
+	/// The deduplication map.
+	DeduplicationMap,
 }
 
 /// The ChunkMaps struct contains all chunk maps.
 #[derive(Debug,Clone,PartialEq,Eq,Default)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct ChunkMaps {
 	/// The offset map.
 	pub offset_map: ChunkOffsetMap,
@@ -212,6 +177,22 @@ pub struct ChunkMaps {
 	pub flags_map: ChunkFlagMap,
 	/// The CRC map.
 	pub crc_map: ChunkCRCMap,
+	/// The same bytes map.
+	pub same_bytes_map: ChunkSamebytesMap,
+	/// The deduplication map.
+	pub duplicate_chunks: ChunkDeduplicationMap,
+}
+
+impl ChunkMaps {
+	/// checks if all maps are empty.
+	pub fn is_empty(&self) -> bool {
+		self.offset_map.chunkmap().is_empty() && 
+		self.size_map.chunkmap().is_empty() && 
+		self.flags_map.chunkmap().is_empty() && 
+		self.crc_map.chunkmap().is_empty() && 
+		self.same_bytes_map.chunkmap().is_empty() && 
+		self.duplicate_chunks.chunkmap().is_empty()
+	}
 }
 
 
@@ -336,7 +317,6 @@ impl Serialize for ChunkOffsetMap {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
-        state.serialize_field("target-size", &self.target_size)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }
@@ -465,7 +445,6 @@ impl Serialize for ChunkSizeMap {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
-        state.serialize_field("target-size", &self.target_size)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }
@@ -595,7 +574,6 @@ impl Serialize for ChunkFlagMap {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
-        state.serialize_field("target-size", &self.target_size)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }
@@ -698,7 +676,6 @@ impl HeaderCoding for ChunkCRCMap {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
 		vec.append(&mut Self::version().encode_directly());
 		vec.append(&mut self.chunkmap.encode_directly());
 		vec
@@ -733,7 +710,264 @@ impl Serialize for ChunkCRCMap {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
-        state.serialize_field("target-size", &self.target_size)?;
+        for (key, value) in &self.chunkmap {
+        	state.serialize_field(string_to_str(key.to_string()), &value)?;
+        }
+        state.end()
+    }
+}
+
+/// The [ChunkSamebytesMap] stores the chunk size of the appropriate chunk.
+#[derive(Debug,Clone,PartialEq,Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+pub struct ChunkSamebytesMap {
+	chunkmap: BTreeMap<u64, u8>, //<chunk no, chunk size in segment>
+	target_size: usize,
+}
+
+impl Default for ChunkSamebytesMap {
+	fn default() -> Self {
+		Self::new_empty()
+	}
+}
+
+impl ChunkSamebytesMap {
+	/// returns a new [ChunkSamebytesMap] with the given values.
+	pub fn with_data(chunkmap: BTreeMap<u64, u8>) -> Self {
+		Self {
+			chunkmap,
+			target_size: 0,
+		}
+	}
+
+	/// returns a new, empty [ChunkMap] with the given values.
+	pub fn new_empty() -> Self {
+		Self {
+			chunkmap: BTreeMap::new(),
+			target_size: 0,
+		}
+	}
+
+	/// Returns a reference to the inner map
+	pub fn chunkmap(&self) -> &BTreeMap<u64, u8> {
+		&self.chunkmap
+	}
+
+	/// The encoded size of this map.
+	pub fn current_size(&self) -> usize {
+		self.chunkmap.len() * 9 + 8
+	}
+
+	/// Reset the target size to the given value.
+	pub fn set_target_size(&mut self, target_size: usize) {
+		self.target_size = target_size
+	}
+
+	/// Tries to add a chunk entry.  
+	/// Returns true, if the chunk no / chunk size pair was added to the map.  
+	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, samebyte: u8) -> bool {
+		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
+			false
+		} else {
+			self.chunkmap.entry(chunk_no).or_insert(samebyte);
+			true
+		}
+	}
+
+	/// Checks if the map is full (returns true if, returns false if not).
+	pub fn is_full(&self) -> bool {
+		if self.target_size < self.current_size() + 17 { //24 -> 8bytes for next chunk_no, 1 byte for the samebyte, 8 bytes for the size of the encoded BTreeMap
+			true
+		} else {
+			false
+		}
+	}
+
+	/// Returns the inner map and replaces it with an empty map.
+	pub fn flush(&mut self) -> BTreeMap<u64, u8> {
+		std::mem::take(&mut self.chunkmap)
+	}
+}
+
+impl HeaderCoding for ChunkSamebytesMap {
+	type Item = ChunkSamebytesMap;
+
+	fn identifier() -> u32 {
+		HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP
+	}
+
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP
+	}
+	
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+
+		vec.append(&mut Self::version().encode_directly());
+		vec.append(&mut self.chunkmap.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<Self> {
+		let mut cursor = Cursor::new(data);
+		Self::check_version(&mut cursor)?;
+		let chunkmap = BTreeMap::<u64, u8>::decode_directly(&mut cursor)?;
+		Ok(Self::with_data(chunkmap))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for ChunkSamebytesMap {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ChunkSamebytesMap {
+	fn struct_name(&self) -> &'static str {
+		"ChunkSamebytesMap"
+	}
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for ChunkSamebytesMap {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
+        for (key, value) in &self.chunkmap {
+        	state.serialize_field(string_to_str(key.to_string()), &value)?;
+        }
+        state.end()
+    }
+}
+
+
+
+/// The [ChunkDeduplicationMap] stores the chunk size of the appropriate chunk.
+#[derive(Debug,Clone,PartialEq,Eq)]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+pub struct ChunkDeduplicationMap {
+	chunkmap: BTreeMap<u64, u64>, //<chunk no, dedup chunk no>
+	target_size: usize,
+}
+
+impl Default for ChunkDeduplicationMap {
+	fn default() -> Self {
+		Self::new_empty()
+	}
+}
+
+impl ChunkDeduplicationMap {
+	/// returns a new [ChunkDeduplicationMap] with the given values.
+	pub fn with_data(chunkmap: BTreeMap<u64, u64>) -> Self {
+		Self {
+			chunkmap,
+			target_size: 0,
+		}
+	}
+
+	/// returns a new, empty [ChunkDeduplicationMap] with the given values.
+	pub fn new_empty() -> Self {
+		Self {
+			chunkmap: BTreeMap::new(),
+			target_size: 0,
+		}
+	}
+
+	/// Returns a reference to the inner map
+	pub fn chunkmap(&self) -> &BTreeMap<u64, u64> {
+		&self.chunkmap
+	}
+
+	/// The encoded size of this map.
+	pub fn current_size(&self) -> usize {
+		self.chunkmap.len() * 16 + 8
+	}
+
+	/// Reset the target size to the given value.
+	pub fn set_target_size(&mut self, target_size: usize) {
+		self.target_size = target_size
+	}
+
+	/// Tries to add a chunk entry.  
+	/// Returns true, if the chunk no / chunk size pair was added to the map.  
+	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, dedup_chunk_no: u64) -> bool {
+		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
+			false
+		} else {
+			self.chunkmap.entry(chunk_no).or_insert(dedup_chunk_no);
+			true
+		}
+	}
+
+	/// Checks if the map is full (returns true if, returns false if not).
+	pub fn is_full(&self) -> bool {
+		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8 bytes for the dedup chunk no, 8 bytes for the size of the encoded BTreeMap
+			true
+		} else {
+			false
+		}
+	}
+
+	/// Returns the inner map and replaces it with an empty map.
+	pub fn flush(&mut self) -> BTreeMap<u64, u64> {
+		std::mem::take(&mut self.chunkmap)
+	}
+}
+
+impl HeaderCoding for ChunkDeduplicationMap {
+	type Item = ChunkDeduplicationMap;
+
+	fn identifier() -> u32 {
+		HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP
+	}
+
+	fn version() -> u8 {
+		DEFAULT_HEADER_VERSION_CHUNK_DEDUPLICATION_MAP
+	}
+	
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+
+		vec.append(&mut Self::version().encode_directly());
+		vec.append(&mut self.chunkmap.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<Self> {
+		let mut cursor = Cursor::new(data);
+		Self::check_version(&mut cursor)?;
+		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		Ok(Self::with_data(chunkmap))
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for ChunkDeduplicationMap {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.struct_name())
+	}
+}
+
+// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
+impl ChunkDeduplicationMap {
+	fn struct_name(&self) -> &'static str {
+		"ChunkDeduplicationMap"
+	}
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for ChunkDeduplicationMap {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }

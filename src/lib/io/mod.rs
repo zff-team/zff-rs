@@ -22,7 +22,6 @@ use std::fs::metadata;
 #[cfg(target_family = "windows")]
 use std::os::windows::fs::MetadataExt;
 
-use crate::PreparedData;
 // - internal
 use crate::{
     Result,
@@ -34,6 +33,7 @@ use crate::{
     CompressionAlgorithm,
     PhysicalObjectEncoder,
     LogicalObjectEncoder,
+    PreparedData,
     hashing::HashType,
     constants::*,
 };
@@ -75,8 +75,8 @@ impl ZffExtenderParameter {
 	}
 }
 
-
 /// This struct contains optional, additional parameter for the [ZffWriter](zffwriter::ZffWriter).
+/// The [ZffWriter](zffwriter::ZffWriter) will use this parameter to create a new zff container.
 #[derive(Default, Debug)]
 pub struct ZffCreationParameters {
     /// If given, the appropriate data will be signed by the given [SigningKey].
