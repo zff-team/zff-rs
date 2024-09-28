@@ -111,7 +111,11 @@ impl ZffObjectReaderPhysical {
 			let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
 			let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
 			let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-			let chunk_data = get_chunk_data(
+			
+			let chunk_data = if let Some(samebyte) = preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+				vec![samebyte; chunk_size as usize]
+			} else {
+				get_chunk_data(
 				segment, 
 				current_chunk_number, 
 				&enc_information, 
@@ -119,7 +123,8 @@ impl ZffObjectReaderPhysical {
 				chunk_size,
 				optional_chunk_offset,
 				optional_chunk_size,
-				optional_chunk_flags)?;
+				optional_chunk_flags)?
+			};
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
