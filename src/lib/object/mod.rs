@@ -486,8 +486,11 @@ pub(crate) fn chunking(
 	let mut flags = ChunkFlags::default();
 	flags.empty_file = empty_file_flag;
 	if empty_file_flag {
-		return Ok(PreparedChunk::new(Vec::new(), flags, 0, CRC32Value::Unencrypted(0)));
+		return Ok(PreparedChunk::new(Vec::new(), flags, 0, CRC32Value::Unencrypted(0), None, None));
 	}
+
+	let mut sambebyte = None;
+	let mut duplicate = None;
 
 	// check same byte
 	// if the length of the buffer is not equal the target chunk size, 
@@ -509,6 +512,12 @@ pub(crate) fn chunking(
 	} else {
 		ChunkContent::Raw(Vec::new())
 	};
+
+	match chunk_content {
+		ChunkContent::SameBytes(samebyte) => sambebyte = Some(samebyte),
+		ChunkContent::Duplicate(chunk_no) => duplicate = Some(chunk_no),
+		_ => (),
+	}
 
 	let (chunked_data, compression_flag) = match chunk_content {
 		ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
@@ -567,5 +576,8 @@ pub(crate) fn chunking(
 		chunked_data, 
 		flags, 
 		size, 
-		crc32))
+		crc32,
+		sambebyte,
+		duplicate,
+	))
 }
