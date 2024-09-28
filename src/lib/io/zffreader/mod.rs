@@ -31,6 +31,11 @@ use crate::{
 		ObjectType as HeaderObjectType,
 		ChunkFlags,
 		CRC32Value,
+		ChunkOffsetMap,
+		ChunkSizeMap,
+		ChunkFlagMap,
+		ChunkSamebytesMap,
+		ChunkDeduplicationMap,
 	},
 	ChunkContent,
 };
@@ -139,6 +144,10 @@ impl PreloadedChunkMaps {
 			},
 		};
 		Ok(())
+	}
+
+	fn get_samebyte(&self, chunk_no: u64) -> Option<u8> {
+		extract_samebyte_from_preloaded_chunkmap(&self, chunk_no)
 	}
 }
 
@@ -360,7 +369,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		check_chunk_number_range(chunk_numbers, self.number_of_chunks())?;
 
 		
-		let mut size = chunk_numbers.end - chunk_numbers.start;
+		let mut size = chunk_numbers.end - chunk_numbers.start + 1;
 		match &mut self.chunk_maps {
 			PreloadedChunkMaps::None => {
 				let mut map = HashMap::new();
@@ -405,9 +414,211 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all offsets of the chunks of the appropriate zff container.
 	pub fn preload_chunk_offset_map_full(&mut self) -> Result<()> {
-		let first = 1;
-		let last = self.number_of_chunks();
-		self.preload_chunk_offset_map(&Range{start: first, end: last})
+		for segment in self.segments.values_mut() {
+			let chunk_maps = segment.footer().chunk_offset_map_table.clone();
+			for (_, offset) in chunk_maps {
+				segment.seek(SeekFrom::Start(offset))?;
+				let mut offset_map = ChunkOffsetMap::decode_directly(segment)?;
+				let inner_map = offset_map.flush();
+				match &mut self.chunk_maps {
+					PreloadedChunkMaps::None => (),
+					PreloadedChunkMaps::InMemory(maps) => maps.offsets.extend(inner_map),
+					PreloadedChunkMaps::Redb(db) => {
+						for (chunk_no, offset) in inner_map {
+							preloaded_redb_chunk_offset_map_add_entry(db, chunk_no, offset)?;
+						}
+					}
+				}
+			}
+		}
+		Ok(())
+	}
+
+	/// Preloads the chunk sizes of the given [Range] of chunks.
+	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
+	pub fn preload_chunk_size_map(&mut self, chunk_numbers: &Range<u64>) -> Result<()> {
+		// check if chunk numbers are valid.
+		check_chunk_number_range(chunk_numbers, self.number_of_chunks())?;
+
+		
+		let mut size = chunk_numbers.end - chunk_numbers.start + 1;
+		match &mut self.chunk_maps {
+			PreloadedChunkMaps::None => {
+				let mut map = HashMap::new();
+				map.try_reserve(size as usize)?;
+				self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
+					sizes: map,
+					..Default::default()
+				});
+			},
+			PreloadedChunkMaps::Redb(_) => (),
+			PreloadedChunkMaps::InMemory(maps) => {
+				for chunk_no in chunk_numbers.start..=chunk_numbers.end {
+					if maps.sizes.contains_key(&chunk_no) {
+						size -= 1;
+					}
+				}
+				maps.sizes.try_reserve(size as usize)?;
+			}
+		}
+
+		for chunk_no in chunk_numbers.start..=chunk_numbers.end {
+			let segment = match get_segment_of_chunk_no(chunk_no, &self.global_chunkmap) {
+				Some(segment_no) => match self.segments.get_mut(&segment_no) {
+					Some(segment) => segment,
+					None => return Err(ZffError::new(
+						ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+				},
+				None => return Err(ZffError::new(
+					ZffErrorKind::InvalidChunkNumber, chunk_no.to_string())),
+			};
+			let size = segment.get_chunk_size(&chunk_no)?;
+			match &mut self.chunk_maps {
+				PreloadedChunkMaps::None => unreachable!(),
+				PreloadedChunkMaps::InMemory(maps) => { maps.sizes.insert(chunk_no, size); },
+				PreloadedChunkMaps::Redb(db) => preloaded_redb_chunk_size_map_add_entry(db, chunk_no, size)?,
+			};
+		}
+
+		if let PreloadedChunkMaps::InMemory(maps) = &mut self.chunk_maps { maps.sizes.shrink_to_fit() }
+		Ok(())
+	}
+
+	/// Preloads all  sizes of the chunks of the appropriate zff container.
+	pub fn preload_chunk_size_map_full(&mut self) -> Result<()> {
+		for segment in self.segments.values_mut() {
+			let chunk_maps = segment.footer().chunk_size_map_table.clone();
+			for (_, offset) in chunk_maps {
+				segment.seek(SeekFrom::Start(offset))?;
+				let mut size_map = ChunkSizeMap::decode_directly(segment)?;
+				let inner_map = size_map.flush();
+				match &mut self.chunk_maps {
+					PreloadedChunkMaps::None => (),
+					PreloadedChunkMaps::InMemory(maps) => maps.sizes.extend(inner_map),
+					PreloadedChunkMaps::Redb(db) => {
+						for (chunk_no, size) in inner_map {
+							preloaded_redb_chunk_size_map_add_entry(db, chunk_no, size)?;
+						}
+					}
+				}
+			}
+		}
+		Ok(())
+	}
+
+	/// Preloads the chunk flags of the given [Range] of chunks.
+	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
+	pub fn preload_chunk_flags_map(&mut self, chunk_numbers: &Range<u64>) -> Result<()> {
+		// check if chunk numbers are valid.
+		check_chunk_number_range(chunk_numbers, self.number_of_chunks())?;
+		
+		let mut size = chunk_numbers.end - chunk_numbers.start + 1;
+		match &mut self.chunk_maps {
+			PreloadedChunkMaps::None => {
+				let mut map = HashMap::new();
+				map.try_reserve(size as usize)?;
+				self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
+					flags: map,
+					..Default::default()
+				});
+			},
+			PreloadedChunkMaps::Redb(_) => (),
+			PreloadedChunkMaps::InMemory(maps) => {
+				for chunk_no in chunk_numbers.start..=chunk_numbers.end {
+					if maps.flags.contains_key(&chunk_no) {
+						size -= 1;
+					}
+				}
+				maps.flags.try_reserve(size as usize)?;
+			}
+		}
+
+		for chunk_no in chunk_numbers.start..=chunk_numbers.end {
+			let segment = match get_segment_of_chunk_no(chunk_no, &self.global_chunkmap) {
+				Some(segment_no) => match self.segments.get_mut(&segment_no) {
+					Some(segment) => segment,
+					None => return Err(ZffError::new(
+						ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+				},
+				None => return Err(ZffError::new(
+					ZffErrorKind::InvalidChunkNumber, chunk_no.to_string())),
+			};
+			let flags = segment.get_chunk_flags(&chunk_no)?;
+			match &mut self.chunk_maps {
+				PreloadedChunkMaps::None => unreachable!(),
+				PreloadedChunkMaps::InMemory(maps) => { maps.flags.insert(chunk_no, flags); },
+				PreloadedChunkMaps::Redb(db) => preloaded_redb_chunk_flags_map_add_entry(db, chunk_no, flags)?,
+			};
+		}
+
+		if let PreloadedChunkMaps::InMemory(maps) = &mut self.chunk_maps { maps.flags.shrink_to_fit() }
+		Ok(())
+	}
+
+	/// Preloads all chunk flags of the chunks of the appropriate zff container.
+	pub fn preload_chunk_flags_map_full(&mut self) -> Result<()> {
+		for segment in self.segments.values_mut() {
+			let chunk_maps = segment.footer().chunk_flags_map_table.clone();
+			for (_, offset) in chunk_maps {
+				segment.seek(SeekFrom::Start(offset))?;
+				let mut flags_map = ChunkFlagMap::decode_directly(segment)?;
+				let inner_map = flags_map.flush();
+				match &mut self.chunk_maps {
+					PreloadedChunkMaps::None => (),
+					PreloadedChunkMaps::InMemory(maps) => maps.flags.extend(inner_map),
+					PreloadedChunkMaps::Redb(db) => {
+						for (chunk_no, flags) in inner_map {
+							preloaded_redb_chunk_flags_map_add_entry(db, chunk_no, flags)?;
+						}
+					}
+				}
+			}
+		}
+		Ok(())
+	}
+
+	/// Preloads all samebyte chunks
+	pub fn preload_chunk_samebytes_map_full(&mut self) -> Result<()> {
+		for segment in self.segments.values_mut() {
+			let chunk_maps = segment.footer().chunk_samebytes_map_table.clone();
+			for (_, offset) in chunk_maps {
+				segment.seek(SeekFrom::Start(offset))?;
+				let mut samebytes_map = ChunkSamebytesMap::decode_directly(segment)?;
+				let inner_map = samebytes_map.flush();
+				match &mut self.chunk_maps {
+					PreloadedChunkMaps::None => (),
+					PreloadedChunkMaps::InMemory(maps) => maps.same_bytes.extend(inner_map),
+					PreloadedChunkMaps::Redb(db) => {
+						for (chunk_no, samebyte) in inner_map {
+							preloaded_redb_chunk_samebytes_map_add_entry(db, chunk_no, samebyte)?;
+						}
+					}
+				}
+			}
+		}
+		Ok(())
+	}
+
+	/// Preloads all duplicated chunks
+	pub fn preload_chunk_deduplication_map_full(&mut self) -> Result<()> {
+		for segment in self.segments.values_mut() {
+			let chunk_maps = segment.footer().chunk_dedup_map_table.clone();
+			for (_, offset) in chunk_maps {
+				segment.seek(SeekFrom::Start(offset))?;
+				let mut deduplication_map = ChunkDeduplicationMap::decode_directly(segment)?;
+				let inner_map = deduplication_map.flush();
+				match &mut self.chunk_maps {
+					PreloadedChunkMaps::None => (),
+					PreloadedChunkMaps::InMemory(maps) => maps.duplicate_chunks.extend(inner_map),
+					PreloadedChunkMaps::Redb(db) => {
+						for (chunk_no, duplicated) in inner_map {
+							preloaded_redb_chunk_deduplication_map_add_entry(db, chunk_no, duplicated)?;
+						}
+					}
+				}
+			}
+		}
+		Ok(())
 	}
 
 	/// Returns the [FileMetadata] of the appropriate active file.
@@ -798,6 +1009,46 @@ fn preloaded_redb_chunk_offset_map_add_entry(db: &mut Database, chunk_no: u64, o
 	Ok(())
 }
 
+fn preloaded_redb_chunk_size_map_add_entry(db: &mut Database, chunk_no: u64, size: u64) -> Result<()> {
+	let write_txn = db.begin_write()?;
+	{
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE)?;
+		table.insert(chunk_no, size)?;
+	}
+	write_txn.commit()?;
+	Ok(())
+}
+
+fn preloaded_redb_chunk_flags_map_add_entry(db: &mut Database, chunk_no: u64, flags: ChunkFlags) -> Result<()> {
+	let write_txn = db.begin_write()?;
+	{
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE)?;
+		table.insert(chunk_no, flags.as_bytes())?;
+	}
+	write_txn.commit()?;
+	Ok(())
+}
+
+fn preloaded_redb_chunk_samebytes_map_add_entry(db: &mut Database, chunk_no: u64, same_byte: u8) -> Result<()> {
+	let write_txn = db.begin_write()?;
+	{
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?;
+		table.insert(chunk_no, same_byte)?;
+	}
+	write_txn.commit()?;
+	Ok(())
+}
+
+fn preloaded_redb_chunk_deduplication_map_add_entry(db: &mut Database, chunk_no: u64, duplicated: u64) -> Result<()> {
+	let write_txn = db.begin_write()?;
+	{
+		let mut table = write_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?;
+		table.insert(chunk_no, duplicated)?;
+	}
+	write_txn.commit()?;
+	Ok(())
+}
+
 // tries to extract the appropriate offset of the given chunk number.
 // returns a None in case of error or if the chunkmap is a [PreloadedChunkmap::None].
 fn extract_offset_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<u64> {
@@ -843,6 +1094,23 @@ fn extract_flags_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps
 		PreloadedChunkMaps::Redb(db) => {
 			let read_txn = db.begin_read().ok()?;
     		let table = read_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE).ok()?;
+    		let value = table.get(&chunk_number).ok()??.value();
+    		Some(value.into())
+		}
+	}
+}
+
+// tries to extract the appropriate sambyte of the given chunk number.
+// returns a None in case of error or if the chunkmap is a [PreloadedChunmaps::None].
+fn extract_samebyte_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<u8> {
+	match preloaded_chunkmap {
+		PreloadedChunkMaps::None => None,
+		PreloadedChunkMaps::InMemory(preloaded_maps) => {
+			preloaded_maps.same_bytes.get(&chunk_number).cloned()
+		},
+		PreloadedChunkMaps::Redb(db) => {
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE).ok()?;
     		let value = table.get(&chunk_number).ok()??.value();
     		Some(value.into())
 		}
