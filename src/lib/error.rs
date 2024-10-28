@@ -159,6 +159,8 @@ pub enum ZffErrorKind {
 	MissmatchIdentifier,
 	/// Error will be returned if the binary search fails (e.g. if the set is empty or malformed).
 	BinarySearchError,
+	/// Error will be returned if the segmentation has not finished.
+	SegmentNotFinished,
 }
 
 impl fmt::Display for ZffErrorKind {
@@ -224,6 +226,7 @@ impl fmt::Display for ZffErrorKind {
 			ZffErrorKind::UnknownMetadataExtendedType => "UnknownMetadataExtendedType",
 			ZffErrorKind::MissmatchIdentifier => "MissmatchIdentifier",
 			ZffErrorKind::BinarySearchError => "BinarySearchError",
+			ZffErrorKind::SegmentNotFinished => "SegmentNotFinished",
 		};
 	write!(f, "{}", err_msg)
 	}
