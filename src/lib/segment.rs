@@ -195,7 +195,7 @@ impl<R: Read + Seek> Segment<R> {
 		if flags.same_bytes {
 			let single_byte = match chunk_content.first() {
 				Some(data) => data,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "Could not find expected samebyte in chunk content.")),
 			};
 			Ok(ChunkContent::SameBytes(*single_byte))
 		} else if flags.duplicate {
