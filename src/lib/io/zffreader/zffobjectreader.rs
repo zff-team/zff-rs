@@ -221,7 +221,9 @@ impl ZffObjectReaderLogical {
 		};
 		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
 			Some(offset) => offset,
-			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+			None => return Err(ZffError::new(
+				ZffErrorKind::MalformedSegment, 
+				format!("Could not read header offsets of object no. {}", self.object_header.object_number))),
 		};
 		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {
@@ -254,7 +256,9 @@ impl ZffObjectReaderLogical {
 		};
 		let footer_offset = match self.object_footer.file_footer_offsets().get(&self.active_file) {
 			Some(offset) => offset,
-			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+			None => return Err(ZffError::new(
+				ZffErrorKind::MalformedSegment, 
+				format!("Could not read footer offset of active file no {} of object {}", self.active_file, self.object_header.object_number))),
 		};
 		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {

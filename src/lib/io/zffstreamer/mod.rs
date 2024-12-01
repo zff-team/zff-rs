@@ -1,9 +1,18 @@
+// - STD
+use std::fs::OpenOptions;
+use std::io::{Seek, SeekFrom, Write};
+use std::ops::{Add, AddAssign};
+
 // Parent
 use super::*;
 
 // - internal
 use crate::{
-    footer::SegmentFooter, header::{ChunkMapType, ChunkMaps, SegmentHeader}, HeaderCoding
+    footer::SegmentFooter, header::{ChunkMapType, ChunkMaps, SegmentHeader},
+    Segment,
+    HeaderCoding,
+    ValueDecoder,
+    file_extension_next_value,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -51,11 +60,11 @@ enum PreparedDataQueueState {
 
 #[derive(Debug, Clone)]
 enum SegmentationState {
-    Full(u64), // current segment number
-    Partial(u64), // current segment number
-    Finished(u64), // current segment number
-    FullLastSegment, // the last segment is full
-    FinishedLastSegment, // the last segment is finished
+    Full(u64), // current segment number | The current segment is full
+    Partial(u64), // current segment number | The current segment is not full yet
+    Finished(u64), // current segment number  | The current segment is finished (you should switch to the next segment)
+    FullLastSegment(u64), // the last segment is full
+    FinishedLastSegment(u64), // the last segment is finished
 }
 
 impl Default for SegmentationState {
@@ -68,10 +77,39 @@ impl Default for SegmentationState {
 #[cfg(feature = "log")]
 use log::trace;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd)]
+struct BytesRead {
+    pub total: u64, // the number of bytes read from this streamer,
+    pub current_segment: u64 // the number of bytes read from the current segment,
+}
+
+impl BytesRead {
+    fn clean(&mut self) {
+        self.current_segment = 0;
+    }
+}
+
+impl Add<u64> for BytesRead {
+     type Output = Self;
+      
+      fn add(self, other: u64) -> Self {
+          Self {
+              total: self.total + other,
+              current_segment: self.current_segment + other
+          }
+      }
+}
+
+impl AddAssign<u64> for BytesRead {
+     fn add_assign(&mut self, other: u64) {
+         self.total += other;
+         self.current_segment += other;
+     }
+}
 
 #[derive(Debug, Clone, Default)]
 struct ZffStreamerInProgressData {
-    bytes_read: u64, // the number of bytes read from this streamer,
+    bytes_read: BytesRead,
     encoded_segment_header: Vec<u8>, // the encoded segment header,
     encoded_segment_header_read_bytes: ReadBytes, // the number of bytes read from the encoded segment header,
     segment_footer: SegmentFooter, // the segment footer,
@@ -113,6 +151,16 @@ impl ZffStreamerInProgressData {
             ..Default::default()
         }
     }
+}
+
+/// Defines the output for a [ZffStreamer].
+/// This enum determine, that the [ZffStreamer] will extend or build a new Zff container.
+pub enum ZffFilesOutput {
+	/// Build a new container by using the appropriate Path-prefix
+	/// (e.g. if "/home/user/zff_container" is given, "/home/user/zff_container.z??" will be used).
+	NewContainer(PathBuf),
+	/// Determine an extension of the given zff container (path).
+	ExtendContainer(Vec<PathBuf>),
 }
 
 /// ZffStreamer is a struct that is used to create a new zff container while using the appropriate Read implementation of this struct.
@@ -225,11 +273,109 @@ impl<R: Read> ZffStreamer<R> {
                         segment_number+1, 
                         self.optional_parameters.chunkmap_size.unwrap_or(DEFAULT_CHUNKMAP_SIZE)
                     ).encode_directly();
+                    self.in_progress_data.bytes_read.clean();
                 },
-            SegmentationState::FullLastSegment => return Err(ZffError::new(ZffErrorKind::SegmentNotFinished, "")),
-            SegmentationState::FinishedLastSegment => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
+            SegmentationState::FullLastSegment(_) => return Err(ZffError::new(ZffErrorKind::SegmentNotFinished, "")),
+            SegmentationState::FinishedLastSegment(_) => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
         }
         Ok(())
+    }
+
+
+    /// Generates the files for the current state of the ZFF container.
+    pub fn generate_files(&mut self, output: ZffFilesOutput) -> Result<()> {
+        // check if an existing container should be extended or a new container should be created
+        let extension_parameter = match output {
+			ZffFilesOutput::NewContainer(_) => None,
+			ZffFilesOutput::ExtendContainer(ref files_to_extend) => {
+                let mut extension_parameter = None;
+                for ext_file in files_to_extend {
+                    let mut raw_segment = File::open(ext_file)?;
+                    if let Ok(mf) = decode_main_footer(&mut raw_segment) {
+                        let current_segment = ext_file.to_path_buf();
+                        
+                        let segment = Segment::new_from_reader(&raw_segment)?;
+                        self.segmentation_state = SegmentationState::Partial(segment.header().segment_number);
+                        let initial_chunk_number = match segment.footer().chunk_offset_map_table.keys().max() {
+                            Some(x) => *x + 1,
+                            None => return Err(ZffError::new(ZffErrorKind::NoChunksLeft, ""))
+                        };
+                        let next_object_no = match mf.object_footer().keys().max() {
+                            Some(x) => *x + 1,
+                            None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
+                        };
+                        let unique_identifier = segment.header().unique_identifier;
+                        self.optional_parameters.unique_identifier = unique_identifier;
+                        self.in_progress_data.segment_footer = segment.footer().clone();
+        
+                        extension_parameter = Some(ZffExtenderParameter::with_data(
+                            mf,
+                            current_segment,
+                            next_object_no,
+                            initial_chunk_number));
+                        break;
+                    }
+                    // try to decode the segment header to check if the file is a valid segment.
+                    let _ = Segment::new_from_reader(raw_segment)?;
+                }
+                extension_parameter
+            },
+		};
+		
+        let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
+
+        loop {
+            file_extension = file_extension_next_value(&file_extension)?;
+            let mut segment_filename = match &output {
+                ZffFilesOutput::NewContainer(ref path) => path.clone(),
+                ZffFilesOutput::ExtendContainer(_) => {
+                    match extension_parameter {
+                        None => unreachable!(),
+                        Some(ref params) => params.current_segment.clone()
+                    }
+                }
+            };
+
+            // set_extension should not affect the ExtendContainer paths.
+	    	segment_filename.set_extension(&file_extension);
+	    	let mut output_file = match &extension_parameter {
+                None => File::create(&segment_filename)?,
+                Some(params) => {
+                    // prepare the current object header
+                    self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
+                    self.in_progress_data.segment_footer.add_object_header_offset(
+                        self.current_object_encoder.obj_number(),
+                        self.in_progress_data.bytes_read.total); //TODO (bytes read is 0 here, b ut this should be the offset of the object header in the file)
+
+                    // Prepare the appropriate file to write to.
+                    let file = OpenOptions::new().append(true).read(true).open(&params.current_segment)?;
+                    file
+                },
+            };
+
+            let mut buffer = vec![0u8; DEFAULT_BUFFER_SIZE as usize];
+            
+            loop {
+                match self.read(&mut buffer) {
+                    Ok(0) => {
+                        break;
+                    },
+                    Ok(n) => {
+                        output_file.write_all(&buffer[..n])?
+                    },
+                    Err(e) => return Err(e.into()),
+                }
+            }
+
+            match self.next_segment() {
+                Ok(_) => {},
+                Err(e) => match e.get_kind() {
+                    ZffErrorKind::NoObjectsLeft => return Ok(()),
+                     _ => return Err(e),
+                }
+            }
+        }
+
     }
 
     /// Returns true if the chunkmap was full and flushed.
@@ -288,61 +434,75 @@ impl<R: Read> ZffStreamer<R> {
 
     /// flushes the current chunkmap.
     fn flush_chunkmap(&mut self, chunk_map_type: ChunkMapType) {
+
+        let segment_number = self.current_segment_no();
+        log::debug!("flushing chunkmap: {:?} at segment {}", chunk_map_type, segment_number);
+
         match chunk_map_type {
             ChunkMapType::OffsetMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.offset_map.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_offset_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
-                    self.in_progress_data.segment_footer.chunk_offset_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.chunk_offset_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_offset_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_offset_map = self.in_progress_data.chunkmaps.offset_map.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_offset_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.offset_map.flush();
                 }
-                self.in_progress_data.current_encoded_chunk_offset_map = self.in_progress_data.chunkmaps.offset_map.encode_directly();
-                self.in_progress_data.current_encoded_chunk_offset_map_read_bytes = ReadBytes::NotRead;
-                self.in_progress_data.chunkmaps.offset_map.flush();
             },
             ChunkMapType::SizeMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.size_map.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_size_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
-                    self.in_progress_data.segment_footer.chunk_size_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.chunk_size_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_size_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_size_map = self.in_progress_data.chunkmaps.size_map.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_size_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.size_map.flush();
                 }
-                self.in_progress_data.current_encoded_chunk_size_map = self.in_progress_data.chunkmaps.size_map.encode_directly();
-                self.in_progress_data.current_encoded_chunk_size_map_read_bytes = ReadBytes::NotRead;
-                self.in_progress_data.chunkmaps.size_map.flush();
             },
             ChunkMapType::FlagsMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.flags_map.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_flags_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
-                    self.in_progress_data.segment_footer.chunk_flags_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.chunk_flags_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_flags_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_flags_map = self.in_progress_data.chunkmaps.flags_map.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_flags_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.flags_map.flush();
                 }
-                self.in_progress_data.current_encoded_chunk_flags_map = self.in_progress_data.chunkmaps.flags_map.encode_directly();
-                self.in_progress_data.current_encoded_chunk_flags_map_read_bytes = ReadBytes::NotRead;
-                self.in_progress_data.chunkmaps.flags_map.flush();
             },
             ChunkMapType::CRCMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.crc_map.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_crc_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
-                    self.in_progress_data.segment_footer.chunk_crc_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.chunk_crc_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_crc_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_crc_map = self.in_progress_data.chunkmaps.crc_map.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_crc_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.crc_map.flush();
                 }
-                self.in_progress_data.current_encoded_chunk_crc_map = self.in_progress_data.chunkmaps.crc_map.encode_directly();
-                self.in_progress_data.current_encoded_chunk_crc_map_read_bytes = ReadBytes::NotRead;
-                self.in_progress_data.chunkmaps.crc_map.flush();
             },
             ChunkMapType::SamebytesMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.same_bytes_map.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
-                    self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_samebytes_map = self.in_progress_data.chunkmaps.same_bytes_map.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_samebytes_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.same_bytes_map.flush();
                 }
-                self.in_progress_data.current_encoded_chunk_samebytes_map = self.in_progress_data.chunkmaps.same_bytes_map.encode_directly();
-                self.in_progress_data.current_encoded_chunk_samebytes_map_read_bytes = ReadBytes::NotRead;
-                self.in_progress_data.chunkmaps.same_bytes_map.flush();
             },
             ChunkMapType::DeduplicationMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.duplicate_chunks.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, INITIAL_SEGMENT_NUMBER);
-                    self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_deduplication_map = self.in_progress_data.chunkmaps.duplicate_chunks.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_deduplication_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.duplicate_chunks.flush();
                 }
-                self.in_progress_data.current_encoded_chunk_deduplication_map = self.in_progress_data.chunkmaps.duplicate_chunks.encode_directly();
-                self.in_progress_data.current_encoded_chunk_deduplication_map_read_bytes = ReadBytes::NotRead;
-                self.in_progress_data.chunkmaps.duplicate_chunks.flush();
             },
+        }
+    }
+
+    fn current_segment_no(&self) -> u64 {
+        match self.segmentation_state {
+            SegmentationState::Partial(segment_number) => segment_number,
+            SegmentationState::Full(segment_number) => segment_number,
+            SegmentationState::Finished(segment_number) => segment_number,
+            SegmentationState::FullLastSegment(segment_number) => segment_number,
+            SegmentationState::FinishedLastSegment(segment_number) => segment_number,
         }
     }
 
@@ -350,21 +510,22 @@ impl<R: Read> ZffStreamer<R> {
 
 impl<R: Read> Read for ZffStreamer<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.segmentation_state {
-            SegmentationState::Finished(_) => {
-                return Ok(0);
-            },
-            SegmentationState::FinishedLastSegment => {
-                return Ok(0);
-            },
-            _ => {},
-        }
-
         let mut bytes_written_to_buffer = 0; // the number of bytes which are written to the current buffer,
 
         // may improve performance in different cases.
         let buf_len = buf.len();
+
         'read_loop: loop {
+            match self.segmentation_state {
+                SegmentationState::Finished(_) => {
+                    return Ok(bytes_written_to_buffer);
+                },
+                SegmentationState::FinishedLastSegment(_) => {
+                    return Ok(bytes_written_to_buffer);
+                },
+                _ => {},
+            }
+
             match self.read_state {
                 ReadState::SegmentHeader => {
                     #[cfg(feature = "log")]
@@ -394,7 +555,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                     self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
                     self.in_progress_data.segment_footer.add_object_header_offset(
                         self.current_object_encoder.obj_number(),
-                        self.in_progress_data.bytes_read);
+                        self.in_progress_data.bytes_read.current_segment);
                 },
                 ReadState::ObjectHeader => {
                     #[cfg(feature = "log")]
@@ -430,10 +591,13 @@ impl<R: Read> Read for ZffStreamer<R> {
                     // switch to the next state
                     match self.segmentation_state {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => self.read_state = ReadState::ChunkSizeMap,
+                        SegmentationState::Full(_) => {
+                            self.read_state = ReadState::ChunkSizeMap;
+                            self.flush_chunkmap(ChunkMapType::SizeMap);
+                        },
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => unreachable!(),
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => unreachable!(),
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -454,10 +618,13 @@ impl<R: Read> Read for ZffStreamer<R> {
                     // switch to the next state
                     match self.segmentation_state {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => self.read_state = ReadState::ChunkFlagsMap,
+                        SegmentationState::Full(_) => {
+                            self.read_state = ReadState::ChunkFlagsMap;
+                            self.flush_chunkmap(ChunkMapType::FlagsMap);
+                        },
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => unreachable!(),
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => unreachable!(),
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -478,10 +645,13 @@ impl<R: Read> Read for ZffStreamer<R> {
                     // switch to the next state
                     match self.segmentation_state {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => self.read_state = ReadState::ChunkCrcMap,
+                        SegmentationState::Full(_) => {
+                            self.read_state = ReadState::ChunkCrcMap;
+                            self.flush_chunkmap(ChunkMapType::CRCMap);
+                        },
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => unreachable!(),
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => unreachable!(),
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -502,10 +672,13 @@ impl<R: Read> Read for ZffStreamer<R> {
                     // switch to the next state
                     match self.segmentation_state {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => self.read_state = ReadState::ChunkSamebytesMap,
+                        SegmentationState::Full(_) => {
+                            self.read_state = ReadState::ChunkSamebytesMap;
+                            self.flush_chunkmap(ChunkMapType::SamebytesMap);
+                        },
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => unreachable!(),
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => unreachable!(),
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -525,10 +698,13 @@ impl<R: Read> Read for ZffStreamer<R> {
                     // switch to the next state
                     match self.segmentation_state {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => self.read_state = ReadState::ChunkDeduplicationMap,
+                        SegmentationState::Full(_) => {
+                            self.read_state = ReadState::ChunkDeduplicationMap;
+                            self.flush_chunkmap(ChunkMapType::DeduplicationMap);
+                        },
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => unreachable!(),
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => unreachable!(),
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -551,8 +727,20 @@ impl<R: Read> Read for ZffStreamer<R> {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
                         SegmentationState::Full(_) => self.read_state = ReadState::SegmentFooter,
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => unreachable!(),
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => unreachable!(),
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                    };
+
+                    match self.read_state {
+                        ReadState::SegmentFooter => {
+                            self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
+                            self.in_progress_data.segment_footer.set_length_of_segment(
+                                self.in_progress_data.bytes_read.current_segment + 
+                                self.in_progress_data.segment_footer.encode_directly().len() as u64);
+                            self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
+                            self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
+                        },
+                        _ => (),
                     };
                 },
 
@@ -683,7 +871,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                     };
                     self.in_progress_data.segment_footer.add_object_footer_offset(
                         self.current_object_encoder.obj_number(), 
-                        self.in_progress_data.bytes_read);
+                        self.in_progress_data.bytes_read.current_segment);
                     self.in_progress_data.current_encoded_object_footer = object_footer;
                     self.in_progress_data.current_encoded_object_footer_read_bytes = ReadBytes::NotRead;
                     self.read_state = ReadState::ObjectFooter;
@@ -693,29 +881,6 @@ impl<R: Read> Read for ZffStreamer<R> {
                     #[cfg(feature = "log")]
                     trace!("ReadState::Chunking");
                     let current_chunk_number = self.current_object_encoder.current_chunk_number();
-
-                    // check the read bytes (for segment length)
-                    // TODO: calculate also the sizes of the current chunkmaps
-                    let read_bytes_segment = match self.segmentation_state {
-                        SegmentationState::Partial(segment_number) => self.in_progress_data.bytes_read - self.in_progress_data.bytes_read*(segment_number-1),
-                        _ => unreachable!(),
-                    };
-                    if read_bytes_segment >= self.optional_parameters.target_segment_size.unwrap_or(u64::MAX) {
-                        // set the appropriate segmentation state to full (with the next segment number)
-                        self.segmentation_state = match self.segmentation_state {
-                            SegmentationState::Partial(segment_number) => SegmentationState::Full(segment_number+1),
-                            _ => unreachable!(),
-                        };
-                        // flush all chunkmaps
-                        self.flush_chunkmap(ChunkMapType::OffsetMap);
-                        self.flush_chunkmap(ChunkMapType::SizeMap);
-                        self.flush_chunkmap(ChunkMapType::FlagsMap);
-                        self.flush_chunkmap(ChunkMapType::CRCMap);
-                        self.flush_chunkmap(ChunkMapType::SamebytesMap);
-                        self.flush_chunkmap(ChunkMapType::DeduplicationMap);
-                        self.read_state = ReadState::ChunkOffsetMap;
-                        continue;
-                    }
 
                     // reads the chunking data
                     let read_bytes = fill_buffer(
@@ -727,6 +892,21 @@ impl<R: Read> Read for ZffStreamer<R> {
                     if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
+
+                    // check the read bytes (for segment length)
+                    // TODO: calculate also the sizes of the current chunkmaps
+                    if self.in_progress_data.bytes_read.current_segment >= self.optional_parameters.target_segment_size.unwrap_or(u64::MAX) {
+                        // set the appropriate segmentation state to full (with the next segment number)
+                        self.segmentation_state = match self.segmentation_state {
+                            SegmentationState::Partial(segment_number) => SegmentationState::Full(segment_number),
+                            _ => unreachable!(),
+                        };
+                        // flush the first chunkmap and set the appropriate read state
+                        self.flush_chunkmap(ChunkMapType::OffsetMap);
+                        self.read_state = ReadState::ChunkOffsetMap;
+                        continue;
+                    }
+
                     // check if the chunkmaps are full - this lines are necessary to ensure
                     // the correct file footer offset is set while e.g. reading a bunch of empty files.
                     if self.check_chunkmap_is_full_and_flush(ChunkMapType::OffsetMap) {
@@ -764,7 +944,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                             PreparedDataQueueState::None => {
                                 // read next chunk
                                 let data = match self.current_object_encoder.get_next_data(
-                                    self.in_progress_data.bytes_read,
+                                    self.in_progress_data.bytes_read.current_segment,
                                     INITIAL_SEGMENT_NUMBER,
                                     self.optional_parameters.deduplication_chunkmap.as_mut()) {
                                         Ok(data) => data,
@@ -782,10 +962,12 @@ impl<R: Read> Read for ZffStreamer<R> {
                                         }
                                 };
 
-                                if !self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(current_chunk_number, self.in_progress_data.bytes_read) {
+                                if !self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(
+                                    current_chunk_number, self.in_progress_data.bytes_read.current_segment) {
                                     self.flush_chunkmap(ChunkMapType::OffsetMap);
                                     self.read_state = ReadState::ChunkOffsetMap;
-                                    self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(current_chunk_number, self.in_progress_data.bytes_read);
+                                    self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(
+                                        current_chunk_number, self.in_progress_data.bytes_read.current_segment);
                                 }
             
                                 self.in_progress_data.current_prepared_data_queue = Some(data);
@@ -926,14 +1108,14 @@ impl<R: Read> Read for ZffStreamer<R> {
                     self.current_object_encoder = match self.object_encoder.pop() {
                         Some(creator_obj_encoder) => creator_obj_encoder,
                         None => {
-                            self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read);
+                            self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
                             self.in_progress_data.segment_footer.set_length_of_segment(
-                                self.in_progress_data.bytes_read + 
+                                self.in_progress_data.bytes_read.current_segment + 
                                 self.in_progress_data.segment_footer.encode_directly().len() as u64 + 
                                 self.in_progress_data.main_footer.encode_directly().len() as u64);
                             self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
                             self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
-                            self.segmentation_state = SegmentationState::FullLastSegment;
+                            self.segmentation_state = SegmentationState::FullLastSegment(self.current_segment_no());
                             self.read_state = ReadState::SegmentFooter;
                             continue;
                         }
@@ -941,7 +1123,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                     self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
                     self.in_progress_data.segment_footer.add_object_header_offset(
                         self.current_object_encoder.obj_number(),
-                        self.in_progress_data.bytes_read);
+                        self.in_progress_data.bytes_read.current_segment);
                 },
                 ReadState::SegmentFooter => {
                     #[cfg(feature = "log")]
@@ -958,7 +1140,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                     };
 
                     // switch to the next state
-                    self.in_progress_data.main_footer.set_footer_offset(self.in_progress_data.bytes_read);
+                    self.in_progress_data.main_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
                     self.in_progress_data.main_footer.set_number_of_segments(INITIAL_SEGMENT_NUMBER);
                     self.in_progress_data.encoded_main_footer = self.in_progress_data.main_footer.encode_directly();
                     self.in_progress_data.encoded_main_footer_read_bytes = ReadBytes::NotRead;
@@ -967,8 +1149,8 @@ impl<R: Read> Read for ZffStreamer<R> {
                         SegmentationState::Full(segment_number) => self.segmentation_state = SegmentationState::Finished(segment_number),
                         SegmentationState::Partial(_) => unreachable!(),
                         SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment => self.read_state = ReadState::MainFooter,
-                        SegmentationState::FinishedLastSegment => unreachable!(),
+                        SegmentationState::FullLastSegment(_) => self.read_state = ReadState::MainFooter,
+                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
                     }
                 },
                 ReadState::MainFooter => {
@@ -982,7 +1164,7 @@ impl<R: Read> Read for ZffStreamer<R> {
                         &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
                     if bytes_written_to_buffer < buf_len {
-                        self.segmentation_state = SegmentationState::FinishedLastSegment;
+                        self.segmentation_state = SegmentationState::FinishedLastSegment(self.current_segment_no());
                     }
                     return Ok(bytes_written_to_buffer);
                 }
@@ -1044,4 +1226,23 @@ fn fill_buffer(in_progress_data: &[u8], in_progress_data_read_bytes: &mut ReadBy
         ReadBytes::Finished => {},
     }
     Ok(bytes_read)
+}
+
+fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter> {
+	raw_segment.seek(SeekFrom::End(-8))?;
+	let footer_offset = u64::decode_directly(raw_segment)?;
+	raw_segment.seek(SeekFrom::Start(footer_offset))?;
+	match MainFooter::decode_directly(raw_segment) {
+		Ok(mf) => {
+			raw_segment.rewind()?;
+			Ok(mf)
+		},
+		Err(e) => match e.get_kind() {
+			ZffErrorKind::HeaderDecodeMismatchIdentifier => {
+				raw_segment.rewind()?;
+				Err(e)
+			},
+			_ => Err(e)
+		}
+	}
 }
