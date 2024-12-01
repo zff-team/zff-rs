@@ -212,7 +212,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			let segment = Segment::with_header_and_data(segment_header, reader, segment_footer);
 			segments.insert(segment_number, segment);
 		}
-
+		
 		let main_footer = match main_footer {
 			Some(footer) => footer,
 			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER)),
@@ -831,6 +831,7 @@ fn try_find_footer<R: Read + Seek>(reader: &mut R) -> Result<Footer> {
 	let position = reader.stream_position()?;
 	reader.seek(SeekFrom::End(-8))?; //seeks to the end to reads the last 8 bytes (footer offset)
 	let mut footer_offset = u64::decode_directly(reader)?;
+	log::trace!("read: {}", footer_offset);
 	reader.seek(SeekFrom::Start(footer_offset))?;
 	if let Ok(segment_footer) = SegmentFooter::decode_directly(reader) {
 		reader.seek(SeekFrom::Start(position))?;
@@ -847,11 +848,11 @@ fn try_find_footer<R: Read + Seek>(reader: &mut R) -> Result<Footer> {
 			Ok(Footer::MainAndSegment((main_footer, segment_footer)))
 		} else {
 			reader.seek(SeekFrom::Start(position))?;
-			Err(ZffError::new(ZffErrorKind::MalformedSegment, ""))
+			Err(ZffError::new(ZffErrorKind::MalformedSegment, "Could not decode segment footer"))
 		}
 	} else {
 		reader.seek(SeekFrom::Start(position))?;
-		Err(ZffError::new(ZffErrorKind::MalformedSegment, ""))
+		Err(ZffError::new(ZffErrorKind::MalformedSegment, "Could not decode main footer"))
 	}
 }
 
@@ -921,11 +922,15 @@ fn initialize_object_reader<R: Read + Seek>(
 	global_chunkmap: Arc<BTreeMap<u64, u64>>
 	) -> Result<ZffObjectReader> {
 	let segment_no_footer = match main_footer.object_footer().get(&object_number) {
-		None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+		None => return Err(ZffError::new(
+			ZffErrorKind::MalformedSegment,
+			format!("Could not find object footer of object no. {}", object_number))),
 		Some(segment_no) => segment_no
 	};
 	let segment_no_header = match main_footer.object_header().get(&object_number) {
-		None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+		None => return Err(ZffError::new(
+			ZffErrorKind::MalformedSegment, 
+			format!("Could not find object header of object no. {}", object_number))),
 		Some(segment_no) => segment_no
 	};
 
