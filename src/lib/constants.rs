@@ -114,6 +114,8 @@ pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;
 pub(crate) const DEFAULT_WAIT_TIME_IO_INTERRUPT_RETRY: u64 = 6000; // in milliseconds
 pub(crate) const DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT: u8 = 11;
 
+pub(crate) const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
+
 /// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
 
