@@ -150,6 +150,7 @@ impl ValueDecoder for ChunkFlags {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 /// The appropriate Chunkmap type.
 pub enum ChunkMapType {
 	/// The offset map.
