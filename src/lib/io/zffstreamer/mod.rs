@@ -32,13 +32,13 @@ enum ReadState {
     ChunkOffsetMap,
     ChunkSizeMap,
     ChunkFlagsMap,
-    ChunkCrcMap,
+    ChunkXxHashMap,
     ChunkSamebytesMap,
     ChunkDeduplicationMap,
     LastChunkOffsetMapOfObject,
     LastChunkSizeMapOfObject,
     LastChunkFlagsMapOfObject,
-    LastChunkCrcMapOfObject,
+    LastChunkXxHashMapOfObject,
     LastChunkSamebytesMapOfObject,
     LastChunkDeduplicationMapOfObject,
     ObjectFooter,
@@ -50,7 +50,7 @@ enum ReadState {
 enum PreparedDataQueueState {
     Flags,
 	Size,
-	Crc,
+	XxHash,
     SameBytes,
     Deduplication,
 	Data,
@@ -124,8 +124,8 @@ struct ZffStreamerInProgressData {
     current_encoded_chunk_size_map_read_bytes: ReadBytes, // the number of bytes read from the current encoded chunk size map,
     current_encoded_chunk_flags_map: Vec<u8>, // the current encoded chunk flags map,
     current_encoded_chunk_flags_map_read_bytes: ReadBytes, // the number of bytes read from the current encoded chunk flags map,
-    current_encoded_chunk_crc_map: Vec<u8>, // the current encoded chunk crc map,
-    current_encoded_chunk_crc_map_read_bytes: ReadBytes, // the number of bytes read from the current encoded chunk crc map,
+    current_encoded_chunk_xxhash_map: Vec<u8>, // the current encoded chunk xxhash map,
+    current_encoded_chunk_xxhash_map_read_bytes: ReadBytes, // the number of bytes read from the current encoded chunk xxhash map,
     current_encoded_chunk_samebytes_map: Vec<u8>, // the current encoded chunk samebytes map,
     current_encoded_chunk_samebytes_map_read_bytes: ReadBytes, // the number of bytes read from the current encoded chunk samebytes map,
     current_encoded_chunk_deduplication_map: Vec<u8>, // the current encoded chunk deduplication map,
@@ -147,7 +147,7 @@ impl ZffStreamerInProgressData {
             current_encoded_chunk_offset_map_read_bytes: ReadBytes::Finished,
             current_encoded_chunk_size_map_read_bytes: ReadBytes::Finished,
             current_encoded_chunk_flags_map_read_bytes: ReadBytes::Finished,
-            current_encoded_chunk_crc_map_read_bytes: ReadBytes::Finished,
+            current_encoded_chunk_xxhash_map_read_bytes: ReadBytes::Finished,
             ..Default::default()
         }
     }
@@ -405,8 +405,8 @@ impl<R: Read> ZffStreamer<R> {
                     false
                 }
             },
-            ChunkMapType::CRCMap => {
-                if self.in_progress_data.chunkmaps.crc_map.is_full() {
+            ChunkMapType::XxHashMap => {
+                if self.in_progress_data.chunkmaps.xxhash_map.is_full() {
                     self.flush_chunkmap(chunk_map_type);
                     true
                 } else {
@@ -436,7 +436,6 @@ impl<R: Read> ZffStreamer<R> {
     fn flush_chunkmap(&mut self, chunk_map_type: ChunkMapType) {
 
         let segment_number = self.current_segment_no();
-        log::debug!("flushing chunkmap: {:?} at segment {}", chunk_map_type, segment_number);
 
         match chunk_map_type {
             ChunkMapType::OffsetMap => {
@@ -466,13 +465,13 @@ impl<R: Read> ZffStreamer<R> {
                     self.in_progress_data.chunkmaps.flags_map.flush();
                 }
             },
-            ChunkMapType::CRCMap => {
-                if let Some(chunk_no) = self.in_progress_data.chunkmaps.crc_map.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_crc_maps.insert(*chunk_no, segment_number);
-                    self.in_progress_data.segment_footer.chunk_crc_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    self.in_progress_data.current_encoded_chunk_crc_map = self.in_progress_data.chunkmaps.crc_map.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_crc_map_read_bytes = ReadBytes::NotRead;
-                    self.in_progress_data.chunkmaps.crc_map.flush();
+            ChunkMapType::XxHashMap => {
+                if let Some(chunk_no) = self.in_progress_data.chunkmaps.xxhash_map.chunkmap().keys().max() {
+                    self.in_progress_data.main_footer.chunk_xxhash_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_xxhash_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.current_encoded_chunk_xxhash_map = self.in_progress_data.chunkmaps.xxhash_map.encode_directly();
+                    self.in_progress_data.current_encoded_chunk_xxhash_map_read_bytes = ReadBytes::NotRead;
+                    self.in_progress_data.chunkmaps.xxhash_map.flush();
                 }
             },
             ChunkMapType::SamebytesMap => {
@@ -646,8 +645,8 @@ impl<R: Read> Read for ZffStreamer<R> {
                     match self.segmentation_state {
                         SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
                         SegmentationState::Full(_) => {
-                            self.read_state = ReadState::ChunkCrcMap;
-                            self.flush_chunkmap(ChunkMapType::CRCMap);
+                            self.read_state = ReadState::ChunkXxHashMap;
+                            self.flush_chunkmap(ChunkMapType::XxHashMap);
                         },
                         SegmentationState::Finished(_) => unreachable!(),
                         SegmentationState::FullLastSegment(_) => unreachable!(),
@@ -655,13 +654,13 @@ impl<R: Read> Read for ZffStreamer<R> {
                     };
                 },
 
-                ReadState::ChunkCrcMap => {
+                ReadState::ChunkXxHashMap => {
                     #[cfg(feature = "log")]
-                    trace!("ReadState::ChunkCrcMap");
+                    trace!("ReadState::ChunkXxHashMap");
                     // reads the chunkmap if not already read
                     let read_bytes = fill_buffer(
-                        &self.in_progress_data.current_encoded_chunk_crc_map, 
-                        &mut self.in_progress_data.current_encoded_chunk_crc_map_read_bytes, 
+                        &self.in_progress_data.current_encoded_chunk_xxhash_map, 
+                        &mut self.in_progress_data.current_encoded_chunk_xxhash_map_read_bytes, 
                         buf, 
                         &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
@@ -801,19 +800,19 @@ impl<R: Read> Read for ZffStreamer<R> {
                     };
 
                     // prepare and switch to the next state
-                    // write the chunk crc map even there is some space left in map to ensure
+                    // write the chunk xxhash map even there is some space left in map to ensure
                     // that this map will be written if there is no next object.
-                    self.flush_chunkmap(ChunkMapType::CRCMap);
-                    self.read_state = ReadState::LastChunkCrcMapOfObject;
+                    self.flush_chunkmap(ChunkMapType::XxHashMap);
+                    self.read_state = ReadState::LastChunkXxHashMapOfObject;
                 },
 
-                ReadState::LastChunkCrcMapOfObject => {
+                ReadState::LastChunkXxHashMapOfObject => {
                     #[cfg(feature = "log")]
-                    trace!("ReadState::LastChunkCrcMapOfObject");
+                    trace!("ReadState::LastChunkXxHashMapOfObject");
                     // reads the chunkmap if not already read
                     let read_bytes = fill_buffer(
-                        &self.in_progress_data.current_encoded_chunk_crc_map, 
-                        &mut self.in_progress_data.current_encoded_chunk_crc_map_read_bytes, 
+                        &self.in_progress_data.current_encoded_chunk_xxhash_map, 
+                        &mut self.in_progress_data.current_encoded_chunk_xxhash_map_read_bytes, 
                         buf, 
                         &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
@@ -924,8 +923,8 @@ impl<R: Read> Read for ZffStreamer<R> {
                         continue;
                     };
 
-                    if self.check_chunkmap_is_full_and_flush(ChunkMapType::CRCMap) {
-                        self.read_state = ReadState::ChunkCrcMap;
+                    if self.check_chunkmap_is_full_and_flush(ChunkMapType::XxHashMap) {
+                        self.read_state = ReadState::ChunkXxHashMap;
                         continue;
                     };
 
@@ -1010,12 +1009,12 @@ impl<R: Read> Read for ZffStreamer<R> {
                                     self.in_progress_data.chunkmaps.size_map.add_chunk_entry(current_chunk_number, size);
                                     continue 'read_loop;
                                 }
-                                self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::Crc;
+                                self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::XxHash;
                             },
-                            PreparedDataQueueState::Crc => {
-                                let crc = match self.in_progress_data.current_prepared_data_queue.clone() {
+                            PreparedDataQueueState::XxHash => {
+                                let xxhash = match self.in_progress_data.current_prepared_data_queue.clone() {
                                     Some(prepared_data) => match prepared_data {
-                                        PreparedData::PreparedChunk(prepared_chunk) => prepared_chunk.crc().clone(),
+                                        PreparedData::PreparedChunk(prepared_chunk) => prepared_chunk.xxhash().clone(),
                                         _ => {
                                             self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::Data;
                                             continue;
@@ -1023,10 +1022,10 @@ impl<R: Read> Read for ZffStreamer<R> {
                                     },
                                     None => unreachable!(),
                                 };
-                                if !self.in_progress_data.chunkmaps.crc_map.add_chunk_entry(current_chunk_number, crc) {
-                                    self.flush_chunkmap(ChunkMapType::CRCMap);
-                                    self.read_state = ReadState::ChunkCrcMap;
-                                    self.in_progress_data.chunkmaps.crc_map.add_chunk_entry(current_chunk_number, crc);
+                                if !self.in_progress_data.chunkmaps.xxhash_map.add_chunk_entry(current_chunk_number, xxhash) {
+                                    self.flush_chunkmap(ChunkMapType::XxHashMap);
+                                    self.read_state = ReadState::ChunkXxHashMap;
+                                    self.in_progress_data.chunkmaps.xxhash_map.add_chunk_entry(current_chunk_number, xxhash);
                                     continue 'read_loop;
                                 }
                                 self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::SameBytes;
@@ -1189,7 +1188,7 @@ fn build_in_progress_data(params: &ZffCreationParameters) -> ZffStreamerInProgre
     in_progress_data.chunkmaps.offset_map.set_target_size(chunkmap_size as usize);
     in_progress_data.chunkmaps.size_map.set_target_size(chunkmap_size as usize);
     in_progress_data.chunkmaps.flags_map.set_target_size(chunkmap_size as usize);
-    in_progress_data.chunkmaps.crc_map.set_target_size(chunkmap_size as usize);
+    in_progress_data.chunkmaps.xxhash_map.set_target_size(chunkmap_size as usize);
     in_progress_data.chunkmaps.same_bytes_map.set_target_size(chunkmap_size as usize);
     in_progress_data.chunkmaps.duplicate_chunks.set_target_size(chunkmap_size as usize);
 

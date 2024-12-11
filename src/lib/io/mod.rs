@@ -39,7 +39,7 @@ use crate::{
 };
 
 // - external
-use crc32fast::Hasher as CRC32Hasher;
+use xxhash_rust::xxh3::xxh3_64;
 use ed25519_dalek::SigningKey;
 #[cfg(target_family = "unix")]
 use time::OffsetDateTime;
@@ -170,12 +170,9 @@ where
     Ok(buffered_chunk)
 }
 
-/// calculates a crc32 hash for the given bytes.
-pub fn calculate_crc32(buffer: &[u8]) -> u32 {
-    let mut crc32_hasher = CRC32Hasher::new();
-    crc32_hasher.update(buffer);
-    
-    crc32_hasher.finalize()
+/// calculates a xxhash hash for the given bytes.
+pub fn calculate_xxhash(buffer: &[u8]) -> u64 {
+    xxh3_64(buffer)
 }
 
 /// This function takes the buffered bytes and tries to compress them. 

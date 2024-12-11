@@ -77,7 +77,7 @@ pub(crate) struct PreloadedChunkMapsInMemory {
 	offsets: HashMap<u64, u64>,
 	sizes: HashMap<u64, u64>,
 	flags: HashMap<u64, ChunkFlags>,
-	crcs: HashMap<u64, u32>,
+	xxhashs: HashMap<u64, u64>,
 	same_bytes: HashMap<u64, u8>,
 	duplicate_chunks: HashMap<u64, u64>,
 }
@@ -86,7 +86,7 @@ impl PreloadedChunkMapsInMemory {
 	pub fn with_data(offsets: HashMap<u64, u64>, 
 		sizes: HashMap<u64, u64>, 
 		flags: HashMap<u64, ChunkFlags>, 
-		crcs: HashMap<u64, u32>, 
+		xxhashs: HashMap<u64, u64>, 
 		same_bytes: HashMap<u64, u8>, 
 		duplicate_chunks: HashMap<u64, u64>
 	) -> Self {
@@ -94,7 +94,7 @@ impl PreloadedChunkMapsInMemory {
 			offsets,
 			sizes,
 			flags,
-			crcs,
+			xxhashs,
 			same_bytes,
 			duplicate_chunks,
 		}
@@ -235,7 +235,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// # Error
 	/// Fails if
 	///   - a segment is missing which should contain the appropriate object header
-	///   - there is a error while reading the object header
+	///   - there is an error while reading the object header
 	///   - there is a decoding error (e.g. corrupted segment)
 	pub fn list_objects(&mut self) -> Result<BTreeMap<u64, ObjectType>> {
 		let mut map = BTreeMap::new();
@@ -831,7 +831,7 @@ fn try_find_footer<R: Read + Seek>(reader: &mut R) -> Result<Footer> {
 	let position = reader.stream_position()?;
 	reader.seek(SeekFrom::End(-8))?; //seeks to the end to reads the last 8 bytes (footer offset)
 	let mut footer_offset = u64::decode_directly(reader)?;
-	log::trace!("read: {}", footer_offset);
+
 	reader.seek(SeekFrom::Start(footer_offset))?;
 	if let Ok(segment_footer) = SegmentFooter::decode_directly(reader) {
 		reader.seek(SeekFrom::Start(position))?;

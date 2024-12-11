@@ -19,8 +19,8 @@ use crate::{
 	DEFAULT_HEADER_VERSION_CHUNK_SIZE_MAP,
 	HEADER_IDENTIFIER_CHUNK_FLAG_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_FLAG_MAP,
-	HEADER_IDENTIFIER_CHUNK_CRC_MAP,
-	DEFAULT_HEADER_VERSION_CHUNK_CRC_MAP,
+	HEADER_IDENTIFIER_CHUNK_XXHASH_MAP,
+	DEFAULT_HEADER_VERSION_CHUNK_XXHASH_MAP,
 	HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP,
 	HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP,
@@ -159,8 +159,8 @@ pub enum ChunkMapType {
 	SizeMap = 1,
 	/// The flags map.
 	FlagsMap = 2,
-	/// The CRC map.
-	CRCMap = 3,
+	/// The xxhash map.
+	XxHashMap = 3,
 	/// The sambebytes map.
 	SamebytesMap = 4,
 	/// The deduplication map.
@@ -177,8 +177,8 @@ pub struct ChunkMaps {
 	pub size_map: ChunkSizeMap,
 	/// The flags map.
 	pub flags_map: ChunkFlagMap,
-	/// The CRC map.
-	pub crc_map: ChunkCRCMap,
+	/// The xxhash map.
+	pub xxhash_map: ChunkXxHashMap,
 	/// The same bytes map.
 	pub same_bytes_map: ChunkSamebytesMap,
 	/// The deduplication map.
@@ -191,7 +191,7 @@ impl ChunkMaps {
 		self.offset_map.chunkmap().is_empty() && 
 		self.size_map.chunkmap().is_empty() && 
 		self.flags_map.chunkmap().is_empty() && 
-		self.crc_map.chunkmap().is_empty() && 
+		self.xxhash_map.chunkmap().is_empty() && 
 		self.same_bytes_map.chunkmap().is_empty() && 
 		self.duplicate_chunks.chunkmap().is_empty()
 	}
@@ -586,20 +586,20 @@ impl Serialize for ChunkFlagMap {
 /// The Chunkmap stores the information where the each appropriate chunk could be found.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
-pub struct ChunkCRCMap {
-	chunkmap: BTreeMap<u64, u32>, //<chunk no, offset in segment>
+pub struct ChunkXxHashMap {
+	chunkmap: BTreeMap<u64, u64>, //<chunk no, xxhash>
 	target_size: usize,
 }
 
-impl Default for ChunkCRCMap {
+impl Default for ChunkXxHashMap {
 	fn default() -> Self {
 		Self::new_empty()
 	}
 }
 
-impl ChunkCRCMap {
-	/// returns a new [ChunkCRCMap] with the given values.
-	pub fn with_data(chunkmap: BTreeMap<u64, u32>) -> Self {
+impl ChunkXxHashMap {
+	/// returns a new [ChunkXxHashMap] with the given values.
+	pub fn with_data(chunkmap: BTreeMap<u64, u64>) -> Self {
 		Self {
 			chunkmap,
 			target_size: 0,
@@ -607,19 +607,19 @@ impl ChunkCRCMap {
 	}
 
 	/// Returns a reference to the inner map
-	pub fn chunkmap(&self) -> &BTreeMap<u64, u32> {
+	pub fn chunkmap(&self) -> &BTreeMap<u64, u64> {
 		&self.chunkmap
 	}
 
 	/// The encoded size of this map.
 	pub fn current_size(&self) -> usize {
 		match self.chunkmap.first_key_value() {
-			Some(_) => self.chunkmap.len() * (8 + 4) + 8, //8 -> 8bytes for the chunk no, 4 bytes for the crc
+			Some(_) => self.chunkmap.len() * (8 + 4) + 8, //8 -> 8bytes for the chunk no, 4 bytes for the xxhash
 			None => return 0,
 		}
 	}
 
-	/// returns a new, empty [ChunkMap] with the given values.
+	/// returns a new, empty [ChunkXxHashMap] with the given values.
 	pub fn new_empty() -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),
@@ -633,20 +633,20 @@ impl ChunkCRCMap {
 	}
 
 	/// Tries to add a chunk entry.  
-	/// Returns true, if the chunk no / crc value pair was added to the map.  
+	/// Returns true, if the chunk no / xxhash value pair was added to the map.  
 	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
-	pub fn add_chunk_entry(&mut self, chunk_no: u64, crc: u32) -> bool {
+	pub fn add_chunk_entry(&mut self, chunk_no: u64, xxhash: u64) -> bool {
 		if self.is_full() { //24 -> 8bytes for next chunk_no, 8bytes for next offset, 8 bytes for the size of the encoded BTreeMap
 			false
 		} else {
-			self.chunkmap.entry(chunk_no).or_insert(crc.clone());
+			self.chunkmap.entry(chunk_no).or_insert(xxhash.clone());
 			true
 		}
 	}
 
 	/// Checks if the map is full (returns true if, returns false if not).
 	pub fn is_full(&self) -> bool {
-		if self.target_size < self.current_size() + 20 { //20 -> 8bytes for next chunk_no, 4 bytes for crc, 8 bytes for the size of the encoded BTreeMap
+		if self.target_size < self.current_size() + 20 { //20 -> 8bytes for next chunk_no, 4 bytes for xxhash, 8 bytes for the size of the encoded BTreeMap
 			true
 		} else {
 			false
@@ -654,20 +654,20 @@ impl ChunkCRCMap {
 	}
 
 	/// Returns the inner map and replaces it with an empty map.
-	pub fn flush(&mut self) -> BTreeMap<u64, u32> {
+	pub fn flush(&mut self) -> BTreeMap<u64, u64> {
 		std::mem::take(&mut self.chunkmap)
 	}
 }
 
-impl HeaderCoding for ChunkCRCMap {
-	type Item = ChunkCRCMap;
+impl HeaderCoding for ChunkXxHashMap {
+	type Item = ChunkXxHashMap;
 
 	fn identifier() -> u32 {
-		HEADER_IDENTIFIER_CHUNK_CRC_MAP
+		HEADER_IDENTIFIER_CHUNK_XXHASH_MAP
 	}
 
 	fn version() -> u8 {
-		DEFAULT_HEADER_VERSION_CHUNK_CRC_MAP
+		DEFAULT_HEADER_VERSION_CHUNK_XXHASH_MAP
 	}
 	
 	fn encode_header(&self) -> Vec<u8> {
@@ -680,27 +680,27 @@ impl HeaderCoding for ChunkCRCMap {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
-		let chunkmap = BTreeMap::<u64, u32>::decode_directly(&mut cursor)?;
+		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
 }
 
 // - implement fmt::Display
-impl fmt::Display for ChunkCRCMap {
+impl fmt::Display for ChunkXxHashMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.struct_name())
 	}
 }
 
 // - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ChunkCRCMap {
+impl ChunkXxHashMap {
 	fn struct_name(&self) -> &'static str {
-		"ChunkCRCMap"
+		"ChunkXxHashMap"
 	}
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for ChunkCRCMap {
+impl Serialize for ChunkXxHashMap {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,

@@ -1,7 +1,7 @@
 // - internal
 use crate::{
 	header::ChunkFlags, 
-	io::calculate_crc32, 
+	io::calculate_xxhash, 
 	Result,
 };
 
@@ -37,11 +37,11 @@ impl Chunk {
 		self.size
 	}
 
-	/// Checks the integrity of the chunk data by calculating the appropriate crc32 hash and comparing it with the given hash.
+	/// Checks the integrity of the chunk data by calculating the appropriate xxhash hash and comparing it with the given hash.
 	///
-	/// Returns true if the crc32 hash is equal to the hash in the header, otherwise false. 
-	pub fn check_integrity(&self, original_hash: u32) -> Result<bool> {
-		let calculated_hash = calculate_crc32(&self.data);
+	/// Returns true if the xxhash hash is equal to the hash in the header, otherwise false. 
+	pub fn check_integrity(&self, original_hash: u64) -> Result<bool> {
+		let calculated_hash = calculate_xxhash(&self.data);
 		Ok(calculated_hash == original_hash)
 	}
 }
@@ -52,19 +52,19 @@ pub struct PreparedChunk {
 	data: Vec<u8>,
 	flags: ChunkFlags,
 	size: u64,
-	crc: u32,
+	xxhash: u64,
 	samebytes: Option<u8>,
 	duplicated: Option<u64>,
 }
 
 impl PreparedChunk {
 	/// Returns a new [PreparedChunk] with the given values.
-	pub fn new(data: Vec<u8>, flags: ChunkFlags, size: u64, crc: u32, samebytes: Option<u8>, duplicated: Option<u64>) -> PreparedChunk {
+	pub fn new(data: Vec<u8>, flags: ChunkFlags, size: u64, xxhash: u64, samebytes: Option<u8>, duplicated: Option<u64>) -> PreparedChunk {
 		Self {
 			data,
 			flags,
 			size,
-			crc,
+			xxhash,
 			samebytes,
 			duplicated
 		}
@@ -85,9 +85,9 @@ impl PreparedChunk {
 		self.size
 	}
 
-	/// Returns the crc32 value.
-	pub fn crc(&self) -> u32 {
-		self.crc
+	/// Returns the xxhash value.
+	pub fn xxhash(&self) -> u64 {
+		self.xxhash
 	}
 
 	/// Returns true if the samebytes flag is set, otherwise false.

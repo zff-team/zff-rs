@@ -29,8 +29,8 @@ pub const HEADER_IDENTIFIER_CHUNK_OFFSET_MAP: u32 = 0x7A666678;
 pub const HEADER_IDENTIFIER_CHUNK_SIZE_MAP: u32 = 0x7A666679;
 /// The identifier of the [ChunkFlagMap](crate::header::ChunkFlagMap).
 pub const HEADER_IDENTIFIER_CHUNK_FLAG_MAP: u32 = 0x7A66667A;
-/// The identifier of the [ChunkCRCMap](crate::header::ChunkFlagMap).
-pub const HEADER_IDENTIFIER_CHUNK_CRC_MAP: u32 = 0x7a666669;
+/// The identifier of the [ChunkXxHashMap](crate::header::ChunkFlagMap).
+pub const HEADER_IDENTIFIER_CHUNK_XXHASH_MAP: u32 = 0x7a666669;
 /// The identifier of the [ChunkSamebytesMap](crate::header::ChunkFlagMap).
 pub const HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP: u32 = 0x7a666653;
 /// The identifier of the [ChunkDeduplicationMap](crate::header::ChunkFlagMap).
@@ -168,8 +168,8 @@ pub const DEFAULT_HEADER_VERSION_CHUNK_OFFSET_MAP: u8 = 1;
 pub const DEFAULT_HEADER_VERSION_CHUNK_SIZE_MAP: u8 = 1;
 /// current header version for the [ChunkFlagMap](crate::header::ChunkFlagMap) structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_FLAG_MAP: u8 = 1;
-/// current header version for the [ChunkCRCMap](crate::header::ChunkCRCMap) structure.
-pub const DEFAULT_HEADER_VERSION_CHUNK_CRC_MAP: u8 = 1;
+/// current header version for the [ChunkXxHashMap](crate::header::ChunkXxHashMap) structure.
+pub const DEFAULT_HEADER_VERSION_CHUNK_XXHASH_MAP: u8 = 1;
 /// current header version for the [ChunkSamebytesMap](crate::header::ChunkSamebytesMap) structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP: u8 = 1;
 /// current header version for the [ChunkDedeuplicationMap](crate::header::ChunkDedeuplicationMap) structure.
@@ -235,8 +235,8 @@ pub const PRELOADED_CHUNK_OFFSET_MAP_TABLE: TableDefinition<u64, u64> = TableDef
 pub const PRELOADED_CHUNK_SIZE_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_size_map");
 /// Table name for the redb preloaded chunk flags map
 pub const PRELOADED_CHUNK_FLAGS_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_flags_map");
-/// Table name for the redb preloaded chunk flags map
-pub const PRELOADED_CHUNK_CRC_MAP_TABLE: TableDefinition<u64, u32> = TableDefinition::new("preloaded_crc_map");
+/// Table name for the redb preloaded chunk xxhash map
+pub const PRELOADED_CHUNK_XXHASH_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_xxhash_map");
 /// Table name for the redb preloaded same byte data
 pub const PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
 /// Table name for the redb preloaded chunk duplication map

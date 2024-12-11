@@ -13,6 +13,7 @@ mod encoder;
 // - re-exports
 pub use encoder::*;
 
+use crate::io::calculate_xxhash;
 // - internal
 use crate::{
     Result,
@@ -46,7 +47,7 @@ pub(crate) enum CompressedData {
 /// The EncodingThreadPoolManager contains the following threads:
 /// - HashingThreadManager: The HashingThreadManager is used to manage the hashing threads.
 /// - CompressionThread: The CompressionThread is used to compress the data.
-/// - Crc32Thread: The Crc32Thread is used to calculate the crc32 of the data.
+/// - XxHashThread: The XxHashThread is used to calculate the xxh3 64bit of the data.
 /// - SameBytesThread: The SameBytesThread is used to check if the data are same bytes or not.
 #[derive(Debug)]
 pub struct EncodingThreadPoolManager {
@@ -54,8 +55,8 @@ pub struct EncodingThreadPoolManager {
     hashing_threads: HashingThreadManager,
     /// the compression thread.
     compression_thread: CompressionThread,
-    /// the crc32 thread.
-    crc32_thread: Crc32Thread,
+    /// the xxhash thread.
+    xxhash_thread: XxHashThread,
 	/// the same bytes thread.
 	same_bytes_thread: SameBytesThread,
     /// the data, which will be used by the appropriate threads.
@@ -71,7 +72,7 @@ impl EncodingThreadPoolManager {
             hashing_threads: hashing_thread_manager,
             compression_thread: CompressionThread::new(compression_header, chunk_size, Arc::clone(&data)),
 			same_bytes_thread: SameBytesThread::new(Arc::clone(&data)),
-            crc32_thread: Crc32Thread::new(Arc::clone(&data)),
+            xxhash_thread: XxHashThread::new(Arc::clone(&data)),
             data,
         }
     }
@@ -95,12 +96,12 @@ impl EncodingThreadPoolManager {
 		self.hashing_threads.finalize_all()
 	}
 
-    /// triggers the underlying HashingThreadManager, the CompressionThread and the Crc32Thread to continue processes with the updated data field.
+    /// triggers the underlying HashingThreadManager, the CompressionThread and the XxHashThread to continue processes with the updated data field.
     /// This function should be called after the data field was updated.
     fn trigger(&mut self) {
 		self.same_bytes_thread.trigger();
         self.compression_thread.trigger();
-        self.crc32_thread.trigger();
+        self.xxhash_thread.trigger();
 		self.hashing_threads.trigger();
     }
 }
@@ -277,19 +278,19 @@ impl DeduplicationThread {
 	}
 }
 
-/// Structure to manage the crc32 calculation in a separate thread.
+/// Structure to manage the xxhash calculation in a separate thread.
 #[derive(Debug)]
-pub(crate) struct Crc32Thread {
-	/// triggers the crc32 thread to continue the crc32 calculation with the updated data field.
+pub(crate) struct XxHashThread {
+	/// triggers the xxhash thread to continue the xxhash calculation with the updated data field.
 	pub trigger: crossbeam::channel::Sender<crossbeam::sync::WaitGroup>,
-	/// will be used to receive the crc32 of the given data.
-	pub result: Arc<RwLock<u32>>,
-	/// the waitgroup, which will be used to wait until the crc32 thread has finished the crc32 calculation.
+	/// will be used to receive the xxhash of the given data.
+	pub result: Arc<RwLock<u64>>,
+	/// the waitgroup, which will be used to wait until the xxhash thread has finished the xxhash calculation.
 	waitgroup: Option<crossbeam::sync::WaitGroup>,
 }
 
-impl Crc32Thread {
-	/// creates a new crc32 thread.
+impl XxHashThread {
+	/// creates a new xxhash thread.
 	pub fn new(data: Arc<RwLock<Vec<u8>>>) -> Self {
 		let (trigger, trigger_receiver) = crossbeam::channel::unbounded::<crossbeam::sync::WaitGroup>();
 		let result = Arc::new(RwLock::new(0));
@@ -299,9 +300,7 @@ impl Crc32Thread {
 			while let Ok(wg) = trigger_receiver.recv() {
 				let mut w_result = c_result.write().unwrap();
 				let r_data = c_data.read().unwrap();
-				let mut hasher = crc32fast::Hasher::new();
-				hasher.update(&r_data);
-				*w_result = hasher.finalize();
+				*w_result = calculate_xxhash(&r_data);
 				drop(wg);
 			}
 		});
@@ -312,15 +311,15 @@ impl Crc32Thread {
 		}
 	}
 
-	/// trigger the thread to continue the crc32 calculation with the updated data field.
+	/// trigger the thread to continue the xxhash calculation with the updated data field.
 	pub fn trigger(&mut self) {
 		let wg = crossbeam::sync::WaitGroup::new();
 		self.waitgroup = Some(wg.clone());
 		self.trigger.send(wg).unwrap();
 	}
 
-	/// returns the crc32 of the given data.
-	pub fn get_result(&mut self) -> RwLockReadGuard<'_, u32> {
+	/// returns the xxhash of the given data.
+	pub fn get_result(&mut self) -> RwLockReadGuard<'_, u64> {
 		if let Some(wg) = self.waitgroup.take() {
 			wg.wait();
 		}
@@ -531,8 +530,8 @@ pub(crate) fn chunking(
 		},
 	};
 
-	// get crc32
-	let crc32 = *encoding_thread_pool_manager.crc32_thread.get_result();
+	// get xxhash 
+	let xxhash = *encoding_thread_pool_manager.xxhash_thread.get_result();
 
 	if compression_flag {
 		flags.compression = true;
@@ -559,7 +558,7 @@ pub(crate) fn chunking(
 		chunked_data, 
 		flags, 
 		size, 
-		crc32,
+		xxhash,
 		sambebyte,
 		duplicate,
 	))

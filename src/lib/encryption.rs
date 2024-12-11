@@ -641,7 +641,7 @@ impl Encryption {
 		Ok(*Nonce::from_slice(&buffer))
 	}
 
-	/// Method to generate a 96-bit nonce for the chunk crc32 value. Will use the chunk number as nonce and fills the
+	/// Method to generate a 96-bit nonce for the chunk xxhash value. Will use the chunk number as nonce and fills the
 	/// missing bits with zeros - except the last bit (the last bit is set).
 	fn gen_crypto_nonce_chunk_offset_map(object_no: u64) -> Result<Nonce> {
 		let mut buffer = vec![];
