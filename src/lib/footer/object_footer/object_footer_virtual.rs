@@ -60,7 +60,7 @@ impl ObjectFooterVirtual {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let encrypted_content = Encryption::encrypt_object_footer(
+		let encrypted_content = ObjectFooter::encrypt(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
 			self.object_number, 
@@ -201,7 +201,7 @@ impl EncryptedObjectFooterVirtual {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		let content = Encryption::decrypt_object_footer(
+		let content = ObjectFooter::decrypt(
 			key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
 		let mut cursor = Cursor::new(content);
 		let (creation_timestamp, 

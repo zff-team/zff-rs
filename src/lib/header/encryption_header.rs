@@ -14,7 +14,7 @@ use crate::{
 	ZffErrorKind,
 	KDFScheme,
 	PBEScheme,
-	Encryption,
+	encryption::*,
 };
 
 use crate::{
@@ -161,14 +161,14 @@ impl EncryptionHeader {
 					let iterations = parameters.iterations;
 					let salt = parameters.salt;
 					match self.pbe_header.encryption_scheme {
-						PBEScheme::AES128CBC => Encryption::decrypt_pbkdf2sha256_aes128cbc(
+						PBEScheme::AES128CBC => decrypt_pbkdf2sha256_aes128cbc(
 							iterations,
 							&salt,
 							&self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
-						PBEScheme::AES256CBC => Encryption::decrypt_pbkdf2sha256_aes256cbc(
+						PBEScheme::AES256CBC => decrypt_pbkdf2sha256_aes256cbc(
 							iterations,
 							&salt,
 							&self.pbe_header.pbencryption_nonce,
@@ -186,7 +186,7 @@ impl EncryptionHeader {
 					let r = parameters.r;
 					let salt = parameters.salt;
 					match self.pbe_header.encryption_scheme {
-						PBEScheme::AES128CBC => Encryption::decrypt_scrypt_aes128cbc(
+						PBEScheme::AES128CBC => decrypt_scrypt_aes128cbc(
 							logn,
 							p,
 							r,
@@ -195,7 +195,7 @@ impl EncryptionHeader {
 							&password,
 							&self.encrypted_encryption_key
 							),
-						PBEScheme::AES256CBC => Encryption::decrypt_scrypt_aes256cbc(
+						PBEScheme::AES256CBC => decrypt_scrypt_aes256cbc(
 							logn,
 							p,
 							r,
@@ -215,7 +215,7 @@ impl EncryptionHeader {
 					let iterations = parameters.iterations;
 					let salt = parameters.salt;
 					match self.pbe_header.encryption_scheme {
-						PBEScheme::AES128CBC => Encryption::decrypt_argon2_aes128cbc(
+						PBEScheme::AES128CBC => decrypt_argon2_aes128cbc(
 							mem_cost,
 							lanes,
 							iterations,
@@ -224,7 +224,7 @@ impl EncryptionHeader {
 							&password,
 							&self.encrypted_encryption_key
 							),
-						PBEScheme::AES256CBC => Encryption::decrypt_argon2_aes256cbc(
+						PBEScheme::AES256CBC => decrypt_argon2_aes256cbc(
 							mem_cost,
 							lanes,
 							iterations,

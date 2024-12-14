@@ -543,7 +543,7 @@ pub(crate) fn chunking(
 				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
 			};
 			//TODO: check to encrypt the content if the chunked data also in the "compression_thread"?.
-			Encryption::encrypt_chunk_content(
+			Vec::<u8>::encrypt(
 				encryption_key,
 				&chunked_data,
 				current_chunk_number,

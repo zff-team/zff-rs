@@ -186,7 +186,7 @@ impl ChunkMap for ChunkFlagsMap {
     D: Read,
     Self: Sized {
 		let structure_data = Self::inner_structure_data(data)?;
-		let enc_buffer = Encryption::decrypt_chunk_flags_map(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
+		let enc_buffer = ChunkFlagsMap::decrypt(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
 		let mut reader = Cursor::new(enc_buffer);
 		let map = BTreeMap::decode_directly(&mut reader)?;
 		Ok(Self::with_data(map))
@@ -203,7 +203,7 @@ impl ChunkMap for ChunkFlagsMap {
 		Self: HeaderCoding, {
 		let mut vec = Vec::new();
 		vec.append(&mut Self::encode_map(self));
-		let enc_buffer = Encryption::encrypt_chunk_flags_map(key, vec, chunk_no, encryption_algorithm.borrow())?;
+		let enc_buffer = ChunkFlagsMap::encrypt(key, vec, chunk_no, encryption_algorithm.borrow())?;
 		Ok(enc_buffer)
 	}
 }
@@ -246,6 +246,12 @@ impl fmt::Display for ChunkFlagsMap {
 impl ChunkFlagsMap {
 	fn struct_name(&self) -> &'static str {
 		"ChunkFlagMap"
+	}
+}
+
+impl Encryption for ChunkFlagsMap {
+	fn crypto_nonce_padding() -> u8 {
+		0b00000111
 	}
 }
 

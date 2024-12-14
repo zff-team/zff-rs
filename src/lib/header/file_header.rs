@@ -212,7 +212,7 @@ impl FileHeader {
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
 
-		let encrypted_data = Encryption::encrypt_file_header(
+		let encrypted_data = FileHeader::encrypt(
 			key, data_to_encrypt,
 			self.file_number,
 			algorithm
@@ -249,7 +249,7 @@ impl FileHeader {
 		
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
-		let decrypted_data = Encryption::decrypt_file_header(
+		let decrypted_data = FileHeader::decrypt(
 			&encryption_information.borrow().encryption_key, 
 			encrypted_data, 
 			file_number, 
@@ -334,6 +334,12 @@ impl fmt::Display for FileHeader {
 impl FileHeader {
 	fn struct_name(&self) -> &'static str {
 		"FileHeader"
+	}
+}
+
+impl Encryption for FileHeader {
+	fn crypto_nonce_padding() -> u8 {
+		0b00000100
 	}
 }
 

@@ -83,7 +83,7 @@ impl ChunkMap for ChunkSizeMap {
     D: Read,
     Self: Sized {
 		let structure_data = Self::inner_structure_data(data)?;
-		let enc_buffer = Encryption::decrypt_chunk_size_map(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
+		let enc_buffer = Self::decrypt(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
 		let mut reader = Cursor::new(enc_buffer);
 		let map = BTreeMap::decode_directly(&mut reader)?;
 		Ok(Self::with_data(map))
@@ -100,7 +100,7 @@ impl ChunkMap for ChunkSizeMap {
 		Self: HeaderCoding, {
 		let mut vec = Vec::new();
 		vec.append(&mut Self::encode_map(self));
-		let enc_buffer = Encryption::encrypt_chunk_size_map(key, vec, chunk_no, encryption_algorithm.borrow())?;
+		let enc_buffer = Self::encrypt(key, vec, chunk_no, encryption_algorithm.borrow())?;
 		Ok(enc_buffer)
 	}
 }
@@ -143,6 +143,12 @@ impl fmt::Display for ChunkSizeMap {
 impl ChunkSizeMap {
 	fn struct_name(&self) -> &'static str {
 		"ChunkSizeMap"
+	}
+}
+
+impl Encryption for ChunkSizeMap {
+	fn crypto_nonce_padding() -> u8 {
+		0b00000011
 	}
 }
 

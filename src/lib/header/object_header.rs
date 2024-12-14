@@ -163,7 +163,7 @@ impl ObjectHeader {
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
 
-		let encrypted_data = Encryption::encrypt_object_header(
+		let encrypted_data = ObjectHeader::encrypt(
 			key, data_to_encrypt,
 			self.object_number,
 			&encryption_header.algorithm)?;
@@ -204,7 +204,7 @@ impl ObjectHeader {
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let encryption_key = encryption_header.decrypt_encryption_key(password)?;
 		let algorithm = &encryption_header.algorithm;
-		let decrypted_data = Encryption::decrypt_object_header(encryption_key, encrypted_data, object_number, algorithm)?;
+		let decrypted_data = Self::decrypt(encryption_key, encrypted_data, object_number, algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (chunk_size,
 			compression_header,
@@ -241,6 +241,12 @@ impl ObjectHeader {
 			description_header,
 			object_type);
 		Ok(inner_content)
+	}
+}
+
+impl Encryption for ObjectHeader {
+	fn crypto_nonce_padding() -> u8 {
+		0b00010000
 	}
 }
 
@@ -413,7 +419,7 @@ impl EncryptedObjectHeader {
 	{
 		let encryption_key = self.encryption_header.decrypt_encryption_key(password)?;
 		let algorithm = &self.encryption_header.algorithm;
-		let decrypted_data = Encryption::decrypt_object_header(encryption_key, &self.encrypted_content, self.object_number, algorithm)?;
+		let decrypted_data = Self::decrypt(encryption_key, &self.encrypted_content, self.object_number, algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (chunk_size,
 			compression_header,
@@ -482,5 +488,11 @@ impl HeaderCoding for EncryptedObjectHeader {
 			flags,
 			encryption_header,
 			encrypted_data))
+	}
+}
+
+impl Encryption for EncryptedObjectHeader {
+	fn crypto_nonce_padding() -> u8 {
+		0b00010000
 	}
 }

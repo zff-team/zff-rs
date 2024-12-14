@@ -67,7 +67,7 @@ impl VirtualMappingInformation {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let encrypted_content = Encryption::encrypt_virtual_mapping_information(
+		let encrypted_content = VirtualMappingInformation::encrypt(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
 			offset, 
@@ -102,7 +102,7 @@ impl VirtualMappingInformation {
 		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
-		let decrypted_data = Encryption::decrypt_virtual_mapping_information(
+		let decrypted_data = VirtualMappingInformation::decrypt(
 			&encryption_information.borrow().encryption_key, 
 			encrypted_data, 
 			offset, 
@@ -146,6 +146,12 @@ impl VirtualMappingInformation {
 			))
 	}
 
+}
+
+impl Encryption for VirtualMappingInformation {
+	fn crypto_nonce_padding() -> u8 {
+		0b00000010
+	}
 }
 
 impl HeaderCoding for VirtualMappingInformation {
@@ -221,7 +227,7 @@ impl VirtualObjectMap {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let encrypted_content = Encryption::encrypt_virtual_object_map(
+		let encrypted_content = VirtualObjectMap::encrypt(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
 			object_number, 
@@ -259,7 +265,7 @@ impl VirtualObjectMap {
 		};
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
-		let decrypted_data = Encryption::decrypt_virtual_mapping_information(
+		let decrypted_data = VirtualMappingInformation::decrypt(
 			&encryption_information.borrow().encryption_key, 
 			encrypted_data,
 			object_number, 
@@ -318,5 +324,11 @@ impl fmt::Display for VirtualObjectMap {
 impl VirtualObjectMap {
 	fn struct_name(&self) -> &'static str {
 		"VirtualObjectMap"
+	}
+}
+
+impl Encryption for VirtualObjectMap {
+	fn crypto_nonce_padding() -> u8 {
+		0b01000000
 	}
 }

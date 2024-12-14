@@ -121,7 +121,7 @@ impl FileFooter {
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
 
-		let encrypted_data = Encryption::encrypt_file_footer(
+		let encrypted_data = FileFooter::encrypt(
 			key, data_to_encrypt,
 			self.file_number,
 			algorithm
@@ -148,7 +148,7 @@ impl FileFooter {
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
-		let decrypted_data = Encryption::decrypt_file_footer(
+		let decrypted_data = FileFooter::decrypt(
 			&encryption_information.borrow().encryption_key, 
 			encrypted_data, 
 			file_number, 
@@ -219,5 +219,11 @@ impl fmt::Display for FileFooter {
 impl FileFooter {
 	fn struct_name(&self) -> &'static str {
 		"FileFooter"
+	}
+}
+
+impl Encryption for FileFooter {
+	fn crypto_nonce_padding() -> u8 {
+		0b00001000 //TODO: move all crypto paddings to constants (#codeCleanup)
 	}
 }

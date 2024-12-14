@@ -167,6 +167,12 @@ impl ObjectFooter {
 	}
 }
 
+impl Encryption for ObjectFooter {
+	fn crypto_nonce_padding() -> u8 {
+		0b00100000
+	}
+}
+
 
 /// Each object contains its own object footer (and this is the encrypted variant).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -180,7 +180,7 @@ impl<R: Read + Seek> Segment<R> {
 
 		if let Some(enc_info) = encryption_information {
 			let enc_info = enc_info.borrow();
-			raw_data_buffer = Encryption::decrypt_chunk_content(
+			raw_data_buffer = Vec::<u8>::decrypt(
 				&enc_info.encryption_key, 
 				raw_data_buffer, 
 				chunk_number, 

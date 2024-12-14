@@ -1,10 +1,9 @@
-//TODO: Convert the Encryption struct to an Encryption Trait which could be implemented by the different types.
 // - STD
 use std::borrow::Borrow;
 use std::fmt;
 // - internal
 use crate::{
-	Result, ZffError, ZffErrorKind, SCRYPT_DERIVED_KEY_LENGTH_AES_128, SCRYPT_DERIVED_KEY_LENGTH_AES_256
+	Result, SCRYPT_DERIVED_KEY_LENGTH_AES_128, SCRYPT_DERIVED_KEY_LENGTH_AES_256
 };
 
 // - external
@@ -111,592 +110,18 @@ impl fmt::Display for PBEScheme {
     }
 }
 
-/// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
-#[repr(u8)]
-#[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq)]
-enum MessageType {
-	ChunkData,
-	FileHeader,
-	FileFooter,
-	ObjectHeader,
-	ObjectFooter,
-	VirtualMappingInformation,
-	VirtualObjectMap,
-	ChunkXxHashMap,
-	ChunkDeduplicationMap,
-	ChunkFlagsMap,
-	ChunkOffsetMap,
-	ChunkSameBytesMap,
-	ChunkSizeMap,
-}
+//TODO: improve this to implement most of the encoding steps in trait methods.
+/// trait to implement the zff encryption for the appropriate type.
+pub trait Encryption {
 
-/// Structure contains serveral methods to handle encryption
-pub struct Encryption;
-
-impl Encryption {
-	/// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn encrypt_pbkdf2sha256_aes128cbc(
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.encrypt(password, plaintext)?)
-	}
-
-	/// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn encrypt_pbkdf2sha256_aes256cbc(
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		let cipher = encryption_scheme.encrypt(password, plaintext)?;
-		Ok(cipher)
-	}
-
-	/// Decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
-	/// Returns the plaintext as ```Vec<u8>```.
-	/// # Error
-	/// if the decryption fails, or the given parameters are false.
-	pub fn decrypt_pbkdf2sha256_aes128cbc(
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		ciphertext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.decrypt(password, ciphertext)?)
-	}
-
-	/// Decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
-	/// Returns the plaintext as ```Vec<u8>```.
-	/// # Error
-	/// if the decryption fails, or the given parameters are false.
-	pub fn decrypt_pbkdf2sha256_aes256cbc(
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		ciphertext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.decrypt(password, ciphertext)?)
-	}
-
-	/// Encrypts the given plaintext with the given values with Scrypt-AES128CBC.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn encrypt_scrypt_aes128cbc(
-		logn: u8,
-		r: u32,
-		p: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.encrypt(password, plaintext)?)
-	}
-
-	/// Encrypts the given plaintext with the given values with Scrypt-AES256CBC.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn encrypt_scrypt_aes256cbc(
-		logn: u8,
-		r: u32,
-		p: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.encrypt(password, plaintext)?)
-	}
-
-	/// Decrypts the given ciphertext with the given values with Scrypt-AES128CBC.
-	/// Returns the plaintext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn decrypt_scrypt_aes128cbc(
-		logn: u8,
-		r: u32,
-		p: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.decrypt(password, plaintext)?)
-	}
-
-	/// Decrypts the given ciphertext with the given values with Scrypt-AES256CBC.
-	/// Returns the plaintext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn decrypt_scrypt_aes256cbc(
-		logn: u8,
-		r: u32,
-		p: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
-		let encryption_scheme = EncryptionScheme::Pbes2(params);
-		Ok(encryption_scheme.decrypt(password, plaintext)?)
-	}
-
-	/// Encrypts the given plaintext with the given values with Argon2id-AES128CBC.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn encrypt_argon2_aes128cbc(
-		mem_cost: u32,
-		lanes: u32,
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let scheme = PBEScheme::AES128CBC;
-		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
-	}
-
-	/// Encrypts the given plaintext with the given values with Argon2id-AES256CBC.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the encryption fails, or the given parameters are false.
-	pub fn encrypt_argon2_aes256cbc(
-		mem_cost: u32,
-		lanes: u32,
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let scheme = PBEScheme::AES256CBC;
-		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
-	}
-
-	/// Decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the decryption fails, or the given parameters are false.
-	pub fn decrypt_argon2_aes128cbc(
-		mem_cost: u32,
-		lanes: u32,
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let scheme = PBEScheme::AES128CBC;
-		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
-	}
-
-	/// Decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
-	/// Returns the ciphertext as ```Vec<u8>```.
-	/// # Error
-	/// if the decryption fails, or the given parameters are false.
-	pub fn decrypt_argon2_aes256cbc(
-		mem_cost: u32,
-		lanes: u32,
-		iterations: u32,
-		salt: &[u8; 32],
-		aes_iv: &[u8; 16],
-		password: impl AsRef<[u8]>,
-		plaintext: &[u8]) -> Result<Vec<u8>> {
-		let scheme = PBEScheme::AES256CBC;
-		let password = &String::from_utf8(password.as_ref().to_vec())?;
-		decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
-	}
-
-	/// Method to encrypt a chunk content with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given chunk data (if selected, then **after the compression**).
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	/// # Example
-	/// ```
-	/// use zff::*;
-	/// use hex::ToHex;
-	///
-	/// fn main() -> Result<()> {
-	///        let key = "01234567890123456789012345678912"; // 32Byte/256Bit Key
-	///        let chunk_no = 1; // 12Byte/96Bit Key
-	///        let message = "My message";
-	/// 
-	///        let ciphertext = Encryption::encrypt_chunk_content(key, message, chunk_no, EncryptionAlgorithm::AES256GCM)?;
-	/// 
-	///        assert_eq!(ciphertext.encode_hex::<String>(), "3f1879c7e3373af75b5b4e857cd88ab7c6db604cef2e60c5df42".to_string());
-	///        Ok(())
-	/// }
-	/// ```
-	/// # Error
-	/// This method will fail, if the encryption fails.
-	pub fn encrypt_chunk_content<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	/// Encrypts the message, using the type specific nonce padding.
+	fn encrypt<K, M, A>(key: K, message: M, nonce_value: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
-	}
-
-	/// Method to encrypt a [crate::header::VirtualMappingInformation] with a key and and the given offset. This method should primary used to encrypt
-	/// the given [crate::header::VirtualMappingInformation].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_virtual_mapping_information<K, M, A>(key: K, message: M, offset: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, offset, algorithm, MessageType::VirtualMappingInformation)
-	}
-
-	/// Method to encrypt a [crate::header::VirtualObjectMap] with a key and and the given depth. This method should primary used to encrypt
-	/// the given [crate::header::VirtualObjectMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_virtual_object_map<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::VirtualObjectMap)
-	}
-
-
-	/// Method to encrypt a [crate::header::FileHeader] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::FileHeader].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_file_header<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
-	}
-
-	/// Method to encrypt a [crate::footer::FileFooter] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::footer::FileFooter].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, file_number, algorithm, MessageType::FileFooter)
-	}
-
-	/// Method to encrypt a [crate::header::ObjectHeader] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ObjectHeader].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
-	}
-
-	/// Method to encrypt a [crate::footer::ObjectFooter] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::footer::ObjectFooter].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
-	}
-
-	/// Method to encrypt a [crate::header::ChunkXxHashMap] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ChunkXxHashMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_chunk_xxhash_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkXxHashMap)
-	}
-
-	/// Method to encrypt a [crate::header::ChunkDeduplicationMap] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ChunkDeduplicationMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_chunk_deduplication_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkDeduplicationMap)
-	}
-
-	/// Method to encrypt a [crate::header::ChunkFlagMap] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ChunkFlagMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_chunk_flags_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkFlagsMap)
-	}
-
-	/// Method to encrypt a [crate::header::ChunkOffsetMap] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ChunkOffsetMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_chunk_offset_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkOffsetMap)
-	}
-
-	/// Method to encrypt a [crate::header::ChunkSamebytesMap] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ChunkSamebytesMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_chunk_samebytes_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSameBytesMap)
-	}
-
-	/// Method to encrypt a [crate::header::ChunkSizeMap] with a key and and the given chunk number. This method should primary used to encrypt
-	/// the given [crate::header::ChunkSizeMap].
-	/// Returns a the cipthertext as ```Vec<u8>```.
-	pub fn encrypt_chunk_size_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSizeMap)
-	}
-
-	/// Method to decrypt a chunk content with a key and and the given chunk number. This method should primary used to decrypt
-	/// the given chunk data (if selected, then **before the decompression**).
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_content<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkData)
-	}
-
-	/// Method to decrypt a [crate::header::VirtualMappingInformation] with a key and and the given offset. This method should primary used to decrypt
-	/// the given [crate::header::VirtualMappingInformation].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_virtual_mapping_information<K, M, A>(key: K, message: M, offset: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, offset, algorithm, MessageType::VirtualMappingInformation)
-	}
-
-	/// Method to decrypt a [VirtualLayer](crate::header::VirtualObjectMap) with a key and and the given depth. This method should primary used to decrypt
-	/// the given [VirtualLayer](crate::header::VirtualObjectMap).
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_virtual_object_map<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::VirtualObjectMap)
-	}
-
-	/// Method to decrypt a [crate::header::FileHeader] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::FileHeader].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_file_header<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileHeader)
-	}
-
-	/// Method to decrypt a [crate::footer::FileFooter] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::footer::FileFooter].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_file_footer<K, M, A>(key: K, message: M, file_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, file_number, algorithm, MessageType::FileFooter)
-	}
-
-	/// Method to decrypt a [crate::header::ObjectHeader] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ObjectHeader].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_object_header<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::ObjectHeader)
-	}
-
-	/// Method to decrypt a [crate::footer::ObjectFooter] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::footer::ObjectFooter].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_object_footer<K, M, A>(key: K, message: M, object_number: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
-	}
-
-	/// Method to decrypt a [crate::header::ChunkXxHashMap] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ChunkXxHashMap].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_xxhash_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkXxHashMap)
-	}
-
-	/// Method to decrypt a [crate::header::ChunkDeduplicationMap] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ChunkDeduplicationMap].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_deduplication_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkDeduplicationMap)
-	}
-
-	/// Method to decrypt a [crate::header::ChunkFlagsMap] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ChunkFlagsMap].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_flags_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkFlagsMap)
-	}
-
-	/// Method to decrypt a [crate::header::ChunkOffsetMap] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ChunkOffsetMap].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_offset_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkOffsetMap)
-	}
-
-	/// Method to decrypt a [crate::header::ChunkSamebytesMap] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ChunkSamebytesMap].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_samebytes_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSameBytesMap)
-	}
-
-	/// Method to decrypt a [crate::header::ChunkSizeMap] with a key and and the given chunk number. This method should primary used to decrypt
-	/// a [crate::header::ChunkSizeMap].
-	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
-	/// # Error
-	/// This method will fail, if the decryption fails.
-	pub fn decrypt_chunk_size_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSizeMap)
-	}
-
-	fn encrypt_message<K, M, A, T>(key: K, message: M, nonce_value: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-		T: Borrow<MessageType>,
-	{
-		let nonce = Self::gen_crypto_nonce(nonce_value, message_type)?;
+		let nonce = Self::gen_crypto_nonce(nonce_value)?;
 
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
@@ -714,14 +139,14 @@ impl Encryption {
 		}
 	}
 
-	fn decrypt_message<K, M, A, T>(key: K, message: M, nonce_value: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
+	/// Decrypts the message, using the type specific nonce padding.
+	fn decrypt<K, M, A>(key: K, message: M, nonce_value: u64, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		M: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
-		T: Borrow<MessageType>
 	{
-		let nonce = Self::gen_crypto_nonce(nonce_value, message_type)?;
+		let nonce = Self::gen_crypto_nonce(nonce_value)?;
 
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
@@ -737,72 +162,265 @@ impl Encryption {
 				Ok(cipher.decrypt(&nonce, message.as_ref())?)
 			}
 		}
-	}
-
-	/// Generates a new random key, with the given key size.
-	/// # Example
-	/// ```no_run
-	/// use zff::*;
-	/// 
-	/// let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
-	/// let my_new_random_super_secret_key = Encryption::gen_random_key(keysize);
-	/// //...
-	/// ```
-	pub fn gen_random_key(length: usize) -> Vec<u8> {
-		let mut key = vec!(0u8; length/8);
-		let mut rng = OsRng;
-		rng.fill_bytes(&mut key);
-		key
-	}
-
-	/// Generates a new random IV/Nonce as ```[u8; 16]``` for use in PBE header.
-	pub fn gen_random_iv() -> [u8; 16] {
-		let mut iv = [0; 16];
-		let mut rng = OsRng;
-		rng.fill_bytes(&mut iv);
-		iv
-	}
-
-	/// Generates a new random salt as ```[u8; 32]``` for use in PBE header.
-	pub fn gen_random_salt() -> [u8; 32] {
-		let mut salt = [0; 32];
-		let mut rng = OsRng;
-		rng.fill_bytes(&mut salt);
-		salt
-	}
-
-	/// Generates a new random IV/Nonce as ```[u8; 12]``` for use in encryption header.
-	pub fn gen_random_header_nonce() -> [u8; 12] {
-		let mut nonce = [0; 12];
-		let mut rng = OsRng;
-		rng.fill_bytes(&mut nonce);
-		nonce
 	}
 
 	/// Method to generate a 96-bit nonce for the appropriate message type (using the given value).
-	fn gen_crypto_nonce<T: Borrow<MessageType>>(nonce_value: u64, message_type: T) -> Result<Nonce> {
+	fn gen_crypto_nonce(nonce_value: u64) -> Result<Nonce> {
 		let mut buffer = vec![];
 		buffer.write_u64::<LittleEndian>(nonce_value)?;
 		buffer.append(&mut vec!(0u8; 4));
 		let buffer_len = buffer.len();
-		match message_type.borrow() {
-			MessageType::ChunkData => (), // fills the missing bits with zeros
-			MessageType::FileHeader => buffer[buffer_len - 1] |= 0b00000100,
-			MessageType::FileFooter => buffer[buffer_len - 1] |= 0b00001000,
-			MessageType::ObjectHeader => buffer[buffer_len - 1] |= 0b00010000,
-			MessageType::ObjectFooter => buffer[buffer_len - 1] |= 0b00100000,
-			MessageType::VirtualMappingInformation => buffer[buffer_len - 1] |= 0b00000010,
-			MessageType::VirtualObjectMap => buffer[buffer_len - 1] |= 0b01000000,
-			MessageType::ChunkXxHashMap => buffer[buffer_len - 1] |= 0b00001111,
-			MessageType::ChunkDeduplicationMap => buffer[buffer_len - 1] |= 0b00111111,
-			MessageType::ChunkFlagsMap => buffer[buffer_len - 1] |= 0b00000111,
-			MessageType::ChunkOffsetMap => buffer[buffer_len - 1] |= 0b00000001,
-			MessageType::ChunkSameBytesMap => buffer[buffer_len - 1] |= 0b00011111,
-			MessageType::ChunkSizeMap => buffer[buffer_len - 1] |= 0b00000011,
-
-		}
+		buffer[buffer_len - 1] |= Self::crypto_nonce_padding();
 		Ok(*Nonce::from_slice(&buffer))
 	}
+
+	/// The appropriate, type specific padding value for the nonce (see official zff documentation).
+	fn crypto_nonce_padding() -> u8;
+
+}
+
+/// implements Encryption for Vec<u8> to use this for chunk content data
+impl Encryption for Vec<u8> {
+	fn crypto_nonce_padding() -> u8 {
+		0b00000000
+	}
+}
+
+/// Generates a new random key, with the given key size.
+/// # Example
+/// ```no_run
+/// use zff::*;
+/// 
+/// let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
+/// let my_new_random_super_secret_key = Encryption::gen_random_key(keysize);
+/// //...
+/// ```
+pub fn gen_random_key(length: usize) -> Vec<u8> {
+	let mut key = vec!(0u8; length/8);
+	let mut rng = OsRng;
+	rng.fill_bytes(&mut key);
+	key
+}
+
+/// Generates a new random IV/Nonce as ```[u8; 16]``` for use in PBE header.
+pub fn gen_random_iv() -> [u8; 16] {
+	let mut iv = [0; 16];
+	let mut rng = OsRng;
+	rng.fill_bytes(&mut iv);
+	iv
+}
+
+/// Generates a new random salt as ```[u8; 32]``` for use in PBE header.
+pub fn gen_random_salt() -> [u8; 32] {
+	let mut salt = [0; 32];
+	let mut rng = OsRng;
+	rng.fill_bytes(&mut salt);
+	salt
+}
+
+/// Generates a new random IV/Nonce as ```[u8; 12]``` for use in encryption header.
+pub fn gen_random_header_nonce() -> [u8; 12] {
+	let mut nonce = [0; 12];
+	let mut rng = OsRng;
+	rng.fill_bytes(&mut nonce);
+	nonce
+}
+
+/// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn encrypt_pbkdf2sha256_aes128cbc(
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.encrypt(password, plaintext)?)
+}
+
+/// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn encrypt_pbkdf2sha256_aes256cbc(
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	let cipher = encryption_scheme.encrypt(password, plaintext)?;
+	Ok(cipher)
+}
+
+/// Decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
+/// Returns the plaintext as ```Vec<u8>```.
+/// # Error
+/// if the decryption fails, or the given parameters are false.
+pub fn decrypt_pbkdf2sha256_aes128cbc(
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	ciphertext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.decrypt(password, ciphertext)?)
+}
+
+/// Decrypts the given ciphertext from the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.
+/// Returns the plaintext as ```Vec<u8>```.
+/// # Error
+/// if the decryption fails, or the given parameters are false.
+pub fn decrypt_pbkdf2sha256_aes256cbc(
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	ciphertext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.decrypt(password, ciphertext)?)
+}
+
+/// Encrypts the given plaintext with the given values with Scrypt-AES128CBC.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn encrypt_scrypt_aes128cbc(
+	logn: u8,
+	r: u32,
+	p: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.encrypt(password, plaintext)?)
+}
+
+/// Encrypts the given plaintext with the given values with Scrypt-AES256CBC.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn encrypt_scrypt_aes256cbc(
+	logn: u8,
+	r: u32,
+	p: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.encrypt(password, plaintext)?)
+}
+
+/// Decrypts the given ciphertext with the given values with Scrypt-AES128CBC.
+/// Returns the plaintext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn decrypt_scrypt_aes128cbc(
+	logn: u8,
+	r: u32,
+	p: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.decrypt(password, plaintext)?)
+}
+
+/// Decrypts the given ciphertext with the given values with Scrypt-AES256CBC.
+/// Returns the plaintext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn decrypt_scrypt_aes256cbc(
+	logn: u8,
+	r: u32,
+	p: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
+	let encryption_scheme = EncryptionScheme::Pbes2(params);
+	Ok(encryption_scheme.decrypt(password, plaintext)?)
+}
+
+/// Encrypts the given plaintext with the given values with Argon2id-AES128CBC.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn encrypt_argon2_aes128cbc(
+	mem_cost: u32,
+	lanes: u32,
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let scheme = PBEScheme::AES128CBC;
+	let password = &String::from_utf8(password.as_ref().to_vec())?;
+	encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
+}
+
+/// Encrypts the given plaintext with the given values with Argon2id-AES256CBC.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the encryption fails, or the given parameters are false.
+pub fn encrypt_argon2_aes256cbc(
+	mem_cost: u32,
+	lanes: u32,
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let scheme = PBEScheme::AES256CBC;
+	let password = &String::from_utf8(password.as_ref().to_vec())?;
+	encrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
+}
+
+/// Decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the decryption fails, or the given parameters are false.
+pub fn decrypt_argon2_aes128cbc(
+	mem_cost: u32,
+	lanes: u32,
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let scheme = PBEScheme::AES128CBC;
+	let password = &String::from_utf8(password.as_ref().to_vec())?;
+	decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
+}
+
+/// Decrypts the given ciphertext with the given values with Argon2id-AES128CBC.
+/// Returns the ciphertext as ```Vec<u8>```.
+/// # Error
+/// if the decryption fails, or the given parameters are false.
+pub fn decrypt_argon2_aes256cbc(
+	mem_cost: u32,
+	lanes: u32,
+	iterations: u32,
+	salt: &[u8; 32],
+	aes_iv: &[u8; 16],
+	password: impl AsRef<[u8]>,
+	plaintext: &[u8]) -> Result<Vec<u8>> {
+	let scheme = PBEScheme::AES256CBC;
+	let password = &String::from_utf8(password.as_ref().to_vec())?;
+	decrypt_argon2_aes(password, salt, mem_cost, lanes, iterations, scheme, aes_iv, plaintext)
 }
 
 // hash_length is 16 for aes128cbc and 32 for aes256cbc

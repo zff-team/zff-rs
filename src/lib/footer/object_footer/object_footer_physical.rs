@@ -67,7 +67,7 @@ impl ObjectFooterPhysical {
 		E: Borrow<EncryptionInformation>
 	{
 		let mut vec = Vec::new();
-		let encrypted_content = Encryption::encrypt_object_footer(
+		let encrypted_content = ObjectFooter::encrypt(
 			&encryption_information.borrow().encryption_key, 
 			self.encode_content(), 
 			self.object_number, 
@@ -195,7 +195,7 @@ impl EncryptedObjectFooterPhysical {
 		A: Borrow<EncryptionAlgorithm>,
 		K: AsRef<[u8]>,
 	{
-		let content = Encryption::decrypt_object_footer(key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
+		let content = ObjectFooter::decrypt(key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
 		let mut cursor = Cursor::new(content);
 		let (acquisition_start, 
 			acquisition_end, 
