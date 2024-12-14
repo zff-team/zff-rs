@@ -1,11 +1,10 @@
+//TODO: Convert the Encryption struct to an Encryption Trait which could be implemented by the different types.
 // - STD
 use std::borrow::Borrow;
 use std::fmt;
 // - internal
 use crate::{
-	Result,
-	SCRYPT_DERIVED_KEY_LENGTH_AES_128,
-	SCRYPT_DERIVED_KEY_LENGTH_AES_256
+	Result, ZffError, ZffErrorKind, SCRYPT_DERIVED_KEY_LENGTH_AES_128, SCRYPT_DERIVED_KEY_LENGTH_AES_256
 };
 
 // - external
@@ -124,6 +123,12 @@ enum MessageType {
 	ObjectFooter,
 	VirtualMappingInformation,
 	VirtualObjectMap,
+	ChunkXxHashMap,
+	ChunkDeduplicationMap,
+	ChunkFlagsMap,
+	ChunkOffsetMap,
+	ChunkSameBytesMap,
+	ChunkSizeMap,
 }
 
 /// Structure contains serveral methods to handle encryption
@@ -430,6 +435,78 @@ impl Encryption {
 		Encryption::encrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
 	}
 
+	/// Method to encrypt a [crate::header::ChunkXxHashMap] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ChunkXxHashMap].
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	pub fn encrypt_chunk_xxhash_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkXxHashMap)
+	}
+
+	/// Method to encrypt a [crate::header::ChunkDeduplicationMap] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ChunkDeduplicationMap].
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	pub fn encrypt_chunk_deduplication_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkDeduplicationMap)
+	}
+
+	/// Method to encrypt a [crate::header::ChunkFlagMap] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ChunkFlagMap].
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	pub fn encrypt_chunk_flags_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkFlagsMap)
+	}
+
+	/// Method to encrypt a [crate::header::ChunkOffsetMap] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ChunkOffsetMap].
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	pub fn encrypt_chunk_offset_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkOffsetMap)
+	}
+
+	/// Method to encrypt a [crate::header::ChunkSamebytesMap] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ChunkSamebytesMap].
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	pub fn encrypt_chunk_samebytes_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSameBytesMap)
+	}
+
+	/// Method to encrypt a [crate::header::ChunkSizeMap] with a key and and the given chunk number. This method should primary used to encrypt
+	/// the given [crate::header::ChunkSizeMap].
+	/// Returns a the cipthertext as ```Vec<u8>```.
+	pub fn encrypt_chunk_size_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::encrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSizeMap)
+	}
+
 	/// Method to decrypt a chunk content with a key and and the given chunk number. This method should primary used to decrypt
 	/// the given chunk data (if selected, then **before the decompression**).
 	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
@@ -528,6 +605,90 @@ impl Encryption {
 		Encryption::decrypt_message(key, message, object_number, algorithm, MessageType::ObjectFooter)
 	}
 
+	/// Method to decrypt a [crate::header::ChunkXxHashMap] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ChunkXxHashMap].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_xxhash_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkXxHashMap)
+	}
+
+	/// Method to decrypt a [crate::header::ChunkDeduplicationMap] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ChunkDeduplicationMap].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_deduplication_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkDeduplicationMap)
+	}
+
+	/// Method to decrypt a [crate::header::ChunkFlagsMap] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ChunkFlagsMap].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_flags_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkFlagsMap)
+	}
+
+	/// Method to decrypt a [crate::header::ChunkOffsetMap] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ChunkOffsetMap].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_offset_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkOffsetMap)
+	}
+
+	/// Method to decrypt a [crate::header::ChunkSamebytesMap] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ChunkSamebytesMap].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_samebytes_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSameBytesMap)
+	}
+
+	/// Method to decrypt a [crate::header::ChunkSizeMap] with a key and and the given chunk number. This method should primary used to decrypt
+	/// a [crate::header::ChunkSizeMap].
+	/// Returns a the plaintext as ```Vec<u8>``` of the given ciphertext.
+	/// # Error
+	/// This method will fail, if the decryption fails.
+	pub fn decrypt_chunk_size_map<K, M, A>(key: K, message: M, chunk_no: u64, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		M: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		Encryption::decrypt_message(key, message, chunk_no, algorithm, MessageType::ChunkSizeMap)
+	}
+
 	fn encrypt_message<K, M, A, T>(key: K, message: M, nonce_value: u64, algorithm: A, message_type: T) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
@@ -535,15 +696,8 @@ impl Encryption {
 		A: Borrow<EncryptionAlgorithm>,
 		T: Borrow<MessageType>,
 	{
-		let nonce = match message_type.borrow() {
-			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
-			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
-			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
-			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
-			MessageType::ObjectFooter => Encryption::gen_crypto_nonce_object_footer(nonce_value)?,
-			MessageType::VirtualMappingInformation => Encryption::gen_crypto_nonce_virtual_mapping_information(nonce_value)?,
-			MessageType::VirtualObjectMap => Encryption::gen_crypto_nonce_virtual_object_map(nonce_value)?,
-		};
+		let nonce = Self::gen_crypto_nonce(nonce_value, message_type)?;
+
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
 				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;
@@ -567,15 +721,8 @@ impl Encryption {
 		A: Borrow<EncryptionAlgorithm>,
 		T: Borrow<MessageType>
 	{
-		let nonce = match message_type.borrow() {
-			MessageType::ChunkData => Encryption::gen_crypto_nonce_chunk_data(nonce_value)?,
-			MessageType::FileHeader => Encryption::gen_crypto_nonce_file_header(nonce_value)?,
-			MessageType::FileFooter => Encryption::gen_crypto_nonce_file_footer(nonce_value)?,
-			MessageType::ObjectHeader => Encryption::gen_crypto_nonce_object_header(nonce_value)?,
-			MessageType::ObjectFooter => Encryption::gen_crypto_nonce_object_footer(nonce_value)?,
-			MessageType::VirtualMappingInformation => Encryption::gen_crypto_nonce_virtual_mapping_information(nonce_value)?,
-			MessageType::VirtualObjectMap => Encryption::gen_crypto_nonce_virtual_object_map(nonce_value)?,
-		};
+		let nonce = Self::gen_crypto_nonce(nonce_value, message_type)?;
+
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
 				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;
@@ -632,90 +779,28 @@ impl Encryption {
 		nonce
 	}
 
-	/// Method to generate a 96-bit nonce for the chunk content. Will use the chunk number as nonce and fills the
-	/// missing bits with zeros.
-	fn gen_crypto_nonce_chunk_data(chunk_no: u64) -> Result<Nonce> {
+	/// Method to generate a 96-bit nonce for the appropriate message type (using the given value).
+	fn gen_crypto_nonce<T: Borrow<MessageType>>(nonce_value: u64, message_type: T) -> Result<Nonce> {
 		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(chunk_no)?;
-		buffer.append(&mut vec!(0u8; 4));
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the chunk xxhash value. Will use the chunk number as nonce and fills the
-	/// missing bits with zeros - except the last bit (the last bit is set).
-	fn gen_crypto_nonce_chunk_offset_map(object_no: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(object_no)?;
+		buffer.write_u64::<LittleEndian>(nonce_value)?;
 		buffer.append(&mut vec!(0u8; 4));
 		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00000001;
-		Ok(*Nonce::from_slice(&buffer))
-	}
+		match message_type.borrow() {
+			MessageType::ChunkData => (), // fills the missing bits with zeros
+			MessageType::FileHeader => buffer[buffer_len - 1] |= 0b00000100,
+			MessageType::FileFooter => buffer[buffer_len - 1] |= 0b00001000,
+			MessageType::ObjectHeader => buffer[buffer_len - 1] |= 0b00010000,
+			MessageType::ObjectFooter => buffer[buffer_len - 1] |= 0b00100000,
+			MessageType::VirtualMappingInformation => buffer[buffer_len - 1] |= 0b00000010,
+			MessageType::VirtualObjectMap => buffer[buffer_len - 1] |= 0b01000000,
+			MessageType::ChunkXxHashMap => buffer[buffer_len - 1] |= 0b00001111,
+			MessageType::ChunkDeduplicationMap => buffer[buffer_len - 1] |= 0b00111111,
+			MessageType::ChunkFlagsMap => buffer[buffer_len - 1] |= 0b00000111,
+			MessageType::ChunkOffsetMap => buffer[buffer_len - 1] |= 0b00000001,
+			MessageType::ChunkSameBytesMap => buffer[buffer_len - 1] |= 0b00011111,
+			MessageType::ChunkSizeMap => buffer[buffer_len - 1] |= 0b00000011,
 
-	/// Method to generate a 96-bit nonce for the virtual mapping information value.
-	/// Will use the original offset as nonce and fills the
-	/// missing bits with zeros - except the second bit (will be set).
-	fn gen_crypto_nonce_virtual_mapping_information(offset: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(offset)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00000010;
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the file header. Will use the file number as nonce and fills the
-	/// missing bits with zeros - except the third to last bit (will be set).
-	fn gen_crypto_nonce_file_header(file_number: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(file_number)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00000100;
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the file footer. Will use the file number as nonce and fills the
-	/// missing bits with zeros - except the fourth to last bit (will be set).
-	fn gen_crypto_nonce_file_footer(file_number: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(file_number)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00001000;
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the object header. Will use the object number as nonce and fills the
-	/// missing bits with zeros - except the 5th to last bit (will be set).
-	fn gen_crypto_nonce_object_header(object_number: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(object_number)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00010000;
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the object footer. Will use the object number as nonce and fills the
-	/// missing bits with zeros - except the 6th to last bit (will be set).
-	fn gen_crypto_nonce_object_footer(object_number: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(object_number)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b00100000;
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// Method to generate a 96-bit nonce for the object footer. Will use the object number as nonce and fills the
-	/// missing bits with zeros - except the 7th to last bit (will be set).
-	fn gen_crypto_nonce_virtual_object_map(object_number: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(object_number)?;
-		buffer.append(&mut vec!(0u8; 11));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= 0b01000000;
+		}
 		Ok(*Nonce::from_slice(&buffer))
 	}
 }

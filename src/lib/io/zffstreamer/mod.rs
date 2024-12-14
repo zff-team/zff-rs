@@ -8,7 +8,7 @@ use super::*;
 
 // - internal
 use crate::{
-    footer::SegmentFooter, header::{ChunkMapType, ChunkMaps, SegmentHeader},
+    footer::SegmentFooter, header::{ChunkMapType, ChunkMaps, SegmentHeader, ChunkMap},
     Segment,
     HeaderCoding,
     ValueDecoder,

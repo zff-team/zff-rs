@@ -32,9 +32,10 @@ use crate::{
 		ChunkFlags,
 		ChunkOffsetMap,
 		ChunkSizeMap,
-		ChunkFlagMap,
+		ChunkFlagsMap,
 		ChunkSamebytesMap,
 		ChunkDeduplicationMap,
+		ChunkMap,
 	},
 	ChunkContent,
 };
@@ -560,7 +561,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			let chunk_maps = segment.footer().chunk_flags_map_table.clone();
 			for (_, offset) in chunk_maps {
 				segment.seek(SeekFrom::Start(offset))?;
-				let mut flags_map = ChunkFlagMap::decode_directly(segment)?;
+				let mut flags_map = ChunkFlagsMap::decode_directly(segment)?;
 				let inner_map = flags_map.flush();
 				match &mut self.chunk_maps {
 					PreloadedChunkMaps::None => (),

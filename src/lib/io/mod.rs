@@ -1,6 +1,6 @@
 // - modules
 /// provides [ZffWriter](crate::io::zffwriter::ZffWriter) and some helper functions to create or extend zff containers.
-pub mod zffwriter;
+//pub mod zffwriter; //TODO: remove
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
 pub mod zffreader;
 /// provides [ZffStreamer] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
