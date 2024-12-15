@@ -261,6 +261,20 @@ impl<R: Read + Seek> ZffReader<R> {
 		Ok(map)
 	}
 
+	/// Same as list_objects, but ignores encrypted objects
+	pub fn list_decrypted_objects(&self) -> BTreeMap<u64, ObjectType> {
+		let mut map = BTreeMap::new();
+		for (k, v) in &self.object_reader {
+			match v {
+				ZffObjectReader::Encrypted(_) => (),
+				ZffObjectReader::Physical(_) => { map.insert(*k, ObjectType::Physical); },
+				ZffObjectReader::Logical(_) => { map.insert(*k, ObjectType::Logical); },
+				ZffObjectReader::Virtual(_) => { map.insert(*k, ObjectType::Virtual); },
+			};
+		};
+		map
+	}
+
 	///  Sets an appropriate object as active to read or seek from this object.
 	///  # Error
 	///  This method fails, if the appropriate object number not exists in this zff container.

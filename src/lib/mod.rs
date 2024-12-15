@@ -22,7 +22,8 @@ pub mod io;
 pub mod helper;
 mod hashing;
 mod compression;
-mod encryption;
+/// Contains various functions, methods and traits to handle encryption in zff.
+pub mod encryption;
 mod traits;
 mod error;
 mod signatures;
