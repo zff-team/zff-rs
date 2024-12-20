@@ -359,6 +359,11 @@ impl ZffError {
 	}
 }
 
+impl From<ZffError> for std::io::Error {
+	fn from(e: ZffError) -> std::io::Error {
+		std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+	}
+}
 
 impl From<ParseIntError> for ZffError {
 	fn from(e: ParseIntError) -> ZffError {

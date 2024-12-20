@@ -211,79 +211,6 @@ pub fn compress_buffer(buf: Vec<u8>, chunk_size: usize, compression_header: &Com
     }
 }
 
-struct ObjectEncoderInformation<R: Read> {
-    pub object_encoder: ObjectEncoder<R>,
-    pub written_object_header: bool,
-}
-
-impl<R: Read> ObjectEncoderInformation<R> {
-    fn with_data(object_encoder: ObjectEncoder<R>, written_object_header: bool) -> ObjectEncoderInformation<R> {
-        Self {
-            object_encoder,
-            written_object_header,
-        }
-    }
-
-    /// returns a reference of the appropriate [ObjectHeader].
-    fn get_obj_header(&mut self) -> &ObjectHeader {
-        match &self.object_encoder {
-            ObjectEncoder::Physical(obj) => obj.object_header(),
-            ObjectEncoder::Logical(obj) => obj.object_header(),
-        }
-    }
-
-    /// returns the appropriate encoded [ObjectHeader].
-    fn get_encoded_header(&mut self) -> Vec<u8> {
-        match self.object_encoder {
-            ObjectEncoder::Physical(ref mut obj) => obj.get_encoded_header(),
-            ObjectEncoder::Logical(ref mut obj) => obj.get_encoded_header(),
-        }
-    }
-
-    /// returns the appropriate object footer.
-    pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
-        match self.object_encoder {
-            ObjectEncoder::Physical(ref mut obj) => obj.get_encoded_footer(),
-            ObjectEncoder::Logical(ref mut obj) => obj.get_encoded_footer(),
-        }
-    }
-
-    /// returns the appropriate object number.
-    fn obj_number(&self) -> u64 {
-        match &self.object_encoder {
-            ObjectEncoder::Physical(obj) => obj.obj_number(),
-            ObjectEncoder::Logical(obj) => obj.obj_number(),
-        }
-    }
-
-    /// returns the next data.
-    fn get_next_data(
-        &mut self, 
-        current_offset: u64, 
-        current_segment_no: u64,
-        deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<PreparedData> {
-        match self.object_encoder {
-            ObjectEncoder::Physical(ref mut obj) => obj.get_next_chunk(deduplication_map),
-            ObjectEncoder::Logical(ref mut obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),
-        }
-    }
-
-    /// returns the current chunk number.
-    fn current_chunk_number(&self) -> u64 {
-        match &self.object_encoder {
-            ObjectEncoder::Physical(obj) => obj.current_chunk_number(),
-            ObjectEncoder::Logical(obj) => obj.current_chunk_number(),
-        }
-    }
-
-    /// returns the total number of files which will be touched by the logical object encoder.
-    /// will return None, if the object encoder is a physical object encoder.
-    pub fn files_left(&self) -> Option<u64> {
-        self.object_encoder.files_left()
-    }
-}
-
-
 #[cfg(target_family = "unix")]
 fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataExtendedValue>> {
     let metadata = std::fs::symlink_metadata(path.as_ref())?;
@@ -544,7 +471,7 @@ fn setup_physical_object_encoder<R: Read>(
 	hash_types: &Vec<HashType>,
 	signature_key_bytes: &Option<Vec<u8>>,
 	chunk_number: u64,
-	object_encoder: &mut Vec<ObjectEncoderInformation<R>>) -> Result<()> {
+	object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
 	for (object_header, stream) in physical_objects {
 		let encoder = PhysicalObjectEncoder::new(
 			object_header,
@@ -552,7 +479,7 @@ fn setup_physical_object_encoder<R: Read>(
 			hash_types.to_owned(),
 			signature_key_bytes.clone(),
 			chunk_number)?;
-		object_encoder.push(ObjectEncoderInformation::with_data(ObjectEncoder::Physical(Box::new(encoder)), false));
+		object_encoder.push(ObjectEncoder::Physical(Box::new(encoder)));
 	}
 	Ok(())
 }
@@ -563,7 +490,7 @@ fn setup_logical_object_encoder<R: Read>(
     hash_types: &Vec<HashType>,
     signature_key_bytes: &Option<Vec<u8>>,
     chunk_number: u64,
-    object_encoder: &mut Vec<ObjectEncoderInformation<R>>) -> Result<()> {
+    object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
     for (logical_object_header, input_files) in logical_objects {
         #[cfg(feature = "log")]
         info!("Collecting files and folders for logical object {} using following paths: {:?}",
@@ -575,11 +502,7 @@ fn setup_logical_object_encoder<R: Read>(
             hash_types,
             signature_key_bytes,
             chunk_number)?;
-        object_encoder.push(
-            ObjectEncoderInformation::with_data(
-                ObjectEncoder::Logical(
-                    Box::new(lobj)),
-                    false));
+        object_encoder.push(ObjectEncoder::Logical(Box::new(lobj)));
     }
     Ok(())
 }

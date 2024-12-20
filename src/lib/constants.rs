@@ -92,8 +92,6 @@ pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str = "Missing object 
 pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object footer in segment with following object number: ";
 pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
-pub(crate) const ERROR_INVALID_OPTION_ZFFCREATE: &str = "Create new container";
-pub(crate) const ERROR_LAST_GREATER_FIRST: &str = "First chunk number is greater than last chunk number. This is invalid.";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
@@ -103,9 +101,6 @@ pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT: &str = "Operation not
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
-
-#[cfg(feature = "log")]
-pub(crate) const ERROR_ZFFWRITER_OPEN_OUTPUTFILE: &str = "Error while trying to open or create output file: ";
 
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;

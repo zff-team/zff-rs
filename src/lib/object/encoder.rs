@@ -87,7 +87,7 @@ impl<R: Read> ObjectEncoder<R> {
 	}
 
 	/// returns a reference of the appropriate [ObjectHeader].
-	pub fn get_obj_header(&mut self) -> &ObjectHeader {
+	pub fn get_obj_header(&self) -> &ObjectHeader {
 		match self {
 			ObjectEncoder::Physical(obj) => &obj.obj_header,
 			ObjectEncoder::Logical(obj) => &obj.obj_header,

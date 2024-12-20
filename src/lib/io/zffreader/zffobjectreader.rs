@@ -80,6 +80,11 @@ impl ZffObjectReaderPhysical {
 		ObjectFooter::Physical(self.object_footer.clone())
 	}
 
+	/// Returns the unwrapped object footer
+	pub fn object_footer_unwrapped_ref(&self) -> &ObjectFooterPhysical {
+		&self.object_footer
+	}
+
 	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.  
 	pub(crate) fn read_with_segments<R: Read + Seek>(
 		&mut self, 
@@ -377,6 +382,11 @@ impl ZffObjectReaderLogical {
 		Ok(())
 	}
 
+	/// Returns the filenumber of the active file.
+	pub fn active_file(&self) -> u64 {
+		self.active_file
+	}
+
 	/// Returns the [FileMetadata] of the active file.
 	/// # Error
 	/// Fails if no valid file is set as the active one.
@@ -385,6 +395,11 @@ impl ZffObjectReaderLogical {
 			Some(metadata) => Ok(metadata),
 			None => Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
 		}
+	}
+
+	/// Returns a Reference of the inner files Hashmap
+	pub(crate) fn files(&self) -> &HashMap<u64, FileMetadata> {
+		&self.files
 	}
 
 	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.

@@ -1,6 +1,7 @@
 // - STD
 use std::borrow::Borrow;
 use std::fmt;
+
 // - internal
 use crate::{
 	Result, SCRYPT_DERIVED_KEY_LENGTH_AES_128, SCRYPT_DERIVED_KEY_LENGTH_AES_256
@@ -22,7 +23,6 @@ use chacha20poly1305::ChaCha20Poly1305;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand::{rngs::OsRng, RngCore};
 use typenum::consts::U12;
-
 #[cfg(feature = "serde")]
 use serde::{
 	Deserialize,
@@ -113,7 +113,6 @@ impl fmt::Display for PBEScheme {
 //TODO: improve this to implement most of the encoding steps in trait methods.
 /// trait to implement the zff encryption for the appropriate type.
 pub trait Encryption {
-
 	/// Encrypts the message, using the type specific nonce padding.
 	fn encrypt<K, M, A>(key: K, message: M, nonce_value: u64, algorithm: A) -> Result<Vec<u8>>
 	where
@@ -192,7 +191,7 @@ impl Encryption for Vec<u8> {
 /// use zff::*;
 /// 
 /// let keysize = 256; //(e.g. for use as 256-Bit-AES-Key).
-/// let my_new_random_super_secret_key = Encryption::gen_random_key(keysize);
+/// let my_new_random_super_secret_key = gen_random_key(keysize);
 /// //...
 /// ```
 pub fn gen_random_key(length: usize) -> Vec<u8> {
