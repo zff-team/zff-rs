@@ -432,10 +432,8 @@ impl<R: Read + Seek> ZffReader<R> {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
 		};
-
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
 		let enc_info = get_enc_info_from_obj_reader(obj_reader)?;
-
 		for chunk_no in chunk_numbers {
 			self.preload_chunk_offset_map(chunk_no, &enc_info)?;
 		}

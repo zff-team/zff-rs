@@ -6,6 +6,7 @@ use std::ops::{Add, AddAssign};
 // Parent
 use super::*;
 
+use crate::chunk;
 // - internal
 use crate::{
     footer::SegmentFooter, header::{ChunkMapType, ChunkMaps, SegmentHeader, ChunkMap},
@@ -435,20 +436,16 @@ impl<R: Read> ZffStreamer<R> {
     }
 
     /// checks if the appropriate object has an encryption header and encrypts the chunkmap if necessary.
-    fn encode_chunkmap(&self, chunkmap_type: ChunkMapType, encoded_chunkmap: Vec<u8>, last_chunk_no: u64) -> Result<Vec<u8>> {
+    fn encode_chunkmap<C>(&self, chunkmap: &C, last_chunk_no: u64) -> Result<Vec<u8>> 
+    where
+        C: ChunkMap + HeaderCoding,
+    {
         if let Some(encryption_header) = &self.current_object_encoder.get_obj_header().encryption_header {
             let key = encryption_header.get_encryption_key_ref().unwrap(); //unwrap should be safe here - I don't know how we would encrypt all the other stuff, without knowing the key. :D
             let algorithm = &encryption_header.algorithm;
-            match chunkmap_type {
-                ChunkMapType::OffsetMap => ChunkOffsetMap::encrypt(key, encoded_chunkmap, last_chunk_no, algorithm),
-                ChunkMapType::SizeMap => ChunkSizeMap::encrypt(key, encoded_chunkmap, last_chunk_no, algorithm),
-                ChunkMapType::FlagsMap => ChunkFlagsMap::encrypt(key, encoded_chunkmap, last_chunk_no, algorithm),
-                ChunkMapType::XxHashMap => ChunkXxHashMap::encrypt(key, encoded_chunkmap, last_chunk_no, algorithm),
-                ChunkMapType::SamebytesMap => ChunkSamebytesMap::encrypt(key, encoded_chunkmap, last_chunk_no, algorithm),
-                ChunkMapType::DeduplicationMap => ChunkDeduplicationMap::encrypt(key, encoded_chunkmap, last_chunk_no, algorithm),
-            }
+            Ok(chunkmap.encrypt_encoded_map(key, algorithm, last_chunk_no)?)
         } else {
-             Ok(encoded_chunkmap)
+             Ok(chunkmap.encode_directly())
         }
     }
 
@@ -462,8 +459,8 @@ impl<R: Read> ZffStreamer<R> {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.offset_map.chunkmap().keys().max() {
                     self.in_progress_data.main_footer.chunk_offset_maps.insert(*chunk_no, segment_number);
                     self.in_progress_data.segment_footer.chunk_offset_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    let encoded_map = self.in_progress_data.chunkmaps.offset_map.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_offset_map = self.encode_chunkmap(chunk_map_type, encoded_map, *chunk_no)?;
+                    self.in_progress_data.current_encoded_chunk_offset_map = self.encode_chunkmap(
+                        &self.in_progress_data.chunkmaps.offset_map, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_offset_map_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.chunkmaps.offset_map.flush();
                 }
@@ -472,8 +469,8 @@ impl<R: Read> ZffStreamer<R> {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.size_map.chunkmap().keys().max() {
                     self.in_progress_data.main_footer.chunk_size_maps.insert(*chunk_no, segment_number);
                     self.in_progress_data.segment_footer.chunk_size_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    let encoded_map = self.in_progress_data.chunkmaps.size_map.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_size_map = self.encode_chunkmap(chunk_map_type, encoded_map, *chunk_no)?;
+                    self.in_progress_data.current_encoded_chunk_size_map = self.encode_chunkmap(
+                        &self.in_progress_data.chunkmaps.size_map, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_size_map_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.chunkmaps.size_map.flush();
                 }
@@ -482,8 +479,8 @@ impl<R: Read> ZffStreamer<R> {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.flags_map.chunkmap().keys().max() {
                     self.in_progress_data.main_footer.chunk_flags_maps.insert(*chunk_no, segment_number);
                     self.in_progress_data.segment_footer.chunk_flags_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    let encoded_map = self.in_progress_data.chunkmaps.flags_map.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_flags_map = self.encode_chunkmap(chunk_map_type, encoded_map, *chunk_no)?;
+                    self.in_progress_data.current_encoded_chunk_flags_map = self.encode_chunkmap(
+                        &self.in_progress_data.chunkmaps.flags_map, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_flags_map_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.chunkmaps.flags_map.flush();
                 }
@@ -492,8 +489,8 @@ impl<R: Read> ZffStreamer<R> {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.xxhash_map.chunkmap().keys().max() {
                     self.in_progress_data.main_footer.chunk_xxhash_maps.insert(*chunk_no, segment_number);
                     self.in_progress_data.segment_footer.chunk_xxhash_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    let encoded_map = self.in_progress_data.chunkmaps.xxhash_map.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_xxhash_map = self.encode_chunkmap(chunk_map_type, encoded_map, *chunk_no)?;
+                    self.in_progress_data.current_encoded_chunk_xxhash_map = self.encode_chunkmap(
+                        &self.in_progress_data.chunkmaps.xxhash_map, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_xxhash_map_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.chunkmaps.xxhash_map.flush();
                 }
@@ -502,8 +499,8 @@ impl<R: Read> ZffStreamer<R> {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.same_bytes_map.chunkmap().keys().max() {
                     self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, segment_number);
                     self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    let encoded_map = self.in_progress_data.chunkmaps.same_bytes_map.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_samebytes_map = self.encode_chunkmap(chunk_map_type, encoded_map, *chunk_no)?;
+                    self.in_progress_data.current_encoded_chunk_samebytes_map = self.encode_chunkmap(
+                        &self.in_progress_data.chunkmaps.same_bytes_map, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_samebytes_map_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.chunkmaps.same_bytes_map.flush();
                 }
@@ -512,8 +509,8 @@ impl<R: Read> ZffStreamer<R> {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.duplicate_chunks.chunkmap().keys().max() {
                     self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, segment_number);
                     self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
-                    let encoded_map = self.in_progress_data.chunkmaps.duplicate_chunks.encode_directly();
-                    self.in_progress_data.current_encoded_chunk_deduplication_map = self.encode_chunkmap(chunk_map_type, encoded_map, *chunk_no)?;
+                    self.in_progress_data.current_encoded_chunk_deduplication_map = self.encode_chunkmap(
+                        &self.in_progress_data.chunkmaps.duplicate_chunks, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_deduplication_map_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.chunkmaps.duplicate_chunks.flush();
                 }

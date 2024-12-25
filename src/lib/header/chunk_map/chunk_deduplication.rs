@@ -104,9 +104,20 @@ impl ChunkMap for ChunkDeduplicationMap {
 		A: Borrow<EncryptionAlgorithm>,
 		Self: HeaderCoding, {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::encode_map(self));
-		let enc_buffer = ChunkDeduplicationMap::encrypt(key, vec, chunk_no, encryption_algorithm.borrow())?;
-		Ok(enc_buffer)
+		let encoded_map = Self::encode_map(self);
+		let mut encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
+		let mut encoded_version = Self::version().encode_directly();
+		let identifier = Self::identifier();
+		let encoded_header_length = (
+			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
+			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
+			encrypted_map.len() +
+			encoded_version.len()) as u64;
+		vec.append(&mut identifier.to_be_bytes().to_vec());
+		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
+		vec.append(&mut encoded_version);
+		vec.append(&mut encrypted_map);
+		Ok(vec)
 	}
 }
 

@@ -146,7 +146,11 @@ pub trait ChunkMap {
 			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		}
 		let header_length = Self::decode_header_length(data)? as usize;
-		let mut structure_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		let version = u8::decode_directly(data)?;
+		if version != Self::version() {
+			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()));
+		}
+		let mut structure_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH-1];
 		data.read_exact(&mut structure_content)?;
         Ok(structure_content)
     }

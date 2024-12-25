@@ -83,7 +83,7 @@ impl ChunkMap for ChunkOffsetMap {
     D: Read,
     Self: Sized {
 		let structure_data = Self::inner_structure_data(data)?;
-		let enc_buffer = ChunkOffsetMap::decrypt(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
+		let enc_buffer = Self::decrypt(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
 		let mut reader = Cursor::new(enc_buffer);
 		let map = BTreeMap::decode_directly(&mut reader)?;
 		Ok(Self::with_data(map))
@@ -99,9 +99,20 @@ impl ChunkMap for ChunkOffsetMap {
 		A: Borrow<EncryptionAlgorithm>,
 		Self: HeaderCoding, {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::encode_map(self));
-		let enc_buffer = ChunkOffsetMap::encrypt(key, vec, chunk_no, encryption_algorithm.borrow())?;
-		Ok(enc_buffer)
+		let encoded_map = Self::encode_map(self);
+		let mut encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
+		let mut encoded_version = Self::version().encode_directly();
+		let identifier = Self::identifier();
+		let encoded_header_length = (
+			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
+			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
+			encrypted_map.len() +
+			encoded_version.len()) as u64;
+		vec.append(&mut identifier.to_be_bytes().to_vec());
+		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
+		vec.append(&mut encoded_version);
+		vec.append(&mut encrypted_map);
+		Ok(vec)
 	}
 }
 
