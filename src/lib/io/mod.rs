@@ -3,8 +3,8 @@
 //pub mod zffwriter; //TODO: remove
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
 pub mod zffreader;
-/// provides [ZffStreamer] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
-pub mod zffstreamer;
+/// provides [ZffWriter] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
+pub mod zffwriter;
 
 // - STD
 use std::io::{Read, copy as io_copy};

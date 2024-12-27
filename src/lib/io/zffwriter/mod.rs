@@ -111,7 +111,7 @@ impl AddAssign<u64> for BytesRead {
 }
 
 #[derive(Debug, Clone, Default)]
-struct ZffStreamerInProgressData {
+struct ZffWriterInProgressData {
     bytes_read: BytesRead,
     encoded_segment_header: Vec<u8>, // the encoded segment header,
     encoded_segment_header_read_bytes: ReadBytes, // the number of bytes read from the encoded segment header,
@@ -144,7 +144,7 @@ struct ZffStreamerInProgressData {
     encoded_main_footer_read_bytes: ReadBytes, // the number of bytes read from the encoded main footer,
 }
 
-impl ZffStreamerInProgressData {
+impl ZffWriterInProgressData {
     fn new() -> Self {
         Self {
             current_encoded_chunk_offset_map_read_bytes: ReadBytes::Finished,
@@ -156,8 +156,8 @@ impl ZffStreamerInProgressData {
     }
 }
 
-/// Defines the output for a [ZffStreamer].
-/// This enum determine, that the [ZffStreamer] will extend or build a new Zff container.
+/// Defines the output for a [ZffWriter].
+/// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
 pub enum ZffFilesOutput {
 	/// Build a new container by using the appropriate Path-prefix
 	/// (e.g. if "/home/user/zff_container" is given, "/home/user/zff_container.z??" will be used).
@@ -166,22 +166,22 @@ pub enum ZffFilesOutput {
 	ExtendContainer(Vec<PathBuf>),
 }
 
-/// ZffStreamer is a struct that is used to create a new zff container while using the appropriate Read implementation of this struct.
+/// ZffWriter is a struct that is used to create a new zff container while using the appropriate Read implementation of this struct.
 /// 
-/// ZffStreamer only supports to create a new zff container in a single segment.
+/// ZffWriter only supports to create a new zff container in a single segment.
 /// For creating a multi-segment zff container, or extending an existing one, use the ZffWriter struct.
-pub struct ZffStreamer<R: Read> {
+pub struct ZffWriter<R: Read> {
     object_encoder: Vec<ObjectEncoder<R>>,
 	current_object_encoder: ObjectEncoder<R>, //the current object encoder
     /// The field target_segment_size will be ignored.
     optional_parameters: ZffCreationParameters,
-    in_progress_data: ZffStreamerInProgressData,
+    in_progress_data: ZffWriterInProgressData,
     read_state: ReadState,
     segmentation_state: SegmentationState,
 }
 
-impl<R: Read> ZffStreamer<R> {
-    /// Returns a new ZffStreamer with the given values.
+impl<R: Read> ZffWriter<R> {
+    /// Returns a new ZffWriter with the given values.
     pub fn with_data(
         physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
@@ -531,7 +531,7 @@ impl<R: Read> ZffStreamer<R> {
 
 }
 
-impl<R: Read> Read for ZffStreamer<R> {
+impl<R: Read> Read for ZffWriter<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut bytes_written_to_buffer = 0; // the number of bytes which are written to the current buffer,
 
@@ -1196,8 +1196,8 @@ impl<R: Read> Read for ZffStreamer<R> {
     }
 }
 
-fn build_in_progress_data(params: &ZffCreationParameters) -> ZffStreamerInProgressData {
-    let mut in_progress_data = ZffStreamerInProgressData::new();
+fn build_in_progress_data(params: &ZffCreationParameters) -> ZffWriterInProgressData {
+    let mut in_progress_data = ZffWriterInProgressData::new();
     in_progress_data.main_footer.description_notes = params.description_notes.clone();
 
     // setup default chunkmap_size if not set in parameters
