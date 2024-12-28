@@ -91,13 +91,13 @@ impl TryFrom<&ObjectHeader> for EncryptionInformation {
 // - implement fmt::Display
 impl fmt::Display for EncryptionInformation {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
 // - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
 impl EncryptionInformation {
-	fn struct_name(&self) -> &'static str {
+	fn struct_name() -> &'static str {
 		"EncryptionInformation"
 	}
 }
@@ -277,18 +277,15 @@ impl HeaderCoding for EncryptionHeader {
 		cursor.read_exact(&mut encryption_key)?;
 		Ok(EncryptionHeader::new(pbe_header, encryption_algorithm, encryption_key))
 	}
+
+	fn struct_name() -> &'static str {
+		"EncryptionHeader"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for EncryptionHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl EncryptionHeader {
-	fn struct_name(&self) -> &'static str {
-		"EncryptionHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }

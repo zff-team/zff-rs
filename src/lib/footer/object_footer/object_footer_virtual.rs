@@ -109,14 +109,7 @@ impl ObjectFooterVirtual {
 // - implement fmt::Display
 impl fmt::Display for ObjectFooterVirtual {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ObjectFooterVirtual {
-	fn struct_name(&self) -> &'static str {
-		"ObjectFooterVirtual"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -155,6 +148,10 @@ impl HeaderCoding for ObjectFooterVirtual {
 			length_of_data,
 			virtual_object_map_offset,
 			virtual_object_map_segment_no))
+	}
+
+	fn struct_name() -> &'static str {
+		"ObjectFooterVirtual"
 	}
 }
 
@@ -222,17 +219,9 @@ impl EncryptedObjectFooterVirtual {
 // - implement fmt::Display
 impl fmt::Display for EncryptedObjectFooterVirtual {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
+		write!(f, "{}", Self::struct_name())
 	}
 }
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl EncryptedObjectFooterVirtual {
-	fn struct_name(&self) -> &'static str {
-		"EncryptedObjectFooterVirtual"
-	}
-}
-
 
 impl HeaderCoding for EncryptedObjectFooterVirtual {
 	type Item = EncryptedObjectFooterVirtual;
@@ -264,5 +253,9 @@ impl HeaderCoding for EncryptedObjectFooterVirtual {
 		Ok(Self::with_data(
 			object_number,
 			encrypted_data))
+	}
+
+	fn struct_name() -> &'static str {
+		"EncryptedObjectFooterVirtual"
 	}
 }

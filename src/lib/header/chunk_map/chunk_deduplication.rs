@@ -146,19 +146,16 @@ impl HeaderCoding for ChunkDeduplicationMap {
 		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
+
+	fn struct_name() -> &'static str {
+		"ChunkDeduplicationMap"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for ChunkDeduplicationMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ChunkDeduplicationMap {
-	fn struct_name(&self) -> &'static str {
-		"ChunkDeduplicationMap"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -174,7 +171,7 @@ impl Serialize for ChunkDeduplicationMap {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }
@@ -269,7 +266,7 @@ impl Serialize for DeduplicationChunkMap {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 6)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 6)?;
         let mut ser_dedup_map = HashMap::new();
         match self {
         	DeduplicationChunkMap::InMemory(dedup_map) => {
@@ -310,13 +307,13 @@ impl Serialize for DeduplicationChunkMap {
 // - implement fmt::Display
 impl fmt::Display for DeduplicationChunkMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
 // - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
 impl DeduplicationChunkMap {
-	fn struct_name(&self) -> &'static str {
+	fn struct_name() -> &'static str {
 		"DeduplicationChunkMap"
 	}
 }

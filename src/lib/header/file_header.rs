@@ -321,19 +321,16 @@ impl HeaderCoding for FileHeader {
 		let (file_type, filename, parent_file_number, metadata_ext) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileHeader::new(file_number, file_type, filename, parent_file_number, metadata_ext))
 	}
+
+	fn struct_name() -> &'static str {
+		"FileHeader"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for FileHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl FileHeader {
-	fn struct_name(&self) -> &'static str {
-		"FileHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 

@@ -224,18 +224,15 @@ impl HeaderCoding for MainFooter {
 			description_notes, 
 			footer_offset))
 	}
+
+	fn struct_name() -> &'static str {
+		"MainFooter"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for MainFooter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl MainFooter {
-	fn struct_name(&self) -> &'static str {
-		"MainFooter"
+		write!(f, "{}", Self::struct_name())
 	}
 }

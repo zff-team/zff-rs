@@ -108,19 +108,16 @@ impl HeaderCoding for PBEHeader {
 		cursor.read_exact(&mut encryption_nonce)?;
 		Ok(PBEHeader::new(kdf_scheme, encryption_scheme, kdf_params, encryption_nonce))
 	}
+
+	fn struct_name() -> &'static str {
+		"PBEHeader"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for PBEHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl PBEHeader {
-	fn struct_name(&self) -> &'static str {
-		"PBEHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -235,6 +232,9 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 		Ok(parameters)
 	}
 
+	fn struct_name() -> &'static str {
+		"PBKDF2SHA256Parameters"
+	}
 }
 
 /// struct to store the parameters for the KDF Scrypt.
@@ -298,6 +298,10 @@ impl HeaderCoding for ScryptParameters {
 		Ok(parameters)
 	}
 
+	fn struct_name() -> &'static str {
+		"ScryptParameters"
+	}
+
 }
 
 
@@ -358,6 +362,10 @@ impl HeaderCoding for Argon2idParameters {
 		cursor.read_exact(&mut salt)?;
 		let parameters = Argon2idParameters::new(mem_cost, lanes, iterations, salt);
 		Ok(parameters)
+	}
+
+	fn struct_name() -> &'static str {
+		"Argon2idParameters"
 	}
 
 }

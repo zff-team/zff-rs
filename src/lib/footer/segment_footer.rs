@@ -189,18 +189,15 @@ impl HeaderCoding for SegmentFooter {
 			first_chunk_number, 
 			footer_offset))
 	}
+
+	fn struct_name() -> &'static str {
+		"SegmentFooter"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for SegmentFooter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl SegmentFooter {
-	fn struct_name(&self) -> &'static str {
-		"SegmentFooter"
+		write!(f, "{}", Self::struct_name())
 	}
 }

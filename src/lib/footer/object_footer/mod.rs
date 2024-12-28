@@ -156,13 +156,13 @@ impl From<ObjectFooterLogical> for ObjectFooter {
 // - implement fmt::Display
 impl fmt::Display for ObjectFooter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
 // - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
 impl ObjectFooter {
-	fn struct_name(&self) -> &'static str {
+	fn struct_name() -> &'static str {
 		"ObjectFooter"
 	}
 }

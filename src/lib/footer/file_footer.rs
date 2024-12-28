@@ -206,19 +206,16 @@ impl HeaderCoding for FileFooter {
 		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileFooter::new(file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
 	}
+
+	fn struct_name() -> &'static str {
+		"FileFooter"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for FileFooter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl FileFooter {
-	fn struct_name(&self) -> &'static str {
-		"FileFooter"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 

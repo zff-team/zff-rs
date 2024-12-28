@@ -141,19 +141,16 @@ impl HeaderCoding for ChunkSizeMap {
 		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
+
+	fn struct_name() -> &'static str {
+		"ChunkSizeMap"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for ChunkSizeMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ChunkSizeMap {
-	fn struct_name(&self) -> &'static str {
-		"ChunkSizeMap"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -169,7 +166,7 @@ impl Serialize for ChunkSizeMap {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }

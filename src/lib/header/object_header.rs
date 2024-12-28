@@ -253,14 +253,7 @@ impl Encryption for ObjectHeader {
 // - implement fmt::Display
 impl fmt::Display for ObjectHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ObjectHeader {
-	fn struct_name(&self) -> &'static str {
-		"ObjectHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -329,6 +322,10 @@ impl HeaderCoding for ObjectHeader {
 			object_type,
 			flags);
 		Ok(object_header)
+	}
+
+	fn struct_name() -> &'static str {
+		"ObjectHeader"
 	}
 }
 
@@ -488,6 +485,10 @@ impl HeaderCoding for EncryptedObjectHeader {
 			flags,
 			encryption_header,
 			encrypted_data))
+	}
+
+	fn struct_name() -> &'static str {
+		"EncryptedObjectHeader"
 	}
 }
 

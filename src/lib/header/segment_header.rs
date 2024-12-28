@@ -86,6 +86,10 @@ impl HeaderCoding for SegmentHeader {
 		let chunkmap_size = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentHeader::new(unique_identifier, segment_number, chunkmap_size))
 	}
+
+	fn struct_name() -> &'static str {
+		"SegmentHeader"
+	}
 }
 
 impl PartialEq for SegmentHeader {
@@ -97,13 +101,6 @@ impl PartialEq for SegmentHeader {
 // - implement fmt::Display
 impl fmt::Display for SegmentHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl SegmentHeader {
-	fn struct_name(&self) -> &'static str {
-		"SegmentHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }

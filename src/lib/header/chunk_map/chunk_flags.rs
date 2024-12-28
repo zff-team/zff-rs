@@ -53,7 +53,7 @@ impl From<u8> for ChunkFlags {
 // - implement fmt::Display
 impl fmt::Display for ChunkFlags {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -77,7 +77,7 @@ impl ChunkFlags {
 		flag_value
 	}
 
-	fn struct_name(&self) -> &'static str {
+	fn struct_name() -> &'static str {
 		"ChunkHeaderFlags"
 	}
 }
@@ -244,19 +244,16 @@ impl HeaderCoding for ChunkFlagsMap {
 		let chunkmap = BTreeMap::<u64, ChunkFlags>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
+
+	fn struct_name() -> &'static str {
+		"ChunkFlagMap"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for ChunkFlagsMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ChunkFlagsMap {
-	fn struct_name(&self) -> &'static str {
-		"ChunkFlagMap"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -272,7 +269,7 @@ impl Serialize for ChunkFlagsMap {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }

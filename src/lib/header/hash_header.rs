@@ -45,7 +45,7 @@ impl Serialize for HashHeader {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 3)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 3)?;
         state.serialize_field("version", &Self::version())?;
         let mut hashes = HashMap::new();
         for hashvalue in &self.hashes {
@@ -90,19 +90,16 @@ impl HeaderCoding for HashHeader {
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
 		Ok(HashHeader::new(hashes))
 	}
+
+	fn struct_name() -> &'static str {
+		"HashHeader"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for HashHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl HashHeader {
-	fn struct_name(&self) -> &'static str {
-		"HashHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -209,19 +206,16 @@ impl HeaderCoding for HashValue {
 
 		Ok(HashValue::new(hash_type, hash, ed25519_signature))
 	}
+
+	fn struct_name() -> &'static str {
+		"HashValue"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for HashValue {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl HashValue {
-	fn struct_name(&self) -> &'static str {
-		"HashValue"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -231,7 +225,7 @@ impl Serialize for HashValue {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 3)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 3)?;
         state.serialize_field("hash_type", &self.hash_type.to_string())?;
         state.serialize_field("hash", &hex::encode(&self.hash))?;
         if let Some(signature) = &self.ed25519_signature {

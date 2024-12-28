@@ -141,19 +141,16 @@ impl HeaderCoding for ChunkSamebytesMap {
 		let chunkmap = BTreeMap::<u64, u8>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
+
+	fn struct_name() -> &'static str {
+		"ChunkSamebytesMap"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for ChunkSamebytesMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl ChunkSamebytesMap {
-	fn struct_name(&self) -> &'static str {
-		"ChunkSamebytesMap"
+		write!(f, "{}", Self::struct_name())
 	}
 }
 
@@ -169,7 +166,7 @@ impl Serialize for ChunkSamebytesMap {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct(self.struct_name(), 2)?;
+        let mut state = serializer.serialize_struct(Self::struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
         	state.serialize_field(string_to_str(key.to_string()), &value)?;
         }

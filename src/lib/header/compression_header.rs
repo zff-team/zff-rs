@@ -82,18 +82,15 @@ impl HeaderCoding for CompressionHeader {
 		let threshold = f32::decode_directly(&mut cursor)?;
 		Ok(CompressionHeader::new(algorithm, level, threshold))
 	}
+
+	fn struct_name() -> &'static str {
+		"CompressionHeader"
+	}
 }
 
 // - implement fmt::Display
 impl fmt::Display for CompressionHeader {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.struct_name())
-	}
-}
-
-// - this is a necassary helper method for fmt::Display and serde::ser::SerializeStruct.
-impl CompressionHeader {
-	fn struct_name(&self) -> &'static str {
-		"CompressionHeader"
+		write!(f, "{}", Self::struct_name())
 	}
 }
