@@ -1115,12 +1115,11 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	) -> Result<ZffObjectReader> {
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {}", obj_number);
-
 	let header = match segments.get_mut(&header_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_object_header(obj_number)?,
 	};
-
+	
 	let footer = match segments.get_mut(&footer_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_object_footer(obj_number)?,

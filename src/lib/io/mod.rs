@@ -26,7 +26,7 @@ use std::os::windows::fs::MetadataExt;
 use crate::{
     Result,
     header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationChunkMap, MetadataExtendedValue},
-    footer::MainFooter,
+    footer::{MainFooter, SegmentFooter},
     ZffError,
     ZffErrorKind,
     ObjectEncoder,
@@ -53,24 +53,30 @@ use log::{info, warn, debug};
 
 #[derive(Debug, Clone)]
 struct ZffExtenderParameter {
-	pub main_footer: MainFooter,
 	pub current_segment: PathBuf,
 	pub next_object_no: u64,
 	pub initial_chunk_number: u64,
+    pub segment_number: u64,
+    pub segment_footer: SegmentFooter,
+    pub main_footer: MainFooter,
 }
 
 impl ZffExtenderParameter {
 	fn with_data(
-		main_footer: MainFooter,
 		current_segment: PathBuf,
 		next_object_no: u64,
 		initial_chunk_number: u64,
+        segment_number: u64,
+        segment_footer: SegmentFooter,
+        main_footer: MainFooter,
 		) -> Self {
 		Self {
-			main_footer,
 			current_segment,
 			next_object_no,
 			initial_chunk_number,
+            segment_number,
+            segment_footer,
+            main_footer,
 		}
 	}
 }

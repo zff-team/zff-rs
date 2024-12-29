@@ -70,6 +70,20 @@ pub enum ChunkMapType {
 	DeduplicationMap = 5,
 }
 
+impl fmt::Display for ChunkMapType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    	let value = match self {
+    		ChunkMapType::OffsetMap => "OffsetMap",
+			ChunkMapType::SizeMap => "SizeMap",
+			ChunkMapType::FlagsMap => "FlagsMap",
+			ChunkMapType::XxHashMap => "XxHashMap",
+			ChunkMapType::SamebytesMap => "SamebytesMap",
+			ChunkMapType::DeduplicationMap => "DeduplicationMap",
+    	};
+        write!(f, "{value}")
+    }
+}
+
 /// The ChunkMaps struct contains all chunk maps.
 #[derive(Debug,Clone,PartialEq,Eq,Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]

@@ -22,6 +22,9 @@ use crate::{
 	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
 };
 
+// - external
+use log::trace;
+
 /// Represents a full [Segment]
 /// 
 /// The [Segment] struct contains a [crate::header::SegmentHeader],
@@ -214,6 +217,10 @@ impl<R: Read + Seek> Segment<R> {
 				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
+
+		#[cfg(feature = "log")]
+		trace!("Initialize object header for object {object_number} at offset {offset} in segment {}", self.header().segment_number);
+
 		let object_header = ObjectHeader::decode_directly(&mut self.data)?;
 		Ok(object_header)
 	}
@@ -252,6 +259,10 @@ impl<R: Read + Seek> Segment<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
+		
+		#[cfg(feature = "log")]
+		trace!("Initialize object footer for object {object_number} at offset {offset} in segment {}", self.header().segment_number);
+		
 		ObjectFooter::decode_directly(&mut self.data)
 	}
 
