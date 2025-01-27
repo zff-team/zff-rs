@@ -96,6 +96,7 @@ impl HeaderCoding for PBEHeader {
 		let kdf_scheme = match u8::decode_directly(&mut cursor)? {
 			0 => KDFScheme::PBKDF2SHA256,
 			1 => KDFScheme::Scrypt,
+			2 => KDFScheme::Argon2id,
 			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME))
 		};
 		let encryption_scheme = match u8::decode_directly(&mut cursor)? {
@@ -175,6 +176,14 @@ impl ValueDecoder for KDFParameters {
 			params_cursor.read_exact(&mut salt)?;
 			let parameters = ScryptParameters::new(logn, r, p, salt);
 			Ok(KDFParameters::ScryptParameters(parameters))
+		} else if identifier == Argon2idParameters::identifier() {
+			let mem_cost = u32::decode_directly(&mut params_cursor)?;
+			let lanes = u32::decode_directly(&mut params_cursor)?;
+			let iterations = u32::decode_directly(&mut params_cursor)?;
+			let mut salt = [0; 32];
+			params_cursor.read_exact(&mut salt)?;
+			let parameters = Argon2idParameters::new(mem_cost, lanes, iterations, salt);
+  			Ok(KDFParameters::Argon2idParameters(parameters))
 		} else {
 			Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF))
 		}
