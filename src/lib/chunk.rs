@@ -47,7 +47,7 @@ impl Chunk {
 }
 
 /// This struct represents a prepared [Chunk] (encrypted and compressed).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PreparedChunk {
 	data: Vec<u8>,
 	flags: ChunkFlags,
