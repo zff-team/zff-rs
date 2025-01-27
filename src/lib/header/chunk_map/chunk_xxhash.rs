@@ -167,7 +167,7 @@ impl Serialize for ChunkXxHashMap {
     {
         let mut state = serializer.serialize_struct(Self::struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
-        	state.serialize_field(string_to_str(key.to_string()), &value)?;
+        	state.serialize_field(string_to_str(key.to_string()), &hex::encode(value.to_be_bytes()))?;
         }
         state.end()
     }

@@ -86,7 +86,7 @@ impl fmt::Display for ChunkMapType {
 
 /// The ChunkMaps struct contains all chunk maps.
 #[derive(Debug,Clone,PartialEq,Eq,Default)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkMaps {
 	/// The offset map.
 	pub offset_map: ChunkOffsetMap,
@@ -112,6 +112,23 @@ impl ChunkMaps {
 		self.same_bytes_map.chunkmap().is_empty() && 
 		self.duplicate_chunks.chunkmap().is_empty()
 	}
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for ChunkMaps {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("ChunkMaps", 6)?;
+        state.serialize_field(string_to_str(self.offset_map.to_string()), &self.offset_map)?;
+		state.serialize_field(string_to_str(self.size_map.to_string()), &self.size_map)?;
+		state.serialize_field(string_to_str(self.flags_map.to_string()), &self.flags_map)?;
+		state.serialize_field(string_to_str(self.xxhash_map.to_string()), &self.xxhash_map)?;
+		state.serialize_field(string_to_str(self.same_bytes_map.to_string()), &self.same_bytes_map)?;
+		state.serialize_field(string_to_str(self.duplicate_chunks.to_string()), &self.duplicate_chunks)?;
+        state.end()
+    }
 }
 
 /// The ChunkMap trait specifies common interface for various types of chunk maps.
