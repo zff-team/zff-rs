@@ -9,6 +9,7 @@ use crate::{
 
 // - external
 use itertools::Itertools;
+#[cfg(feature = "log")]
 use log::trace;
 
 use crate::constants::{
