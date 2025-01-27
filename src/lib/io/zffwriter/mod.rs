@@ -931,17 +931,22 @@ impl<R: Read> Read for ZffWriter<R> {
                                         }
                                 };
 
-                                if !self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(
-                                    current_chunk_number, self.in_progress_data.bytes_read.current_segment) {
-                                    self.flush_chunkmap(ChunkMapType::OffsetMap)?;
-                                    self.read_state = ReadState::ChunkOffsetMap;
-                                    self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(
-                                        current_chunk_number, self.in_progress_data.bytes_read.current_segment);
+                                match data {
+                                    PreparedData::PreparedChunk(_) => {
+                                        if !self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(
+                                            current_chunk_number, self.in_progress_data.bytes_read.current_segment) {
+                                            self.flush_chunkmap(ChunkMapType::OffsetMap)?;
+                                            self.read_state = ReadState::ChunkOffsetMap;
+                                            self.in_progress_data.chunkmaps.offset_map.add_chunk_entry(
+                                                current_chunk_number, self.in_progress_data.bytes_read.current_segment);
+                                        }
+                                        self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::Flags;
+                                    },
+                                    _ => {
+                                        self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::Data;
+                                    },
                                 }
-            
                                 self.in_progress_data.current_prepared_data_queue = Some(data);
-                                self.in_progress_data.current_prepared_data_queue_state = PreparedDataQueueState::Flags;
-                                self.in_progress_data.current_encoded_chunked_data_read_bytes = ReadBytes::NotRead;
                             },
                             PreparedDataQueueState::Flags => {
                                 let flags = match &self.in_progress_data.current_prepared_data_queue {
