@@ -23,6 +23,7 @@ use crate::{
 };
 
 // - external
+#[cfg(feature = "log")]
 use log::trace;
 
 /// Represents a full [Segment]
