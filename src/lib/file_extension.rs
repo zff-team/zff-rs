@@ -22,7 +22,7 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 	let mut chars = value.chars();
 	match chars.next() {
 		Some(FILE_EXTENSION_START) => (),
-		_ => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, FILE_EXTENSION_PARSER_ERROR)),
+		_ => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, format!("{FILE_EXTENSION_PARSER_ERROR} \"{value}\""))),
 	};
 	let mut next_value: u64 = match chars.as_str().parse() {
 		Ok(val) => val,
