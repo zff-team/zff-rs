@@ -441,7 +441,7 @@ impl LogicalObjectEncoder {
 				FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
 			},
 			#[cfg(target_family = "windows")]
-			FileType::SpecialFile => unreachable!("Special files are not supported on Windows"),
+			FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
 			#[cfg(target_family = "unix")]
 			FileType::SpecialFile => {
 				let metadata = std::fs::metadata(&path)?;
@@ -544,6 +544,9 @@ impl LogicalObjectEncoder {
 					match file_encoder.get_next_chunk(deduplication_map) {
 						Ok(data) => {
 							self.current_chunk_number += 1;
+							if data.flags().empty_file {
+								self.empty_file_eof = true;
+							}
 							return Ok(PreparedData::PreparedChunk(data));
 						},
 						Err(e) => match e.get_kind() {
