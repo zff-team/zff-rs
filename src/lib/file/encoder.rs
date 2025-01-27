@@ -116,6 +116,11 @@ impl FileEncoder {
 		})
 	}
 
+	/// Returns a reference of the appropriate file header
+	pub fn file_header_ref(&self) -> &FileHeader {
+		&self.file_header
+	}
+
 	/// returns the underlying encoded header
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
 		if self.acquisition_start == 0 {
