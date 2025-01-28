@@ -428,6 +428,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all chunk offset maps for the specific object.
 	pub fn preload_chunk_offset_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		#[cfg(feature = "log")]
+		log::debug!("Preloading chunk offset map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -488,6 +490,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all chunk size maps for the specific object.
 	pub fn preload_chunk_size_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		#[cfg(feature = "log")]
+		log::debug!("Preloading chunk size map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -550,6 +554,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all chunk flags maps for the specific object.
 	pub fn preload_chunk_flags_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		#[cfg(feature = "log")]
+		log::debug!("Preloading chunk flags map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -612,6 +618,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all xxhash chunk maps for the specific object.
 	pub fn preload_chunk_xxhash_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		#[cfg(feature = "log")]
+		log::debug!("Preloading chunk xxhash map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -674,6 +682,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all samebyte chunk maps for the specific object.
 	pub fn preload_chunk_samebytes_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		#[cfg(feature = "log")]
+		log::debug!("Preloading chunk samebytes map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -736,6 +746,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all deduplication chunk maps for the specific object.
 	pub fn preload_chunk_deduplication_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		#[cfg(feature = "log")]
+		log::debug!("Preloading chunk deduplication map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -1013,22 +1025,24 @@ fn get_chunk_data<C, R>(
 	current_chunk_number: u64, 
 	enc_information: &Option<EncryptionInformation>,
 	compression_algorithm: C,
-	original_chunk_size: u64, // size of the uncompressed data
-	chunk_offset: Option<u64>,
-	chunk_size: Option<u64>, // size of the compressed chunk
-	chunk_flags: Option<ChunkFlags>,
+	preloaded_chunkmaps: &PreloadedChunkMaps,
+	original_chunk_size: u64, // size of the uncompressed data //TODO!
 	) -> std::result::Result<Vec<u8>, std::io::Error>
 where
 	C: Borrow<CompressionAlgorithm> + std::marker::Copy,
 	R: Read + Seek
 {
+	let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
+	let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
+	let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
+	
 	let chunk_content = match segment.chunk_data(
 		current_chunk_number, 
 		enc_information, 
 		compression_algorithm, 
-		chunk_offset,
-		chunk_size,
-		chunk_flags.clone()) {
+		optional_chunk_offset,
+		optional_chunk_size,
+		optional_chunk_flags.clone()) {
 		Ok(data) => data,
 		Err(e) => match e.unwrap_kind() {
 			ZffErrorKind::IoError(io_error) => return Err(io_error),
@@ -1044,10 +1058,8 @@ where
 				dup_chunk_no, 
 				enc_information, 
 				compression_algorithm,
-				original_chunk_size, 
-				chunk_offset,
-				chunk_size,
-				chunk_flags)
+				preloaded_chunkmaps,
+				original_chunk_size,)
 		}
 	}
 }

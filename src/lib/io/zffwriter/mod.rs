@@ -450,8 +450,8 @@ impl<R: Read> ZffWriter<R> {
             },
             ChunkMapType::DeduplicationMap => {
                 if let Some(chunk_no) = self.in_progress_data.chunkmaps.duplicate_chunks.chunkmap().keys().max() {
-                    self.in_progress_data.main_footer.chunk_samebytes_maps.insert(*chunk_no, segment_number);
-                    self.in_progress_data.segment_footer.chunk_samebytes_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.main_footer.chunk_dedup_maps.insert(*chunk_no, segment_number);
+                    self.in_progress_data.segment_footer.chunk_dedup_map_table.insert(*chunk_no, self.in_progress_data.bytes_read.current_segment);
                     self.in_progress_data.current_encoded_chunk_deduplication_map = self.encode_chunkmap(
                         &self.in_progress_data.chunkmaps.duplicate_chunks, *chunk_no)?;
                     self.in_progress_data.current_encoded_chunk_deduplication_map_read_bytes = ReadBytes::NotRead;

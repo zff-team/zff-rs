@@ -113,10 +113,6 @@ impl ZffObjectReaderPhysical {
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
 
-			let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-			let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-			let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-			
 			let chunk_data = if let Some(samebyte) = preloaded_chunkmaps.get_samebyte(current_chunk_number) {
 				vec![samebyte; chunk_size as usize]
 			} else {
@@ -124,11 +120,9 @@ impl ZffObjectReaderPhysical {
 				segment, 
 				current_chunk_number, 
 				&enc_information, 
-				compression_algorithm, 
-				chunk_size,
-				optional_chunk_offset,
-				optional_chunk_size,
-				optional_chunk_flags)?
+				compression_algorithm,
+				preloaded_chunkmaps,
+				chunk_size,)?
 			};
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
@@ -416,7 +410,6 @@ impl ZffObjectReaderLogical {
 					std::io::ErrorKind::Other, 
 					format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file))),
 		};
-
 		let chunk_size = self.object_header.chunk_size;
 		let first_chunk_number = active_filemetadata.first_chunk_number;
 		let last_chunk_number = first_chunk_number + active_filemetadata.number_of_chunks - 1;
@@ -425,6 +418,8 @@ impl ZffObjectReaderLogical {
 		let mut read_bytes = 0; // number of bytes which are written to buffer
 		let compression_algorithm = &self.object_header.compression_header.algorithm;
 		loop {
+			#[cfg(feature = "log")]
+			log::trace!("ZffLogicalObjectReader: read_with_segments: read chunk {current_chunk_number}");
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
 				break;
 			}
@@ -437,19 +432,13 @@ impl ZffObjectReaderLogical {
 			};
 			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
 			
-			let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-			let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-			let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-
 			let chunk_data = get_chunk_data(
 				segment, 
 				current_chunk_number, 
 				&enc_information, 
 				compression_algorithm, 
-				chunk_size,
-				optional_chunk_offset,
-				optional_chunk_size,
-				optional_chunk_flags)?;
+				preloaded_chunkmaps,
+				chunk_size,)?;
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
@@ -600,20 +589,13 @@ impl ZffObjectReaderVirtual {
 				};
 				let enc_information = EncryptionInformation::try_from(object_header).ok();
 
-
-				let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-				let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-				let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-
 				let chunk_data = get_chunk_data(
 					segment, 
 					current_chunk_number, 
 					&enc_information, 
-					compression_algorithm, 
-					chunk_size,
-					optional_chunk_offset,
-					optional_chunk_size,
-					optional_chunk_flags)?;
+					compression_algorithm,
+					preloaded_chunkmaps,
+					chunk_size,)?;
 				let mut should_break = false;
 				let mut cursor = if remaining_offset_length as u64 > chunk_data[inner_position..].len() as u64 {
 					Cursor::new(&chunk_data[inner_position..])

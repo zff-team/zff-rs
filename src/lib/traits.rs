@@ -94,6 +94,8 @@ pub trait HeaderCoding {
 			Ok(val) => val,
 			Err(_) => return false,
 		};
+		#[cfg(feature = "log")]
+		log::trace!("Read identifier: {:x}", identifier);
 		identifier == Self::identifier()
 	}
 
