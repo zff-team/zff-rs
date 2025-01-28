@@ -9,8 +9,7 @@ use ed25519_dalek::{
 	SECRET_KEY_LENGTH,
 	PUBLIC_KEY_LENGTH
 };
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::{rng, RngCore};
 use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
 
 // - internal
@@ -28,7 +27,7 @@ pub struct Signature;
 impl Signature {
 	/// generates a new, random keypair.
 	pub fn new_signing_key() -> SigningKey {
-		let mut csprng = OsRng{};
+		let mut csprng = rng();
 		let mut secret_key = [0u8; SECRET_KEY_LENGTH];
 		csprng.fill_bytes(&mut secret_key);
 		SigningKey::from_bytes(&secret_key)
