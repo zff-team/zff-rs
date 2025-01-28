@@ -155,8 +155,9 @@ impl ZffWriterInProgressData {
 
 /// Defines the output for a [ZffWriter].
 /// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ZffFilesOutput {
+    #[default]
     /// To stream the data via implemented Read.
     Stream,
 	/// Build a new container by using the appropriate Path-prefix
@@ -226,6 +227,15 @@ impl<R: Read> ZffWriter<R> {
         total_files
     }
 
+    /// Returns a reference to the outputfile of the encoder.
+    pub fn output_path(&self) -> Option<PathBuf> {
+        match &self.output {
+            ZffFilesOutput::Stream => None,
+            ZffFilesOutput::NewContainer(ref path) => Some(path.clone()),
+            ZffFilesOutput::ExtendContainer(ref path_vec) => Some(path_vec[0].clone()),
+        }
+    }
+
     /// sets the next segment.
     pub fn next_segment(&mut self) -> Result<()> {
         // check if the current segment is already finished
@@ -253,9 +263,7 @@ impl<R: Read> ZffWriter<R> {
 
     /// Generates the files for the current state of the ZFF container.
     pub fn generate_files(&mut self) -> Result<()> {
-		
         let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
-
         let mut initial_extend =  match &self.output {
             ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::InvalidOption, "")), //TODO: Define other kind of error here
             ZffFilesOutput::NewContainer(_) => false,
@@ -270,28 +278,17 @@ impl<R: Read> ZffWriter<R> {
                 ZffFilesOutput::ExtendContainer(ref path_vec) => path_vec[0].clone(), // should never get out of bound when fn setup_container was used before.
             };
 
-            // set_extension should not affect the ExtendContainer paths.
-	    	segment_filename.set_extension(&file_extension);
-
 	    	let mut output_file = match initial_extend {
-                false => File::create(&segment_filename)?,
+                false => {
+                    segment_filename.set_extension(&file_extension);
+                    File::create(&segment_filename)?
+                },
                 true => {
                     // this is only necessary to extend the existing file.
-                    initial_extend = false;
-                                   
+                    initial_extend = false;           
                     // Prepare the appropriate file to write to.
                     let mut file = OpenOptions::new().append(true).read(true).open(segment_filename)?;
-                    let offset = file.seek(SeekFrom::End(0))?;
-
-                    // prepare other stuff
-                    self.in_progress_data.bytes_read.current_segment = offset;
-
-                    // prepare the current object header
-                    self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
-                    self.in_progress_data.segment_footer.add_object_header_offset(
-                        self.current_object_encoder.obj_number(),
-                        self.in_progress_data.bytes_read.current_segment);
-
+                    file.seek(SeekFrom::End(0))?;
                     file
                 },
             };
@@ -318,7 +315,6 @@ impl<R: Read> ZffWriter<R> {
                 }
             }
         }
-
     }
 
     /// Returns true if the chunkmap was full and flushed.
@@ -395,7 +391,7 @@ impl<R: Read> ZffWriter<R> {
         let segment_number = self.current_segment_no();
 
         #[cfg(feature = "log")]
-        trace!("Flush chunkmap {chunk_map_type} for chunk number in segment {segment_number} at offset {}", self.in_progress_data.bytes_read.current_segment);
+        trace!("Flush chunkmap {chunk_map_type} in segment {segment_number} at offset {}", self.in_progress_data.bytes_read.current_segment);
 
         match chunk_map_type {
             ChunkMapType::OffsetMap => {
@@ -1188,6 +1184,7 @@ fn setup_container<R: Read>(
                         mf,
                     ));
                     total_bytes_read += raw_segment.seek(SeekFrom::End(0))?;
+                    raw_segment.seek(SeekFrom::Start(0))?;
                 }
                 // try to decode the segment header to check if the file is a valid segment.
                 let _ = Segment::new_from_reader(raw_segment)?;
@@ -1225,7 +1222,7 @@ fn setup_container<R: Read>(
         &mut object_encoder)?;
 
     object_encoder.reverse();
-    let current_object_encoder = match object_encoder.pop() {
+    let mut current_object_encoder = match object_encoder.pop() {
         Some(creator_obj_encoder) => creator_obj_encoder,
         None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
     };
@@ -1242,8 +1239,15 @@ fn setup_container<R: Read>(
     };
 
     if let Some(extender_parameter) = extender_parameter {
-        segmentation_state = SegmentationState::Partial(extender_parameter.segment_number);
+        let mut file = OpenOptions::new().append(true).read(true).open(&extender_parameter.current_segment)?;
+        let offset = file.seek(SeekFrom::End(0))?;
+        in_progress_data.bytes_read.current_segment = offset;
+        in_progress_data.current_encoded_object_header = current_object_encoder.get_encoded_header();
         in_progress_data.segment_footer = extender_parameter.segment_footer;
+        in_progress_data.segment_footer.add_object_header_offset(
+            current_object_encoder.obj_number(),
+            in_progress_data.bytes_read.current_segment);
+        segmentation_state = SegmentationState::Partial(extender_parameter.segment_number);
         in_progress_data.main_footer = extender_parameter.main_footer;
         output = ZffFilesOutput::ExtendContainer(vec![extender_parameter.current_segment]);
         in_progress_data.bytes_read.total = total_bytes_read;
