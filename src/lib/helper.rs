@@ -119,21 +119,21 @@ pub fn base64_to_buffer<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>,
 
 
 /// Returns the segment number of a given chunk number.
-pub fn get_segment_of_chunk_no(chunk_no: u64, global_chunkmap: &BTreeMap<u64, u64>) -> Option<u64> {
+pub fn get_segment_of_chunk_no(chunk_no: u64, mainfooter_chunkmap: &BTreeMap<u64, u64>) -> Option<u64> {
     // If the chunk_no is exactly matched, return the corresponding value.
-    if let Some(&value) = global_chunkmap.get(&chunk_no) {
+    if let Some(&value) = mainfooter_chunkmap.get(&chunk_no) {
         return Some(value);
     }
 
     // If the chunk_no is higher than the highest key, return None.
-    if let Some((&highest_chunk_no, _)) = global_chunkmap.iter().next_back() {
+    if let Some((&highest_chunk_no, _)) = mainfooter_chunkmap.iter().next_back() {
         if chunk_no > highest_chunk_no {
             return None;
         }
     }
 
     // Find the next higher key and return its value.
-    if let Some((_, &segment_no)) = global_chunkmap.iter().find(|(&key, _)| key > chunk_no) {
+    if let Some((_, &segment_no)) = mainfooter_chunkmap.iter().find(|(&key, _)| key > chunk_no) {
         return Some(segment_no);
     }
 

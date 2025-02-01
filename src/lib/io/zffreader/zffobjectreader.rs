@@ -1,40 +1,46 @@
 // - STD
 use std::io::Cursor;
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 
 // - internal
 use crate::{
 	footer::{
-		ObjectFooterPhysical,
-		ObjectFooterLogical,
-		ObjectFooterVirtual,
-		EncryptedObjectFooter,
+		EncryptedObjectFooter, ObjectFooterLogical, ObjectFooterPhysical, ObjectFooterVirtual
 	},
 	header::{
-		HashHeader, 
-		EncryptedObjectHeader, 
-		VirtualMappingInformation},
+		EncryptedObjectHeader, HashHeader, VirtualMappingInformation},
 	helper::find_vmi_offset,
 };
 
 use super::*;
 
-/// An enum, which provides an appropriate object reader.
 #[derive(Debug)]
-pub enum ZffObjectReader {
-	/// Contains a [ZffObjectReaderPhysical].
-	Physical(Box<ZffObjectReaderPhysical>),
-	/// Contains a [ZffObjectReaderLogical].
-	Logical(Box<ZffObjectReaderLogical>),
-	/// Contains a [ZffObjectReaderVirtual].
-	Virtual(Box<ZffObjectReaderVirtual>),
-	/// Contains a [ZffObjectReaderEncrypted].
-	Encrypted(Box<ZffObjectReaderEncrypted>),
+pub(crate) struct ObjectMetadata {
+	pub header: ObjectHeader,
+	pub footer: ObjectFooter,
 }
 
-impl Seek for ZffObjectReader {
+impl ObjectMetadata {
+	pub(crate) fn new(header: ObjectHeader, footer: ObjectFooter) -> Self {
+		Self { header, footer }
+	}
+}
+
+/// An enum, which provides an appropriate object reader.
+#[derive(Debug)]
+pub(crate) enum ZffObjectReader<R: Read + Seek> {
+	/// Contains a [ZffObjectReaderPhysical].
+	Physical(Box<ZffObjectReaderPhysical<R>>),
+	/// Contains a [ZffObjectReaderLogical].
+	Logical(Box<ZffObjectReaderLogical<R>>),
+	/// Contains a [ZffObjectReaderVirtual].
+	Virtual(Box<ZffObjectReaderVirtual<R>>),
+	/// Contains a [ZffObjectReaderEncrypted].
+	Encrypted(Box<ZffObjectReaderEncrypted<R>>),
+}
+
+impl<R: Read + Seek> Seek for ZffObjectReader<R> {
 	fn seek(&mut self, seek_from: std::io::SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		match self {
 			ZffObjectReader::Physical(reader) => reader.seek(seek_from),
@@ -48,29 +54,30 @@ impl Seek for ZffObjectReader {
 /// A reader which contains the appropriate metadata of a physical object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub struct ZffObjectReaderPhysical {
+pub(crate) struct ZffObjectReaderPhysical<R: Read + Seek> {
+	metadata: ArcZffReaderMetadata<R>,
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterPhysical,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 	position: u64
 }
 
-impl ZffObjectReaderPhysical {
+impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 	/// creates a new [ZffObjectReaderPhysical] with the given metadata.
-	pub fn with_obj_metadata(
-		object_header: ObjectHeader, 
-		object_footer: ObjectFooterPhysical,
-		global_chunkmap: Arc<BTreeMap<u64, u64>>,
-		) -> Self {
+	pub fn with_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
+		let object_header = metadata.lock().unwrap().object_header(&object_no).unwrap().clone();
+		let object_footer = match metadata.lock().unwrap().object_footer(&object_no) {
+			Some(ObjectFooter::Physical(footer)) => footer.clone(),
+			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
+		};
 		Self {
+			metadata,
 			object_header,
-			object_footer,
-			global_chunkmap,
+  			object_footer,
 			position: 0
 		}
 	}
 
-	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader).
+	/// Returns a reference to the [ObjectHeader](crate::header::ObjectHeader).
 	pub fn object_header_ref(&self) -> &ObjectHeader {
 		&self.object_header
 	}
@@ -84,45 +91,27 @@ impl ZffObjectReaderPhysical {
 	pub fn object_footer_unwrapped_ref(&self) -> &ObjectFooterPhysical {
 		&self.object_footer
 	}
+}
 
-	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.  
-	pub(crate) fn read_with_segments<R: Read + Seek>(
-		&mut self, 
-		buffer: &mut [u8], 
-		segments: &mut HashMap<u64, Segment<R>>,
-		preloaded_chunkmaps: &PreloadedChunkMaps,
-		) -> std::result::Result<usize, std::io::Error> {
+impl<R: Read + Seek> Read for ZffObjectReaderPhysical<R> {
+	fn read(&mut self, buffer: &mut [u8], ) -> std::io::Result<usize> {
 		let chunk_size = self.object_header.chunk_size;
 		let first_chunk_number = self.object_footer.first_chunk_number;
 		let last_chunk_number = first_chunk_number + self.object_footer.number_of_chunks - 1;
 		let mut current_chunk_number = (first_chunk_number * chunk_size + self.position) / chunk_size;
 		let mut inner_position = (self.position % chunk_size) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
-		let compression_algorithm = &self.object_header.compression_header.algorithm;
 
 		loop {
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
 				break;
 			}
-			let segment = match get_segment_of_chunk_no(current_chunk_number, &self.global_chunkmap) {
-				Some(segment_no) => match segments.get_mut(&segment_no) {
-					Some(segment) => segment,
-					None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-				},
-				None => break,
-			};
-			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
 
-			let chunk_data = if let Some(samebyte) = preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+			let chunk_data = if let Some(samebyte) = self.metadata.lock().unwrap().preloaded_chunkmaps.get_samebyte(current_chunk_number) {
 				vec![samebyte; chunk_size as usize]
 			} else {
-				get_chunk_data(
-				segment, 
-				current_chunk_number, 
-				&enc_information, 
-				compression_algorithm,
-				preloaded_chunkmaps,
-				chunk_size,)?
+				let object_no = &self.object_header.object_number;
+				get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
 			};
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
@@ -135,7 +124,7 @@ impl ZffObjectReaderPhysical {
 	}
 }
 
-impl Seek for ZffObjectReaderPhysical {
+impl<R: Read + Seek> Seek for ZffObjectReaderPhysical<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		match seek_from {
 			SeekFrom::Start(value) => {
@@ -163,134 +152,38 @@ impl Seek for ZffObjectReaderPhysical {
 /// A reader which contains the appropriate metadata of a logical object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub struct ZffObjectReaderLogical {
+pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
+	metadata: ArcZffReaderMetadata<R>,
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterLogical,
 	active_file: u64, // filenumber of active file
 	files: HashMap<u64, FileMetadata>,//<filenumber, metadata>,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
-impl ZffObjectReaderLogical {
+impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	/// Initialize the [ZffObjectReaderLogical] with a minimal set of (the absolutly required) metadata which will be stored in memory.
-	pub fn with_obj_metadata_minimal<R: Read + Seek>(
-		object_header: ObjectHeader, 
-		object_footer: ObjectFooterLogical,
-		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		global_chunkmap: Arc<BTreeMap<u64, u64>>,
-		) -> Result<Self> {
-		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::Minimal, Arc::clone(&global_chunkmap))
+	fn with_obj_metadata_minimal(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
+		Self::with_obj_metadata(object_no, metadata, PreloadDegree::Minimal)
 	}
 
 	/// Initialize the [ZffObjectReaderLogical] with the recommended set of metadata which will be stored in memory.
-	pub fn with_obj_metadata_recommended<R: Read + Seek>(
-		object_header: ObjectHeader, 
-		object_footer: ObjectFooterLogical,
-		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		global_chunkmap: Arc<BTreeMap<u64, u64>>, 
-		) -> Result<Self> {
-		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::Recommended, Arc::clone(&global_chunkmap))
+	pub fn with_obj_metadata_recommended(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
+			Self::with_obj_metadata(object_no, metadata, PreloadDegree::Recommended)
 	}
 
 	/// Initialize the [ZffObjectReaderLogical] which will store all metadata in memory.
-	pub fn with_obj_metadata_all<R: Read + Seek>(
-		object_header: ObjectHeader, 
-		object_footer: ObjectFooterLogical,
-		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		global_chunkmap: Arc<BTreeMap<u64, u64>>,
-		) -> Result<Self> {
-		Self::with_obj_metadata(object_header, object_footer, segments, PreloadDegree::All, Arc::clone(&global_chunkmap))
+	pub fn with_obj_metadata_all(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
+			Self::with_obj_metadata(object_no, metadata, PreloadDegree::All)
 	}
 
-	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader).
-	pub(crate) fn object_header_ref(&self) -> &ObjectHeader {
-		&self.object_header
-	}
-
-	/// Returns the appropriate [ObjectFooter](crate::footer::ObjectFooter).
-	pub(crate) fn object_footer(&self) -> ObjectFooter {
-		ObjectFooter::Logical(self.object_footer.clone())
-	}
-
-	/// Returns the appropriate [FileHeader](crate::header::FileHeader) of the current active file.
-	pub fn current_fileheader<R: Read + Seek>(&self, segments: &mut HashMap<u64, Segment<R>>) -> Result<FileHeader> {
-		let header_segment_number = match self.object_footer.file_header_segment_numbers().get(&self.active_file) {
-			Some(no) => no,
-			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
-		};
-		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
-			Some(offset) => offset,
-			None => return Err(ZffError::new(
-				ZffErrorKind::MalformedSegment, 
-				format!("Could not read header offsets of object no. {}", self.object_header.object_number))),
-		};
-		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
-			let key = match encryption_header.get_encryption_key() {
-				Some(key) => key,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
-			};
-			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
-		} else {
-			None
-		};
-		match segments.get_mut(header_segment_number) {
-			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
-			Some(segment) => {
-				segment.seek(SeekFrom::Start(*header_offset))?;
-				//check encryption
-				if let Some(enc_info) = &enc_info {
-					Ok(FileHeader::decode_encrypted_header_with_key(segment, enc_info)?)
-				} else {
-					Ok(FileHeader::decode_directly(segment)?)
-				}
-			}
-		}
-	}
-
-	/// Returns the appropriate [FileFooter](crate::footer::FileFooter) of the current active file.
-	pub fn current_filefooter<R: Read + Seek>(&self, segments: &mut HashMap<u64, Segment<R>>) -> Result<FileFooter> {
-		let footer_segment_number = match self.object_footer.file_footer_segment_numbers().get(&self.active_file) {
-			Some(no) => no,
-			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
-		};
-		let footer_offset = match self.object_footer.file_footer_offsets().get(&self.active_file) {
-			Some(offset) => offset,
-			None => return Err(ZffError::new(
-				ZffErrorKind::MalformedSegment, 
-				format!("Could not read footer offset of active file no {} of object {}", self.active_file, self.object_header.object_number))),
-		};
-		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
-			let key = match encryption_header.get_encryption_key() {
-				Some(key) => key,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
-			};
-			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
-		} else {
-			None
-		};
-		match segments.get_mut(footer_segment_number) {
-			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
-			Some(segment) => {
-				segment.seek(SeekFrom::Start(*footer_offset))?;
-				//check encryption
-				if let Some(enc_info) = &enc_info {
-					Ok(FileFooter::decode_encrypted_footer_with_key(segment, enc_info)?)
-				} else {
-					Ok(FileFooter::decode_directly(segment)?)
-				}
-			}
-		}
-	}
-
-	fn with_obj_metadata<R: Read + Seek>(
-		object_header: ObjectHeader, 
-		object_footer: ObjectFooterLogical,
-		segments: &mut HashMap<u64, Segment<R>>, //<segment number, Segment-object>
-		degree_value: PreloadDegree,
-		global_chunkmap: Arc<BTreeMap<u64, u64>>,
-		) -> Result<Self> {
+	fn with_obj_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>, degree_value: PreloadDegree) -> Result<Self> {
 		#[cfg(feature = "log")]
-		debug!("Initialize logical object {}", object_header.object_number);
+		debug!("Initialize logical object {}", object_no);
+		let object_header = metadata.lock().unwrap().object_header(&object_no).unwrap().clone();
+		let object_footer = match metadata.lock().unwrap().object_footer(&object_no) {
+			Some(ObjectFooter::Logical(footer)) => footer.clone(),
+			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
+		};
 
 		let enc_info = if let Some(encryption_header) = &object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {
@@ -320,7 +213,7 @@ impl ZffObjectReaderLogical {
 				}
 			};
 
-			let fileheader = match segments.get_mut(header_segment_number) {
+			let fileheader = match metadata.lock().unwrap().segments.get_mut(header_segment_number) {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
 				Some(segment) => {
 					segment.seek(SeekFrom::Start(*header_offset))?;
@@ -333,7 +226,7 @@ impl ZffObjectReaderLogical {
 				}
 			};
 
-			let filefooter = match segments.get_mut(footer_segment_number) {
+			let filefooter = match metadata.lock().unwrap().segments.get_mut(footer_segment_number) {
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
 				Some(segment) => {
 					segment.seek(SeekFrom::Start(*footer_offset))?;
@@ -357,12 +250,92 @@ impl ZffObjectReaderLogical {
 		debug!("{} files were successfully initialized for logical object {}.", files.len(), object_header.object_number);
 
 		Ok(Self {
+			metadata,
 			object_header,
 			object_footer,
 			active_file: 1,
 			files,
-			global_chunkmap: Arc::clone(&global_chunkmap),
 		})
+	}
+
+	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader).
+	pub(crate) fn object_header_ref(&self) -> &ObjectHeader {
+		&self.object_header
+	}
+
+	/// Returns the appropriate [ObjectFooter](crate::footer::ObjectFooter).
+	pub(crate) fn object_footer(&self) -> ObjectFooter {
+		ObjectFooter::Logical(self.object_footer.clone())
+	}
+
+	/// Returns the appropriate [FileHeader](crate::header::FileHeader) of the current active file.
+	pub fn current_fileheader(&self) -> Result<FileHeader> {
+		let header_segment_number = match self.object_footer.file_header_segment_numbers().get(&self.active_file) {
+			Some(no) => no,
+			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+		};
+		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(
+				ZffErrorKind::MalformedSegment, 
+				format!("Could not read header offsets of object no. {}", self.object_header.object_number))),
+		};
+		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
+			let key = match encryption_header.get_encryption_key() {
+				Some(key) => key,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+			};
+			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
+		} else {
+			None
+		};
+		match self.metadata.lock().unwrap().segments.get_mut(header_segment_number) {
+			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			Some(segment) => {
+				segment.seek(SeekFrom::Start(*header_offset))?;
+				//check encryption
+				if let Some(enc_info) = &enc_info {
+					Ok(FileHeader::decode_encrypted_header_with_key(segment, enc_info)?)
+				} else {
+					Ok(FileHeader::decode_directly(segment)?)
+				}
+			}
+		}
+	}
+
+	/// Returns the appropriate [FileFooter](crate::footer::FileFooter) of the current active file.
+	pub fn current_filefooter(&self) -> Result<FileFooter> {
+		let footer_segment_number = match self.object_footer.file_footer_segment_numbers().get(&self.active_file) {
+			Some(no) => no,
+			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+		};
+		let footer_offset = match self.object_footer.file_footer_offsets().get(&self.active_file) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(
+				ZffErrorKind::MalformedSegment, 
+				format!("Could not read footer offset of active file no {} of object {}", self.active_file, self.object_header.object_number))),
+		};
+		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
+			let key = match encryption_header.get_encryption_key() {
+				Some(key) => key,
+				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+			};
+			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
+		} else {
+			None
+		};
+		match self.metadata.lock().unwrap().segments.get_mut(footer_segment_number) {
+			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			Some(segment) => {
+				segment.seek(SeekFrom::Start(*footer_offset))?;
+				//check encryption
+				if let Some(enc_info) = &enc_info {
+					Ok(FileFooter::decode_encrypted_footer_with_key(segment, enc_info)?)
+				} else {
+					Ok(FileFooter::decode_directly(segment)?)
+				}
+			}
+		}
 	}
 
 	/// Sets the file of the appropriate filenumber active.
@@ -395,14 +368,10 @@ impl ZffObjectReaderLogical {
 	pub(crate) fn files(&self) -> &HashMap<u64, FileMetadata> {
 		&self.files
 	}
+}
 
-	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.
-	pub(crate) fn read_with_segments<R: Read + Seek>(
-		&mut self, 
-		buffer: &mut [u8], 
-		segments: &mut HashMap<u64, Segment<R>>,
-		preloaded_chunkmaps: &PreloadedChunkMaps,
-		) -> std::result::Result<usize, std::io::Error> {
+impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
 		let active_filemetadata = match self.files.get_mut(&self.active_file) {
 			Some(metadata) => metadata,
 			None => return Err(
@@ -416,41 +385,28 @@ impl ZffObjectReaderLogical {
 		let mut current_chunk_number = (first_chunk_number * chunk_size + active_filemetadata.position) / chunk_size;
 		let mut inner_position = (active_filemetadata.position % chunk_size) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
-		let compression_algorithm = &self.object_header.compression_header.algorithm;
 		loop {
-			#[cfg(feature = "log")]
-			log::trace!("ZffLogicalObjectReader: read_with_segments: read chunk {current_chunk_number}");
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
 				break;
 			}
-			let segment = match get_segment_of_chunk_no(current_chunk_number, &self.global_chunkmap) {
-				Some(segment_no) => match segments.get_mut(&segment_no) {
-					Some(segment) => segment,
-					None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-				},
-				None => break,
+
+			let chunk_data = if let Some(samebyte) = self.metadata.lock().unwrap().preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+				vec![samebyte; chunk_size as usize]
+			} else {
+				let object_no = &self.object_header.object_number;
+				get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
 			};
-			let enc_information = EncryptionInformation::try_from(&self.object_header).ok();
-			
-			let chunk_data = get_chunk_data(
-				segment, 
-				current_chunk_number, 
-				&enc_information, 
-				compression_algorithm, 
-				preloaded_chunkmaps,
-				chunk_size,)?;
 			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
 			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
 			inner_position = 0;
 			current_chunk_number += 1;
 		}
-
 		active_filemetadata.position += read_bytes as u64;
 		Ok(read_bytes)
 	}
 }
 
-impl Seek for ZffObjectReaderLogical {
+impl<R: Read + Seek> Seek for ZffObjectReaderLogical<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 
 		let active_filemetadata = match self.files.get_mut(&self.active_file) {
@@ -487,46 +443,33 @@ impl Seek for ZffObjectReaderLogical {
 /// A reader which contains the appropriate metadata of the virtual object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub struct ZffObjectReaderVirtual {
+pub(crate) struct ZffObjectReaderVirtual<R: Read + Seek> {
+	metadata: ArcZffReaderMetadata<R>,
 	/// Contains the appropriate object header
 	object_header: ObjectHeader,
 	/// Contains the appropriate object footer of the virtual object
 	object_footer: ObjectFooterVirtual,
-	/// Cached header of all affected passive objects.
-	passive_object_header: BTreeMap<u64, ObjectHeader>,
 	/// The virtual object map
 	virtual_object_map: BTreeSet<BTreeMap<u64, (u64, u64)>>, 
 	/// the internal reader position
 	position: u64,
-	/// The global chunkmap
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
-impl ZffObjectReaderVirtual {
+impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 	/// creates a new [ZffObjectReaderVirtual] with the given metadata.
-	pub fn with_data(
-		object_header: ObjectHeader,
-		object_footer: ObjectFooterVirtual,
-		global_chunkmap: Arc<BTreeMap<u64, u64>>
-	) -> Self {
+	pub fn with_data(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
+		let object_header = metadata.lock().unwrap().object_header(&object_no).unwrap().clone();
+		let object_footer = match metadata.lock().unwrap().object_footer(&object_no) {
+			Some(ObjectFooter::Virtual(footer)) => footer.clone(),
+			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
+		};
 		Self {
+			metadata,
 			object_header,
 			object_footer,
-			passive_object_header: BTreeMap::new(),
 			virtual_object_map: BTreeSet::new(), //TODO: Fill this map with the appropriate data :D !!!
 			position: 0,
-			global_chunkmap: Arc::clone(&global_chunkmap)
 		}
-	}
-
-	/// checks if the internal map for passive objects is empty. Returns true if, returns false if not.
-	pub fn is_passive_object_header_map_empty(&self) -> bool {
-		self.passive_object_header.is_empty()
-	}
-
-	/// Replaces the internal map of passive objects with the given map.
-	pub fn update_passive_object_header_map(&mut self, passive_object_header: BTreeMap<u64, ObjectHeader>) {
-		self.passive_object_header = passive_object_header;
 	}
 
 	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader).
@@ -535,7 +478,7 @@ impl ZffObjectReaderVirtual {
 	}
 
 	/// Returns a reference of the appropriate [crate::footer::ObjectFooterVirtual].
-	pub fn object_footer_ref(&self) -> &ObjectFooterVirtual {
+	pub fn object_footer_unwrapped_ref(&self) -> &ObjectFooterVirtual {
 		&self.object_footer
 	}
 
@@ -548,15 +491,10 @@ impl ZffObjectReaderVirtual {
 	pub fn fill_object_map(&mut self, virtual_object_map: BTreeSet<BTreeMap<u64, (u64, u64)>>) {
 		self.virtual_object_map = virtual_object_map;
 	}
+}
 
-	/// Works like [std::io::Read] for the underlying data, but needs also the segments and the optional preloaded chunkmap.
-	pub(crate) fn read_with_segments<R: Read + Seek>(
-		&mut self, 
-		buffer: &mut [u8], 
-		segments: &mut HashMap<u64, Segment<R>>,
-		preloaded_chunkmaps: &PreloadedChunkMaps,
-		) -> std::result::Result<usize, std::io::Error> {
-		
+impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
 		let mut read_bytes = 0; // number of bytes which are written to buffer
 		
 		'outer: loop {
@@ -564,38 +502,34 @@ impl ZffObjectReaderVirtual {
 			let virtual_mapping_information = match get_vmi_info(
 				&self.virtual_object_map, 
 				self.position, 
-				segments) {
+				Arc::clone(&self.metadata)) {
 				Ok(mi) => mi,
 				Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
 			};
 
-			let object_header = get_affected_object_header(&virtual_mapping_information, &self.passive_object_header)?;
-			let chunk_size = object_header.chunk_size;
+			let vmi_obj_no = virtual_mapping_information.object_number;
+			let chunk_size = match self.metadata.lock().unwrap().object_metadata.get(&vmi_obj_no) {
+				Some(ref obj) => obj.header.chunk_size,
+				None => return Err(std::io::Error::new(
+					std::io::ErrorKind::Other, 
+					format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{vmi_obj_no}"))),
+			};
 			let mut current_chunk_number = virtual_mapping_information.start_chunk_no;
 			let mut inner_position = virtual_mapping_information.chunk_offset as usize; // the inner chunk position
 			let mut remaining_offset_length = virtual_mapping_information.length as usize;
-			let compression_algorithm = &self.object_header.compression_header.algorithm;
 
 			loop {
 				if read_bytes == buffer.len() {
 					break 'outer;
 				}
-				let segment = match get_segment_of_chunk_no(current_chunk_number, &self.global_chunkmap) {
-					Some(segment_no) => match segments.get_mut(&segment_no) {
-						Some(segment) => segment,
-						None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-					},
-					None => break,
-				};
-				let enc_information = EncryptionInformation::try_from(object_header).ok();
 
-				let chunk_data = get_chunk_data(
-					segment, 
-					current_chunk_number, 
-					&enc_information, 
-					compression_algorithm,
-					preloaded_chunkmaps,
-					chunk_size,)?;
+				let chunk_data = if let Some(samebyte) = self.metadata.lock().unwrap().preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+					vec![samebyte; chunk_size as usize]
+				} else {
+					let object_no = &self.object_header.object_number;
+					get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
+				};
+
 				let mut should_break = false;
 				let mut cursor = if remaining_offset_length as u64 > chunk_data[inner_position..].len() as u64 {
 					Cursor::new(&chunk_data[inner_position..])
@@ -620,24 +554,13 @@ impl ZffObjectReaderVirtual {
 	}
 }
 
-fn get_affected_object_header<'a>(
-	virtual_mapping_information: &'a VirtualMappingInformation,
-	passive_object_header: &'a BTreeMap<u64, ObjectHeader>) -> std::io::Result<&'a ObjectHeader> {
-
-	let object_number = virtual_mapping_information.object_number;
-	let object_header = match passive_object_header.get(&virtual_mapping_information.object_number) {
-		Some(header) => header,
-		None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{object_number}"))),
-	};
-	Ok(object_header)
-}
-
 fn get_vmi_info<R: Read + Seek>(
 	vmi_map: &BTreeSet<BTreeMap<u64, (u64, u64)>>, 
 	offset: u64,
-	segments: &mut HashMap<u64, Segment<R>>) -> Result<VirtualMappingInformation> {
+	metadata: ArcZffReaderMetadata<R>) -> Result<VirtualMappingInformation> {
     let (segment_no, offset) = find_vmi_offset(vmi_map, offset).ok_or_else(|| ZffError::new(ZffErrorKind::ValueNotInMap, "VMI not found"))?;
-    let segment = match segments.get_mut(&segment_no) {
+    let segments = &mut metadata.lock().unwrap().segments;
+	let segment = match segments.get_mut(&segment_no) {
 		Some(segment) => segment,
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 	};
@@ -645,7 +568,7 @@ fn get_vmi_info<R: Read + Seek>(
 	VirtualMappingInformation::decode_directly(segment)
 }
 
-impl Seek for ZffObjectReaderVirtual {
+impl<R: Read + Seek> Seek for ZffObjectReaderVirtual<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		match seek_from {
 			SeekFrom::Start(value) => {
@@ -670,57 +593,55 @@ impl Seek for ZffObjectReaderVirtual {
 	}
 }
 
-#[derive(Debug)]
-enum PreloadDegree {
-	Minimal,
-	Recommended,
-	All,
-}
-
 /// A reader which contains the appropriate metadata of a encrypted object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub struct ZffObjectReaderEncrypted {
+pub(crate) struct ZffObjectReaderEncrypted<R: Read + Seek> {
 	encrypted_header: EncryptedObjectHeader,
 	encrypted_footer: EncryptedObjectFooter,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
+	metadata: ArcZffReaderMetadata<R>,
 }
 
-impl ZffObjectReaderEncrypted {
+impl<R: Read + Seek> ZffObjectReaderEncrypted<R> {
 	/// creates a new [ZffObjectReaderEncrypted] with the given metadata.
 	pub fn with_data(
 		encrypted_header: EncryptedObjectHeader, 
 		encrypted_footer: EncryptedObjectFooter, 
-		global_chunkmap: Arc<BTreeMap<u64, u64>>) -> Self {
+		metadata: ArcZffReaderMetadata<R>) -> Self {
 		Self {
 			encrypted_header,
 			encrypted_footer,
-			global_chunkmap
+			metadata,
 		}
 	}
 
 	/// Tries to decrypt the [ZffObjectReader] with the given parameters.
-	pub fn decrypt_with_password<P, R>(&mut self, password: P, segments: &mut HashMap<u64, Segment<R>>) -> Result<ZffObjectReader> 
+	pub fn decrypt_with_password<P>(&mut self, password: P) -> Result<ZffObjectReader<R>> 
 	where
 		P: AsRef<[u8]>,
 		R: Read + Seek,
 	{
 		let decrypted_object_header = self.encrypted_header.decrypt_with_password(password)?;
-
 		let enc_info = EncryptionInformation::try_from(&decrypted_object_header)?;
-
 		let decrypted_footer = self.encrypted_footer.decrypt(enc_info.encryption_key, enc_info.algorithm)?;
 
+		let obj_no = decrypted_object_header.object_number;
+		let obj_metadata = ObjectMetadata::new(decrypted_object_header, decrypted_footer.clone());
+		self.metadata.lock().unwrap().object_metadata.insert(obj_no, obj_metadata);
+
 		let obj_reader = match decrypted_footer {
-			ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(
-				ZffObjectReaderPhysical::with_obj_metadata(
-					decrypted_object_header, physical, Arc::clone(&self.global_chunkmap)))),
-			ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(
+			ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
+				ZffObjectReaderPhysical::with_metadata(
+					obj_no, 
+					Arc::clone(&self.metadata)))),
+			ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
 				ZffObjectReaderLogical::with_obj_metadata_recommended(
-					decrypted_object_header, logical, segments, Arc::clone(&self.global_chunkmap))?)),
-			ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(
+					obj_no, 
+					Arc::clone(&self.metadata))?)),
+			ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
 				ZffObjectReaderVirtual::with_data(
-					decrypted_object_header, virt, Arc::clone(&self.global_chunkmap))))
+					obj_no, 
+					Arc::clone(&self.metadata)))),
 		};
 
 		Ok(obj_reader)
@@ -839,4 +760,11 @@ impl FileMetadata {
 			hash_header: Some(filefooter.hash_header.clone()),
 		}
 	}
+}
+
+#[derive(Debug)]
+enum PreloadDegree {
+	Minimal,
+	Recommended,
+	All,
 }

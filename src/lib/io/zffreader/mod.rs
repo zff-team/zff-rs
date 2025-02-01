@@ -1,9 +1,8 @@
 // - STD
 use std::fmt;
-use std::borrow::Borrow;
 use std::io::{Read, Seek, SeekFrom};
 use std::collections::{HashMap, BTreeMap};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 // - modules
 mod zffobjectreader;
@@ -41,6 +40,11 @@ use crate::{
 };
 
 use super::*;
+
+// - type definitions
+// This is a Arc instead of a Rc to optain more flexibility by using the [ZffReader] 
+// (Rc / RefCell do not implement Send :-( )).
+type ArcZffReaderMetadata<R> = Arc<Mutex<ZffReaderGeneralMetadata<R>>>;
 
 // - external
 use redb::{Database, ReadableTable};
@@ -151,6 +155,41 @@ impl PreloadedChunkMaps {
 	}
 }
 
+/// internally handled metadata for the [ZffReader] (and appropriate [ZffObjectReader])
+#[derive(Debug)]
+pub(crate) struct ZffReaderGeneralMetadata<R: Read + Seek> {
+	pub segments: HashMap<u64, Segment<R>>, //<segment number, Segment>
+	pub object_metadata: BTreeMap<u64, ObjectMetadata>, //<object number, ObjectMetadata>
+	pub main_footer: MainFooter,
+	pub preloaded_chunkmaps: PreloadedChunkMaps,
+}
+
+impl<R: Read + Seek> ZffReaderGeneralMetadata<R> {
+	fn new(segments: HashMap<u64, Segment<R>>, main_footer: MainFooter) -> Self {
+		Self {
+			segments,
+			object_metadata: BTreeMap::new(),
+			main_footer,
+			preloaded_chunkmaps: PreloadedChunkMaps::default(),
+		}
+	}
+
+	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader) to the given Object number.
+	pub fn object_header_ref(&self, object_no: &u64) -> Option<&ObjectHeader> {
+		Some(&self.object_metadata.get(object_no)?.header)
+	}
+
+	/// Returns a Clone of the appropriate [ObjectHeader](crate::header::ObjectHeader) to the given Object number.
+	pub fn object_header(&self, object_no: &u64) -> Option<ObjectHeader> {
+		Some(self.object_metadata.get(object_no)?.header.clone())
+	}
+
+	/// Returns a Clone of the appropriate [ObjectFooter](crate::header::ObjectFooter) to the given Object number.
+	pub fn object_footer(&self, object_no: &u64) -> Option<ObjectFooter> {
+		Some(self.object_metadata.get(object_no)?.footer.clone())
+	}
+}
+
 /// The [ZffReader] can be used to read the data of a zff container in a proper way.  
 /// It implements [std::io::Read] and [std::io::Seek] to ensure a wide range of possible use.
 /// # Example
@@ -177,12 +216,9 @@ impl PreloadedChunkMaps {
 /// ```
 #[derive(Debug)]
 pub struct ZffReader<R: Read + Seek> {
-	segments: HashMap<u64, Segment<R>>, //<segment number, Segment>
-	object_reader: HashMap<u64, ZffObjectReader>, //<object_number, ZffObjectReader>,
-	main_footer: MainFooter,
-	chunk_maps: PreloadedChunkMaps,
+	metadata: ArcZffReaderMetadata<R>,
+	object_reader: HashMap<u64, ZffObjectReader<R>>, //<object_number, ZffObjectReader>,
 	active_object: u64, //the number of the active object.
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
 }
 
 impl<R: Read + Seek> ZffReader<R> {
@@ -219,15 +255,12 @@ impl<R: Read + Seek> ZffReader<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER)),
 		};
 
-		let global_chunkmap = Arc::new(main_footer.chunk_offset_maps().clone());
+		let metadata = Arc::new(Mutex::new(ZffReaderGeneralMetadata::new(segments, main_footer)));
 
 		Ok(Self {
-			segments,
+			metadata,
 			object_reader: HashMap::new(),
-			main_footer,
-			chunk_maps: PreloadedChunkMaps::default(),
 			active_object: 0,
-			global_chunkmap,
 		})
 	}
 
@@ -240,8 +273,9 @@ impl<R: Read + Seek> ZffReader<R> {
 	///   - there is a decoding error (e.g. corrupted segment)
 	pub fn list_objects(&mut self) -> Result<BTreeMap<u64, ObjectType>> {
 		let mut map = BTreeMap::new();
-		for (object_number, segment_number) in self.main_footer.object_header() {
-			let segment = match self.segments.get_mut(segment_number) {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for (object_number, segment_number) in self.metadata.lock().unwrap().main_footer.object_header() {
+			let segment = match segments.get_mut(segment_number) {
 				Some(segment) => segment,
 				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
 			};
@@ -306,8 +340,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// # Error
 	/// May fail due to various conditions, e.g. corrupted or missing segments.
 	pub fn initialize_object(&mut self, object_number: u64) -> Result<()> {
-		let object_reader = initialize_object_reader(
-			object_number, &mut self.segments, &self.main_footer, Arc::clone(&self.global_chunkmap))?;
+		let object_reader = initialize_object_reader(object_number, Arc::clone(&self.metadata))?;
 		self.object_reader.insert(object_number, object_reader);
 		Ok(())
 	}
@@ -316,15 +349,15 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// # Error
 	/// May fail due to various conditions, e.g. corrupted or missing segments.
 	pub fn initialize_objects_all(&mut self) -> Result<()> {
-		let object_reader_map = initialize_object_reader_all(
-			&mut self.segments, &self.main_footer, Arc::clone(&self.global_chunkmap))?;
+		let object_reader_map = initialize_object_reader_all(Arc::clone(&self.metadata))?;
 		self.object_reader = object_reader_map;
 		Ok(())
 	}
 
 	/// Lists the number of chunks of this zff container.
 	pub fn number_of_chunks(&self) -> u64 {
-		let (chunk_number, _) = self.main_footer.chunk_offset_maps().last_key_value().unwrap_or((&0, &0));
+		let metadata = self.metadata.lock().unwrap();
+		let (chunk_number, _) = metadata.main_footer.chunk_offset_maps().last_key_value().unwrap_or((&0, &0));
 		*chunk_number
 	}
 
@@ -341,7 +374,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
 		};
 		let decrypted_reader = match object_reader {
-			ZffObjectReader::Encrypted(reader) => reader.decrypt_with_password(decryption_password, &mut self.segments)?,
+			ZffObjectReader::Encrypted(reader) => reader.decrypt_with_password(decryption_password)?,
 			_ => return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, object_number.to_string()))
 		};
 		let o_type = match decrypted_reader {
@@ -365,7 +398,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	///   - do nothing, if the existing preloaded chunkmap is an in-memory map.
 	///   - convert the existing preloaded chunkmap to an in-memory chunkmap, if the existing preloaded chunkmap is a redb-based preloaded chunkmap.
 	pub fn set_preload_chunkmaps_mode_in_memory(&mut self) -> Result<()> {
-		self.chunk_maps.set_mode_in_memory()?;
+		self.metadata.lock().unwrap().preloaded_chunkmaps.set_mode_in_memory()?;
 		Ok(())
 	}
 
@@ -377,7 +410,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	///   - Initialize a empty Redb and use this.
 	///   - convert the existing preloaded (in-memory) chunkmap to the Redb (copy the content) and use the Redb as the appropriate preloaded chunkmap.
 	pub fn set_preload_chunkmap_mode_redb(&mut self, db: Database) -> Result<()> {
-		self.chunk_maps.set_mode_redb(db)
+		self.metadata.lock().unwrap().preloaded_chunkmaps.set_mode_redb(db)
 	}
 
 	/// Automatically preloads all maps of the specific object (will be used in case of encrypted maps for performance reasons).
@@ -393,8 +426,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Preloads the chunk offset map of the given highest chunk number of the map.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	fn preload_chunk_offset_map(&mut self, chunk_number: u64, encryption_information: &Option<EncryptionInformation>) -> Result<()> {
-		//TODO: Check if the chunk_number is already preloaded (then return  just a Ok(()));
-		for segment in self.segments.values_mut() {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for segment in segments.values_mut() {
 			if let Some(offset) = segment.footer().chunk_offset_map_table.get(&chunk_number) {
 				segment.seek(SeekFrom::Start(*offset))?;
 				let mut map = if let Some(ref enc_info) = encryption_information {
@@ -404,17 +437,12 @@ impl<R: Read + Seek> ZffReader<R> {
 					ChunkOffsetMap::decode_directly(segment)?
 				};
 				let inner_map = map.flush();
-				match &mut self.chunk_maps {
-					PreloadedChunkMaps::None => {
-						let mut map = HashMap::new();
-						map.extend(inner_map);
-						self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
-							offsets: map,
-							..Default::default()
-						});
-					},
-					PreloadedChunkMaps::InMemory(maps) => maps.offsets.extend(inner_map),
-					PreloadedChunkMaps::Redb(db) => {
+				
+				let borrowed_metadata = &mut self.metadata.lock().unwrap();
+				match borrowed_metadata.preloaded_chunkmaps {
+					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+					PreloadedChunkMaps::InMemory(ref mut maps) => maps.offsets.extend(inner_map),
+					PreloadedChunkMaps::Redb(ref mut db) => {
 						for (chunk_no, value) in inner_map {
 							preloaded_redb_chunk_offset_map_add_entry(db, chunk_no, value)?;
 						}
@@ -428,6 +456,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all chunk offset maps for the specific object.
 	pub fn preload_chunk_offset_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		initialize_new_map_if_empty(Arc::clone(&self.metadata));
+		
 		#[cfg(feature = "log")]
 		log::debug!("Preloading chunk offset map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
@@ -455,8 +485,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Preloads the chunk size map of the given highest chunk number of the map.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	fn preload_chunk_size_map(&mut self, chunk_number: u64, encryption_information: &Option<EncryptionInformation>) -> Result<()> {
-		//TODO: Check if the chunk_number is already preloaded (then return  just a Ok(()));
-		for segment in self.segments.values_mut() {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for segment in segments.values_mut() {
 			if let Some(offset) = segment.footer().chunk_size_map_table.get(&chunk_number) {
 				segment.seek(SeekFrom::Start(*offset))?;
 				let mut map = if let Some(ref enc_info) = encryption_information {
@@ -466,17 +496,12 @@ impl<R: Read + Seek> ZffReader<R> {
 					ChunkSizeMap::decode_directly(segment)?
 				};
 				let inner_map = map.flush();
-				match &mut self.chunk_maps {
-					PreloadedChunkMaps::None => {
-						let mut map = HashMap::new();
-						map.extend(inner_map);
-						self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
-							sizes: map,
-							..Default::default()
-						});
-					},
-					PreloadedChunkMaps::InMemory(maps) => maps.sizes.extend(inner_map),
-					PreloadedChunkMaps::Redb(db) => {
+				
+				let borrowed_metadata = &mut self.metadata.lock().unwrap();
+				match borrowed_metadata.preloaded_chunkmaps {
+					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+					PreloadedChunkMaps::InMemory(ref mut maps) => maps.sizes.extend(inner_map),
+					PreloadedChunkMaps::Redb(ref mut db) => {
 						for (chunk_no, value) in inner_map {
 							preloaded_redb_chunk_size_map_add_entry(db, chunk_no, value)?;
 						}
@@ -490,6 +515,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all chunk size maps for the specific object.
 	pub fn preload_chunk_size_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		initialize_new_map_if_empty(Arc::clone(&self.metadata));
+
 		#[cfg(feature = "log")]
 		log::debug!("Preloading chunk size map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
@@ -519,8 +546,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Preloads the chunk flags map of the given highest chunk number of the map.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	fn preload_chunk_flags_map(&mut self, chunk_number: u64, encryption_information: &Option<EncryptionInformation>) -> Result<()> {
-		//TODO: Check if the chunk_number is already preloaded (then return  just a Ok(()));
-		for segment in self.segments.values_mut() {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for segment in segments.values_mut() {
 			if let Some(offset) = segment.footer().chunk_flags_map_table.get(&chunk_number) {
 				segment.seek(SeekFrom::Start(*offset))?;
 				let mut map = if let Some(ref enc_info) = encryption_information {
@@ -530,17 +557,12 @@ impl<R: Read + Seek> ZffReader<R> {
 					ChunkFlagsMap::decode_directly(segment)?
 				};
 				let inner_map = map.flush();
-				match &mut self.chunk_maps {
-					PreloadedChunkMaps::None => {
-						let mut map = HashMap::new();
-						map.extend(inner_map);
-						self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
-							flags: map,
-							..Default::default()
-						});
-					},
-					PreloadedChunkMaps::InMemory(maps) => maps.flags.extend(inner_map),
-					PreloadedChunkMaps::Redb(db) => {
+				
+				let borrowed_metadata = &mut self.metadata.lock().unwrap();
+				match borrowed_metadata.preloaded_chunkmaps {
+					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+					PreloadedChunkMaps::InMemory(ref mut maps) => maps.flags.extend(inner_map),
+					PreloadedChunkMaps::Redb(ref mut db) => {
 						for (chunk_no, value) in inner_map {
 							preloaded_redb_chunk_flags_map_add_entry(db, chunk_no, value)?;
 						}
@@ -554,6 +576,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all chunk flags maps for the specific object.
 	pub fn preload_chunk_flags_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		initialize_new_map_if_empty(Arc::clone(&self.metadata));
+
 		#[cfg(feature = "log")]
 		log::debug!("Preloading chunk flags map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
@@ -583,8 +607,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Preloads the chunk xxhash map of the given highest chunk number of the map.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	fn preload_chunk_xxhash_map(&mut self, chunk_number: u64, encryption_information: &Option<EncryptionInformation>) -> Result<()> {
-		//TODO: Check if the chunk_number is already preloaded (then return  just a Ok(()));
-		for segment in self.segments.values_mut() {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for segment in segments.values_mut() {
 			if let Some(offset) = segment.footer().chunk_xxhash_map_table.get(&chunk_number) {
 				segment.seek(SeekFrom::Start(*offset))?;
 				let mut map = if let Some(ref enc_info) = encryption_information {
@@ -594,17 +618,12 @@ impl<R: Read + Seek> ZffReader<R> {
 					ChunkXxHashMap::decode_directly(segment)?
 				};
 				let inner_map = map.flush();
-				match &mut self.chunk_maps {
-					PreloadedChunkMaps::None => {
-						let mut map = HashMap::new();
-						map.extend(inner_map);
-						self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
-							xxhashs: map,
-							..Default::default()
-						});
-					},
-					PreloadedChunkMaps::InMemory(maps) => maps.xxhashs.extend(inner_map),
-					PreloadedChunkMaps::Redb(db) => {
+				
+				let borrowed_metadata = &mut self.metadata.lock().unwrap();
+				match borrowed_metadata.preloaded_chunkmaps {
+					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+					PreloadedChunkMaps::InMemory(ref mut maps) => maps.xxhashs.extend(inner_map),
+					PreloadedChunkMaps::Redb(ref mut db) => {
 						for (chunk_no, value) in inner_map {
 							preloaded_redb_chunk_xxhash_map_add_entry(db, chunk_no, value)?;
 						}
@@ -618,6 +637,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all xxhash chunk maps for the specific object.
 	pub fn preload_chunk_xxhash_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		initialize_new_map_if_empty(Arc::clone(&self.metadata));
+
 		#[cfg(feature = "log")]
 		log::debug!("Preloading chunk xxhash map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
@@ -647,8 +668,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Preloads the chunk samebytes map of the given highest chunk number of the map.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	fn preload_chunk_samebytes_map(&mut self, chunk_number: u64, encryption_information: &Option<EncryptionInformation>) -> Result<()> {
-		//TODO: Check if the chunk_number is already preloaded (then return  just a Ok(()));
-		for segment in self.segments.values_mut() {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for segment in segments.values_mut() {
 			if let Some(offset) = segment.footer().chunk_samebytes_map_table.get(&chunk_number) {
 				segment.seek(SeekFrom::Start(*offset))?;
 				let mut map = if let Some(ref enc_info) = encryption_information {
@@ -658,17 +679,12 @@ impl<R: Read + Seek> ZffReader<R> {
 					ChunkSamebytesMap::decode_directly(segment)?
 				};
 				let inner_map = map.flush();
-				match &mut self.chunk_maps {
-					PreloadedChunkMaps::None => {
-						let mut map = HashMap::new();
-						map.extend(inner_map);
-						self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
-							same_bytes: map,
-							..Default::default()
-						});
-					},
-					PreloadedChunkMaps::InMemory(maps) => maps.same_bytes.extend(inner_map),
-					PreloadedChunkMaps::Redb(db) => {
+				
+				let borrowed_metadata = &mut self.metadata.lock().unwrap();
+				match borrowed_metadata.preloaded_chunkmaps {
+					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+					PreloadedChunkMaps::InMemory(ref mut maps) => maps.same_bytes.extend(inner_map),
+					PreloadedChunkMaps::Redb(ref mut db) => {
 						for (chunk_no, value) in inner_map {
 							preloaded_redb_chunk_samebytes_map_add_entry(db, chunk_no, value)?;
 						}
@@ -682,6 +698,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all samebyte chunk maps for the specific object.
 	pub fn preload_chunk_samebytes_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		initialize_new_map_if_empty(Arc::clone(&self.metadata));
+		
 		#[cfg(feature = "log")]
 		log::debug!("Preloading chunk samebytes map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
@@ -711,8 +729,8 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// Preloads the chunk deduplication map of the given highest chunk number of the map.
 	/// If no chunkmap was initialized, a new in-memory map will be initialized by using this method.
 	fn preload_chunk_deduplication_map(&mut self, chunk_number: u64, encryption_information: &Option<EncryptionInformation>) -> Result<()> {
-		//TODO: Check if the chunk_number is already preloaded (then return  just a Ok(()));
-		for segment in self.segments.values_mut() {
+		let segments = &mut self.metadata.lock().unwrap().segments;
+		for segment in segments.values_mut() {
 			if let Some(offset) = segment.footer().chunk_dedup_map_table.get(&chunk_number) {
 				segment.seek(SeekFrom::Start(*offset))?;
 				let mut map = if let Some(ref enc_info) = encryption_information {
@@ -722,17 +740,12 @@ impl<R: Read + Seek> ZffReader<R> {
 					ChunkDeduplicationMap::decode_directly(segment)?
 				};
 				let inner_map = map.flush();
-				match &mut self.chunk_maps {
-					PreloadedChunkMaps::None => {
-						let mut map = HashMap::new();
-						map.extend(inner_map);
-						self.chunk_maps = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
-							duplicate_chunks: map,
-							..Default::default()
-						});
-					},
-					PreloadedChunkMaps::InMemory(maps) => maps.duplicate_chunks.extend(inner_map),
-					PreloadedChunkMaps::Redb(db) => {
+				
+				let borrowed_metadata = &mut self.metadata.lock().unwrap();
+				match borrowed_metadata.preloaded_chunkmaps {
+					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+					PreloadedChunkMaps::InMemory(ref mut maps) => maps.duplicate_chunks.extend(inner_map),
+					PreloadedChunkMaps::Redb(ref mut db) => {
 						for (chunk_no, value) in inner_map {
 							preloaded_redb_chunk_deduplication_map_add_entry(db, chunk_no, value)?;
 						}
@@ -746,6 +759,8 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	/// Preloads all deduplication chunk maps for the specific object.
 	pub fn preload_chunk_deduplication_map_per_object(&mut self, object_number: u64) -> Result<()> {
+		initialize_new_map_if_empty(Arc::clone(&self.metadata));
+		
 		#[cfg(feature = "log")]
 		log::debug!("Preloading chunk deduplication map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
@@ -810,9 +825,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// - no object was set as active.  
 	pub fn current_fileheader(&mut self) -> Result<FileHeader> {
 		match self.object_reader.get(&self.active_object) {
-			Some(ZffObjectReader::Logical(reader)) => {
-				reader.current_fileheader(&mut self.segments)
-			},
+			Some(ZffObjectReader::Logical(reader)) => reader.current_fileheader(),
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
@@ -828,9 +841,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// - no object was set as active.  
 	pub fn current_filefooter(&mut self) -> Result<FileFooter> {
 		match self.object_reader.get(&self.active_object) {
-			Some(ZffObjectReader::Logical(reader)) => {
-				reader.current_filefooter(&mut self.segments)
-			},
+			Some(ZffObjectReader::Logical(reader)) => reader.current_filefooter(),
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
@@ -866,22 +877,10 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
-	fn get_active_reader(&self) -> Result<&ZffObjectReader> {
+	fn get_active_reader(&self) -> Result<&ZffObjectReader<R>> {
 		match self.object_reader.get(&self.active_object) {
 			Some(reader) => Ok(reader),
 			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
-		}
-	}
-
-	/// Returns a reference to the [Segment] of the appropriate segment number.
-	/// # Error
-	/// May fail if   
-	/// - the appropriate segment number does not exist.
-	/// - a decoding error occurs while trying to read the appropriate metadata of the segment.
-	pub fn segment_mut_ref(&mut self, segment_number: u64) -> Result<&mut Segment<R>> {
-		match self.segments.get_mut(&segment_number) {
-			Some(segment) => Ok(segment),
-			None => Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string()))
 		}
 	}
 }
@@ -894,50 +893,12 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 			};
 			match object_reader {
-				ZffObjectReader::Physical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps),
-				ZffObjectReader::Logical(reader) => return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps),
-				ZffObjectReader::Encrypted(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				ZffObjectReader::Virtual(reader) => if !reader.is_passive_object_header_map_empty() { return reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps); },
+				ZffObjectReader::Physical(reader) => reader.read(buffer),
+				ZffObjectReader::Logical(reader) => reader.read(buffer),
+				ZffObjectReader::Encrypted(_) => Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+				ZffObjectReader::Virtual(reader) => reader.read(buffer),
 			}
 		}
-
-		// updates the object header map in virtual objects, if the map is empty (check see lines before: "is_passive_object_header_map_empty()").
-		// this lines are moved at the end to ensure graciousness through the borrow checker.
-		let mut passive_objects_map = BTreeMap::new();
-		let passive_objects_vec = match self.object_reader.get(&self.active_object) {
-			Some(object_reader) => match object_reader {
-				ZffObjectReader::Virtual(reader) => reader.object_footer_ref().passive_objects.clone(),
-				_ => unreachable!(),
-			},
-			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
-		};
-		for passive_object_no in passive_objects_vec {
-			let object_header = match self.object_reader.get(&passive_object_no) {
-				Some(reader) => match reader {
-					ZffObjectReader::Physical(phy) => phy.object_header_ref(),
-					ZffObjectReader::Logical(log) => log.object_header_ref(),
-					ZffObjectReader::Virtual(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-					ZffObjectReader::Encrypted(_) => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				},
-				None => return Err(
-					std::io::Error::new(
-						std::io::ErrorKind::NotFound, 
-						format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{passive_object_no}"))
-				),
-			};
-			passive_objects_map.insert(passive_object_no, object_header.clone());
-		}
-		let object_reader = match self.object_reader.get_mut(&self.active_object) {
-			Some(object_reader) => object_reader,
-			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
-		};
-		match object_reader {
-			ZffObjectReader::Virtual(reader) => { 
-				reader.update_passive_object_header_map(passive_objects_map); 
-				reader.read_with_segments(buffer, &mut self.segments, &self.chunk_maps)
-			},
-			_ => unreachable!(),
-		}		
 	}
 }
 
@@ -1020,25 +981,49 @@ fn try_find_footer<R: Read + Seek>(reader: &mut R) -> Result<Footer> {
 	}
 }
 
-fn get_chunk_data<C, R>(
-	segment: &mut Segment<R>, 
+fn get_chunk_data<R>(
+	current_object_no: &u64,
+	metadata: ArcZffReaderMetadata<R>,
 	current_chunk_number: u64, 
-	enc_information: &Option<EncryptionInformation>,
-	compression_algorithm: C,
-	preloaded_chunkmaps: &PreloadedChunkMaps,
-	original_chunk_size: u64, // size of the uncompressed data //TODO!
 	) -> std::result::Result<Vec<u8>, std::io::Error>
 where
-	C: Borrow<CompressionAlgorithm> + std::marker::Copy,
 	R: Read + Seek
 {
-	let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-	let optional_chunk_size = extract_size_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
-	let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(preloaded_chunkmaps, current_chunk_number);
+	let optional_chunk_offset = extract_offset_from_preloaded_chunkmap(
+		&metadata.lock().unwrap().preloaded_chunkmaps, current_chunk_number);
+	let optional_chunk_size = extract_size_from_preloaded_chunkmap(
+		&metadata.lock().unwrap().preloaded_chunkmaps, current_chunk_number);
+	let optional_chunk_flags = extract_flags_from_preloaded_chunkmap(
+		&metadata.lock().unwrap().preloaded_chunkmaps, current_chunk_number);
+	let optional_chunk_deduplication = extract_deduplication_chunks_from_preloaded_chunkmap(
+		&metadata.lock().unwrap().preloaded_chunkmaps, current_chunk_number);
+	//TODO: check if the xxhash should be compared in general (performance tests?)
+
+	if let Some(dedup_chunk_no) = optional_chunk_deduplication {
+		return get_chunk_data(current_object_no, metadata, dedup_chunk_no);
+	};
 	
+	let segments = &mut metadata.lock().unwrap().segments;
+	let segment = match get_segment_of_chunk_no(
+	current_chunk_number, 
+	&metadata.lock().unwrap().main_footer.chunk_offset_maps) 
+	{
+		Some(segment_no) => match segments.get_mut(&segment_no) {
+			Some(segment) => segment,
+			None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+		},
+		None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+	};
+
+	// unwrap should be safe here, while we already checked that this method only will be called from [ZffObjectReader]-methods.
+	let borrowed_metadata = &metadata.lock().unwrap();
+	let object_header_ref = borrowed_metadata.object_header_ref(&current_object_no).unwrap();
+	let enc_information = EncryptionInformation::try_from(object_header_ref).ok();
+	let compression_algorithm = &object_header_ref.compression_header.algorithm;
+
 	let chunk_content = match segment.chunk_data(
 		current_chunk_number, 
-		enc_information, 
+		&enc_information, 
 		compression_algorithm, 
 		optional_chunk_offset,
 		optional_chunk_size,
@@ -1051,69 +1036,60 @@ where
 	};
 	match chunk_content {
 		ChunkContent::Raw(data) => Ok(data),
-		ChunkContent::SameBytes(single_byte) => Ok(vec![single_byte; original_chunk_size as usize]),
-		ChunkContent::Duplicate(dup_chunk_no) => {
-			get_chunk_data(
-				segment, 
-				dup_chunk_no, 
-				enc_information, 
-				compression_algorithm,
-				preloaded_chunkmaps,
-				original_chunk_size,)
+		ChunkContent::SameBytes(single_byte) => {
+			let original_chunk_size = object_header_ref.chunk_size;
+			Ok(vec![single_byte; original_chunk_size as usize])
+		},
+		ChunkContent::Duplicate(dedup_chunk_no) => {
+			get_chunk_data(current_object_no, Arc::clone(&metadata), dedup_chunk_no)	
 		}
 	}
 }
 
 
 fn initialize_object_reader_all<R: Read + Seek>(
-	segments: &mut HashMap<u64, Segment<R>>, 
-	main_footer: &MainFooter,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
-	) -> Result<HashMap<u64, ZffObjectReader>> {
+	metadata: ArcZffReaderMetadata<R>) -> Result<HashMap<u64, ZffObjectReader<R>>> {
 
 	let mut obj_reader_map = HashMap::new();
-	for obj_no in main_footer.object_footer().keys() {
-		let obj_reader = initialize_object_reader(*obj_no, segments, main_footer, Arc::clone(&global_chunkmap))?;
+	for obj_no in metadata.lock().unwrap().main_footer.object_footer().keys() {
+		let obj_reader = initialize_object_reader(
+			*obj_no,
+			Arc::clone(&metadata))?;
 		obj_reader_map.insert(*obj_no, obj_reader);
 	}
 	Ok(obj_reader_map)
 }
 
 fn initialize_object_reader<R: Read + Seek>(
-	object_number: u64,
-	segments: &mut HashMap<u64, Segment<R>>,
-	main_footer: &MainFooter,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>
-	) -> Result<ZffObjectReader> {
-	let segment_no_footer = match main_footer.object_footer().get(&object_number) {
+	object_number: u64, metadata: ArcZffReaderMetadata<R>) -> Result<ZffObjectReader<R>> {
+	let borrowed_metadata = metadata.lock().unwrap();
+	let segment_no_footer = match borrowed_metadata.main_footer.object_footer().get(&object_number) {
 		None => return Err(ZffError::new(
 			ZffErrorKind::MalformedSegment,
 			format!("Could not find object footer of object no. {}", object_number))),
 		Some(segment_no) => segment_no
 	};
-	let segment_no_header = match main_footer.object_header().get(&object_number) {
+	let segment_no_header = match borrowed_metadata.main_footer.object_header().get(&object_number) {
 		None => return Err(ZffError::new(
 			ZffErrorKind::MalformedSegment, 
 			format!("Could not find object header of object no. {}", object_number))),
 		Some(segment_no) => segment_no
 	};
 
-	match segments.get_mut(segment_no_header) {
+	match metadata.lock().unwrap().segments.get_mut(segment_no_header) {
 		None => Err(ZffError::new(ZffErrorKind::MissingSegment, segment_no_header.to_string())),
 		Some(segment) => if segment.read_object_header(object_number).is_ok() {
 							initialize_unencrypted_object_reader(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
-								segments,
-								Arc::clone(&global_chunkmap))
+								Arc::clone(&metadata))
 						} else {
 							initialize_encrypted_object_reader(
 								object_number,
 								*segment_no_header,
 								*segment_no_footer,
-								segments,
-								Arc::clone(&global_chunkmap))
+								Arc::clone(&metadata))
 						},
 	}
 }
@@ -1122,25 +1098,31 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	obj_number: u64,
 	header_segment_no: u64,
 	footer_segment_no: u64,
-	segments: &mut HashMap<u64, Segment<R>>,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>,
-	) -> Result<ZffObjectReader> {
+	metadata: ArcZffReaderMetadata<R>,
+	) -> Result<ZffObjectReader<R>> {
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {}", obj_number);
-	let header = match segments.get_mut(&header_segment_no) {
+	let header = match metadata.lock().unwrap().segments.get_mut(&header_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_object_header(obj_number)?,
 	};
 	
-	let footer = match segments.get_mut(&footer_segment_no) {
+	let footer = match metadata.lock().unwrap().segments.get_mut(&footer_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_object_footer(obj_number)?,
 	};
 
+	let obj_number = header.object_number;
+	let obj_metadata = ObjectMetadata::new(header, footer.clone());
+	metadata.lock().unwrap().object_metadata.insert(obj_number, obj_metadata);
+
 	let obj_reader = match footer {
-		ObjectFooter::Physical(physical) => ZffObjectReader::Physical(Box::new(ZffObjectReaderPhysical::with_obj_metadata(header, physical, global_chunkmap))),
-		ObjectFooter::Logical(logical) => ZffObjectReader::Logical(Box::new(ZffObjectReaderLogical::with_obj_metadata_recommended(header, logical, segments, global_chunkmap)?)),
-		ObjectFooter::Virtual(virt) => ZffObjectReader::Virtual(Box::new(ZffObjectReaderVirtual::with_data(header, virt, global_chunkmap))),
+		ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
+			ZffObjectReaderPhysical::with_metadata(obj_number, Arc::clone(&metadata)))),
+		ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
+			ZffObjectReaderLogical::with_obj_metadata_recommended(obj_number, Arc::clone(&metadata))?)),
+		ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
+			ZffObjectReaderVirtual::with_data(obj_number, Arc::clone(&metadata)))),
 	};
 	Ok(obj_reader)
 }
@@ -1149,20 +1131,19 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 	obj_number: u64,
 	header_segment_no: u64,
 	footer_segment_no: u64,
-	segments: &mut HashMap<u64, Segment<R>>,
-	global_chunkmap: Arc<BTreeMap<u64, u64>>
-	) -> Result<ZffObjectReader> {
+	metadata: ArcZffReaderMetadata<R>,
+	) -> Result<ZffObjectReader<R>> {
 
-	let header = match segments.get_mut(&header_segment_no) {
+	let header = match metadata.lock().unwrap().segments.get_mut(&header_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_encrypted_object_header(obj_number)?,
 	};
-	let footer = match segments.get_mut(&footer_segment_no) {
+	let footer = match metadata.lock().unwrap().segments.get_mut(&footer_segment_no) {
 		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
 		Some(segment) => segment.read_encrypted_object_footer(obj_number)?,
 	};
 	let obj_reader = ZffObjectReader::Encrypted(
-		Box::new(ZffObjectReaderEncrypted::with_data(header, footer, Arc::clone(&global_chunkmap))));
+		Box::new(ZffObjectReaderEncrypted::with_data(header, footer, Arc::clone(&metadata))));
 	Ok(obj_reader)
 }
 
@@ -1277,6 +1258,21 @@ fn extract_flags_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps
 	}
 }
 
+fn extract_deduplication_chunks_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<u64> {
+	match preloaded_chunkmap {
+		PreloadedChunkMaps::None => None,
+		PreloadedChunkMaps::InMemory(preloaded_maps) => {
+			preloaded_maps.duplicate_chunks.get(&chunk_number).cloned()
+		},
+		PreloadedChunkMaps::Redb(db) => {
+  			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE).ok()?;
+    		let value = table.get(&chunk_number).ok()??.value();
+			Some(value.into())
+		}
+	}
+}
+
 // tries to extract the appropriate sambyte of the given chunk number.
 // returns a None in case of error or if the chunkmap is a [PreloadedChunmaps::None].
 fn extract_samebyte_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<u8> {
@@ -1294,7 +1290,9 @@ fn extract_samebyte_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkM
 	}
 }
 
-fn get_chunks_of_unencrypted_object(object_reader: &HashMap<u64, ZffObjectReader>, object_number: u64) -> Result<Vec<u64>> {
+fn get_chunks_of_unencrypted_object<R: Read + Seek>(
+	object_reader: &HashMap<u64, ZffObjectReader<R>>, 
+	object_number: u64) -> Result<Vec<u64>> {
 	let obj_reader = match object_reader.get(&object_number) {
 		Some(reader) => reader,
 		None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
@@ -1316,7 +1314,7 @@ fn get_chunks_of_unencrypted_object(object_reader: &HashMap<u64, ZffObjectReader
 			chunk_numbers
 		},
 		ZffObjectReader::Virtual(reader) => {
-			let passive_objects = reader.object_footer_ref().passive_objects.clone();
+			let passive_objects = reader.object_footer_unwrapped_ref().passive_objects.clone();
 			let mut chunk_numbers = Vec::new();
 			for obj_no in passive_objects {
 				chunk_numbers.extend(get_chunks_of_unencrypted_object(object_reader, obj_no)?);
@@ -1333,7 +1331,7 @@ fn get_chunks_of_unencrypted_object(object_reader: &HashMap<u64, ZffObjectReader
 	Ok(chunk_numbers)
 }
 
-fn get_enc_info_from_obj_reader(object_reader: &ZffObjectReader) -> Result<Option<EncryptionInformation>> {
+fn get_enc_info_from_obj_reader<R: Read + Seek>(object_reader: &ZffObjectReader<R>) -> Result<Option<EncryptionInformation>> {
 		let enc_info = match object_reader {
 		ZffObjectReader::Physical(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
 		ZffObjectReader::Virtual(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
@@ -1348,4 +1346,17 @@ fn get_enc_info_from_obj_reader(object_reader: &ZffObjectReader) -> Result<Optio
 		},
 	};
 	Ok(enc_info)
+}
+
+fn initialize_new_map_if_empty<R: Read + Seek>(metadata: ArcZffReaderMetadata<R>) {
+	let preloaded_chunkmaps = &metadata.lock().unwrap().preloaded_chunkmaps;
+	let new_preloaded_chunkmaps = match preloaded_chunkmaps {
+		PreloadedChunkMaps::None => {
+			PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
+				..Default::default()
+			})
+		},
+		_ => return,
+	};
+	metadata.lock().unwrap().preloaded_chunkmaps = new_preloaded_chunkmaps;
 }
