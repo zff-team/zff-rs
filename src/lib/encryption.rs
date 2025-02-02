@@ -21,7 +21,7 @@ use aes_gcm::{
 };
 use chacha20poly1305::ChaCha20Poly1305;
 use byteorder::{LittleEndian, WriteBytesExt};
-use rand::{rng, RngCore};
+use rand::{rngs::OsRng, TryRngCore};
 use typenum::consts::U12;
 #[cfg(feature = "serde")]
 use serde::{
@@ -194,35 +194,31 @@ impl Encryption for Vec<u8> {
 /// let my_new_random_super_secret_key = gen_random_key(keysize);
 /// //...
 /// ```
-pub fn gen_random_key(length: usize) -> Vec<u8> {
+pub fn gen_random_key(length: usize) -> Result<Vec<u8>> {
 	let mut key = vec!(0u8; length/8);
-	let mut rng = rng();
-	rng.fill_bytes(&mut key);
-	key
+	OsRng.try_fill_bytes(&mut key);
+	Ok(key)
 }
 
 /// Generates a new random IV/Nonce as ```[u8; 16]``` for use in PBE header.
-pub fn gen_random_iv() -> [u8; 16] {
+pub fn gen_random_iv() -> Result<[u8; 16]> {
 	let mut iv = [0; 16];
-	let mut rng = rng();
-	rng.fill_bytes(&mut iv);
-	iv
+	OsRng.try_fill_bytes(&mut iv);
+	Ok(iv)
 }
 
 /// Generates a new random salt as ```[u8; 32]``` for use in PBE header.
-pub fn gen_random_salt() -> [u8; 32] {
+pub fn gen_random_salt() -> Result<[u8; 32]> {
 	let mut salt = [0; 32];
-	let mut rng = rng();
-	rng.fill_bytes(&mut salt);
-	salt
+	OsRng.try_fill_bytes(&mut salt);
+	Ok(salt)
 }
 
 /// Generates a new random IV/Nonce as ```[u8; 12]``` for use in encryption header.
-pub fn gen_random_header_nonce() -> [u8; 12] {
+pub fn gen_random_header_nonce() -> Result<[u8; 12]> {
 	let mut nonce = [0; 12];
-	let mut rng = rng();
-	rng.fill_bytes(&mut nonce);
-	nonce
+	OsRng.try_fill_bytes(&mut nonce);
+	Ok(nonce)
 }
 
 /// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES128CBC, defined in PKCS#5.
