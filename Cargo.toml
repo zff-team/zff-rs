@@ -23,7 +23,7 @@ crate-type = ["lib"]
 
 [dependencies]
 byteorder = "1.4.3"
-rand = "0.9"
+rand = { version = "0.9", features = ["os_rng"] }
 base64 = "0.22"
 time = { version = "0.3" }
 itertools = "0.14"
@@ -35,7 +35,7 @@ rust-argon2 = "2.0"
 aes-gcm = "0.10"
 chacha20poly1305 = "0.10"
 typenum = "1.16.0"
-cbc = { version = "0.1.2", features = [ "alloc" ] }
+cbc = { version = "0.1.2", features = [ "alloc" , "std"] }
 aes = "0.8.3"
 #compression
 zstd = "0.13"
