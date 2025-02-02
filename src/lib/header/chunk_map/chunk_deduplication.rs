@@ -3,6 +3,7 @@ use super::*;
 
 // - internal
 use crate::{
+	io::zffreader::ZffReader,
     HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP,
 	DEFAULT_HEADER_VERSION_CHUNK_DEDUPLICATION_MAP,
 	CHUNK_MAP_TABLE,
@@ -179,11 +180,14 @@ impl Serialize for ChunkDeduplicationMap {
     }
 }
 
-
-
-
-
-
+/// A structure to handle chunk deduplication.
+#[derive(Debug, Default)]
+pub struct DeduplicationMetadata<R: Read + Seek> {
+	/// A map which can be used to handle the chunk deduplication.
+	pub deduplication_map: DeduplicationChunkMap,
+	/// Optional original zffreader - in case of an extension of an existing zff container.
+	pub original_zffreader: Option<ZffReader<R>>,
+}
 
 //TODO: use xxhash before using blake3
 /// A map which can be used to handle the chunk deduplication.

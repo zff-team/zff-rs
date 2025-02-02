@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read, Cursor};
+use std::io::{Read, Cursor, Seek};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -10,7 +10,7 @@ use crate::io::BufferedChunk;
 use crate::PreparedChunk;
 // - internal
 use crate::{
-	header::{FileHeader, HashHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationChunkMap},
+	header::{FileHeader, HashHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationMetadata},
 	footer::FileFooter,
 };
 use crate::{
@@ -135,9 +135,9 @@ impl FileEncoder {
 	}
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
-	pub fn get_next_chunk(
+	pub fn get_next_chunk<D: Read + Seek>(
 		&mut self, 
-		deduplication_map: Option<&mut DeduplicationChunkMap>,
+		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
 		) -> Result<PreparedChunk> {
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
@@ -235,7 +235,7 @@ impl FileEncoder {
 			self.current_chunk_number,
 			buf_len,
 			chunk_size as u64,
-			deduplication_map,
+			deduplication_metadata,
 			encryption_key,
 			encryption_algorithm,
 			empty_file_flag

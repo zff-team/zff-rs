@@ -172,24 +172,24 @@ pub enum ZffFilesOutput {
 /// 
 /// ZffWriter only supports to create a new zff container in a single segment.
 /// For creating a multi-segment zff container, or extending an existing one, use the ZffWriter struct.
-pub struct ZffWriter<R: Read> {
+pub struct ZffWriter<R: Read, C: Read + Seek> {
     object_encoder: Vec<ObjectEncoder<R>>,
 	current_object_encoder: ObjectEncoder<R>, //the current object encoder
     /// The field target_segment_size will be ignored.
-    optional_parameters: ZffCreationParameters,
+    optional_parameters: ZffCreationParameters<C>,
     in_progress_data: ZffWriterInProgressData,
     read_state: ReadState,
     segmentation_state: SegmentationState,
     output: ZffFilesOutput,
 }
 
-impl<R: Read> ZffWriter<R> {
+impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
     /// Returns a new ZffWriter with the given values.
     pub fn with_data(
         physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
 		hash_types: Vec<HashType>,
-        params: ZffCreationParameters,
+        params: ZffCreationParameters<C>,
         output: ZffFilesOutput,
     ) -> Result<Self> {
         setup_container(physical_objects, logical_objects, hash_types, params, output)
@@ -372,9 +372,9 @@ impl<R: Read> ZffWriter<R> {
     }
 
     /// checks if the appropriate object has an encryption header and encrypts the chunkmap if necessary.
-    fn encode_chunkmap<C>(&self, chunkmap: &C, last_chunk_no: u64) -> Result<Vec<u8>> 
+    fn encode_chunkmap<M>(&self, chunkmap: &M, last_chunk_no: u64) -> Result<Vec<u8>> 
     where
-        C: ChunkMap + HeaderCoding,
+        M: ChunkMap + HeaderCoding,
     {
         if let Some(encryption_header) = &self.current_object_encoder.get_obj_header().encryption_header {
             let key = encryption_header.get_encryption_key_ref().unwrap(); //unwrap should be safe here - I don't know how we would encrypt all the other stuff, without knowing the key. :D
@@ -470,7 +470,7 @@ impl<R: Read> ZffWriter<R> {
 
 }
 
-impl<R: Read> Read for ZffWriter<R> {
+impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut bytes_written_to_buffer = 0; // the number of bytes which are written to the current buffer,
 
@@ -911,7 +911,7 @@ impl<R: Read> Read for ZffWriter<R> {
                                 let data = match self.current_object_encoder.get_next_data(
                                     self.in_progress_data.bytes_read.current_segment,
                                     self.current_segment_no(),
-                                    self.optional_parameters.deduplication_chunkmap.as_mut()) {
+                                    self.optional_parameters.deduplication_metadata.as_mut()) {
                                         Ok(data) => data,
                                         Err(e) => match e.get_kind() {
                                             ZffErrorKind::ReadEOF => {
@@ -1142,12 +1142,12 @@ impl<R: Read> Read for ZffWriter<R> {
     }
 }
 
-fn setup_container<R: Read>(
+fn setup_container<R: Read, C: Read + Seek>(
     physical_objects: HashMap<ObjectHeader, R>,
     logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>,
     hash_types: Vec<HashType>,
-    params: ZffCreationParameters,
-    output: ZffFilesOutput) -> Result<ZffWriter<R>> {
+    params: ZffCreationParameters<C>,
+    output: ZffFilesOutput) -> Result<ZffWriter<R, C>> {
     let mut physical_objects = physical_objects;
     let mut logical_objects = logical_objects;
 
@@ -1266,7 +1266,7 @@ fn setup_container<R: Read>(
     })
 }
 
-fn build_in_progress_data(params: &ZffCreationParameters) -> ZffWriterInProgressData {
+fn build_in_progress_data<C: Read + Seek>(params: &ZffCreationParameters<C>) -> ZffWriterInProgressData {
     let mut in_progress_data = ZffWriterInProgressData::new();
     in_progress_data.main_footer.description_notes = params.description_notes.clone();
 

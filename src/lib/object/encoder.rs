@@ -1,5 +1,5 @@
 // - STD
-use std::io::{Read, Cursor};
+use std::io::{Read, Cursor, Seek};
 use std::path::PathBuf;
 use std::fs::File;
 use std::collections::HashMap;
@@ -39,7 +39,7 @@ use crate::{
 		FileHeader,
 		FileType,
 		EncryptionInformation,
-		DeduplicationChunkMap,
+		DeduplicationMetadata,
 	},
 	footer::{ObjectFooterPhysical, ObjectFooterLogical},
 	FileEncoder,
@@ -119,15 +119,15 @@ impl<R: Read> ObjectEncoder<R> {
 	}
 
 	/// returns the next data.
-	pub fn get_next_data(
+	pub fn get_next_data<D: Read + Seek>(
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64, 
-		deduplication_map: Option<&mut DeduplicationChunkMap>
+		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>
 		) -> Result<PreparedData> {
 		match self {
-			ObjectEncoder::Physical(obj) => obj.get_next_chunk(deduplication_map),
-			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_map),
+			ObjectEncoder::Physical(obj) => obj.get_next_chunk(deduplication_metadata),
+			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_metadata),
 		}
 	}
 
@@ -226,13 +226,13 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 
 	/// Returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
-	pub fn get_next_chunk(
+	pub fn get_next_chunk<D: Read + Seek>(
 		&mut self,
-		deduplication_map: Option<&mut DeduplicationChunkMap>,
+		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
 		) -> Result<PreparedData> {
 			
 		// checks and adds a deduplication thread to the internal thread manager (check is included in the add_deduplication_thread method)
-		if deduplication_map.is_some() {
+		if deduplication_metadata.is_some() {
 			self.encoding_thread_pool_manager.hashing_threads.add_deduplication_thread();
 		};
 
@@ -261,7 +261,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			self.current_chunk_number,
 			buffered_chunk.bytes_read,
 			chunk_size as u64,
-			deduplication_map,
+			deduplication_metadata,
 			encryption_key,
 			encryption_algorithm,
 			false, // there is no empty file flag for a physical object
@@ -521,11 +521,11 @@ impl LogicalObjectEncoder {
 
 	/// Returns the next encoded data - an encoded [FileHeader], an encoded file chunk or an encoded [FileFooter](crate::footer::FileFooter).
 	/// This method will increment the self.current_chunk_number automatically.
-	pub fn get_next_data(
+	pub fn get_next_data<D: Read + Seek>(
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64,
-		deduplication_map: Option<&mut DeduplicationChunkMap>) -> Result<PreparedData> {
+		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>) -> Result<PreparedData> {
 		match self.current_file_encoder {
 			Some(ref mut file_encoder) => {
 				// return file header
@@ -541,7 +541,7 @@ impl LogicalObjectEncoder {
 				
 				// return next chunk
 				if !self.empty_file_eof {
-					match file_encoder.get_next_chunk(deduplication_map) {
+					match file_encoder.get_next_chunk(deduplication_metadata) {
 						Ok(data) => {
 							self.current_chunk_number += 1;
 							if data.flags().empty_file {

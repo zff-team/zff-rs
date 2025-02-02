@@ -5,7 +5,7 @@ use std::sync::{
 };
 use std::collections::HashMap;
 use std::thread::{self};
-use std::io::copy as io_copy;
+use std::io::{copy as io_copy, Read, Seek};
 
 // - modules
 mod encoder; 
@@ -23,7 +23,7 @@ use crate::{
     CompressionAlgorithm,
 	PreparedChunk,
     io::{buffer_chunk, check_same_byte},
-	header::{ChunkFlags, DeduplicationChunkMap},
+	header::{ChunkFlags, DeduplicationMetadata},
 	error::{ZffError, ZffErrorKind},
 	encryption::{Encryption, EncryptionAlgorithm},
 	ChunkContent,
@@ -472,12 +472,12 @@ impl SameBytesThread {
 }
 
 /// creates a chunk by using the given data and the given chunk size.
-pub(crate) fn chunking(
+pub(crate) fn chunking<R: Read + Seek>(
 	encoding_thread_pool_manager: &mut EncodingThreadPoolManager,
 	current_chunk_number: u64,
 	samebyte_checklen_value: u64,
 	chunk_size: u64, // target chunk size,
-	deduplication_map: Option<&mut DeduplicationChunkMap>,
+	deduplication_metadata: Option<&mut DeduplicationMetadata<R>>,
 	encryption_key: Option<&Vec<u8>>,
 	encryption_algorithm: Option<&EncryptionAlgorithm>,
 	empty_file_flag: bool,
@@ -498,14 +498,14 @@ pub(crate) fn chunking(
 		flags.same_bytes = true;
 		let first_byte = encoding_thread_pool_manager.data.read().unwrap()[0];
 		ChunkContent::SameBytes(first_byte)
-	} else if let Some(deduplication_map) = deduplication_map {
+	} else if let Some(deduplication_metadata) = deduplication_metadata {
 		// unwrap should be safe here, because we have already testet this before.
 		let b3h = encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
-		if let Ok(chunk_no) = deduplication_map.get_chunk_number(*b3h) {
+		if let Ok(chunk_no) = deduplication_metadata.deduplication_map.get_chunk_number(*b3h) {
 			flags.duplicate = true;
 			ChunkContent::Duplicate(chunk_no)
 		} else {
-			deduplication_map.append_entry(current_chunk_number, *b3h)?;
+			deduplication_metadata.deduplication_map.append_entry(current_chunk_number, *b3h)?;
 			ChunkContent::Raw(Vec::new())
 		}
 	} else {

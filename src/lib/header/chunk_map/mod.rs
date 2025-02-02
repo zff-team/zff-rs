@@ -3,7 +3,7 @@ use core::borrow::Borrow;
 use std::path::Path;
 use std::cmp::PartialEq;
 use std::collections::{HashMap, BTreeMap};
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Seek};
 use std::fmt;
 
 // - modules

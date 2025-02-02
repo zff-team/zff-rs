@@ -7,7 +7,7 @@ pub mod zffreader;
 pub mod zffwriter;
 
 // - STD
-use std::io::{Read, copy as io_copy};
+use std::io::{Read, copy as io_copy, Seek};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::fs::{Metadata, read_link, File, read_dir};
@@ -25,7 +25,7 @@ use std::os::windows::fs::MetadataExt;
 // - internal
 use crate::{
     Result,
-    header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationChunkMap, MetadataExtendedValue},
+    header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationMetadata, MetadataExtendedValue},
     footer::{MainFooter, SegmentFooter},
     ZffError,
     ZffErrorKind,
@@ -84,7 +84,7 @@ impl ZffExtenderParameter {
 /// This struct contains optional, additional parameter for the [ZffWriter](zffwriter::ZffWriter).
 /// The [ZffWriter](zffwriter::ZffWriter) will use this parameter to create a new zff container.
 #[derive(Default, Debug)]
-pub struct ZffCreationParameters {
+pub struct ZffCreationParameters<R: Read + Seek> {
     /// If given, the appropriate data will be signed by the given [SigningKey].
 	pub signature_key: Option<SigningKey>,
 	/// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.
@@ -95,7 +95,7 @@ pub struct ZffCreationParameters {
 	/// If set, the chunkmaps will not grow larger than the given size. Otherwise, the default size 32k will be used.
 	pub chunkmap_size: Option<u64>, //default is 32k
 	/// Optional [DeduplicationChunkMap] to ensure a chunk deduplication (and safe some disk space).
-	pub deduplication_chunkmap: Option<DeduplicationChunkMap>,
+	pub deduplication_metadata: Option<DeduplicationMetadata<R>>,
 	/// Will be used as a unique identifier, to assign each segment to the appropriate zff container.
 	/// If the [ZffWriter](zffwriter::ZffWriter) will be extend an existing Zff container, this value will be ignored.
 	pub unique_identifier: u64

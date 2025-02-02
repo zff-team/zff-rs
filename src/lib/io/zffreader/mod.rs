@@ -361,6 +361,15 @@ impl<R: Read + Seek> ZffReader<R> {
 		*chunk_number
 	}
 
+	/// Returns the Data of the given chunk no
+	/// # Error
+	/// - If the object is encrypted, it will return an error.
+	/// - If the chunk number is out of range, it will return an error.
+	pub fn chunk_data(&self, chunk_no: u64) -> Result<Vec<u8>> {
+		//TODO
+		unimplemented!()
+	}
+
 	/// Decrypts an encrypted initialized object (and re-initialize/replaces the appropriate object directly).
 	/// # Error
 	/// May fail due to various conditions:
