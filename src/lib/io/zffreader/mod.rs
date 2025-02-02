@@ -892,12 +892,7 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 				Some(object_reader) => object_reader,
 				None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 			};
-			match object_reader {
-				ZffObjectReader::Physical(reader) => reader.read(buffer),
-				ZffObjectReader::Logical(reader) => reader.read(buffer),
-				ZffObjectReader::Encrypted(_) => Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-				ZffObjectReader::Virtual(reader) => reader.read(buffer),
-			}
+			object_reader.read(buffer)
 		}
 	}
 }

@@ -40,6 +40,18 @@ pub(crate) enum ZffObjectReader<R: Read + Seek> {
 	Encrypted(Box<ZffObjectReaderEncrypted<R>>),
 }
 
+impl<R: Read + Seek> Read for ZffObjectReader<R> {
+	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
+		match self {
+			ZffObjectReader::Physical(reader) => reader.read(buf),
+			ZffObjectReader::Logical(reader) => reader.read(buf),
+			ZffObjectReader::Virtual(reader) => reader.read(buf),
+  			ZffObjectReader::Encrypted(_) => Err(
+				std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+		}
+	}
+}
+
 impl<R: Read + Seek> Seek for ZffObjectReader<R> {
 	fn seek(&mut self, seek_from: std::io::SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		match self {
