@@ -15,14 +15,8 @@ use crate::{
 	KDFScheme,
 	PBEScheme,
 	encryption::*,
+	constants::*,
 };
-
-use crate::{
-	HEADER_IDENTIFIER_ENCRYPTION_HEADER,
-	ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM,
-	DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER,
-};
-
 // - external
 #[cfg(feature = "serde")]
 use serde::{
@@ -56,10 +50,10 @@ impl TryFrom<ObjectHeader> for EncryptionInformation {
 	type Error = ZffError;
 	fn try_from(obj_header: ObjectHeader) -> Result<Self> {
 		match obj_header.encryption_header {
-			None => Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+			None => Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			Some(enc_header) => {
 				match enc_header.get_encryption_key() {
-					None => Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+					None => Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 					Some(key) => Ok(EncryptionInformation {
 						encryption_key: key,
 						algorithm: enc_header.algorithm
@@ -74,10 +68,10 @@ impl TryFrom<&ObjectHeader> for EncryptionInformation {
 	type Error = ZffError;
 	fn try_from(obj_header: &ObjectHeader) -> Result<Self> {
 		match obj_header.encryption_header {
-			None => Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+			None => Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			Some(ref enc_header) => {
 				match enc_header.get_encryption_key() {
-					None => Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+					None => Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 					Some(key) => Ok(EncryptionInformation {
 						encryption_key: key,
 						algorithm: enc_header.algorithm.clone()
@@ -177,7 +171,7 @@ impl EncryptionHeader {
 							),
 					}
 				}
-				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, ""))
+				_ => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME))
 			},
 			KDFScheme::Scrypt => match &self.pbe_header.kdf_parameters {
 				KDFParameters::ScryptParameters(parameters) => {
@@ -206,7 +200,7 @@ impl EncryptionHeader {
 							),
 					}
 				},
-				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
+				_ => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME)),
 			},
 			KDFScheme::Argon2id => match &self.pbe_header.kdf_parameters {
 				KDFParameters::Argon2idParameters(parameters) => {
@@ -235,7 +229,7 @@ impl EncryptionHeader {
 							),
 					}
 				},
-				_ => Err(ZffError::new(ZffErrorKind::MalformedHeader, "")),
+				_ => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME)),
 			},
 		}?;
 		self.decrypted_encryption_key = Some(decryption_key.clone());
@@ -270,7 +264,7 @@ impl HeaderCoding for EncryptionHeader {
 			0 => EncryptionAlgorithm::AES128GCM,
 			1 => EncryptionAlgorithm::AES256GCM,
 			2 => EncryptionAlgorithm::CHACHA20POLY1305,
-			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
+			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM)),
 		};
 		let key_length = u64::decode_directly(&mut cursor)? as usize;
 		let mut encryption_key = vec![0u8; key_length];

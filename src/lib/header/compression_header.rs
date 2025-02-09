@@ -7,6 +7,7 @@ use crate::constants::DEFAULT_HEADER_VERSION_COMPRESSION_HEADER;
 use crate::{
 	Result,
 	ZffError,
+	ZffErrorKind,
 	HeaderCoding,
 	ValueEncoder,
 	ValueDecoder,
@@ -76,7 +77,7 @@ impl HeaderCoding for CompressionHeader {
 			Ok(0) => CompressionAlgorithm::None,
 			Ok(1) => CompressionAlgorithm::Zstd,
 			Ok(2) => CompressionAlgorithm::Lz4,
-			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM))
+			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM))
 		};
 		let level = u8::decode_directly(&mut cursor)?;
 		let threshold = f32::decode_directly(&mut cursor)?;

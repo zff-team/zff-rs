@@ -14,18 +14,7 @@ use crate::{
 	ValueDecoder,
 	ZffError,
 	ZffErrorKind,
-};
-
-use crate::{
-	DEFAULT_HEADER_VERSION_OBJECT_HEADER,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
-	ERROR_HEADER_DECODER_HEADER_LENGTH,
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	HEADER_IDENTIFIER_OBJECT_HEADER,
-	ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE,
-	ENCRYPT_OBJECT_FLAG_VALUE,
-	SIGN_HASH_FLAG_VALUE,
+	constants::*,
 };
 
 use crate::header::{
@@ -143,7 +132,9 @@ impl ObjectHeader {
 		K: AsRef<[u8]>
 	{
 		let encryption_header = match &self.encryption_header {
-			None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+			None => return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			Some(header) => {
 				header
 			}
@@ -188,7 +179,9 @@ impl ObjectHeader {
 		P: AsRef<[u8]>,
 	{
 		if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+			return Err(ZffError::new(
+				ZffErrorKind::Invalid, 
+				ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		};
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
@@ -198,7 +191,9 @@ impl ObjectHeader {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		if !flags.encryption {
-			return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, ""));
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_MISSING_ENCRYPTION_HEADER_KEY));
 		}
 		let mut encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
@@ -233,7 +228,9 @@ impl ObjectHeader {
 		let object_type = match u8::decode_directly(inner_content)? {
 			0 => ObjectType::Physical,
 			1 => ObjectType::Logical,
-			value => return Err(ZffError::new(ZffErrorKind::InvalidFlagValue, format!("{ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE}{value}"))),
+			value => return Err(ZffError::new(
+				ZffErrorKind::Invalid, 
+				format!("{ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE}{value}"))),
 		};
 		let inner_content = (
 			chunk_size,
@@ -306,7 +303,9 @@ impl HeaderCoding for ObjectHeader {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		if flags.encryption {
-			return Err(ZffError::new(ZffErrorKind::MissingPassword, ""));
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError,
+				ERROR_MISSING_ENCRYPTION_HEADER_KEY));
 		}
 		let (chunk_size,
 			compression_header,
@@ -405,7 +404,7 @@ impl EncryptedObjectHeader {
 	pub fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {
 			Ok(value) => Ok(value),
-			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+			Err(_) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
 	}
 
@@ -471,12 +470,14 @@ impl HeaderCoding for EncryptedObjectHeader {
 		let mut cursor = Cursor::new(data);
 		let header_version = u8::decode_directly(&mut cursor)?;
 		if header_version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, header_version.to_string()))
+			return Err(ZffError::new(
+				ZffErrorKind::Unsupported, 
+				format!("{ERROR_UNSUPPORTED_VERSION}{header_version}")))
 		};
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let flags = ObjectFlags::from(u8::decode_directly(&mut cursor)?);
 		if !flags.encryption {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeError, ""));
+			return Err(ZffError::new(ZffErrorKind::EncodingError, ""));
 		}
 		let encryption_header = EncryptionHeader::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;

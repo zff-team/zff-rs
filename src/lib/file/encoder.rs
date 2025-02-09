@@ -6,6 +6,7 @@ use std::cell::RefCell;
 
 use std::time::SystemTime;
 
+use crate::header::ChunkFlags;
 use crate::io::BufferedChunk;
 use crate::PreparedChunk;
 // - internal
@@ -15,11 +16,10 @@ use crate::{
 };
 use crate::{
 	Result,
+	EncodingState,
 	io::buffer_chunk,
 	HeaderCoding,
 	ValueEncoder,
-	ZffError,
-	ZffErrorKind,
 	EncodingThreadPoolManager,
 	Signature,
 	chunking,
@@ -138,10 +138,9 @@ impl FileEncoder {
 	pub fn get_next_chunk<D: Read + Seek>(
 		&mut self, 
 		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
-		) -> Result<PreparedChunk> {
+		) -> Result<EncodingState> {
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
-		let mut empty_file_flag = false;
 
 		let buffered_chunk = match &self.filetype_encoding_information {
 			FileTypeEncodingInformation::Directory(directory_children) => {
@@ -214,10 +213,13 @@ impl FileEncoder {
 
 		if buffered_chunk.buffer.is_empty() && self.read_bytes_underlying_data != 0 || eof {
 			//this case is the normal "file reader reached EOF".
-			return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+			return Ok(EncodingState::ReadEOF);
 		} else if buffered_chunk.buffer.is_empty() && self.read_bytes_underlying_data == 0 {
 			//this case is the "file is empty".
-			empty_file_flag = true;
+			let mut flags = ChunkFlags::default();
+			flags.empty_file = true;
+			let prepared_chunk = PreparedChunk::new(Vec::new(), flags, 0, 0, None, None);
+			return Ok(EncodingState::PreparedChunk(prepared_chunk))
 		};
 
 		// Needed for the same byte check
@@ -238,11 +240,10 @@ impl FileEncoder {
 			deduplication_metadata,
 			encryption_key,
 			encryption_algorithm,
-			empty_file_flag
 		)?;
 
 		self.current_chunk_number += 1;
-	    Ok(chunk)
+	    Ok(EncodingState::PreparedChunk(chunk))
 	}
 
 	/// returns the appropriate encoded [FileFooter].
@@ -282,67 +283,3 @@ impl FileEncoder {
 	    }
 	}
 }
-
-/*/// this implement Read for [FileEncoder]. This implementation should only used for a single zff segment file (e.g. in http streams).
-/// State: completly untested.
-impl Read for FileEncoder {
-	fn read(&mut self, buf: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-		let mut read_bytes = 0;
-		//read encoded header, if there are remaining bytes to read.
-        if let remaining_bytes @ 1.. = self.encoded_header_remaining_bytes {
-            let mut inner_read_bytes = 0;
-            let mut inner_cursor = Cursor::new(self.get_encoded_header());
-            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
-            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-            self.encoded_header_remaining_bytes -= inner_read_bytes;
-            read_bytes += inner_read_bytes;
-        }
-        loop {
-        	if read_bytes == buf.len() {
-        		self.encoded_footer = match self.get_encoded_footer() {
-        			Ok(footer) => footer,
-        			Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-        		};
-        		self.encoded_footer_remaining_bytes = self.encoded_footer.len();
-				break;
-			};
-        	match &self.current_chunked_data {
-        		Some(data) => {
-        			let mut inner_read_bytes = 0;
-        			let mut inner_cursor = Cursor::new(&data);
-        			inner_cursor.seek(SeekFrom::End(-(self.current_chunked_data_remaining_bytes as i64)))?;
-        			inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-        			self.current_chunked_data_remaining_bytes -= inner_read_bytes;
-        			if self.current_chunked_data_remaining_bytes < 1 {
-        				self.current_chunked_data = None;
-        			}
-        			read_bytes += inner_read_bytes;
-        		},
-        		None => {
-        			match self.get_next_chunk() {
-        				Ok(chunk) => {
-        					self.current_chunked_data_remaining_bytes = chunk.len();
-        					self.current_chunked_data = Some(chunk);
-        				},
-        				Err(e) => match e.unwrap_kind() {
-        					ZffErrorKind::ReadEOF => break,
-        					ZffErrorKind::NotAvailableForFileType => break,
-        					ZffErrorKind::IoError(ioe) => return Err(ioe),
-        					e => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
-        				}
-        			}
-        		}
-        	}
-        }
-        //read encoded footer, if there are remaining bytes to read.
-        if let remaining_bytes @ 1.. = self.encoded_footer_remaining_bytes {
-            let mut inner_read_bytes = 0;
-            let mut inner_cursor = Cursor::new(&self.encoded_footer);
-            inner_cursor.seek(SeekFrom::End(-(remaining_bytes as i64)))?;
-            inner_read_bytes += inner_cursor.read(&mut buf[read_bytes..])?;
-            self.encoded_footer_remaining_bytes -= inner_read_bytes;
-            read_bytes += inner_read_bytes;
-        }
-        Ok(read_bytes)
-	}
-}*/

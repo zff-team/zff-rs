@@ -12,6 +12,7 @@ use crate::{
     Segment,
     HeaderCoding,
     ValueDecoder,
+    EncodingState,
     file_extension_next_value,
 };
 
@@ -59,7 +60,7 @@ enum PreparedDataQueueState {
 }
 
 #[derive(Debug, Clone)]
-enum SegmentationState {
+enum SegmentationInnerState {
     Full(u64), // current segment number | The current segment is full
     Partial(u64), // current segment number | The current segment is not full yet
     Finished(u64), // current segment number  | The current segment is finished (you should switch to the next segment)
@@ -67,9 +68,19 @@ enum SegmentationState {
     FinishedLastSegment(u64), // the last segment is finished
 }
 
-impl Default for SegmentationState {
+/// The current segmentation state, returned by next_segment()
+pub enum SegmentationState {
+    /// The segmentation is currently unfinished and the read progress can be proceeded.
+    SegmentNotFinished,
+    /// The segmentation is finished and the next segment file should be used.
+    SegmentFinished,
+    /// The last segment is finished.
+    LastSegmentFinished,
+}
+
+impl Default for SegmentationInnerState {
     fn default() -> Self {
-        SegmentationState::Partial(INITIAL_SEGMENT_NUMBER)
+        SegmentationInnerState::Partial(INITIAL_SEGMENT_NUMBER)
     }
 }
 
@@ -179,7 +190,7 @@ pub struct ZffWriter<R: Read, C: Read + Seek> {
     optional_parameters: ZffCreationParameters<C>,
     in_progress_data: ZffWriterInProgressData,
     read_state: ReadState,
-    segmentation_state: SegmentationState,
+    segmentation_state: SegmentationInnerState,
     output: ZffFilesOutput,
 }
 
@@ -237,13 +248,13 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
     }
 
     /// sets the next segment.
-    pub fn next_segment(&mut self) -> Result<()> {
+    pub fn next_segment(&mut self) -> SegmentationState {
         // check if the current segment is already finished
         match self.segmentation_state {
-            SegmentationState::Partial(_) => return Err(ZffError::new(ZffErrorKind::SegmentNotFinished, "")),
-            SegmentationState::Full(_) => return Err(ZffError::new(ZffErrorKind::SegmentNotFinished, "")),
-            SegmentationState::Finished(segment_number) => {
-                    self.segmentation_state = SegmentationState::Partial(segment_number+1);
+            SegmentationInnerState::Partial(_) => SegmentationState::SegmentNotFinished,
+            SegmentationInnerState::Full(_) => SegmentationState::SegmentNotFinished,
+            SegmentationInnerState::Finished(segment_number) => {
+                    self.segmentation_state = SegmentationInnerState::Partial(segment_number+1);
                     self.read_state = ReadState::SegmentHeader;
                     self.in_progress_data.encoded_segment_header_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data.encoded_segment_header = SegmentHeader::new(
@@ -254,18 +265,18 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
                     self.in_progress_data.segment_footer = SegmentFooter::default();
                     self.in_progress_data.segment_footer.first_chunk_number = self.current_object_encoder.current_chunk_number();
                     self.in_progress_data.bytes_read.clean();
+                    SegmentationState::SegmentFinished
                 },
-            SegmentationState::FullLastSegment(_) => return Err(ZffError::new(ZffErrorKind::SegmentNotFinished, "")),
-            SegmentationState::FinishedLastSegment(_) => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
+            SegmentationInnerState::FullLastSegment(_) => SegmentationState::SegmentNotFinished,
+            SegmentationInnerState::FinishedLastSegment(_) => SegmentationState::LastSegmentFinished,
         }
-        Ok(())
     }
 
     /// Generates the files for the current state of the ZFF container.
     pub fn generate_files(&mut self) -> Result<()> {
         let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
         let mut initial_extend =  match &self.output {
-            ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::InvalidOption, "")), //TODO: Define other kind of error here
+            ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::Invalid, "")), //TODO: Define other kind of error here?
             ZffFilesOutput::NewContainer(_) => false,
             ZffFilesOutput::ExtendContainer(_) => true,
         };
@@ -308,12 +319,10 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
             }
 
             match self.next_segment() {
-                Ok(_) => {},
-                Err(e) => match e.get_kind() {
-                    ZffErrorKind::NoObjectsLeft => return Ok(()),
-                     _ => return Err(e),
-                }
-            }
+                SegmentationState::LastSegmentFinished => return Ok(()),
+                SegmentationState::SegmentNotFinished => unreachable!(),
+                SegmentationState::SegmentFinished => ()
+            };
         }
     }
 
@@ -460,11 +469,11 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
 
     fn current_segment_no(&self) -> u64 {
         match self.segmentation_state {
-            SegmentationState::Partial(segment_number) => segment_number,
-            SegmentationState::Full(segment_number) => segment_number,
-            SegmentationState::Finished(segment_number) => segment_number,
-            SegmentationState::FullLastSegment(segment_number) => segment_number,
-            SegmentationState::FinishedLastSegment(segment_number) => segment_number,
+            SegmentationInnerState::Partial(segment_number) => segment_number,
+            SegmentationInnerState::Full(segment_number) => segment_number,
+            SegmentationInnerState::Finished(segment_number) => segment_number,
+            SegmentationInnerState::FullLastSegment(segment_number) => segment_number,
+            SegmentationInnerState::FinishedLastSegment(segment_number) => segment_number,
         }
     }
 
@@ -479,10 +488,10 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
         'read_loop: loop {
             match self.segmentation_state {
-                SegmentationState::Finished(_) => {
+                SegmentationInnerState::Finished(_) => {
                     return Ok(bytes_written_to_buffer);
                 },
-                SegmentationState::FinishedLastSegment(_) => {
+                SegmentationInnerState::FinishedLastSegment(_) => {
                     return Ok(bytes_written_to_buffer);
                 },
                 _ => {},
@@ -554,14 +563,14 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
                     // switch to the next state
                     match self.segmentation_state {
-                        SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => {
+                        SegmentationInnerState::Partial(_) => self.read_state = ReadState::Chunking,
+                        SegmentationInnerState::Full(_) => {
                             self.read_state = ReadState::ChunkSizeMap;
                             self.flush_chunkmap(ChunkMapType::SizeMap)?;
                         },
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => unreachable!(),
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -581,14 +590,14 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
                     // switch to the next state
                     match self.segmentation_state {
-                        SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => {
+                        SegmentationInnerState::Partial(_) => self.read_state = ReadState::Chunking,
+                        SegmentationInnerState::Full(_) => {
                             self.read_state = ReadState::ChunkFlagsMap;
                             self.flush_chunkmap(ChunkMapType::FlagsMap)?;
                         },
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => unreachable!(),
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -608,14 +617,14 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
                     // switch to the next state
                     match self.segmentation_state {
-                        SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => {
+                        SegmentationInnerState::Partial(_) => self.read_state = ReadState::Chunking,
+                        SegmentationInnerState::Full(_) => {
                             self.read_state = ReadState::ChunkXxHashMap;
                             self.flush_chunkmap(ChunkMapType::XxHashMap)?;
                         },
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => unreachable!(),
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -635,14 +644,14 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
                     // switch to the next state
                     match self.segmentation_state {
-                        SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => {
+                        SegmentationInnerState::Partial(_) => self.read_state = ReadState::Chunking,
+                        SegmentationInnerState::Full(_) => {
                             self.read_state = ReadState::ChunkSamebytesMap;
                             self.flush_chunkmap(ChunkMapType::SamebytesMap)?;
                         },
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => unreachable!(),
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -661,14 +670,14 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                     };
                     // switch to the next state
                     match self.segmentation_state {
-                        SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => {
+                        SegmentationInnerState::Partial(_) => self.read_state = ReadState::Chunking,
+                        SegmentationInnerState::Full(_) => {
                             self.read_state = ReadState::ChunkDeduplicationMap;
                             self.flush_chunkmap(ChunkMapType::DeduplicationMap)?;
                         },
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => unreachable!(),
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
                 },
 
@@ -688,11 +697,11 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
                     // switch to the next state
                     match self.segmentation_state {
-                        SegmentationState::Partial(_) => self.read_state = ReadState::Chunking,
-                        SegmentationState::Full(_) => self.read_state = ReadState::SegmentFooter,
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => unreachable!(),
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Partial(_) => self.read_state = ReadState::Chunking,
+                        SegmentationInnerState::Full(_) => self.read_state = ReadState::SegmentFooter,
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
 
                     match self.read_state {
@@ -863,7 +872,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                     if self.in_progress_data.bytes_read.current_segment >= self.optional_parameters.target_segment_size.unwrap_or(u64::MAX) {
                         // set the appropriate segmentation state to full (with the next segment number)
                         self.segmentation_state = match self.segmentation_state {
-                            SegmentationState::Partial(segment_number) => SegmentationState::Full(segment_number),
+                            SegmentationInnerState::Partial(segment_number) => SegmentationInnerState::Full(segment_number),
                             _ => unreachable!(),
                         };
                         // flush the first chunkmap and set the appropriate read state
@@ -911,20 +920,16 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                                 let data = match self.current_object_encoder.get_next_data(
                                     self.in_progress_data.bytes_read.current_segment,
                                     self.current_segment_no(),
-                                    self.optional_parameters.deduplication_metadata.as_mut()) {
-                                        Ok(data) => data,
-                                        Err(e) => match e.get_kind() {
-                                            ZffErrorKind::ReadEOF => {
-                                                // write the chunk offset map even there is some space left in map to ensure
-                                                // that this map will be written if there is no next object.
-                                                self.flush_chunkmap(ChunkMapType::OffsetMap)?;
-                                                self.read_state = ReadState::LastChunkOffsetMapOfObject;
-                                                break;
-                                            },
-                                            _ => {
-                                                return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-                                            }
-                                        }
+                                    self.optional_parameters.deduplication_metadata.as_mut())? {
+                                        EncodingState::PreparedData(data) => data,
+                                        EncodingState::ReadEOF => {
+                                            // write the chunk offset map even there is some space left in map to ensure
+                                            // that this map will be written if there is no next object.
+                                            self.flush_chunkmap(ChunkMapType::OffsetMap)?;
+                                            self.read_state = ReadState::LastChunkOffsetMapOfObject;
+                                            break;
+                                        },
+                                        EncodingState::PreparedChunk(_) => unreachable!(),
                                 };
 
                                 match data {
@@ -1082,7 +1087,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                                 self.in_progress_data.main_footer.encode_directly().len() as u64);
                             self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
                             self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
-                            self.segmentation_state = SegmentationState::FullLastSegment(self.current_segment_no());
+                            self.segmentation_state = SegmentationInnerState::FullLastSegment(self.current_segment_no());
                             self.read_state = ReadState::SegmentFooter;
                             continue;
                         }
@@ -1115,11 +1120,11 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                     self.in_progress_data.encoded_main_footer_read_bytes = ReadBytes::NotRead;
                     
                     match self.segmentation_state {
-                        SegmentationState::Full(segment_number) => self.segmentation_state = SegmentationState::Finished(segment_number),
-                        SegmentationState::Partial(_) => unreachable!(),
-                        SegmentationState::Finished(_) => unreachable!(),
-                        SegmentationState::FullLastSegment(_) => self.read_state = ReadState::MainFooter,
-                        SegmentationState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Full(segment_number) => self.segmentation_state = SegmentationInnerState::Finished(segment_number),
+                        SegmentationInnerState::Partial(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_) => unreachable!(),
+                        SegmentationInnerState::FullLastSegment(_) => self.read_state = ReadState::MainFooter,
+                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     }
                 },
                 ReadState::MainFooter => {
@@ -1133,7 +1138,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                         &mut bytes_written_to_buffer)?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
                     if bytes_written_to_buffer < buf_len {
-                        self.segmentation_state = SegmentationState::FinishedLastSegment(self.current_segment_no());
+                        self.segmentation_state = SegmentationInnerState::FinishedLastSegment(self.current_segment_no());
                     }
                     return Ok(bytes_written_to_buffer);
                 }
@@ -1163,15 +1168,15 @@ fn setup_container<R: Read, C: Read + Seek>(
                     let current_segment = ext_file.to_path_buf();
                     
                     let segment = Segment::new_from_reader(&raw_segment)?;
-                    //self.segmentation_state = SegmentationState::Partial(segment.header().segment_number);
+                    //self.segmentation_state = SegmentationInnerState::Partial(segment.header().segment_number);
                     let segment_number = segment.header().segment_number;
                     let initial_chunk_number = match segment.footer().chunk_offset_map_table.keys().max() {
                         Some(x) => *x + 1,
-                        None => return Err(ZffError::new(ZffErrorKind::NoChunksLeft, ""))
+                        None => return Err(ZffError::new(ZffErrorKind::NoDataLeft, "")) // no chunks left
                     };
                     let next_object_no = match mf.object_footer().keys().max() {
                         Some(x) => *x + 1,
-                        None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
+                        None => return Err(ZffError::new(ZffErrorKind::NoDataLeft, "")), // no objects left
                     };
                     let segment_footer = segment.footer().clone();
     
@@ -1224,10 +1229,10 @@ fn setup_container<R: Read, C: Read + Seek>(
     object_encoder.reverse();
     let mut current_object_encoder = match object_encoder.pop() {
         Some(creator_obj_encoder) => creator_obj_encoder,
-        None => return Err(ZffError::new(ZffErrorKind::NoObjectsLeft, "")),
+        None => return Err(ZffError::new(ZffErrorKind::NoDataLeft, "")), // no objects left
     };
 
-    let mut segmentation_state = SegmentationState::default();
+    let mut segmentation_state = SegmentationInnerState::default();
 
     let mut in_progress_data = build_in_progress_data(&params);
     let mut output = output;
@@ -1247,7 +1252,7 @@ fn setup_container<R: Read, C: Read + Seek>(
         in_progress_data.segment_footer.add_object_header_offset(
             current_object_encoder.obj_number(),
             in_progress_data.bytes_read.current_segment);
-        segmentation_state = SegmentationState::Partial(extender_parameter.segment_number);
+        segmentation_state = SegmentationInnerState::Partial(extender_parameter.segment_number);
         in_progress_data.main_footer = extender_parameter.main_footer;
         output = ZffFilesOutput::ExtendContainer(vec![extender_parameter.current_segment]);
         in_progress_data.bytes_read.total = total_bytes_read;
@@ -1330,8 +1335,8 @@ fn decode_main_footer<R: Read + Seek>(raw_segment: &mut R) -> Result<MainFooter>
 			raw_segment.rewind()?;
 			Ok(mf)
 		},
-		Err(e) => match e.get_kind() {
-			ZffErrorKind::HeaderDecodeMismatchIdentifier => {
+		Err(e) => match e.kind_ref() {
+			ZffErrorKind::Invalid => {
 				raw_segment.rewind()?;
 				Err(e)
 			},

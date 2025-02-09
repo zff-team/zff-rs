@@ -14,14 +14,7 @@ use crate::{
 	ZffErrorKind,
 	Encryption,
 	EncryptionAlgorithm,
-	FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL,
-	FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL,
-	FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL,
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
-	ERROR_HEADER_DECODER_HEADER_LENGTH,
+	constants::*,
 };
 use crate::header::{
 	HashHeader,
@@ -89,7 +82,7 @@ impl ObjectFooter {
 	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {
 			Ok(value) => Ok(value),
-			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+			Err(_) => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
 	}
 
@@ -109,7 +102,7 @@ impl ObjectFooter {
 				data.read_exact(&mut content_buffer)?;
 				Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(content_buffer)?))
 			},
-			_ => Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
+			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
 	}
 
@@ -213,7 +206,7 @@ impl EncryptedObjectFooter {
 	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {
 			Ok(value) => Ok(value),
-			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+			Err(_) => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
 	}
 
@@ -233,7 +226,7 @@ impl EncryptedObjectFooter {
 				data.read_exact(&mut content_buffer)?;
 				Ok(EncryptedObjectFooter::Logical(EncryptedObjectFooterLogical::decode_content(content_buffer)?))
 			},
-			_ => Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
+			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
 	}
 

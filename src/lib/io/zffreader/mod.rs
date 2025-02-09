@@ -252,7 +252,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		
 		let main_footer = match main_footer {
 			Some(footer) => footer,
-			None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_MISSING_SEGMENT_MAIN_FOOTER)),
+			None => return Err(ZffError::new(ZffErrorKind::Missing, ERROR_MISSING_SEGMENT_MAIN_FOOTER)),
 		};
 
 		let metadata = Arc::new(Mutex::new(ZffReaderGeneralMetadata::new(segments, main_footer)));
@@ -277,7 +277,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		for (object_number, segment_number) in self.metadata.lock().unwrap().main_footer.object_header() {
 			let segment = match segments.get_mut(segment_number) {
 				Some(segment) => segment,
-				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, segment_number.to_string())),
+				None => return Err(ZffError::new(ZffErrorKind::Missing, segment_number.to_string())),
 			};
 			if let Ok(obj_header) = segment.read_object_header(*object_number) {
 				let obj_type = match obj_header.object_type {
@@ -317,7 +317,9 @@ impl<R: Read + Seek> ZffReader<R> {
 			self.active_object = object_number;
 			Ok(())
 		} else {
-			Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string()))
+			Err(ZffError::new(
+				ZffErrorKind::Missing,
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}")))
 		}
 	}
 
@@ -329,10 +331,14 @@ impl<R: Read + Seek> ZffReader<R> {
 		if let Some(object_reader) = self.object_reader.get_mut(&self.active_object) {
 			match object_reader {
 				ZffObjectReader::Logical(reader) => reader.set_active_file(filenumber),
-				_ => Err(ZffError::new(ZffErrorKind::MismatchObjectType, self.active_object.to_string()))
+				_ => Err(ZffError::new(
+					ZffErrorKind::Invalid,
+					 self.active_object.to_string()))
 			}
 		} else {
-			Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string()))
+			Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{}", self.active_object)))
 		}
 	}
 
@@ -380,11 +386,15 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn decrypt_object<P: AsRef<[u8]>>(&mut self, object_number: u64, decryption_password: P) -> Result<ObjectType> {
 		let object_reader = match self.object_reader.get_mut(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 		let decrypted_reader = match object_reader {
 			ZffObjectReader::Encrypted(reader) => reader.decrypt_with_password(decryption_password)?,
-			_ => return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, object_number.to_string()))
+			_ => return Err(ZffError::new(
+				ZffErrorKind::EncryptionError,
+				NO_ENCRYPTION_DETECTED))
 		};
 		let o_type = match decrypted_reader {
 			ZffObjectReader::Physical(_) => ObjectType::Physical,
@@ -471,7 +481,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		log::debug!("Preloading chunk offset map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
 		let enc_info = get_enc_info_from_obj_reader(obj_reader)?;
@@ -530,7 +542,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		log::debug!("Preloading chunk size map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
@@ -591,7 +605,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		log::debug!("Preloading chunk flags map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
@@ -652,7 +668,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		log::debug!("Preloading chunk xxhash map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
@@ -713,7 +731,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		log::debug!("Preloading chunk samebytes map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
@@ -774,7 +794,9 @@ impl<R: Read + Seek> ZffReader<R> {
 		log::debug!("Preloading chunk deduplication map for object {}", object_number);
 		let obj_reader = match self.object_reader.get(&object_number) {
 			Some(reader) => reader,
-			None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 
 		let chunk_numbers = get_chunks_of_unencrypted_object(&self.object_reader, object_number)?;
@@ -819,10 +841,12 @@ impl<R: Read + Seek> ZffReader<R> {
 			Some(ZffObjectReader::Logical(reader)) => {
 				Ok(reader.filemetadata()?)
 			},
-			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
-			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{}", self.active_object))),
 		}
 	}
 
@@ -835,10 +859,10 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn current_fileheader(&mut self) -> Result<FileHeader> {
 		match self.object_reader.get(&self.active_object) {
 			Some(ZffObjectReader::Logical(reader)) => reader.current_fileheader(),
-			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
-			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
+			None => Err(ZffError::new(ZffErrorKind::Missing, self.active_object.to_string())),
 		}
 	}
 
@@ -851,10 +875,10 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn current_filefooter(&mut self) -> Result<FileFooter> {
 		match self.object_reader.get(&self.active_object) {
 			Some(ZffObjectReader::Logical(reader)) => reader.current_filefooter(),
-			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
-			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::MismatchObjectType, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
+			None => Err(ZffError::new(ZffErrorKind::Missing, self.active_object.to_string())),
 		}
 	}
 
@@ -868,7 +892,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			ZffObjectReader::Physical(reader) => Ok(reader.object_header_ref()),
 			ZffObjectReader::Logical(reader) => Ok(reader.object_header_ref()),
 			ZffObjectReader::Virtual(reader) => Ok(reader.object_header_ref()),
-			ZffObjectReader::Encrypted(_) => Err(ZffError::new(ZffErrorKind::InvalidOption, ""))
+			ZffObjectReader::Encrypted(_) => Err(ZffError::new(ZffErrorKind::Invalid, ""))
 		}
 	}
 
@@ -882,14 +906,16 @@ impl<R: Read + Seek> ZffReader<R> {
 			ZffObjectReader::Physical(reader) => Ok(reader.object_footer()),
 			ZffObjectReader::Logical(reader) => Ok(reader.object_footer()),
 			ZffObjectReader::Virtual(reader) => Ok(reader.object_footer()),
-			ZffObjectReader::Encrypted(_) => Err(ZffError::new(ZffErrorKind::InvalidOption, ""))
+			ZffObjectReader::Encrypted(_) => Err(ZffError::new(ZffErrorKind::Invalid, ""))
 		}
 	}
 
 	fn get_active_reader(&self) -> Result<&ZffObjectReader<R>> {
 		match self.object_reader.get(&self.active_object) {
 			Some(reader) => Ok(reader),
-			None => Err(ZffError::new(ZffErrorKind::MissingObjectNumber, self.active_object.to_string())),
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object))),
 		}
 	}
 }
@@ -977,11 +1003,11 @@ fn try_find_footer<R: Read + Seek>(reader: &mut R) -> Result<Footer> {
 			Ok(Footer::MainAndSegment((main_footer, segment_footer)))
 		} else {
 			reader.seek(SeekFrom::Start(position))?;
-			Err(ZffError::new(ZffErrorKind::MalformedSegment, "Could not decode segment footer"))
+			Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_UNDECODABLE_SEGMENT_FOOTER))
 		}
 	} else {
 		reader.seek(SeekFrom::Start(position))?;
-		Err(ZffError::new(ZffErrorKind::MalformedSegment, "Could not decode main footer"))
+		Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_UNDECODABLE_MAIN_FOOTER))
 	}
 }
 
@@ -1033,8 +1059,7 @@ where
 		optional_chunk_size,
 		optional_chunk_flags.clone()) {
 		Ok(data) => data,
-		Err(e) => match e.unwrap_kind() {
-			ZffErrorKind::IoError(io_error) => return Err(io_error),
+		Err(e) => match e.kind() {
 			error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
 		},
 	};
@@ -1069,19 +1094,21 @@ fn initialize_object_reader<R: Read + Seek>(
 	let borrowed_metadata = metadata.lock().unwrap();
 	let segment_no_footer = match borrowed_metadata.main_footer.object_footer().get(&object_number) {
 		None => return Err(ZffError::new(
-			ZffErrorKind::MalformedSegment,
-			format!("Could not find object footer of object no. {}", object_number))),
+			ZffErrorKind::EncodingError,
+			format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		Some(segment_no) => segment_no
 	};
 	let segment_no_header = match borrowed_metadata.main_footer.object_header().get(&object_number) {
 		None => return Err(ZffError::new(
-			ZffErrorKind::MalformedSegment, 
-			format!("Could not find object header of object no. {}", object_number))),
+			ZffErrorKind::EncodingError, 
+			format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		Some(segment_no) => segment_no
 	};
 
 	match metadata.lock().unwrap().segments.get_mut(segment_no_header) {
-		None => Err(ZffError::new(ZffErrorKind::MissingSegment, segment_no_header.to_string())),
+		None => Err(ZffError::new(
+			ZffErrorKind::Missing, 
+			segment_no_header.to_string())),
 		Some(segment) => if segment.read_object_header(object_number).is_ok() {
 							initialize_unencrypted_object_reader(
 								object_number,
@@ -1107,12 +1134,16 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {}", obj_number);
 	let header = match metadata.lock().unwrap().segments.get_mut(&header_segment_no) {
-		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
+		None => return Err(ZffError::new(
+			ZffErrorKind::Missing,
+			format!("{ERROR_MISSING_SEGMENT}{header_segment_no}"))),
 		Some(segment) => segment.read_object_header(obj_number)?,
 	};
 	
 	let footer = match metadata.lock().unwrap().segments.get_mut(&footer_segment_no) {
-		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
+		None => return Err(ZffError::new(
+			ZffErrorKind::Missing, 
+			format!("{ERROR_MISSING_SEGMENT}{header_segment_no}"))),
 		Some(segment) => segment.read_object_footer(obj_number)?,
 	};
 
@@ -1139,11 +1170,15 @@ fn initialize_encrypted_object_reader<R: Read + Seek>(
 	) -> Result<ZffObjectReader<R>> {
 
 	let header = match metadata.lock().unwrap().segments.get_mut(&header_segment_no) {
-		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
+		None => return Err(ZffError::new(
+			ZffErrorKind::Missing, 
+			format!("{ERROR_MISSING_SEGMENT}{header_segment_no}"))),
 		Some(segment) => segment.read_encrypted_object_header(obj_number)?,
 	};
 	let footer = match metadata.lock().unwrap().segments.get_mut(&footer_segment_no) {
-		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, header_segment_no.to_string())),
+		None => return Err(ZffError::new(
+			ZffErrorKind::Missing, 
+			format!("{ERROR_MISSING_SEGMENT}{header_segment_no}"))),
 		Some(segment) => segment.read_encrypted_object_footer(obj_number)?,
 	};
 	let obj_reader = ZffObjectReader::Encrypted(
@@ -1299,7 +1334,9 @@ fn get_chunks_of_unencrypted_object<R: Read + Seek>(
 	object_number: u64) -> Result<Vec<u64>> {
 	let obj_reader = match object_reader.get(&object_number) {
 		Some(reader) => reader,
-		None => return Err(ZffError::new(ZffErrorKind::MissingObjectNumber, object_number.to_string())),
+		None => return Err(ZffError::new(
+			ZffErrorKind::Missing, 
+			format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 	};
 	
 	let chunk_numbers = match obj_reader {
@@ -1328,7 +1365,9 @@ fn get_chunks_of_unencrypted_object<R: Read + Seek>(
 			chunk_numbers
 		},
 		ZffObjectReader::Encrypted(_) => {
-			return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, ""));
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_MISSING_ENCRYPTION_HEADER_KEY));
 		},
 	};
 
@@ -1340,12 +1379,14 @@ fn get_enc_info_from_obj_reader<R: Read + Seek>(object_reader: &ZffObjectReader<
 		ZffObjectReader::Physical(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
 		ZffObjectReader::Virtual(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
 		ZffObjectReader::Logical(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
-		ZffObjectReader::Encrypted(_) => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+		ZffObjectReader::Encrypted(_) => return Err(ZffError::new(
+			ZffErrorKind::EncryptionError, 
+			ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 	};
 	let enc_info = match enc_info {
 		Ok(enc_info) => Some(enc_info),
-		Err(e) => match e.get_kind() {
-			ZffErrorKind::MissingEncryptionHeader => None,
+		Err(e) => match e.kind_ref() {
+			ZffErrorKind::EncryptionError => None,
 			_ => return Err(e),
 		},
 	};

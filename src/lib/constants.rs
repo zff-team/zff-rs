@@ -88,10 +88,30 @@ pub(crate) const ERROR_HEADER_DECODER_KEY_POSITION: &str = "Key not in position.
 pub(crate) const ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM: &str = "unknown compression algorithm value";
 pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER: &str = "The read identifier does not match the header identifier.";
 pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &str = "A segment with a valid zff main footer is missing.";
+pub(crate) const ERROR_MISSING_SEGMENT: &str = "A segment is missing. Segment no: ";
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str = "Missing object header in segment with following object number: ";
 pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object footer in segment with following object number: ";
+pub(crate) const ERROR_MALFORMED_SEGMENT: &str = "A Segment is malformed.";
+pub(crate) const ERROR_MISSING_OBJECT_NO: &str = "Missing object number: ";
 pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
+pub(crate) const ERROR_MISSING_ENCRYPTION_HEADER_KEY: &str = "Trying to decode encrypted content, but encryption header or key is missing.";
+pub(crate) const NO_ENCRYPTION_DETECTED: &str = "No encryption detected.";
+pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str = "Trying to decrypt unencryted object.";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
+pub(crate) const ERROR_UNSUPPORTED_VERSION: &str = "Unsupported version: ";
+pub(crate) const ERROR_BINARY_SEARCH_EXCEEDED_MAX_ITERATIONS: &str = "Binary search exceeded max iterations.";
+pub(crate) const ERROR_MAP_EMPTY: &str = "Map is empty.";
+pub(crate) const ERROR_WRONG_SIGNATURE_KEY_LENGTH: &str = "Wrong signature key length.";
+pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_SAMEBYTE: &str = "Could not find expected samebyte in chunk content.";
+pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP: &str = "Could not find expected chunk number in map: ";
+pub(crate) const ERROR_NOT_IN_MAP: &str = "Data not in map";
+pub(crate) const ERROR_NO_INPUT_FILE: &str = "There is no input file";
+pub(crate) const ERROR_UNKNOWN_SPECIAL_FILETYPE: &str = "Unknown file type";
+pub(crate) const ERROR_UNSUPPORTED_METADATA_EXT: &str = "Unsupported metadata extended type identifier: ";
+pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segment footer";
+pub(crate) const ERROR_UNDECODABLE_MAIN_FOOTER: &str = "Could not decode main footer";
+pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str = "Could not read header offsets of object no. ";
+pub(crate) const ERROR_UNREADABLE_FILE_FOOTER_OFFSET_NO: &str = "Could not read footer offsets of file no. ";
 
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
@@ -110,6 +130,8 @@ pub(crate) const DEFAULT_WAIT_TIME_IO_INTERRUPT_RETRY: u64 = 6000; // in millise
 pub(crate) const DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT: u8 = 11;
 
 pub(crate) const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
+
+pub(crate) const DEFAULT_BINARY_SEARCH_MAX_ITERATIONS: u32 = 1000;
 
 /// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
@@ -131,6 +153,8 @@ pub const ED25519_DALEK_SIGNATURE_LEN: usize = SIGNATURE_LENGTH;
 //ZFF File extension
 /// the start value for file extensions. a file-extension always starts with a 'z', followed by the segment number (e.g. "z01", "z02", ..., "z99", "z100", ...).
 pub const FILE_EXTENSION_START: char = 'z';
+/// the start value for file extensions for the first 9 numbers (starting at 01). A file-extension always starts with a 'z', followed by the segment number (e.g. "z01", "z02", ..., "z99", "z100", ...).
+pub const FILE_EXTENSION_START_PRE9: &str = "z0";
 /// Initializer to count the file extension numbers.
 pub const FILE_EXTENSION_INITIALIZER: &str = "z00";
 /// the file extension for the first segment.

@@ -17,7 +17,7 @@ use crate::{
 	Result,
 	ZffError,
 	ZffErrorKind,
-	ED25519_DALEK_SIGNATURE_LEN,
+	constants::*,
 };
 
 
@@ -48,7 +48,7 @@ impl Signature {
 			key_slice.copy_from_slice(&key);
 			Ok(SigningKey::from_bytes(&key_slice))
 		} else {
-			Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""))
+			Err(ZffError::new(ZffErrorKind::SigningError, ERROR_WRONG_SIGNATURE_KEY_LENGTH))
 		}
 	}
 
@@ -65,7 +65,7 @@ impl Signature {
 			key_slice.copy_from_slice(key);
 			Ok(SigningKey::from_bytes(&key_slice))
 		} else {
-			Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""))
+			Err(ZffError::new(ZffErrorKind::SigningError, ERROR_WRONG_SIGNATURE_KEY_LENGTH))
 		}
 	}
 
@@ -98,7 +98,7 @@ impl Signature {
 			key_slice.copy_from_slice(key);
 			VerifyingKey::from_bytes(&key_slice)?
 		} else {
-			return Err(ZffError::new(ZffErrorKind::WrongSignatureKeyLength, ""));
+			return Err(ZffError::new(ZffErrorKind::SigningError,ERROR_WRONG_SIGNATURE_KEY_LENGTH));
 		};
 		let signature = Ed25519Signature::from_bytes(&signature);
 		match verifying_key.verify(message, &signature) {

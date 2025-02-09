@@ -12,29 +12,7 @@ use itertools::Itertools;
 #[cfg(feature = "log")]
 use log::trace;
 
-use crate::constants::{
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	ERROR_HEADER_DECODER_HEADER_LENGTH,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
-	ERROR_HEADER_DECODER_KEY_POSITION,
-	METADATA_EXT_TYPE_IDENTIFIER_U8,
-	METADATA_EXT_TYPE_IDENTIFIER_U16,
-	METADATA_EXT_TYPE_IDENTIFIER_U32,
-	METADATA_EXT_TYPE_IDENTIFIER_U64,
-	METADATA_EXT_TYPE_IDENTIFIER_I8,
-	METADATA_EXT_TYPE_IDENTIFIER_I16,
-	METADATA_EXT_TYPE_IDENTIFIER_I32,
-	METADATA_EXT_TYPE_IDENTIFIER_I64,
-	METADATA_EXT_TYPE_IDENTIFIER_STRING,
-	METADATA_EXT_TYPE_IDENTIFIER_HASHMAP,
-	METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP,
-	METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY,
-	METADATA_EXT_TYPE_IDENTIFIER_F32,
-	METADATA_EXT_TYPE_IDENTIFIER_F64,
-	METADATA_EXT_TYPE_IDENTIFIER_VEC,
-	METADATA_EXT_TYPE_IDENTIFIER_BOOL,
-};
+use crate::constants::*;
 
 // - external
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
@@ -84,7 +62,7 @@ pub trait HeaderCoding {
 	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {
 			Ok(value) => Ok(value),
-			Err(_) => Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+			Err(_) => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
 	}
 
@@ -103,10 +81,10 @@ pub trait HeaderCoding {
 	fn check_version<R: Read>(data: &mut R) -> Result<()> {
 		let version = match data.read_u8() {
 			Ok(val) => val,
-			Err(_) => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_HEADER_LENGTH)),
+			Err(_) => return Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		};
 		if version != Self::version() {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()));
+			return Err(ZffError::new(ZffErrorKind::Unsupported, format!("{ERROR_UNSUPPORTED_VERSION}{version}")));
 		}
 		Ok(())
 	}
@@ -120,7 +98,7 @@ pub trait HeaderCoding {
     	trace!("Trying to decode a {}", Self::struct_name());
 
 		if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		}
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
@@ -558,7 +536,7 @@ pub trait ValueDecoder {
 	/// decodes the value for the given key.
 	fn decode_for_key<K: Into<String>, R: Read>(data: &mut R, key: K) -> Result<Self::Item> {
 		if !Self::check_key_on_position(data, key) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecoderKeyNotOnPosition, ERROR_HEADER_DECODER_KEY_POSITION))
+			return Err(ZffError::new(ZffErrorKind::KeyNotOnPosition, ERROR_HEADER_DECODER_KEY_POSITION))
 		}
 		Self::decode_directly(data)
 	}

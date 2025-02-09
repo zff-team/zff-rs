@@ -27,6 +27,7 @@ use crate::{
 	error::{ZffError, ZffErrorKind},
 	encryption::{Encryption, EncryptionAlgorithm},
 	ChunkContent,
+	constants::*,
 };
 
 /// Indicates if the data are compressed or not.
@@ -480,13 +481,8 @@ pub(crate) fn chunking<R: Read + Seek>(
 	deduplication_metadata: Option<&mut DeduplicationMetadata<R>>,
 	encryption_key: Option<&Vec<u8>>,
 	encryption_algorithm: Option<&EncryptionAlgorithm>,
-	empty_file_flag: bool,
 ) -> Result<PreparedChunk> {
 	let mut flags = ChunkFlags::default();
-	flags.empty_file = empty_file_flag;
-	if empty_file_flag {
-		return Ok(PreparedChunk::new(Vec::new(), flags, 0, 0, None, None));
-	}
 
 	let mut sambebyte = None;
 	let mut duplicate = None;
@@ -525,7 +521,7 @@ pub(crate) fn chunking<R: Read + Seek>(
 			match &*encoding_thread_pool_manager.compression_thread.get_result() {
 				CompressedData::Compressed(compressed_data) => (compressed_data.clone(), true),
 				CompressedData::Raw => (encoding_thread_pool_manager.data.read().unwrap().clone(), false),
-				CompressedData::Err(e) => return Err(ZffError::new(ZffErrorKind::Custom, e.details.clone())),
+				CompressedData::Err(e) => return Err(ZffError::from(e)),
 			}
 		},
 	};
@@ -540,7 +536,7 @@ pub(crate) fn chunking<R: Read + Seek>(
 		Some(encryption_key) => {
 			let encryption_algorithm = match encryption_algorithm {
 				Some(algorithm) => algorithm,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionHeader, "")),
+				None => return Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			};
 			//TODO: check to encrypt the content if the chunked data also in the "compression_thread"?.
 			Vec::<u8>::encrypt(

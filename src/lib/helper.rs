@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 // internal
-use crate::{Result, ZffError, ZffErrorKind};
+use crate::{Result, ZffError, ZffErrorKind, constants::*};
 
 // external
 #[cfg(feature = "log")]
@@ -40,14 +40,14 @@ fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offse
     let mut low = 0;
     let mut high = set.len() - 1;
     while low <= high {
-        if zombie_counter > 1000 {
+        if zombie_counter > DEFAULT_BINARY_SEARCH_MAX_ITERATIONS {
             #[cfg(feature = "log")]
             debug!("Malformed VMI map. Exiting.");
-            return Err(ZffError::new(ZffErrorKind::BinarySearchError, "zombie counter exceeded 1000 iterations. Exiting."));
+            return Err(ZffError::new(ZffErrorKind::NotFound,ERROR_BINARY_SEARCH_EXCEEDED_MAX_ITERATIONS));
         }
         let mid = (low + high) / 2;
-        let lowest_offset = set.iter().nth(mid).unwrap().keys().next().unwrap();
-        let highest_offset = set.iter().nth(mid).unwrap().keys().next_back().unwrap();
+        let lowest_offset = set.iter().nth(mid).unwrap().keys().next().unwrap(); //TODO: remove unwraps
+        let highest_offset = set.iter().nth(mid).unwrap().keys().next_back().unwrap(); //TODO: remove unwraps
         if lowest_offset <= &offset && highest_offset >= &offset {
             // returns the appropriate set index
             return Ok(mid);
@@ -63,7 +63,7 @@ fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offse
     }
     #[cfg(feature = "log")]
     debug!("Empty map");
-    Err(ZffError::new(ZffErrorKind::BinarySearchError, "Empty map"))
+    Err(ZffError::new(ZffErrorKind::NotFound, ERROR_MAP_EMPTY))
 }
 
 

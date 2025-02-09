@@ -200,7 +200,9 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		let enc_info = if let Some(encryption_header) = &object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {
 				Some(key) => key,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, 
+					ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			};
 			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
 		} else {
@@ -215,18 +217,20 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 
 			let header_offset = match object_footer.file_header_offsets().get(filenumber) {
 				Some(offset) => offset,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 			};
 			let (footer_segment_number, footer_offset) = match object_footer.file_footer_segment_numbers().get(filenumber) {
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 				Some(segment_no) => match object_footer.file_footer_offsets().get(filenumber) {
-					None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "")),
+					None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 					Some(offset) => (segment_no, offset),
 				}
 			};
 
 			let fileheader = match metadata.lock().unwrap().segments.get_mut(header_segment_number) {
-				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+				None => return Err(ZffError::new(
+					ZffErrorKind::Missing, 
+					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 				Some(segment) => {
 					segment.seek(SeekFrom::Start(*header_offset))?;
 					//check encryption
@@ -239,7 +243,9 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			};
 
 			let filefooter = match metadata.lock().unwrap().segments.get_mut(footer_segment_number) {
-				None => return Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+				None => return Err(ZffError::new(
+					ZffErrorKind::Missing, 
+					format!("{ERROR_MISSING_SEGMENT}{footer_segment_number}"))),
 				Some(segment) => {
 					segment.seek(SeekFrom::Start(*footer_offset))?;
 					//check encryption
@@ -284,25 +290,31 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	pub fn current_fileheader(&self) -> Result<FileHeader> {
 		let header_segment_number = match self.object_footer.file_header_segment_numbers().get(&self.active_file) {
 			Some(no) => no,
-			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing,
+				format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
 		};
 		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
 			Some(offset) => offset,
 			None => return Err(ZffError::new(
-				ZffErrorKind::MalformedSegment, 
-				format!("Could not read header offsets of object no. {}", self.object_header.object_number))),
+				ZffErrorKind::EncodingError, 
+				format!("{ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO}{}", self.object_header.object_number))),
 		};
 		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {
 				Some(key) => key,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, 
+					ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			};
 			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
 		} else {
 			None
 		};
 		match self.metadata.lock().unwrap().segments.get_mut(header_segment_number) {
-			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 			Some(segment) => {
 				segment.seek(SeekFrom::Start(*header_offset))?;
 				//check encryption
@@ -319,25 +331,33 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	pub fn current_filefooter(&self) -> Result<FileFooter> {
 		let footer_segment_number = match self.object_footer.file_footer_segment_numbers().get(&self.active_file) {
 			Some(no) => no,
-			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
 		};
 		let footer_offset = match self.object_footer.file_footer_offsets().get(&self.active_file) {
 			Some(offset) => offset,
 			None => return Err(ZffError::new(
-				ZffErrorKind::MalformedSegment, 
-				format!("Could not read footer offset of active file no {} of object {}", self.active_file, self.object_header.object_number))),
+				ZffErrorKind::EncodingError, 
+				format!("{ERROR_UNREADABLE_FILE_FOOTER_OFFSET_NO}{} of object {}", 
+				self.active_file, 
+				self.object_header.object_number))),
 		};
 		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
 			let key = match encryption_header.get_encryption_key() {
 				Some(key) => key,
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, "")),
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, 
+					ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			};
 			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
 		} else {
 			None
 		};
 		match self.metadata.lock().unwrap().segments.get_mut(footer_segment_number) {
-			None => Err(ZffError::new(ZffErrorKind::MissingSegment, "")),
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_SEGMENT}{footer_segment_number}"))),
 			Some(segment) => {
 				segment.seek(SeekFrom::Start(*footer_offset))?;
 				//check encryption
@@ -356,14 +376,11 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	pub fn set_active_file(&mut self, filenumber: u64) -> Result<()> {
 		match self.files.get(&filenumber) {
 			Some(_) => self.active_file = filenumber,
-			None => return Err(ZffError::new(ZffErrorKind::MissingFileNumber, filenumber.to_string()))
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_FILE_NUMBER}{filenumber}")))
 		}
 		Ok(())
-	}
-
-	/// Returns the filenumber of the active file.
-	pub fn active_file(&self) -> u64 {
-		self.active_file
 	}
 
 	/// Returns the [FileMetadata] of the active file.
@@ -372,7 +389,9 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	pub(crate) fn filemetadata(&self) -> Result<&FileMetadata> {
 		match self.files.get(&self.active_file) {
 			Some(metadata) => Ok(metadata),
-			None => Err(ZffError::new(ZffErrorKind::MissingFileNumber, self.active_file.to_string()))
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
 		}
 	}
 
@@ -570,11 +589,13 @@ fn get_vmi_info<R: Read + Seek>(
 	vmi_map: &BTreeSet<BTreeMap<u64, (u64, u64)>>, 
 	offset: u64,
 	metadata: ArcZffReaderMetadata<R>) -> Result<VirtualMappingInformation> {
-    let (segment_no, offset) = find_vmi_offset(vmi_map, offset).ok_or_else(|| ZffError::new(ZffErrorKind::ValueNotInMap, "VMI not found"))?;
+    let (segment_no, offset) = find_vmi_offset(vmi_map, offset).ok_or_else(|| ZffError::new(ZffErrorKind::NotFound, "VMI not found"))?;
     let segments = &mut metadata.lock().unwrap().segments;
 	let segment = match segments.get_mut(&segment_no) {
 		Some(segment) => segment,
-		None => return Err(ZffError::new(ZffErrorKind::MissingSegment, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+		None => return Err(ZffError::new(
+			ZffErrorKind::Missing, 
+			ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 	};
 	segment.seek(SeekFrom::Start(offset))?;
 	VirtualMappingInformation::decode_directly(segment)

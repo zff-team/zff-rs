@@ -1,5 +1,4 @@
-use crate::constants::DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL;
-
+// - internal
 use super::*;
 
 /// An [ObjectFooterPhysical] is written at the end of each physical object.
@@ -143,7 +142,7 @@ impl HeaderCoding for ObjectFooterPhysical {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encryption_flag = bool::decode_directly(&mut cursor)?;
 		if encryption_flag {
-			return Err(ZffError::new(ZffErrorKind::MissingPassword, ""));
+			return Err(ZffError::new(ZffErrorKind::Missing, ERROR_MISSING_ENCRYPTION_HEADER_KEY));
 		}
 		let (acquisition_start, 
 			acquisition_end, 
@@ -248,7 +247,9 @@ impl HeaderCoding for EncryptedObjectFooterPhysical {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encryption_flag = bool::decode_directly(&mut cursor)?;
 		if !encryption_flag {
-			return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, ""));
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN));
 		}
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		Ok(Self::new(

@@ -3,6 +3,7 @@ use crate::{
 	ZffError,
 	ZffErrorKind,
 	FILE_EXTENSION_START,
+	FILE_EXTENSION_START_PRE9,
 	FILE_EXTENSION_PARSER_ERROR,
 };
 
@@ -22,17 +23,19 @@ pub fn file_extension_next_value<V: Into<String>>(value: V) -> Result<String> {
 	let mut chars = value.chars();
 	match chars.next() {
 		Some(FILE_EXTENSION_START) => (),
-		_ => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, format!("{FILE_EXTENSION_PARSER_ERROR} \"{value}\""))),
+		_ => return Err(ZffError::new(
+			ZffErrorKind::ParsingError, 
+			format!("{FILE_EXTENSION_PARSER_ERROR} \"{value}\""))),
 	};
 	let mut next_value: u64 = match chars.as_str().parse() {
 		Ok(val) => val,
-		Err(e) => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, e.to_string())),
+		Err(e) => return Err(ZffError::new(ZffErrorKind::ParsingError, e.to_string())),
 	};
 	next_value += 1;
 	if next_value <= 9 {
-		Ok(String::from("z0") + &next_value.to_string())
+		Ok(String::from(FILE_EXTENSION_START_PRE9) + &next_value.to_string())
 	} else {
-		Ok(String::from("z") + &next_value.to_string())
+		Ok(String::from(FILE_EXTENSION_START) + &next_value.to_string())
 	}
 }
 
@@ -52,16 +55,20 @@ pub fn file_extension_previous_value<V: Into<String>>(value: V) -> Result<String
 	let mut chars = value.chars();
 	match chars.next() {
 		Some(FILE_EXTENSION_START) => (),
-		_ => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, FILE_EXTENSION_PARSER_ERROR)),
+		_ => return Err(ZffError::new(
+			ZffErrorKind::ParsingError,
+			FILE_EXTENSION_PARSER_ERROR)),
 	};
 	let mut previous_value: u64 = match chars.as_str().parse() {
 		Ok(val) => val,
-		Err(e) => return Err(ZffError::new(ZffErrorKind::FileExtensionParserError, e.to_string())),
+		Err(e) => return Err(ZffError::new(
+			ZffErrorKind::ParsingError, 
+			e.to_string())),
 	};
 	previous_value -= 1;
 	if previous_value <= 9 {
-		Ok(String::from("z0") + &previous_value.to_string())
+		Ok(String::from(FILE_EXTENSION_START_PRE9) + &previous_value.to_string())
 	} else {
-		Ok(String::from("z") + &previous_value.to_string())
+		Ok(String::from(FILE_EXTENSION_START) + &previous_value.to_string())
 	}
 }

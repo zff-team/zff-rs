@@ -18,27 +18,7 @@ use crate::{
 
 use crate::{
 	encryption::EncryptionAlgorithm,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-	HEADER_IDENTIFIER_FILE_HEADER,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
-	DEFAULT_HEADER_VERSION_FILE_HEADER,
-	METADATA_EXT_TYPE_IDENTIFIER_U8,
-	METADATA_EXT_TYPE_IDENTIFIER_U16,
-	METADATA_EXT_TYPE_IDENTIFIER_U32,
-	METADATA_EXT_TYPE_IDENTIFIER_U64,
-	METADATA_EXT_TYPE_IDENTIFIER_I8,
-	METADATA_EXT_TYPE_IDENTIFIER_I16,
-	METADATA_EXT_TYPE_IDENTIFIER_I32,
-	METADATA_EXT_TYPE_IDENTIFIER_I64,
-	METADATA_EXT_TYPE_IDENTIFIER_STRING,
-	METADATA_EXT_TYPE_IDENTIFIER_HASHMAP,
-	METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP,
-	METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY,
-	METADATA_EXT_TYPE_IDENTIFIER_F32,
-	METADATA_EXT_TYPE_IDENTIFIER_F64,
-	METADATA_EXT_TYPE_IDENTIFIER_VEC,
-	METADATA_EXT_TYPE_IDENTIFIER_BOOL,
+	constants::*,
 };
 
 use crate::header::EncryptionInformation;
@@ -106,7 +86,7 @@ impl TryFrom<u8> for SpecialFileType {
 			0 => Ok(SpecialFileType::Fifo),
 			1 => Ok(SpecialFileType::Char),
 			2 => Ok(SpecialFileType::Block),
-			_ => Err(ZffError::new(ZffErrorKind::UnknownFileType, byte.to_string())),
+			_ => Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE)),
 		}
 	}
 }
@@ -118,7 +98,7 @@ impl TryFrom<&u8> for SpecialFileType {
 			0 => Ok(SpecialFileType::Fifo),
 			1 => Ok(SpecialFileType::Char),
 			2 => Ok(SpecialFileType::Block),
-			_ => Err(ZffError::new(ZffErrorKind::UnknownFileType, byte.to_string())),
+			_ => Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE)),
 		}
 	}
 }
@@ -238,7 +218,7 @@ impl FileHeader {
 		E: Borrow<EncryptionInformation>
 	{
 		if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		};
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
@@ -280,7 +260,7 @@ impl FileHeader {
 			2 => FileType::Directory,
 			3 => FileType::Symlink,
 			4 => FileType::Hardlink,
-			val => return Err(ZffError::new(ZffErrorKind::UnknownFileType, val.to_string()))
+			_ => return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE))
 		};
 		let filename = String::decode_directly(inner_content)?;
 		let parent_file_number = u64::decode_directly(inner_content)?;
@@ -615,7 +595,9 @@ impl ValueDecoder for MetadataExtendedValue {
 				Ok(MetadataExtendedValue::Vector(vec))
 			},
 			METADATA_EXT_TYPE_IDENTIFIER_BOOL => Ok(MetadataExtendedValue::Bool(bool::decode_directly(data)?)),
-			_ => Err(ZffError::new(ZffErrorKind::UnknownMetadataExtendedType, identifier.to_string())),
+			_ => Err(ZffError::new(
+				ZffErrorKind::Unsupported, 
+				format!("{ERROR_UNSUPPORTED_METADATA_EXT}{identifier}"))),
 		}
 	}
 }

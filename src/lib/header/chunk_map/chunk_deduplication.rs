@@ -4,9 +4,7 @@ use super::*;
 // - internal
 use crate::{
 	io::zffreader::ZffReader,
-    HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP,
-	DEFAULT_HEADER_VERSION_CHUNK_DEDUPLICATION_MAP,
-	CHUNK_MAP_TABLE,
+    constants::*,
 };
 
 // - external
@@ -252,12 +250,14 @@ impl DeduplicationChunkMap {
 	{ //returns the appropriate Chunk no.
 		match self {
 			DeduplicationChunkMap::InMemory(map) => {
-				map.get(blak3_hash.borrow()).copied().ok_or(ZffError::new_not_in_map_error())
+				map.get(blak3_hash.borrow()).copied().ok_or(ZffError::new(
+					ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))
 			},
 			DeduplicationChunkMap::Redb(db) => {
 			let read_txn = db.begin_read()?;
     		let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
-    		let value = table.get(blak3_hash.borrow().as_bytes())?.ok_or(ZffError::new_not_in_map_error())?.value();
+    		let value = table.get(blak3_hash.borrow().as_bytes())?.ok_or(
+				ZffError::new(ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))?.value();
     		Ok(value)
 			}
 		}

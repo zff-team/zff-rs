@@ -202,8 +202,8 @@ impl HeaderCoding for MainFooter {
 		let position = cursor.position();
 		let description_notes = match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
 			Ok(value) => Some(value),
-			Err(e) => match e.get_kind() {
-				ZffErrorKind::HeaderDecoderKeyNotOnPosition => {
+			Err(e) => match e.kind_ref() {
+				ZffErrorKind::KeyNotOnPosition => {
 					cursor.set_position(position);
 					None
 				},

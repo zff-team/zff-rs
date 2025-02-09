@@ -315,7 +315,7 @@ fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u6
     } else if metadata.file_type().is_symlink() {
         FileType::Symlink
     } else {
-        return Err(ZffError::new(ZffErrorKind::UnknownFileType, ""));
+        return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
     };
 
     let filename = match path.file_name() {
@@ -787,7 +787,9 @@ fn prepare_object_header<R: Read>(
 fn check_encryption_key_in_header(object_header: &ObjectHeader) -> Result<()> {
     if let Some(encryption_header) = &object_header.encryption_header {
         if encryption_header.get_encryption_key_ref().is_none() {
-            return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, object_header.object_number.to_string()))
+            return Err(ZffError::new(
+                ZffErrorKind::EncryptionError,
+                ERROR_MISSING_ENCRYPTION_HEADER_KEY))
         };
     }
     Ok(())

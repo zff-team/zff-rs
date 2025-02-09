@@ -15,13 +15,7 @@ use crate::{
 	ZffErrorKind,
 	header::EncryptionInformation,
 	Encryption,
-	HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION,
-	HEADER_IDENTIFIER_VIRTUAL_OBJECT_MAP,
-	DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION,
-	DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
+	constants::*,
 };
 
 // - external
@@ -93,7 +87,7 @@ impl VirtualMappingInformation {
 		E: Borrow<EncryptionInformation>
 	{
 		if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		};
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
@@ -175,7 +169,9 @@ impl HeaderCoding for VirtualMappingInformation {
 		let mut cursor = Cursor::new(data);
 		let version = u8::decode_directly(&mut cursor)?;
 		if version != DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+			return Err(ZffError::new(
+				ZffErrorKind::Unsupported, 
+				format!("{ERROR_UNSUPPORTED_VERSION}{version}")))
 		};
 		let (object_number,
 			start_chunk_no, 
@@ -250,7 +246,7 @@ impl VirtualObjectMap {
 		E: Borrow<EncryptionInformation>
 	{
 		if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		};
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
@@ -258,7 +254,9 @@ impl VirtualObjectMap {
 		let mut cursor = Cursor::new(header_content);
 		let version = u8::decode_directly(&mut cursor)?;
 		if version != DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+			return Err(ZffError::new(
+				ZffErrorKind::Unsupported, 
+				format!("{ERROR_UNSUPPORTED_VERSION}{version}")))
 		};
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;

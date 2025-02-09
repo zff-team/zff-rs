@@ -32,9 +32,7 @@ use crate::{
     ZffErrorKind,
     EncryptionAlgorithm,
     Encryption,
-    DEFAULT_LENGTH_HEADER_IDENTIFIER,
-    DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-    ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
+    constants::*,
 };
 
 #[cfg(feature = "serde")]
@@ -174,12 +172,12 @@ pub trait ChunkMap {
          Self: HeaderCoding,
     {
         if !Self::check_identifier(data) {
-			return Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		}
 		let header_length = Self::decode_header_length(data)? as usize;
 		let version = u8::decode_directly(data)?;
 		if version != Self::version() {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()));
+			return Err(ZffError::new(ZffErrorKind::Unsupported, format!("{ERROR_UNSUPPORTED_VERSION}{version}")));
 		}
 		let mut structure_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH-1];
 		data.read_exact(&mut structure_content)?;

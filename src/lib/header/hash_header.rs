@@ -14,6 +14,7 @@ use crate::{
 	HeaderCoding,
 	HashType,
 	ZffError,
+	ZffErrorKind,
 	HEADER_IDENTIFIER_HASH_HEADER,
 	HEADER_IDENTIFIER_HASH_VALUE,
 	ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE,
@@ -193,7 +194,7 @@ impl HeaderCoding for HashValue {
 			2 => HashType::SHA512,
 			3 => HashType::SHA3_256,
 			4 => HashType::Blake3,
-			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE)),
+			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE)),
 		};
 	 	let hash = Vec::<u8>::decode_directly(&mut cursor)?;
 	 	

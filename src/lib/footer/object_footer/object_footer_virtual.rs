@@ -134,7 +134,7 @@ impl HeaderCoding for ObjectFooterVirtual {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encryption_flag = bool::decode_directly(&mut cursor)?;
 		if encryption_flag {
-			return Err(ZffError::new(ZffErrorKind::MissingPassword, ""));
+			return Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_MISSING_ENCRYPTION_HEADER_KEY));
 		}
 		let (creation_timestamp, 
 			passive_objects,
@@ -242,12 +242,14 @@ impl HeaderCoding for EncryptedObjectFooterVirtual {
 		let mut cursor = Cursor::new(data);
 		let version = u8::decode_directly(&mut cursor)?;
 		if version != DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL {
-			return Err(ZffError::new(ZffErrorKind::UnsupportedVersion, version.to_string()))
+			return Err(ZffError::new(ZffErrorKind::Unsupported, format!("{ERROR_UNSUPPORTED_VERSION}{version}")))
 		};
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let encryption_flag = bool::decode_directly(&mut cursor)?;
 		if !encryption_flag {
-			return Err(ZffError::new(ZffErrorKind::NoEncryptionDetected, ""));
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN));
 		}
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(

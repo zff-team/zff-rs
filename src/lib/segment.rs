@@ -16,10 +16,7 @@ use crate::{
 	decompress_buffer,
 	header::{SegmentHeader, ObjectHeader, EncryptionInformation, EncryptedObjectHeader, ChunkFlags},
 	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
-	ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT,
-	ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
+	constants::*,
 };
 
 // - external
@@ -199,7 +196,7 @@ impl<R: Read + Seek> Segment<R> {
 		if flags.same_bytes {
 			let single_byte = match chunk_content.first() {
 				Some(data) => data,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, "Could not find expected samebyte in chunk content.")),
+				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_COULD_NOT_FIND_EXPECTED_SAMEBYTE)),
 			};
 			Ok(ChunkContent::SameBytes(*single_byte))
 		} else if flags.duplicate {
@@ -215,7 +212,7 @@ impl<R: Read + Seek> Segment<R> {
 	pub fn read_object_header(&mut self, object_number: u64) -> Result<ObjectHeader> {
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
+				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 
@@ -230,7 +227,7 @@ impl<R: Read + Seek> Segment<R> {
 	pub fn read_encrypted_object_header(&mut self, object_number: u64) -> Result<EncryptedObjectHeader> {
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
+				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 		let object_header = EncryptedObjectHeader::decode_directly(&mut self.data)?;
@@ -246,7 +243,7 @@ impl<R: Read + Seek> Segment<R> {
 	{
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
+				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 		let object_header = ObjectHeader::decode_encrypted_header_with_password(&mut self.data, decryption_password)?;
@@ -257,7 +254,7 @@ impl<R: Read + Seek> Segment<R> {
 	pub fn read_object_footer(&mut self, object_number: u64) -> Result<ObjectFooter> {
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 			Some(value) => value,
-			None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
+			None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 		
@@ -271,7 +268,7 @@ impl<R: Read + Seek> Segment<R> {
 	pub fn read_encrypted_object_footer(&mut self, object_number: u64) -> Result<EncryptedObjectFooter> {
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 				Some(value) => value,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
+				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 		let encrypted_object_footer = EncryptedObjectFooter::decode_directly(&mut self.data)?;
@@ -287,7 +284,7 @@ impl<R: Read + Seek> Segment<R> {
 	{
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 				Some(value) => value,
-				None => return Err(ZffError::new(ZffErrorKind::MalformedSegment, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
+				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
 		self.data.seek(SeekFrom::Start(*offset))?;
 		let encrypted_object_footer = EncryptedObjectFooter::decode_directly(&mut self.data)?;
@@ -319,7 +316,9 @@ impl<R: Read + Seek> Seek for Segment<R> {
 fn get_chunkmap_offset(map: &BTreeMap<u64, u64>, chunk_number: u64) -> Result<u64> {
     match map.range(chunk_number..).next() {
         Some((_, &v)) => Ok(v),
-        None => Err(ZffError::new(ZffErrorKind::ValueNotInMap, chunk_number.to_string())),
+        None => Err(ZffError::new(
+			ZffErrorKind::NotFound, 
+			format!("{ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP}{chunk_number}"))),
     }
 }
 
@@ -331,7 +330,9 @@ fn get_first_chunknumber(map: &BTreeMap<u64, u64>, chunk_number: u64, first_segm
         None => if chunk_number >= first_segment_chunk_number {
         	Ok(first_segment_chunk_number)
         } else {
-        	Err(ZffError::new(ZffErrorKind::ValueNotInMap, chunk_number.to_string()))
+        	Err(ZffError::new(
+				ZffErrorKind::NotFound, 
+				format!("{ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP}{chunk_number}")))
         },
     }
 }

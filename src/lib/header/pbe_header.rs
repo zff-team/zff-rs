@@ -97,12 +97,12 @@ impl HeaderCoding for PBEHeader {
 			0 => KDFScheme::PBKDF2SHA256,
 			1 => KDFScheme::Scrypt,
 			2 => KDFScheme::Argon2id,
-			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME))
+			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME))
 		};
 		let encryption_scheme = match u8::decode_directly(&mut cursor)? {
 			0 => PBEScheme::AES128CBC,
 			1 => PBEScheme::AES256CBC,
-			_ => return Err(ZffError::new_header_decode_error(ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME)),
+			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME)),
 		};
 		let kdf_params = KDFParameters::decode_directly(&mut cursor)?;
 		let mut encryption_nonce = [0; 16];
@@ -185,7 +185,9 @@ impl ValueDecoder for KDFParameters {
 			let parameters = Argon2idParameters::new(mem_cost, lanes, iterations, salt);
   			Ok(KDFParameters::Argon2idParameters(parameters))
 		} else {
-			Err(ZffError::new(ZffErrorKind::HeaderDecodeMismatchIdentifier, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF))
+			Err(ZffError::new(
+				ZffErrorKind::Invalid, 
+				ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF))
 		}
 	}
 }

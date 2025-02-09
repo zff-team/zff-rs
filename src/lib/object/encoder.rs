@@ -25,7 +25,8 @@ use crate::{
 	Signature,
 	ZffError,
 	ZffErrorKind,
-	FileTypeEncodingInformation
+	FileTypeEncodingInformation,
+	constants::*,
 };
 
 #[cfg(feature = "log")]
@@ -49,6 +50,18 @@ use super::chunking;
 // - external
 use ed25519_dalek::SigningKey;
 use time::OffsetDateTime;
+
+/// Returns the current state of encoding.
+#[derive(Debug, Clone, Default)]
+pub enum EncodingState {
+	/// Returns a prepared chunk.
+	PreparedChunk(PreparedChunk),
+	/// returns prepared data (contains a prepared chunk, a file header or a file footer).
+	PreparedData(PreparedData),
+	/// is used, if the source reader reaches a EOF state.
+	#[default]
+	ReadEOF,
+}
 
 /// Contains a prepared data object. This can be a [PreparedChunk], a [PreparedFileHeader] or a [PreparedFileFooter].
 #[derive(Debug, Clone)]
@@ -124,7 +137,7 @@ impl<R: Read> ObjectEncoder<R> {
 		current_offset: u64, 
 		current_segment_no: u64, 
 		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>
-		) -> Result<PreparedData> {
+		) -> Result<EncodingState> {
 		match self {
 			ObjectEncoder::Physical(obj) => obj.get_next_chunk(deduplication_metadata),
 			ObjectEncoder::Logical(obj) => obj.get_next_data(current_offset, current_segment_no, deduplication_metadata),
@@ -173,7 +186,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
 			match encryption_header.get_encryption_key() {
 				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, obj_header.object_number.to_string()))
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY))
 			}
 	    } else {
 	    	(obj_header.encode_directly(), None)
@@ -229,7 +243,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	pub fn get_next_chunk<D: Read + Seek>(
 		&mut self,
 		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
-		) -> Result<PreparedData> {
+		) -> Result<EncodingState> {
 			
 		// checks and adds a deduplication thread to the internal thread manager (check is included in the add_deduplication_thread method)
 		if deduplication_metadata.is_some() {
@@ -241,7 +255,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    let buffered_chunk = buffer_chunk(&mut self.underlying_data, chunk_size)?;
 	    self.read_bytes_underlying_data += buffered_chunk.bytes_read;
 	    if buffered_chunk.buffer.is_empty() {
-	    	return Err(ZffError::new(ZffErrorKind::ReadEOF, ""));
+	    	return Ok(EncodingState::ReadEOF);
 	    };
 
 		self.encoding_thread_pool_manager.update(buffered_chunk.buffer);
@@ -250,7 +264,9 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		let encryption_key = if let Some(encryption_header) = &self.obj_header.encryption_header {
 			match encryption_header.get_encryption_key_ref() {
 				Some(key) => Some(key),
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, self.obj_header.object_number.to_string()))
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, 
+					ERROR_MISSING_ENCRYPTION_HEADER_KEY))
 			}
 	    } else {
 	    	None
@@ -263,12 +279,10 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			chunk_size as u64,
 			deduplication_metadata,
 			encryption_key,
-			encryption_algorithm,
-			false, // there is no empty file flag for a physical object
-		)?;
+			encryption_algorithm)?;
 	    
 		self.current_chunk_number += 1;
-	    Ok(PreparedData::PreparedChunk(chunk))
+	    Ok(EncodingState::PreparedData(PreparedData::PreparedChunk(chunk)))
 	}
 
 	/// Generates a appropriate footer. Attention: A call of this method ...
@@ -383,7 +397,9 @@ impl LogicalObjectEncoder {
 		let (_encoded_header, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
 			match encryption_header.get_encryption_key() {
 				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
-				None => return Err(ZffError::new(ZffErrorKind::MissingEncryptionKey, obj_header.object_number.to_string()))
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, 
+					ERROR_MISSING_ENCRYPTION_HEADER_KEY))
 			}
 	    } else {
 	    	(obj_header.encode_directly(), None)
@@ -406,7 +422,9 @@ impl LogicalObjectEncoder {
 		let mut files = files;
 		let (path, current_file_header) = match files.pop() {
 			Some((path, header)) => (path, header),
-			None => return Err(ZffError::new(ZffErrorKind::NoFilesLeft, "There is no input file"))
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing,
+				ERROR_NO_INPUT_FILE))
 		};
 		//open first file path - if the path is not accessable, create an empty reader.
 		#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
@@ -455,7 +473,9 @@ impl LogicalObjectEncoder {
 				} else if metadata.file_type().is_socket() {
 					SpecialFileEncodingInformation::Socket(metadata.rdev())
 				} else {
-					return Err(ZffError::new(ZffErrorKind::UnknownFileType, "Unknown special file type"));
+					return Err(ZffError::new(
+						ZffErrorKind::Unsupported,
+						ERROR_UNKNOWN_SPECIAL_FILETYPE));
 				};
 				FileTypeEncodingInformation::SpecialFile(specialfile_info)
 			},
@@ -525,7 +545,7 @@ impl LogicalObjectEncoder {
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64,
-		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>) -> Result<PreparedData> {
+		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>) -> Result<EncodingState> {
 		match self.current_file_encoder {
 			Some(ref mut file_encoder) => {
 				// return file header
@@ -536,24 +556,23 @@ impl LogicalObjectEncoder {
 					}
 					self.object_footer.add_file_header_segment_number(self.current_file_number, current_segment_no);
 					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
-					return Ok(PreparedData::PreparedFileHeader(file_encoder.get_encoded_header()));
+					let prepared_data = PreparedData::PreparedFileHeader(file_encoder.get_encoded_header());
+					return Ok(EncodingState::PreparedData(prepared_data));
 				}
 				
 				// return next chunk
 				if !self.empty_file_eof {
-					match file_encoder.get_next_chunk(deduplication_metadata) {
-						Ok(data) => {
+					match file_encoder.get_next_chunk(deduplication_metadata)? {
+						EncodingState::PreparedChunk(data) => {
 							self.current_chunk_number += 1;
 							if data.flags().empty_file {
 								self.empty_file_eof = true;
 							}
-							return Ok(PreparedData::PreparedChunk(data));
+							let prepared_data = PreparedData::PreparedChunk(data);
+							return Ok(EncodingState::PreparedData(prepared_data));
 						},
-						Err(e) => match e.get_kind() {
-							ZffErrorKind::ReadEOF => (),
-							ZffErrorKind::NotAvailableForFileType => (),
-							_ => return Err(e)
-						}
+						EncodingState::PreparedData(_) => unreachable!(),
+						EncodingState::ReadEOF => (),
 					};
 				} else {
 					self.empty_file_eof = false;
@@ -573,7 +592,7 @@ impl LogicalObjectEncoder {
 						// The appropriate file footer will be returned.
 						self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
 						self.current_file_encoder = None;
-						return Ok(prepared_file_footer);
+						return Ok(EncodingState::PreparedData(prepared_file_footer));
 					}
 				};
 
@@ -624,7 +643,7 @@ impl LogicalObjectEncoder {
 						} else if metadata.file_type().is_socket() {
 							SpecialFileEncodingInformation::Socket(metadata.rdev())
 						} else {
-							return Err(ZffError::new(ZffErrorKind::UnknownFileType, "Unknown special file type"));
+							return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
 						};
 						FileTypeEncodingInformation::SpecialFile(specialfile_info)
 					},
@@ -640,11 +659,11 @@ impl LogicalObjectEncoder {
 					encryption_information, 
 					self.current_chunk_number, 
 					filetype_encoding_information)?);
-				Ok(prepared_file_footer)
+				Ok(EncodingState::PreparedData(prepared_file_footer))
 			},
 			None => {
 				self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
-				Err(ZffError::new(ZffErrorKind::ReadEOF, ""))
+				Ok(EncodingState::ReadEOF)
 			},
 		}	
 	}
