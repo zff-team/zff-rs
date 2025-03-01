@@ -7,23 +7,18 @@ use std::io::{Cursor, Read, Seek};
 use std::fmt;
 
 // - modules
-mod chunk_flags;
-mod chunk_offset;
-mod chunk_size;
-mod chunk_xxhash;
+mod chunk_header;
 mod chunk_same_bytes;
 mod chunk_deduplication;
 
 // - use
-pub use chunk_flags::*;
-pub use chunk_offset::*;
-pub use chunk_size::*;
-pub use chunk_xxhash::*;
+pub use chunk_header::*;
 pub use chunk_same_bytes::*;
 pub use chunk_deduplication::*;
 
 // - internal
 use crate::{
+	header::ChunkHeader,
 	Result,
 	HeaderCoding,
 	ValueEncoder,
@@ -54,27 +49,18 @@ use redb::ReadableTable;
 #[derive(Debug)]
 /// The appropriate Chunkmap type.
 pub enum ChunkMapType {
-	/// The offset map.
-	OffsetMap = 0,
-	/// The size map.
-	SizeMap = 1,
-	/// The flags map.
-	FlagsMap = 2,
-	/// The xxhash map.
-	XxHashMap = 3,
+	/// The header map.
+	HeaderMap = 0,
 	/// The sambebytes map.
-	SamebytesMap = 4,
+	SamebytesMap = 1,
 	/// The deduplication map.
-	DeduplicationMap = 5,
+	DeduplicationMap = 2,
 }
 
 impl fmt::Display for ChunkMapType {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     	let value = match self {
-    		ChunkMapType::OffsetMap => "OffsetMap",
-			ChunkMapType::SizeMap => "SizeMap",
-			ChunkMapType::FlagsMap => "FlagsMap",
-			ChunkMapType::XxHashMap => "XxHashMap",
+    		ChunkMapType::HeaderMap => "HeaderMap",
 			ChunkMapType::SamebytesMap => "SamebytesMap",
 			ChunkMapType::DeduplicationMap => "DeduplicationMap",
     	};
@@ -87,13 +73,7 @@ impl fmt::Display for ChunkMapType {
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkMaps {
 	/// The offset map.
-	pub offset_map: ChunkOffsetMap,
-	/// The size map.
-	pub size_map: ChunkSizeMap,
-	/// The flags map.
-	pub flags_map: ChunkFlagsMap,
-	/// The xxhash map.
-	pub xxhash_map: ChunkXxHashMap,
+	pub header_map: ChunkHeaderMap,
 	/// The same bytes map.
 	pub same_bytes_map: ChunkSamebytesMap,
 	/// The deduplication map.
@@ -103,10 +83,7 @@ pub struct ChunkMaps {
 impl ChunkMaps {
 	/// checks if all maps are empty.
 	pub fn is_empty(&self) -> bool {
-		self.offset_map.chunkmap().is_empty() && 
-		self.size_map.chunkmap().is_empty() && 
-		self.flags_map.chunkmap().is_empty() && 
-		self.xxhash_map.chunkmap().is_empty() && 
+		self.header_map.chunkmap().is_empty() && 
 		self.same_bytes_map.chunkmap().is_empty() && 
 		self.duplicate_chunks.chunkmap().is_empty()
 	}
@@ -119,10 +96,7 @@ impl Serialize for ChunkMaps {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("ChunkMaps", 6)?;
-        state.serialize_field(string_to_str(self.offset_map.to_string()), &self.offset_map)?;
-		state.serialize_field(string_to_str(self.size_map.to_string()), &self.size_map)?;
-		state.serialize_field(string_to_str(self.flags_map.to_string()), &self.flags_map)?;
-		state.serialize_field(string_to_str(self.xxhash_map.to_string()), &self.xxhash_map)?;
+        state.serialize_field(string_to_str(self.header_map.to_string()), &self.header_map)?;
 		state.serialize_field(string_to_str(self.same_bytes_map.to_string()), &self.same_bytes_map)?;
 		state.serialize_field(string_to_str(self.duplicate_chunks.to_string()), &self.duplicate_chunks)?;
         state.end()
@@ -152,7 +126,7 @@ pub trait ChunkMap {
     /// Tries to add a chunk entry.  
 	/// Returns true, if the chunk no / value pair was added to the map.  
 	/// Returns false, if the map is full (in this case, the pair was **not** added to the map).
-	fn add_chunk_entry<V: Borrow<Self::Value>>(&mut self, chunk_no: u64, value: V) -> bool;
+	fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool;
 
     /// Checks if the map is full (returns true if, returns false if not).
 	fn is_full(&self) -> bool;

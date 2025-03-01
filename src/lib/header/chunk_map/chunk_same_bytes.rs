@@ -59,7 +59,7 @@ impl ChunkMap for ChunkSamebytesMap {
 		self.target_size = target_size
 	}
 
-	fn add_chunk_entry<V: Borrow<Self::Value>>(&mut self, chunk_no: u64, value: V) -> bool {
+	fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool {
 		if self.is_full() {
 			false
 		} else {

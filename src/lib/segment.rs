@@ -78,21 +78,31 @@ impl<R: Read + Seek> Segment<R> {
 		&self.footer
 	}
 
-	/// Returns the offset of the appropriate chunk (number).
-	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
-		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_offset_map_table, *chunk_number)?;
+	// calculates the offset of the appropriate chunk header.
+	fn calc_seek_offset_chunk_header(&self, chunk_number: u64) -> Result<u64> {
+		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_header_map_table, chunk_number)?;
 		//get the first chunk number of the specific chunk map
 		let first_chunk_number_of_map = get_first_chunknumber(
-			&self.footer.chunk_offset_map_table, *chunk_number, self.footer.first_chunk_number)?;
+			&self.footer.chunk_header_map_table, chunk_number, self.footer.first_chunk_number)?;
 
 		// skips the chunk map header and the other chunk entries.
 		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
-					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
+					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier 
 						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
 						  1 + // skip the ChunkMap header version
 						  8 + // skip the length of the map
-						  8 + // skip the chunk number itself
-						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
+						  ((chunk_number - first_chunk_number_of_map) * (8 + 38)) +//skip the other chunk entries
+						  8; // skip the chunk number itself
+		Ok(seek_offset)
+	}
+
+	/// Returns the offset of the appropriate chunk (number).
+	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
+		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
+		let seek_offset = chunk_header_offset + // go to the appropriate chunk header
+						  4 + // skip the magic bytes
+						  8 + // skip the header length
+						  1;
 
 		//go to the appropriate chunk map.
 		self.data.seek(SeekFrom::Start(seek_offset))?;
@@ -103,19 +113,12 @@ impl<R: Read + Seek> Segment<R> {
 
 	/// Returns the size of the appropriate (encrypted, compressed, ...) chunk (number)
 	pub fn get_chunk_size(&mut self, chunk_number: &u64) -> Result<u64> {
-		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_size_map_table, *chunk_number)?;
-		//get the first chunk number of the specific chunk map
-		let first_chunk_number_of_map = get_first_chunknumber(
-			&self.footer.chunk_size_map_table, *chunk_number, self.footer.first_chunk_number)?;
-
-		// skips the chunk map header and the other chunk entries.
-		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
-					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
-						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
-						  1 + // skip the ChunkMap header version
-						  8 + // skip the length of the map
-						  8 + // skip the chunk number itself
-						  ((chunk_number - first_chunk_number_of_map) * 2 * 8); //skip the other chunk entries
+		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
+		let seek_offset = chunk_header_offset + // go to the appropriate chunk header
+						  4 + // skip the magic bytes
+						  8 + // skip the header length
+						  1 + // skip the chunk type
+						  8; // skip the chunk offset
 
 		//go to the appropriate chunk map.
 		self.data.seek(SeekFrom::Start(seek_offset))?;
@@ -126,19 +129,13 @@ impl<R: Read + Seek> Segment<R> {
 
 	/// Returns the flags of the appropriate (encrypted, compressed, ...) chunk (number)
 	pub fn get_chunk_flags(&mut self, chunk_number: &u64) -> Result<ChunkFlags> {
-		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_flags_map_table, *chunk_number)?;
-		//get the first chunk number of the specific chunk map
-		let first_chunk_number_of_map = get_first_chunknumber(
-			&self.footer.chunk_flags_map_table, *chunk_number, self.footer.first_chunk_number)?;
-
-		// skips the chunk map header and the other chunk entries.
-		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
-					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier
-						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
-						  1 + // skip the ChunkMap header version
-						  8 + // skip the length of the map
-						  8 + // skip the chunk number itself
-						  ((chunk_number - first_chunk_number_of_map) * (8 + 1)); //skip the other chunk entries
+		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
+		let seek_offset = chunk_header_offset + // go to the appropriate chunk header
+						  4 + // skip the magic bytes
+						  8 + // skip the header length
+						  1 + // skip the chunk type
+						  8 + // skip the chunk offset
+						  8; // skip the chunk size
 
 		//go to the appropriate chunk map.
 		self.data.seek(SeekFrom::Start(seek_offset))?;

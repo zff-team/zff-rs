@@ -53,7 +53,7 @@ use time::OffsetDateTime;
 
 /// Returns the current state of encoding.
 #[derive(Debug, Clone, Default)]
-pub enum EncodingState {
+pub(crate) enum EncodingState {
 	/// Returns a prepared chunk.
 	PreparedChunk(PreparedChunk),
 	/// returns prepared data (contains a prepared chunk, a file header or a file footer).
@@ -65,7 +65,7 @@ pub enum EncodingState {
 
 /// Contains a prepared data object. This can be a [PreparedChunk], a [PreparedFileHeader] or a [PreparedFileFooter].
 #[derive(Debug, Clone)]
-pub enum PreparedData {
+pub(crate) enum PreparedData {
 	/// A prepared chunk.
 	PreparedChunk(PreparedChunk),
 	/// A prepared file header.
@@ -132,7 +132,7 @@ impl<R: Read> ObjectEncoder<R> {
 	}
 
 	/// returns the next data.
-	pub fn get_next_data<D: Read + Seek>(
+	pub(crate) fn get_next_data<D: Read + Seek>(
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64, 
@@ -240,7 +240,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
 
 	/// Returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
-	pub fn get_next_chunk<D: Read + Seek>(
+	pub(crate) fn get_next_chunk<D: Read + Seek>(
 		&mut self,
 		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
 		) -> Result<EncodingState> {
@@ -541,7 +541,7 @@ impl LogicalObjectEncoder {
 
 	/// Returns the next encoded data - an encoded [FileHeader], an encoded file chunk or an encoded [FileFooter](crate::footer::FileFooter).
 	/// This method will increment the self.current_chunk_number automatically.
-	pub fn get_next_data<D: Read + Seek>(
+	pub(crate) fn get_next_data<D: Read + Seek>(
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64,
@@ -565,7 +565,7 @@ impl LogicalObjectEncoder {
 					match file_encoder.get_next_chunk(deduplication_metadata)? {
 						EncodingState::PreparedChunk(data) => {
 							self.current_chunk_number += 1;
-							if data.flags().empty_file {
+							if data.chunk_header.flags.empty_file {
 								self.empty_file_eof = true;
 							}
 							let prepared_data = PreparedData::PreparedChunk(data);

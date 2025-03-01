@@ -1,6 +1,6 @@
 // - internal
 use crate::{
-	header::ChunkFlags, 
+	header::{ChunkFlags, ChunkHeader}, 
 	io::calculate_xxhash, 
 	Result,
 };
@@ -48,56 +48,22 @@ impl Chunk {
 
 /// This struct represents a prepared [Chunk] (encrypted and compressed).
 #[derive(Debug, Clone, Default)]
-pub struct PreparedChunk {
-	data: Vec<u8>,
-	flags: ChunkFlags,
-	size: u64,
-	xxhash: u64,
-	samebytes: Option<u8>,
-	duplicated: Option<u64>,
+pub(crate) struct PreparedChunk {
+	pub data: Vec<u8>,
+	pub chunk_header: ChunkHeader, // the offset has to be set afterwards
+	pub samebytes: Option<u8>,
+	pub duplicated: Option<u64>,
 }
 
 impl PreparedChunk {
 	/// Returns a new [PreparedChunk] with the given values.
-	pub fn new(data: Vec<u8>, flags: ChunkFlags, size: u64, xxhash: u64, samebytes: Option<u8>, duplicated: Option<u64>) -> PreparedChunk {
+	pub fn new(data: Vec<u8>, chunk_header: ChunkHeader, samebytes: Option<u8>, duplicated: Option<u64>) -> PreparedChunk {
 		Self {
 			data,
-			flags,
-			size,
-			xxhash,
+			chunk_header,
 			samebytes,
 			duplicated
 		}
-	}
-
-	/// Returns the underlying data.
-	pub fn data(&self) -> &Vec<u8> {
-		&self.data
-	}
-
-	/// Returns the flags.
-	pub fn flags(&self) -> &ChunkFlags {
-		&self.flags
-	}
-
-	/// Returns the size.
-	pub fn size(&self) -> u64 {
-		self.size
-	}
-
-	/// Returns the xxhash value.
-	pub fn xxhash(&self) -> u64 {
-		self.xxhash
-	}
-
-	/// Returns true if the samebytes flag is set, otherwise false.
-	pub fn samebytes(&self) -> Option<u8> {
-		self.samebytes
-	}
-
-	/// Returns the duplicated chunk id, if this chunk is a duplication.
-	pub fn duplicated(&self) -> Option<u64> {
-		self.duplicated
 	}
 }
 

@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use std::time::SystemTime;
 
-use crate::header::ChunkFlags;
+use crate::header::{ChunkFlags, ChunkHeader};
 use crate::io::BufferedChunk;
 use crate::PreparedChunk;
 // - internal
@@ -135,7 +135,7 @@ impl FileEncoder {
 	}
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
-	pub fn get_next_chunk<D: Read + Seek>(
+	pub(crate) fn get_next_chunk<D: Read + Seek>(
 		&mut self, 
 		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
 		) -> Result<EncodingState> {
@@ -218,7 +218,9 @@ impl FileEncoder {
 			//this case is the "file is empty".
 			let mut flags = ChunkFlags::default();
 			flags.empty_file = true;
-			let prepared_chunk = PreparedChunk::new(Vec::new(), flags, 0, 0, None, None);
+			let mut chunk_header = ChunkHeader::default();
+			chunk_header.flags = flags;
+			let prepared_chunk = PreparedChunk::new(Vec::new(), chunk_header, None, None);
 			return Ok(EncodingState::PreparedChunk(prepared_chunk))
 		};
 

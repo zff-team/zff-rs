@@ -278,6 +278,7 @@ pub(crate) const XATTR_ATTRNAME_POSIX_ACL: &str = "system.posix_acl_access";
 pub(crate) const XATTR_ATTRNAME_POSIX_ACL_DEFAULT: &str = "system.posix_acl_default";
 
 // type identifier values for metadata extended map values.
+// - primitive types
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U8: u8 = 0x00;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U16: u8 = 0x01;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_U32: u8 = 0x02;
@@ -294,4 +295,7 @@ pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F32: u8 = 0x0C;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F64: u8 = 0x0D;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VEC: u8 = 0x0E;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BOOL: u8 = 0x0F;
+// - self defined types
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_CHUNK_HEADER: u8 = 0xFE;
+// - unknown type
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN: u8 = 0xFF;

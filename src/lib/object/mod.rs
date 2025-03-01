@@ -17,7 +17,7 @@ use crate::io::calculate_xxhash;
 // - internal
 use crate::{
     Result,
-    header::CompressionHeader,
+    header::{CompressionHeader, ChunkHeader},
     HashType,
     Hash,
     CompressionAlgorithm,
@@ -550,11 +550,16 @@ pub(crate) fn chunking<R: Read + Seek>(
 	
 	let size = chunked_data.len() as u64;
 
+	let chunk_header = ChunkHeader::new(
+		0, // offset is set later
+		size,
+		flags,
+		xxhash,
+	);
+
 	Ok(PreparedChunk::new(
 		chunked_data, 
-		flags, 
-		size, 
-		xxhash,
+		chunk_header,
 		sambebyte,
 		duplicate,
 	))

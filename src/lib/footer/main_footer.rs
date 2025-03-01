@@ -4,14 +4,15 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 // - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueDecoder,
-	ValueEncoder,
-	ZffErrorKind,
+use crate::{ 
+	HeaderCoding, 
+	Result, 
+	ValueDecoder, 
+	ValueEncoder, 
+	ZffErrorKind, 
+	ENCODING_KEY_DESCRIPTION_NOTES, 
 	FOOTER_IDENTIFIER_MAIN_FOOTER,
-	ENCODING_KEY_DESCRIPTION_NOTES, constants::DEFAULT_FOOTER_VERSION_MAIN_FOOTER,
+	DEFAULT_FOOTER_VERSION_MAIN_FOOTER
 };
 
 // - external
@@ -35,13 +36,7 @@ pub struct MainFooter {
 	/// the segment numbers where the appropriate object footer can be found.
 	pub object_footer: BTreeMap<u64, u64>, // <object number, segment number>
 	/// the segment numbers where the appropriate chunkmap can be found.
-	pub chunk_offset_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
-	/// the segment numbers where the appropriate chunkmap can be found.
-	pub chunk_size_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
-	/// the segment numbers where the appropriate chunkmap can be found.
-	pub chunk_flags_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
-	/// the segment numbers where the appropriate chunkmap can be found.
-	pub chunk_xxhash_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+	pub chunk_header_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
 	/// The segment numbers where the appropriate chunkmap can be found.
 	pub chunk_samebytes_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
 	/// The segment numbers where the appropriate chunkmap can be found.
@@ -58,10 +53,7 @@ impl MainFooter {
 		number_of_segments: u64,
 		object_header: BTreeMap<u64, u64>,
 		object_footer: BTreeMap<u64, u64>,
-		chunk_offset_maps: BTreeMap<u64, u64>,
-		chunk_size_maps: BTreeMap<u64, u64>,
-		chunk_flags_maps: BTreeMap<u64, u64>,
-		chunk_xxhash_maps: BTreeMap<u64, u64>,
+		chunk_header_maps: BTreeMap<u64, u64>,
 		chunk_samebytes_maps: BTreeMap<u64, u64>,
 		chunk_dedup_maps: BTreeMap<u64, u64>,
 		description_notes: Option<String>,
@@ -70,10 +62,7 @@ impl MainFooter {
 			number_of_segments,
 			object_header,
 			object_footer,
-			chunk_offset_maps,
-			chunk_size_maps,
-			chunk_flags_maps,
-			chunk_xxhash_maps,
+			chunk_header_maps,
 			chunk_samebytes_maps,
 			chunk_dedup_maps,
 			description_notes,
@@ -126,26 +115,6 @@ impl MainFooter {
 		Some(self.description_notes.as_ref()?)
 	}
 
-	/// Returns a reference of the global chunkmap table.
-	pub fn chunk_offset_maps(&self) -> &BTreeMap<u64, u64> {
-		&self.chunk_offset_maps
-	}
-
-	/// Returns a reference of the global chunksize table.
-	pub fn chunk_size_maps(&self) -> &BTreeMap<u64, u64> {
-		&self.chunk_size_maps
-	}
-
-	/// Returns a reference of the global chunkflags table.
-	pub fn chunk_flags_maps(&self) -> &BTreeMap<u64, u64> {
-		&self.chunk_flags_maps
-	}
-
-	/// Returns a reference of the global chunk xxhash table.
-	pub fn chunk_xxhash_maps(&self) -> &BTreeMap<u64, u64> {
-		&self.chunk_xxhash_maps
-	}
-
 	/// Returns a reference of the global chunk samebytes table.
 	pub fn chunk_samebytes_maps(&self) -> &BTreeMap<u64, u64> {
 		&self.chunk_samebytes_maps
@@ -174,10 +143,7 @@ impl HeaderCoding for MainFooter {
 		vec.append(&mut self.number_of_segments.encode_directly());
 		vec.append(&mut self.object_header.encode_directly());
 		vec.append(&mut self.object_footer.encode_directly());
-		vec.append(&mut self.chunk_offset_maps.encode_directly());
-		vec.append(&mut self.chunk_size_maps.encode_directly());
-		vec.append(&mut self.chunk_flags_maps.encode_directly());
-		vec.append(&mut self.chunk_xxhash_maps.encode_directly());
+		vec.append(&mut self.chunk_header_maps.encode_directly());
 		vec.append(&mut self.chunk_samebytes_maps.encode_directly());
 		vec.append(&mut self.chunk_dedup_maps.encode_directly());
 		if let Some(description_notes) = &self.description_notes {
@@ -193,10 +159,7 @@ impl HeaderCoding for MainFooter {
 		let number_of_segments = u64::decode_directly(&mut cursor)?;
 		let object_header = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let object_footer = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_offset_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_size_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_flags_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_xxhash_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunk_header_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_samebytes_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let chunk_dedup_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
 		let position = cursor.position();
@@ -215,10 +178,7 @@ impl HeaderCoding for MainFooter {
 			number_of_segments, 
 			object_header, 
 			object_footer, 
-			chunk_offset_maps,
-			chunk_size_maps,
-			chunk_flags_maps,
-			chunk_xxhash_maps,
+			chunk_header_maps,
 			chunk_samebytes_maps,
 			chunk_dedup_maps,
 			description_notes, 

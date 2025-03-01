@@ -10,21 +10,21 @@ use crate::{
 /// The Chunkmap stores the information where the each appropriate chunk could be found.
 #[derive(Debug,Clone,PartialEq,Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
-pub struct ChunkOffsetMap {
-	chunkmap: BTreeMap<u64, u64>, //<chunk no, offset in segment>
+pub struct ChunkHeaderMap {
+	chunkmap: BTreeMap<u64, ChunkHeader>, //<chunk no, offset in segment>
 	target_size: usize,
 }
 
-impl Default for ChunkOffsetMap {
+impl Default for ChunkHeaderMap {
 	fn default() -> Self {
 		Self::new_empty()
 	}
 }
 
-impl ChunkMap for ChunkOffsetMap {
-	type Value = u64;
+impl ChunkMap for ChunkHeaderMap {
+	type Value = ChunkHeader;
 
-	/// returns a new [ChunkOffsetMap] with the given values.
+	/// returns a new [ChunkHeaderMap] with the given values.
 	fn with_data(chunkmap: BTreeMap<u64, Self::Value>) -> Self {
 		Self {
 			chunkmap,
@@ -32,7 +32,7 @@ impl ChunkMap for ChunkOffsetMap {
 		}
 	}
 
-	/// returns a new, empty [ChunkOffsetMap] with the given values.
+	/// returns a new, empty [ChunkHeaderMap] with the given values.
 	fn new_empty() -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),
@@ -46,7 +46,7 @@ impl ChunkMap for ChunkOffsetMap {
 
 	fn current_size(&self) -> usize {
 		match self.chunkmap.first_key_value() {
-			Some(_) => self.chunkmap.len() * (8 + 8) + 8, //8 -> 8bytes for the chunk no, 8 bytes for the deduplication chunk no
+			Some(_) => self.chunkmap.len() * (8 + 38) + 8, //8 -> 8bytes for the chunk no, 8 bytes for the encoded chunk header.
 			None => return 0,
 		}
 	}
@@ -59,17 +59,17 @@ impl ChunkMap for ChunkOffsetMap {
 		self.target_size = target_size
 	}
 
-	fn add_chunk_entry<V: Borrow<Self::Value>>(&mut self, chunk_no: u64, value: V) -> bool {
+	fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool {
 		if self.is_full() {
 			false
 		} else {
-			self.chunkmap.entry(chunk_no).or_insert(*value.borrow());
+			self.chunkmap.entry(chunk_no).or_insert(value);
 			true
 		}
 	}
 
 	fn is_full(&self) -> bool {
-		if self.target_size < self.current_size() + 24 { //24 -> 8bytes for next chunk_no, 8 bytes for deduplication chunk_no, 8 bytes for the size of the encoded BTreeMap
+		if self.target_size < self.current_size() + 54 { //54 -> 8bytes for next chunk_no, 38 bytes for the encoded chunk header, 8 bytes for the size of the encoded BTreeMap
 			true
 		} else {
 			false
@@ -116,8 +116,8 @@ impl ChunkMap for ChunkOffsetMap {
 	}
 }
 
-impl HeaderCoding for ChunkOffsetMap {
-	type Item = ChunkOffsetMap;
+impl HeaderCoding for ChunkHeaderMap {
+	type Item = ChunkHeaderMap;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_CHUNK_OFFSET_MAP
@@ -138,30 +138,30 @@ impl HeaderCoding for ChunkOffsetMap {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
-		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+		let chunkmap = BTreeMap::<u64, ChunkHeader>::decode_directly(&mut cursor)?;
 		Ok(Self::with_data(chunkmap))
 	}
 
 	fn struct_name() -> &'static str {
-		"ChunkOffsetMap"
+		"ChunkHeaderMap"
 	}
 }
 
 // - implement fmt::Display
-impl fmt::Display for ChunkOffsetMap {
+impl fmt::Display for ChunkHeaderMap {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", Self::struct_name())
 	}
 }
 
-impl Encryption for ChunkOffsetMap {
+impl Encryption for ChunkHeaderMap {
 	fn crypto_nonce_padding() -> u8 {
 		0b00000001
 	}
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for ChunkOffsetMap {
+impl Serialize for ChunkHeaderMap {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,

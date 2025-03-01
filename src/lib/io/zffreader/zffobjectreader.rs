@@ -76,8 +76,8 @@ pub(crate) struct ZffObjectReaderPhysical<R: Read + Seek> {
 impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 	/// creates a new [ZffObjectReaderPhysical] with the given metadata.
 	pub fn with_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
-		let object_header = metadata.lock().unwrap().object_header(&object_no).unwrap().clone();
-		let object_footer = match metadata.lock().unwrap().object_footer(&object_no) {
+		let object_header = metadata.object_header(&object_no).unwrap().clone();
+		let object_footer = match metadata.object_footer(&object_no) {
 			Some(ObjectFooter::Physical(footer)) => footer.clone(),
 			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
 		};
@@ -119,7 +119,7 @@ impl<R: Read + Seek> Read for ZffObjectReaderPhysical<R> {
 				break;
 			}
 
-			let chunk_data = if let Some(samebyte) = self.metadata.lock().unwrap().preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+			let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
 				vec![samebyte; chunk_size as usize]
 			} else {
 				let object_no = &self.object_header.object_number;
@@ -191,8 +191,8 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	fn with_obj_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>, degree_value: PreloadDegree) -> Result<Self> {
 		#[cfg(feature = "log")]
 		debug!("Initialize logical object {}", object_no);
-		let object_header = metadata.lock().unwrap().object_header(&object_no).unwrap().clone();
-		let object_footer = match metadata.lock().unwrap().object_footer(&object_no) {
+		let object_header = metadata.object_header(&object_no).unwrap().clone();
+		let object_footer = match metadata.object_footer(&object_no) {
 			Some(ObjectFooter::Logical(footer)) => footer.clone(),
 			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
 		};
@@ -227,7 +227,8 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 				}
 			};
 
-			let fileheader = match metadata.lock().unwrap().segments.get_mut(header_segment_number) {
+			let mut segments = metadata.segments.write().unwrap();
+			let fileheader = match segments.get_mut(header_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
@@ -242,7 +243,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 				}
 			};
 
-			let filefooter = match metadata.lock().unwrap().segments.get_mut(footer_segment_number) {
+			let filefooter = match segments.get_mut(footer_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{footer_segment_number}"))),
@@ -311,7 +312,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		} else {
 			None
 		};
-		match self.metadata.lock().unwrap().segments.get_mut(header_segment_number) {
+		match self.metadata.segments.write().unwrap().get_mut(header_segment_number) {
 			None => Err(ZffError::new(
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
@@ -354,7 +355,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		} else {
 			None
 		};
-		match self.metadata.lock().unwrap().segments.get_mut(footer_segment_number) {
+		match self.metadata.segments.write().unwrap().get_mut(footer_segment_number) {
 			None => Err(ZffError::new(
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_SEGMENT}{footer_segment_number}"))),
@@ -421,7 +422,7 @@ impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 				break;
 			}
 
-			let chunk_data = if let Some(samebyte) = self.metadata.lock().unwrap().preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+			let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
 				vec![samebyte; chunk_size as usize]
 			} else {
 				let object_no = &self.object_header.object_number;
@@ -489,8 +490,8 @@ pub(crate) struct ZffObjectReaderVirtual<R: Read + Seek> {
 impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 	/// creates a new [ZffObjectReaderVirtual] with the given metadata.
 	pub fn with_data(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
-		let object_header = metadata.lock().unwrap().object_header(&object_no).unwrap().clone();
-		let object_footer = match metadata.lock().unwrap().object_footer(&object_no) {
+		let object_header = metadata.object_header(&object_no).unwrap().clone();
+		let object_footer = match metadata.object_footer(&object_no) {
 			Some(ObjectFooter::Virtual(footer)) => footer.clone(),
 			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
 		};
@@ -539,7 +540,7 @@ impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
 			};
 
 			let vmi_obj_no = virtual_mapping_information.object_number;
-			let chunk_size = match self.metadata.lock().unwrap().object_metadata.get(&vmi_obj_no) {
+			let chunk_size = match self.metadata.object_metadata.read().unwrap().get(&vmi_obj_no) {
 				Some(ref obj) => obj.header.chunk_size,
 				None => return Err(std::io::Error::new(
 					std::io::ErrorKind::Other, 
@@ -554,7 +555,7 @@ impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
 					break 'outer;
 				}
 
-				let chunk_data = if let Some(samebyte) = self.metadata.lock().unwrap().preloaded_chunkmaps.get_samebyte(current_chunk_number) {
+				let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
 					vec![samebyte; chunk_size as usize]
 				} else {
 					let object_no = &self.object_header.object_number;
@@ -590,7 +591,7 @@ fn get_vmi_info<R: Read + Seek>(
 	offset: u64,
 	metadata: ArcZffReaderMetadata<R>) -> Result<VirtualMappingInformation> {
     let (segment_no, offset) = find_vmi_offset(vmi_map, offset).ok_or_else(|| ZffError::new(ZffErrorKind::NotFound, "VMI not found"))?;
-    let segments = &mut metadata.lock().unwrap().segments;
+    let mut segments = metadata.segments.write().unwrap();
 	let segment = match segments.get_mut(&segment_no) {
 		Some(segment) => segment,
 		None => return Err(ZffError::new(
@@ -660,7 +661,7 @@ impl<R: Read + Seek> ZffObjectReaderEncrypted<R> {
 
 		let obj_no = decrypted_object_header.object_number;
 		let obj_metadata = ObjectMetadata::new(decrypted_object_header, decrypted_footer.clone());
-		self.metadata.lock().unwrap().object_metadata.insert(obj_no, obj_metadata);
+		self.metadata.object_metadata.write().unwrap().insert(obj_no, obj_metadata);
 
 		let obj_reader = match decrypted_footer {
 			ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
