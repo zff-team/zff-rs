@@ -806,6 +806,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                         }
                     };
                     self.in_progress_data.main_footer.object_header.insert(self.current_object_encoder.obj_number(), self.current_segment_no());
+                    self.in_progress_data.chunkmaps.set_object_number(self.current_object_encoder.obj_number());
                     self.read_state = ReadState::ObjectHeader;
                     self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
                     self.in_progress_data.segment_footer.add_object_header_offset(
@@ -972,6 +973,8 @@ fn setup_container<R: Read, C: Read + Seek>(
         in_progress_data.encoded_segment_header_read_bytes = ReadBytes::Finished;
         in_progress_data.main_footer.object_header.insert(current_object_encoder.obj_number(), extender_parameter.segment_number);
     }
+
+    in_progress_data.chunkmaps.set_object_number(current_object_encoder.obj_number());
 
     Ok(ZffWriter {
         read_state,
