@@ -2,7 +2,7 @@
 use core::borrow::Borrow;
 use std::path::Path;
 use std::cmp::PartialEq;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap, BTreeMap, HashSet};
 use std::io::{Cursor, Read, Seek};
 use std::fmt;
 
@@ -40,10 +40,6 @@ use serde::{
 	Serialize,
 	ser::{Serializer, SerializeStruct},
 };
-#[cfg(feature = "serde")]
-use hex;
-#[cfg(feature = "serde")]
-use redb::ReadableTable;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -69,7 +65,7 @@ impl fmt::Display for ChunkMapType {
 }
 
 /// The ChunkMaps struct contains all chunk maps.
-#[derive(Debug,Clone,PartialEq,Eq,Default)]
+#[derive(Debug,Clone,PartialEq,Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkMaps {
 	/// The offset map.
@@ -87,6 +83,14 @@ impl ChunkMaps {
 		self.same_bytes_map.chunkmap().is_empty() && 
 		self.duplicate_chunks.chunkmap().is_empty()
 	}
+
+	/// sets the appropriate object number
+	pub fn set_object_number(&mut self, object_number: u64) {
+		self.header_map.set_object_number(object_number);
+		self.same_bytes_map.set_object_number(object_number);
+		self.duplicate_chunks.set_object_number(object_number);
+	}
+
 }
 
 #[cfg(feature = "serde")]
@@ -115,10 +119,10 @@ pub trait ChunkMap {
     type Value;
 
     /// returns a new chunk map with the given values.
-	fn with_data(chunkmap: BTreeMap<u64, Self::Value>) -> Self;
+	fn new(object_number: u64, chunkmap: BTreeMap<u64, Self::Value>) -> Self;
 
 	/// returns a new, empty chunk map with the given values.
-	fn new_empty() -> Self;
+	fn new_empty(object_number: u64) -> Self;
 
     /// Returns the inner map and replaces it with an empty map.
 	fn flush(&mut self) -> BTreeMap<u64, Self::Value>;
@@ -140,8 +144,11 @@ pub trait ChunkMap {
     /// Returns a reference to the inner map
 	fn chunkmap(&self) -> &BTreeMap<u64, Self::Value>;
 
+	/// Sets the appropriate object number
+	fn set_object_number(&mut self, object_number: u64);
+
     /// Returns the apprpropriate (encrypted) structure data
-    fn inner_structure_data<D: Read>(data: &mut D) -> Result<Vec<u8>>
+    fn inner_structure_data<D: Read>(data: &mut D) -> Result<ChunkMapInnerStructureData>
     where 
          Self: HeaderCoding,
     {
@@ -153,9 +160,10 @@ pub trait ChunkMap {
 		if version != Self::version() {
 			return Err(ZffError::new(ZffErrorKind::Unsupported, format!("{ERROR_UNSUPPORTED_VERSION}{version}")));
 		}
+		let object_number = u64::decode_directly(data)?;
 		let mut structure_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH-1];
 		data.read_exact(&mut structure_content)?;
-        Ok(structure_content)
+		Ok(ChunkMapInnerStructureData::new(object_number, structure_content))
     }
 
     /// Decrypts and decodes the chunk map by using the given key.
@@ -192,5 +200,26 @@ pub trait ChunkMap {
 		vec.append(&mut encrypted_map);
 
 		Ok(vec)
+	}
+}
+
+
+/// Structure data for chunk map inner structure.
+/// This structure is used to store the structure data for chunk map inner structure.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ChunkMapInnerStructureData {
+	/// Object number for chunk map inner structure.
+	pub object_number: u64,
+	/// Structure data for chunk map inner structure.
+	pub structure_data: Vec<u8>,
+}
+
+impl ChunkMapInnerStructureData {
+	/// Creates a new chunk map inner structure data.
+	pub fn new(object_number: u64, structure_data: Vec<u8>) -> Self {
+		Self {
+			object_number,
+			structure_data,
+		}
 	}
 }

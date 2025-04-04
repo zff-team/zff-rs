@@ -174,7 +174,7 @@ pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
 
 impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	/// Initialize the [ZffObjectReaderLogical] with a minimal set of (the absolutly required) metadata which will be stored in memory.
-	fn with_obj_metadata_minimal(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
+	pub fn with_obj_metadata_minimal(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 		Self::with_obj_metadata(object_no, metadata, PreloadDegree::Minimal)
 	}
 

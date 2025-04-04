@@ -150,7 +150,7 @@ impl PreloadedChunkMaps {
 #[derive(Debug)]
 pub(crate) struct ZffReaderGeneralMetadata<R: Read + Seek> {
 	pub segments: Arc<RwLock<HashMap<u64, Segment<R>>>>, //<segment number, Segment>
-	pub object_metadata: Arc<RwLock<BTreeMap<u64, ObjectMetadata>>>, //<object number, ObjectMetadata>
+	pub object_metadata: Arc<RwLock<BTreeMap<u64, ObjectMetadata>>>, //<object number, ObjectMetadata> //TODO: ObjectMetadata should be a Arc<RwLock>> which is present in the appropriate ZffObjectReader
 	pub main_footer: MainFooter,
 	pub preloaded_chunkmaps: Arc<RwLock<PreloadedChunkMaps>>,
 }
@@ -361,13 +361,75 @@ impl<R: Read + Seek> ZffReader<R> {
 		*chunk_number
 	}
 
+	/// Returns a list of all xxhashes (of all unencrypted objects) 
+	/// as BTreeMap<u64, u64> (chunk_no / appropriate xxhash)
+	pub fn get_xxhashmaps_unencrypted(&self) -> Result<BTreeMap<u64, u64>> {
+		let mut map = BTreeMap::new();
+		let mut segments = self.metadata.segments.write().unwrap();
+		for segment in segments.values_mut() {
+			let map_table = segment.footer().chunk_header_map_table.clone();
+			//trying to decode the map entries - will fail if the map is encrypted.
+			for offset in map_table.values() {
+				segment.seek(SeekFrom::Start(*offset))?;
+				match ChunkHeaderMap::decode_directly( segment) {
+					Ok(inner_map) => inner_map
+														.chunkmap()
+														.into_iter()
+														.for_each(|(chunk_no, header) | {
+															map.insert(*chunk_no, header.integrity_hash);
+														}),
+					Err(e) => panic!("{e}"),
+				}
+			}
+		}
+		Ok(map)
+	}
+
 	/// Returns the Data of the given chunk no
 	/// # Error
 	/// - If the object is encrypted, it will return an error.
 	/// - If the chunk number is out of range, it will return an error.
 	pub fn chunk_data(&self, chunk_no: u64) -> Result<Vec<u8>> {
-		//TODO
-		unimplemented!()
+		let mut segments = self.metadata.segments.write().unwrap();
+		let segment = match get_segment_of_chunk_no(
+			chunk_no, 
+			&self.metadata.main_footer.chunk_header_maps) 
+		{
+			Some(segment_no) => match segments.get_mut(&segment_no) {
+				Some(segment) => segment,
+				None => return Err(ZffError::new(ZffErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+			},
+			None => return Err(ZffError::new(ZffErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+		};
+		// search for the appropriate object number
+		let preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.read().unwrap();
+		let chunk_header = match extract_chunk_header_from_preloaded_chunkmap(&preloaded_chunkmaps, chunk_no) {
+			Some(header) => header,
+			None => segment.get_chunk_header(&chunk_no)?, 
+		};
+
+		if chunk_header.flags.encryption {
+			return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_CHUNK_IS_ENCRYPTED_}{chunk_no}")));
+		}
+
+		let object_number = segment.get_object_number(chunk_no)?;
+		let object_metadata = self.metadata.object_metadata.read().unwrap();
+		let object_header = match object_metadata.get(&object_number) {
+			Some(ref metadata) => &metadata.header,
+			None => return Err(ZffError::new(ZffErrorKind::Missing, format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
+		};
+
+		match segment.chunk_data(
+			chunk_no, 
+			&None::<EncryptionInformation>, 
+			&object_header.compression_header.algorithm, 
+			Some(chunk_header.offset), 
+			Some(chunk_header.size), 
+			Some(chunk_header.flags))? {
+				ChunkContent::Raw(data) => Ok(data),
+				ChunkContent::Duplicate(chunk_no) => self.chunk_data(chunk_no),
+				ChunkContent::SameBytes(single_byte) => Ok(vec![single_byte; object_header.chunk_size as usize])
+			}
 	}
 
 	/// Decrypts an encrypted initialized object (and re-initialize/replaces the appropriate object directly).
@@ -834,41 +896,47 @@ where
 		return get_chunk_data(current_object_no, metadata, dedup_chunk_no);
 	};
 	
-	let segments = &mut metadata.segments.write().unwrap();
-	let segment = match get_segment_of_chunk_no(
-	current_chunk_number, 
-	&metadata.main_footer.chunk_header_maps) 
-	{
-		Some(segment_no) => match segments.get_mut(&segment_no) {
-			Some(segment) => segment,
-			None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-		},
-		None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
-	};
-
-	// unwrap should be safe here, while we already checked that this method only will be called from [ZffObjectReader]-methods.
-	//let object_header_ref = metadata.object_header_ref(&current_object_no).unwrap();
-	let object_metadata = metadata.object_metadata.read().unwrap();
-	let object_header_ref = &object_metadata.get(&current_object_no).unwrap().header;
-	let enc_information = EncryptionInformation::try_from(object_header_ref).ok();
-	let compression_algorithm = &object_header_ref.compression_header.algorithm;
-
-	let chunk_content = match segment.chunk_data(
+	let original_chunk_size;
+	let chunk_content = {
+		// Implicitly drops the RAII when exiting the Scope (necessary if the ChunkContent 
+		// is a Duplicate - while we try to recursivly use the get_chunk_data()-method).
+		let segments = &mut metadata.segments.write().unwrap();
+		let segment = match get_segment_of_chunk_no(
 		current_chunk_number, 
-		&enc_information, 
-		compression_algorithm, 
-		optional_chunk_offset,
-		optional_chunk_size,
-		optional_chunk_flags.clone()) {
-		Ok(data) => data,
-		Err(e) => match e.kind() {
-			error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
-		},
+		&metadata.main_footer.chunk_header_maps) 
+		{
+			Some(segment_no) => match segments.get_mut(&segment_no) {
+				Some(segment) => segment,
+				None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+			},
+			None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
+		};
+	
+		// unwrap should be safe here, while we already checked that this method only will be called from [ZffObjectReader]-methods.
+		//let object_header_ref = metadata.object_header_ref(&current_object_no).unwrap();
+		let object_metadata = metadata.object_metadata.read().unwrap();
+		let object_header_ref = &object_metadata.get(&current_object_no).unwrap().header;
+		let enc_information = EncryptionInformation::try_from(object_header_ref).ok();
+		let compression_algorithm = &object_header_ref.compression_header.algorithm;
+		original_chunk_size = object_header_ref.chunk_size;
+
+		match segment.chunk_data(
+			current_chunk_number, 
+			&enc_information, 
+			compression_algorithm, 
+			optional_chunk_offset,
+			optional_chunk_size,
+			optional_chunk_flags.clone()) {
+			Ok(data) => data,
+			Err(e) => match e.kind() {
+				error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+			},
+		}
 	};
+
 	match chunk_content {
 		ChunkContent::Raw(data) => Ok(data),
 		ChunkContent::SameBytes(single_byte) => {
-			let original_chunk_size = object_header_ref.chunk_size;
 			Ok(vec![single_byte; original_chunk_size as usize])
 		},
 		ChunkContent::Duplicate(dedup_chunk_no) => {
@@ -1026,6 +1094,36 @@ fn preloaded_redb_chunk_deduplication_map_add_entry(db: &mut Database, chunk_no:
 	}
 	write_txn.commit()?;
 	Ok(())
+}
+
+// tries to extract the appropriate offset of the given chunk number.
+// returns a None in case of error or if the chunkmap is a [PreloadedChunkmap::None].
+fn extract_chunk_header_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkMaps, chunk_number: u64) -> Option<ChunkHeader> {
+	match preloaded_chunkmap {
+		PreloadedChunkMaps::None => None,
+		PreloadedChunkMaps::InMemory(preloaded_maps) => {
+			preloaded_maps.chunk_header.get(&chunk_number).map(|header| header.clone()) //TODO: find a more efficient way?
+		},
+		PreloadedChunkMaps::Redb(db) => {
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE).ok()?;
+    		let offset = table.get(&chunk_number).ok()??.value();
+    		
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE).ok()?;
+    		let size = table.get(&chunk_number).ok()??.value();
+
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE).ok()?;
+    		let flags = table.get(&chunk_number).ok()??.value().into();
+    		
+			let read_txn = db.begin_read().ok()?;
+    		let table = read_txn.open_table(PRELOADED_CHUNK_XXHASH_MAP_TABLE).ok()?;
+    		let integrity_hash = table.get(&chunk_number).ok()??.value();
+
+			Some(ChunkHeader::new(offset, size, flags, integrity_hash))
+		}
+	}
 }
 
 // tries to extract the appropriate offset of the given chunk number.
@@ -1188,7 +1286,8 @@ fn initialize_new_map_if_empty<R: Read + Seek>(metadata: ArcZffReaderMetadata<R>
 	*preloaded_chunkmaps = new_preloaded_chunkmaps;
 }
 
-/// Returns the segment number and the appropriate offset of a chunkmap (if exists for the appropriate chunk number).
+/// Returns the segment number and the appropriate offset of a chunkmap 
+/// (if exists for the appropriate chunk number).
 /// Otherwise, returns None.
 fn chunkmap_offset_info<R>(
 	chunkmap_type: ChunkMapType, 

@@ -14,7 +14,7 @@ use crate::{
 	CompressionAlgorithm,
 	ChunkContent,
 	decompress_buffer,
-	header::{SegmentHeader, ObjectHeader, EncryptionInformation, EncryptedObjectHeader, ChunkFlags},
+	header::{SegmentHeader, ObjectHeader, EncryptionInformation, EncryptedObjectHeader, ChunkFlags, ChunkHeader},
 	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
 	constants::*,
 };
@@ -87,13 +87,38 @@ impl<R: Read + Seek> Segment<R> {
 
 		// skips the chunk map header and the other chunk entries.
 		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
-					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk header identifier 
-						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the header length value
+					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier 
+						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
 						  1 + // skip the ChunkMap header version
+						  8 + // skip the object number
 						  8 + // skip the length of the map
 						  ((chunk_number - first_chunk_number_of_map) * (8 + 38)) +//skip the other chunk entries
 						  8; // skip the chunk number itself
 		Ok(seek_offset)
+	}
+
+	// returns the object number of the appropriate chunk
+	pub(crate) fn get_object_number(&mut self, chunk_number: u64) -> Result<u64> {
+		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_header_map_table, chunk_number)?;
+
+		// skips the chunk map header and the other chunk entries.
+		let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
+					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier 
+						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
+						  1; // skip the ChunkMap header version
+		self.data.seek(SeekFrom::Start(seek_offset))?;
+		u64::decode_directly(&mut self.data)
+	}
+
+	/// Returns the ChunkHeader of the appropriate chunk (number).
+	pub fn get_chunk_header(&mut self, chunk_number: &u64) -> Result<ChunkHeader> {
+		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
+
+		//go to the appropriate chunk map.
+		self.data.seek(SeekFrom::Start(chunk_header_offset))?;
+		// read the appropriate offset
+		let header = <ChunkHeader as ValueDecoder>::decode_directly(&mut self.data)?;
+		Ok(header)
 	}
 
 	/// Returns the offset of the appropriate chunk (number).

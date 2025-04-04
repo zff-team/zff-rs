@@ -1,5 +1,5 @@
+// - external
 use redb::TableDefinition;
-
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 // identifier: magic bytes
@@ -112,7 +112,7 @@ pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segm
 pub(crate) const ERROR_UNDECODABLE_MAIN_FOOTER: &str = "Could not decode main footer";
 pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str = "Could not read header offsets of object no. ";
 pub(crate) const ERROR_UNREADABLE_FILE_FOOTER_OFFSET_NO: &str = "Could not read footer offsets of file no. ";
-
+pub(crate) const ERROR_CHUNK_IS_ENCRYPTED_: &str = "The chunk is encrypted; chunk no ";
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
@@ -246,8 +246,10 @@ pub const METADATA_BTIME: &str = "btime";
 
 
 // - ChunkMap
-/// Table name for the redb chunkmap
-pub const CHUNK_MAP_TABLE: TableDefinition<&[u8; 32], u64> = TableDefinition::new("map");
+/// Table name for the redb deduplication chunkmap (xxhashes)
+pub const CHUNK_MAP_TABLE: TableDefinition<u64, Vec<u64>> = TableDefinition::new("map");
+/// Table name for the redb deduplication chunkmap (blake3 hashes)
+pub const CHUNK_MAP_B3_TABLE: TableDefinition<u64, &[u8; 32]> = TableDefinition::new("b3_map");
 /// Table name for the redb preloaded chunk offset map
 pub const PRELOADED_CHUNK_OFFSET_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_offset_map");
 /// Table name for the redb preloaded chunk size map

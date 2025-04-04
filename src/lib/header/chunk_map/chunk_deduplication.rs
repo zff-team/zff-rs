@@ -3,8 +3,7 @@ use super::*;
 
 // - internal
 use crate::{
-	io::zffreader::ZffReader,
-    constants::*,
+	constants::*, io::zffreader::ZffReader
 };
 
 // - external
@@ -12,34 +11,31 @@ use redb::Database;
 use blake3::Hash as Blake3Hash;
 
 /// The [ChunkDeduplicationMap] stores the chunk size of the appropriate chunk.
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug,Clone,PartialEq,Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkDeduplicationMap {
 	chunkmap: BTreeMap<u64, u64>, //<chunk no, dedup chunk no>
+	object_number: u64,
 	target_size: usize,
-}
-
-impl Default for ChunkDeduplicationMap {
-	fn default() -> Self {
-		Self::new_empty()
-	}
 }
 
 impl ChunkMap for ChunkDeduplicationMap {
 	type Value = u64;
 
 	/// returns a new [ChunkDeduplicationMap] with the given values.
-	fn with_data(chunkmap: BTreeMap<u64, Self::Value>) -> Self {
+	fn new(object_number: u64, chunkmap: BTreeMap<u64, Self::Value>) -> Self {
 		Self {
 			chunkmap,
+			object_number,
 			target_size: 0,
 		}
 	}
 
 	/// returns a new, empty [ChunkDeduplicationMap] with the given values.
-	fn new_empty() -> Self {
+	fn new_empty(object_number: u64) -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),
+			object_number,
 			target_size: 0,
 		}
 	}
@@ -61,6 +57,10 @@ impl ChunkMap for ChunkDeduplicationMap {
 
 	fn set_target_size(&mut self, target_size: usize) {
 		self.target_size = target_size
+	}
+
+	fn set_object_number(&mut self, object_number: u64) {
+		self.object_number = object_number
 	}
 
 	fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool {
@@ -86,11 +86,11 @@ impl ChunkMap for ChunkDeduplicationMap {
     A: Borrow<EncryptionAlgorithm>, 
     D: Read,
     Self: Sized {
-		let structure_data = Self::inner_structure_data(data)?;
-		let enc_buffer = ChunkDeduplicationMap::decrypt(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
+		let inner_structure_data = Self::inner_structure_data(data)?;
+		let enc_buffer = Self::decrypt(key, inner_structure_data.structure_data, chunk_no, encryption_algorithm.borrow())?;
 		let mut reader = Cursor::new(enc_buffer);
 		let map = BTreeMap::decode_directly(&mut reader)?;
-		Ok(Self::with_data(map))
+		Ok(Self::new(inner_structure_data.object_number, map))
 	}
 
 	fn encode_map(&self) -> Vec<u8> {
@@ -106,15 +106,18 @@ impl ChunkMap for ChunkDeduplicationMap {
 		let encoded_map = Self::encode_map(self);
 		let mut encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
 		let mut encoded_version = Self::version().encode_directly();
+		let mut encoded_object_number = self.object_number.encode_directly();
 		let identifier = Self::identifier();
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
+			encoded_object_number.len() +
 			encrypted_map.len() +
 			encoded_version.len()) as u64;
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
 		vec.append(&mut encoded_version);
+		vec.append(&mut encoded_object_number);
 		vec.append(&mut encrypted_map);
 		Ok(vec)
 	}
@@ -133,8 +136,8 @@ impl HeaderCoding for ChunkDeduplicationMap {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
 		vec.append(&mut Self::version().encode_directly());
+		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.chunkmap.encode_directly());
 		vec
 	}
@@ -142,8 +145,9 @@ impl HeaderCoding for ChunkDeduplicationMap {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
+		let object_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		Ok(Self::with_data(chunkmap))
+		Ok(Self::new(object_number, chunkmap))
 	}
 
 	fn struct_name() -> &'static str {
@@ -183,24 +187,30 @@ impl Serialize for ChunkDeduplicationMap {
 pub struct DeduplicationMetadata<R: Read + Seek> {
 	/// A map which can be used to handle the chunk deduplication.
 	pub deduplication_map: DeduplicationChunkMap,
-	/// Optional original zffreader - in case of an extension of an existing zff container.
+	/// Optional original zffreader - in case of an extension of an existing zff container, this is necessary.
 	pub original_zffreader: Option<ZffReader<R>>,
 }
 
-//TODO: use xxhash before using blake3
 /// A map which can be used to handle the chunk deduplication.
 #[derive(Debug)]
 pub enum DeduplicationChunkMap {
 	/// Use a in-memory deduplication map at cost of memory.
-	InMemory(HashMap<Blake3Hash, u64>), //<blake3-hash, the appropriate chunk number with the original data>
+	InMemory(InMemoryDedupMap), //<xxhash, the appropriate chunk number with the original data>
 	/// Use a Redb based deduplication map at cost of I/O.
 	Redb(Database),
 }
 
 impl Default for DeduplicationChunkMap {
 	fn default() -> Self {
-		DeduplicationChunkMap::InMemory(HashMap::new())
+		DeduplicationChunkMap::InMemory(InMemoryDedupMap::default())
 	}
+}
+
+/// The InMemory deduplication map structure
+#[derive(Debug, Default)]
+pub struct InMemoryDedupMap {
+	xxhash_map: HashMap<u64, HashSet<u64>>, //<xxhash-value, HashSet<Chunk-No>
+	verification_hash_map: HashMap<u64, Blake3Hash> // Chunk-No, Verification-Hash
 }
 
 impl DeduplicationChunkMap {
@@ -218,24 +228,37 @@ impl DeduplicationChunkMap {
 
 	/// Creates a new in-memory [DeduplicationChunkMap].
 	pub fn new_in_memory_map() -> Self {
-		DeduplicationChunkMap::InMemory(HashMap::new())
+		DeduplicationChunkMap::InMemory(InMemoryDedupMap::default())
 	}
 
 	/// Adds an entry to the deduplication map.
-	pub fn append_entry(&mut self, chunk_no: u64, blak3_hash: Blake3Hash) -> Result<()> {
+	pub fn append_entry(&mut self, xxhash: u64, chunk_no: u64) -> Result<()> {
 		match self {
 			DeduplicationChunkMap::InMemory(map) => {
-				match map.get_mut(&blak3_hash) {
-					Some(_) => (),
-					None => { map.insert(blak3_hash, chunk_no); }
+				//TODO: Better implementation in future with get_or_insert
+				// see: https://github.com/rust-lang/rust/issues/60896
+				match map.xxhash_map.get_mut(&xxhash) {
+					Some(set) => { set.insert(chunk_no); },
+					None => {
+						let mut set = HashSet::new();
+						set.insert(chunk_no);
+						map.xxhash_map.insert(xxhash, set);
+					}
 				}
 				Ok(())
 			},
 			DeduplicationChunkMap::Redb(db) => {
+				let read_txn = db.begin_read()?;
+				let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
+				let mut inner_vec = table.get(xxhash)?.ok_or(
+					ZffError::new(ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))?.value();
+				if !inner_vec.contains(&chunk_no) {
+					inner_vec.push(chunk_no);
+				};
 				let write_txn = db.begin_write()?;
 			    {
 			        let mut table = write_txn.open_table(CHUNK_MAP_TABLE)?;
-			        table.insert(blak3_hash.as_bytes(), chunk_no)?;
+			        table.insert(xxhash, inner_vec)?;
 			    }
 			    write_txn.commit()?;
 				Ok(())
@@ -243,70 +266,56 @@ impl DeduplicationChunkMap {
 		}
 	}
 
-	/// Returns the chunk number to the given hash.
-	pub fn get_chunk_number<B>(&mut self, blak3_hash: B) -> Result<u64>
-	where
-		B: Borrow<Blake3Hash>
-	{ //returns the appropriate Chunk no.
+	/// Adds a blake3 hash to an existing chunk / xxhash combination
+	pub fn append_verification_hash<B: Borrow<Blake3Hash>>(&mut self, chunk_no: u64, verification_hash: B) -> Result<()> {
 		match self {
 			DeduplicationChunkMap::InMemory(map) => {
-				map.get(blak3_hash.borrow()).copied().ok_or(ZffError::new(
-					ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))
+				map.verification_hash_map.insert(chunk_no, *verification_hash.borrow());
+				Ok(())
+			},
+			DeduplicationChunkMap::Redb(db) => {
+				let write_txn = db.begin_write()?;
+			    {
+			        let mut table = write_txn.open_table(CHUNK_MAP_B3_TABLE)?;
+			        table.insert(chunk_no, verification_hash.borrow().as_bytes())?;
+			    }
+			    write_txn.commit()?;
+				Ok(())
+			}
+		}
+	}
+
+	/// Returns all chunk numbers to the given xxhash.
+	pub fn get_chunk_number(&mut self, xxhash: u64) -> Result<HashSet<u64>> {
+		match self {
+			DeduplicationChunkMap::InMemory(map) => {
+				map.xxhash_map.get(&xxhash).ok_or(ZffError::new(
+					ZffErrorKind::NotFound, ERROR_NOT_IN_MAP)).map(|map| map.clone())
 			},
 			DeduplicationChunkMap::Redb(db) => {
 			let read_txn = db.begin_read()?;
     		let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
-    		let value = table.get(blak3_hash.borrow().as_bytes())?.ok_or(
+    		let inner_vec = table.get(xxhash)?.ok_or(
 				ZffError::new(ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))?.value();
-    		Ok(value)
+			Ok(inner_vec.into_iter().collect())
+			}
+		}
+	}
+
+	/// Returns the appropriate verification Hash, if exists
+	pub fn get_verification_hash(&mut self, chunk_no: u64) -> Result<Option<Blake3Hash>> {
+		match self {
+			DeduplicationChunkMap::InMemory(map) => {
+				Ok(map.verification_hash_map.get(&chunk_no).map(|hash| hash.clone()))
+			},
+			DeduplicationChunkMap::Redb(db) => {
+				let read_txn = db.begin_read()?;
+				let table = read_txn.open_table(CHUNK_MAP_B3_TABLE)?;
+				Ok(table.get(chunk_no)?.map(|access_guard| Blake3Hash::from_bytes(*access_guard.value())))
 			}
 		}
 	}
 }
-
-#[cfg(feature = "serde")]
-impl Serialize for DeduplicationChunkMap {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct(Self::struct_name(), 6)?;
-        let mut ser_dedup_map = HashMap::new();
-        match self {
-        	DeduplicationChunkMap::InMemory(dedup_map) => {
-        		for (blake3_hash, chunk_number) in dedup_map {
-        			ser_dedup_map.insert(blake3_hash.to_hex().to_lowercase(), *chunk_number);
-        		};
-        		state.serialize_field("in-memory-map", &ser_dedup_map)?;
-        	},
-        	DeduplicationChunkMap::Redb(database) => {
-        		let read_txn = match database.begin_read() {
-        			Ok(txn) => txn,
-        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
-        		};
-        		let table = match read_txn.open_table(CHUNK_MAP_TABLE) {
-        			Ok(table) => table,
-        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
-        		};
-        		let iterator = match table.iter() {
-        			Ok(iterator) => iterator,
-        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
-        		};
-
-        		for element in iterator {
-        			let (k, v) = match element {
-	        			Ok((k, v)) => (k, v),
-	        			Err(e) => return Err(serde::ser::Error::custom(e.to_string())),
-	        		};
-        			ser_dedup_map.insert(hex::encode(k.value()), v.value());
-        		};
-        		state.serialize_field("redb-map", &ser_dedup_map)?;
-        	}
-        }
-        state.end()
-    }
-}
-
 
 // - implement fmt::Display
 impl fmt::Display for DeduplicationChunkMap {

@@ -8,34 +8,31 @@ use crate::{
 };
 
 /// The Chunkmap stores the information where the each appropriate chunk could be found.
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug,Clone,PartialEq,Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkHeaderMap {
 	chunkmap: BTreeMap<u64, ChunkHeader>, //<chunk no, offset in segment>
+	object_number: u64,
 	target_size: usize,
-}
-
-impl Default for ChunkHeaderMap {
-	fn default() -> Self {
-		Self::new_empty()
-	}
 }
 
 impl ChunkMap for ChunkHeaderMap {
 	type Value = ChunkHeader;
 
 	/// returns a new [ChunkHeaderMap] with the given values.
-	fn with_data(chunkmap: BTreeMap<u64, Self::Value>) -> Self {
+	fn new(object_number: u64, chunkmap: BTreeMap<u64, Self::Value>) -> Self {
 		Self {
 			chunkmap,
+			object_number,
 			target_size: 0,
 		}
 	}
 
 	/// returns a new, empty [ChunkHeaderMap] with the given values.
-	fn new_empty() -> Self {
+	fn new_empty(object_number: u64) -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),
+			object_number,
 			target_size: 0,
 		}
 	}
@@ -57,6 +54,10 @@ impl ChunkMap for ChunkHeaderMap {
 
 	fn set_target_size(&mut self, target_size: usize) {
 		self.target_size = target_size
+	}
+
+	fn set_object_number(&mut self, object_number: u64) {
+		self.object_number = object_number
 	}
 
 	fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool {
@@ -82,11 +83,11 @@ impl ChunkMap for ChunkHeaderMap {
     A: Borrow<EncryptionAlgorithm>, 
     D: Read,
     Self: Sized {
-		let structure_data = Self::inner_structure_data(data)?;
-		let enc_buffer = Self::decrypt(key, structure_data, chunk_no, encryption_algorithm.borrow())?;
+		let inner_structure_data = Self::inner_structure_data(data)?;
+		let enc_buffer = Self::decrypt(key, inner_structure_data.structure_data, chunk_no, encryption_algorithm.borrow())?;
 		let mut reader = Cursor::new(enc_buffer);
 		let map = BTreeMap::decode_directly(&mut reader)?;
-		Ok(Self::with_data(map))
+		Ok(Self::new(inner_structure_data.object_number, map))
 	}
 
 	fn encode_map(&self) -> Vec<u8> {
@@ -102,15 +103,18 @@ impl ChunkMap for ChunkHeaderMap {
 		let encoded_map = Self::encode_map(self);
 		let mut encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
 		let mut encoded_version = Self::version().encode_directly();
+		let mut encoded_object_number = self.object_number.encode_directly();
 		let identifier = Self::identifier();
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
 			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
+			encoded_object_number.len() +
 			encrypted_map.len() +
 			encoded_version.len()) as u64;
 		vec.append(&mut identifier.to_be_bytes().to_vec());
 		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
 		vec.append(&mut encoded_version);
+		vec.append(&mut encoded_object_number);
 		vec.append(&mut encrypted_map);
 		Ok(vec)
 	}
@@ -129,8 +133,8 @@ impl HeaderCoding for ChunkHeaderMap {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-
 		vec.append(&mut Self::version().encode_directly());
+		vec.append(&mut self.object_number.encode_directly());
 		vec.append(&mut self.chunkmap.encode_directly());
 		vec
 	}
@@ -138,8 +142,9 @@ impl HeaderCoding for ChunkHeaderMap {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
+		let object_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap = BTreeMap::<u64, ChunkHeader>::decode_directly(&mut cursor)?;
-		Ok(Self::with_data(chunkmap))
+		Ok(Self::new(object_number, chunkmap))
 	}
 
 	fn struct_name() -> &'static str {

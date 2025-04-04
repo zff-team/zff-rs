@@ -13,7 +13,6 @@ mod encoder;
 // - re-exports
 pub use encoder::*;
 
-use crate::io::calculate_xxhash;
 // - internal
 use crate::{
     Result,
@@ -22,7 +21,7 @@ use crate::{
     Hash,
     CompressionAlgorithm,
 	PreparedChunk,
-    io::{buffer_chunk, check_same_byte},
+    io::{buffer_chunk, check_same_byte, calculate_xxhash},
 	header::{ChunkFlags, DeduplicationMetadata},
 	error::{ZffError, ZffErrorKind},
 	encryption::{Encryption, EncryptionAlgorithm},
@@ -487,6 +486,9 @@ pub(crate) fn chunking<R: Read + Seek>(
 	let mut sambebyte = None;
 	let mut duplicate = None;
 
+	// get xxhash 
+	let xxhash = *encoding_thread_pool_manager.xxhash_thread.get_result();
+
 	// check same byte
 	// if the length of the buffer is not equal the target chunk size, 
 	// the condition failed and same byte flag can not be set.
@@ -497,11 +499,34 @@ pub(crate) fn chunking<R: Read + Seek>(
 	} else if let Some(deduplication_metadata) = deduplication_metadata {
 		// unwrap should be safe here, because we have already testet this before.
 		let b3h = encoding_thread_pool_manager.hashing_threads.get_deduplication_result();
-		if let Ok(chunk_no) = deduplication_metadata.deduplication_map.get_chunk_number(*b3h) {
-			flags.duplicate = true;
-			ChunkContent::Duplicate(chunk_no)
+		if let Ok(chunk_no_set) = deduplication_metadata.deduplication_map.get_chunk_number(xxhash) {
+			let mut content = None;
+			for chunk_no in chunk_no_set {
+				let verification_hash = match deduplication_metadata.deduplication_map.get_verification_hash(chunk_no)? {
+					Some(vhash) => vhash,
+					None => {
+						let zffreader = match &mut deduplication_metadata.original_zffreader {
+							Some(zr) => zr,
+							None => break,
+						};
+						let chunk_data = zffreader.chunk_data(chunk_no)?;
+						let verification_hash = blake3::hash(&chunk_data);
+						deduplication_metadata.deduplication_map.append_verification_hash(chunk_no, verification_hash)?;
+						verification_hash
+					}
+				};
+				if verification_hash == *b3h {
+					flags.duplicate = true;
+					content = Some(chunk_no);
+					break;
+				}
+			}
+			match content {
+				Some(chunk_no) => ChunkContent::Duplicate(chunk_no),
+				None => ChunkContent::Raw(Vec::new()),
+			}
 		} else {
-			deduplication_metadata.deduplication_map.append_entry(current_chunk_number, *b3h)?;
+			deduplication_metadata.deduplication_map.append_entry(xxhash, current_chunk_number)?;
 			ChunkContent::Raw(Vec::new())
 		}
 	} else {
@@ -525,9 +550,6 @@ pub(crate) fn chunking<R: Read + Seek>(
 			}
 		},
 	};
-
-	// get xxhash 
-	let xxhash = *encoding_thread_pool_manager.xxhash_thread.get_result();
 
 	if compression_flag {
 		flags.compression = true;
