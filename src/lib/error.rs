@@ -43,8 +43,11 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
 	/// fn my_func() -> Result<()> {
+	/// 	let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
 	///     let custom_error = ZffError::new_with_source(
-	///                                ZffErrorKind::Custom, "My detailed custom error message");
+	///                                ZffErrorKind::Custom,
+	/// 							   Some(Box::new(io_error)),
+	/// 							   "My detailed custom error message");
 	///        Err(custom_error)
 	/// }
 	/// fn main() {
@@ -69,7 +72,7 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
 	/// fn my_func() -> Result<()> {
-	///     let custom_error = ZffError::new_with_source(
+	///     let custom_error = ZffError::new(
 	///                                ZffErrorKind::Custom, "My detailed custom error message");
 	///        Err(custom_error)
 	/// }
@@ -122,7 +125,7 @@ impl ZffError {
 	/// fn main() {
 	///     match my_func() {
 	///         Err(x) => {
-	///             assert!(matches!(x.get_kind(), &ZffErrorKind::Custom));
+	///             assert!(matches!(x.kind(), ZffErrorKind::Custom));
 	///         },
 	///         _ => ()
 	///     }
@@ -142,7 +145,7 @@ impl ZffError {
 	/// fn main() {
 	///     match my_func() {
 	///         Err(x) => {
-	///             assert!(matches!(x.get_kind(), &ZffErrorKind::Custom));
+	///             assert!(matches!(x.kind(), ZffErrorKind::Custom));
 	///         },
 	///         _ => ()
 	///     }
@@ -162,7 +165,7 @@ impl ZffError {
 	/// fn main() {
 	///     match my_func() {
 	///         Err(x) => {
-	///             assert!(matches!(x.unwrap_kind(), ZffErrorKind::Custom));
+	///             assert!(matches!(x.into_inner_kind(), ZffErrorKind::Custom));
 	///         },
 	///         _ => ()
 	///     }
