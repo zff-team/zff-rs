@@ -13,6 +13,6 @@ jobs:
 
       - uses: yesolutions/mirror-action@master
         with:
-          REMOTE: 'https://codeberg.org/ph0llux/mirror_test.git'
+          REMOTE: 'https://codeberg.org/zff-team/zff-rs.git'
           GIT_USERNAME: yourusername
           GIT_PASSWORD: ${{ secrets.CODEBERG_TOKEN }}
