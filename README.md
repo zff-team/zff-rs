@@ -5,6 +5,7 @@
 ![Apache2/MIT licensed][license-image]
 ![Rust Version][rustc-image]
 [![website][website-image]][website-link]
+[![codeberg][codeberg-image]][codeberg-link]
 
 Zff (Z forensic file format) is file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
 The focus of zff is on speed, security and modularity in concert with forensic requirements. The modular design promises high maintainability and scalability.
@@ -120,6 +121,8 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 [//]: # (badges)
 
+[codeberg-image]: https://img.shields.io/badge/Codeberg_Mirror-codeberg.org/zff--team/zff--rs-blue
+[codeberg-link]: https://codeberg.org/zff-team/zff-rs
 [crate-image]: https://img.shields.io/crates/v/zff
 [crate-link]: https://crates.io/crates/zff
 [docs-image]: https://docs.rs/zff/badge.svg
