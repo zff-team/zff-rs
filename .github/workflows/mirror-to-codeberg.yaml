@@ -1,0 +1,18 @@
+name: Mirror to Codeberg
+
+on: [push]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - uses: yesolutions/mirror-action@master
+        with:
+          REMOTE: 'https://codeberg.org/ph0llux/mirror_test.git'
+          GIT_USERNAME: yourusername
+          GIT_PASSWORD: ${{ secrets.CODEBERG_TOKEN }}
