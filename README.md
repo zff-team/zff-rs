@@ -120,7 +120,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 [//]: # (badges)
 
-[crate-image]: https://buildstats.info/crate/zff
+[crate-image]: https://img.shields.io/crates/v/zff
 [crate-link]: https://crates.io/crates/zff
 [docs-image]: https://docs.rs/zff/badge.svg
 [docs-link]: https://docs.rs/zff/
