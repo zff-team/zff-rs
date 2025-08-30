@@ -173,20 +173,20 @@ pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
 }
 
 impl<R: Read + Seek> ZffObjectReaderLogical<R> {
-	/// Initialize the [ZffObjectReaderLogical] with a minimal set of (the absolutly required) metadata which will be stored in memory.
+	/*/// Initialize the [ZffObjectReaderLogical] with a minimal set of (the absolutly required) metadata which will be stored in memory.
 	pub fn with_obj_metadata_minimal(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 		Self::with_obj_metadata(object_no, metadata, PreloadDegree::Minimal)
-	}
+	}*/
 
 	/// Initialize the [ZffObjectReaderLogical] with the recommended set of metadata which will be stored in memory.
 	pub fn with_obj_metadata_recommended(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 			Self::with_obj_metadata(object_no, metadata, PreloadDegree::Recommended)
 	}
 
-	/// Initialize the [ZffObjectReaderLogical] which will store all metadata in memory.
+	/*/// Initialize the [ZffObjectReaderLogical] which will store all metadata in memory.
 	pub fn with_obj_metadata_all(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 			Self::with_obj_metadata(object_no, metadata, PreloadDegree::All)
-	}
+	}*/
 
 	fn with_obj_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>, degree_value: PreloadDegree) -> Result<Self> {
 		#[cfg(feature = "log")]
@@ -214,7 +214,6 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		for (filenumber, header_segment_number) in object_footer.file_header_segment_numbers() {
 			#[cfg(feature = "log")]
 			debug!("Initialize file {filenumber}");
-
 			let header_offset = match object_footer.file_header_offsets().get(filenumber) {
 				Some(offset) => offset,
 				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
@@ -226,13 +225,13 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 					Some(offset) => (segment_no, offset),
 				}
 			};
-
 			let mut segments = metadata.segments.write().unwrap();
 			let fileheader = match segments.get_mut(header_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 				Some(segment) => {
+					debug!("123");
 					segment.seek(SeekFrom::Start(*header_offset))?;
 					//check encryption
 					if let Some(enc_info) = &enc_info {
@@ -242,7 +241,6 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 					}
 				}
 			};
-
 			let filefooter = match segments.get_mut(footer_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
@@ -258,9 +256,9 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 				}
 			};
 			let metadata = match degree_value {
-				PreloadDegree::Minimal => FileMetadata::with_header_minimal(&fileheader, &filefooter),
+				//PreloadDegree::Minimal => FileMetadata::with_header_minimal(&fileheader, &filefooter),
 				PreloadDegree::Recommended => FileMetadata::with_header_recommended(&fileheader, &filefooter),
-				PreloadDegree::All => FileMetadata::with_header_all(&fileheader, &filefooter),
+				//PreloadDegree::All => FileMetadata::with_header_all(&fileheader, &filefooter),
 			};
 			files.insert(*filenumber, metadata);
 		}
@@ -798,7 +796,7 @@ impl FileMetadata {
 
 #[derive(Debug)]
 enum PreloadDegree {
-	Minimal,
+	//Minimal,
 	Recommended,
-	All,
+	//All,
 }

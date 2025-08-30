@@ -785,13 +785,11 @@ impl<R: Read + Seek> ZffReader<R> {
 
 impl<R: Read + Seek> Read for ZffReader<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
-		{
-			let object_reader = match self.object_reader.get_mut(&self.active_object) {
-				Some(object_reader) => object_reader,
-				None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
-			};
-			object_reader.read(buffer)
-		}
+		let object_reader = match self.object_reader.get_mut(&self.active_object) {
+			Some(object_reader) => object_reader,
+			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
+		};
+		object_reader.read(buffer)
 	}
 }
 
@@ -945,7 +943,6 @@ where
 	}
 }
 
-
 fn initialize_object_reader_all<R: Read + Seek>(
 	metadata: ArcZffReaderMetadata<R>) -> Result<HashMap<u64, ZffObjectReader<R>>> {
 
@@ -1003,14 +1000,13 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	) -> Result<ZffObjectReader<R>> {
 	#[cfg(feature = "log")]
 	debug!("Initialize unencrypted object reader for object {obj_number}");
-	let mut segments = metadata.segments.write().unwrap();
-	let header = match segments.get_mut(&header_segment_no) {
+	let header = match metadata.segments.write().unwrap().get_mut(&header_segment_no) {
 		None => return Err(ZffError::new(
 			ZffErrorKind::Missing,
 			format!("{ERROR_MISSING_SEGMENT}{header_segment_no}"))),
 		Some(segment) => segment.read_object_header(obj_number)?,
 	};
-	let footer = match segments.get_mut(&footer_segment_no) {
+	let footer = match metadata.segments.write().unwrap().get_mut(&footer_segment_no) {
 		None => return Err(ZffError::new(
 			ZffErrorKind::Missing, 
 			format!("{ERROR_MISSING_SEGMENT}{header_segment_no}"))),
