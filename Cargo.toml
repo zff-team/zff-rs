@@ -23,41 +23,41 @@ crate-type = ["lib"]
 
 [dependencies]
 byteorder = "1.4.3"
-rand = { version = "0.9", features = ["os_rng"] }
+rand = { version = "0.9.2", features = ["os_rng"] }
 base64 = "0.22"
-time = { version = "0.3" }
+time = { version = "0.3.44" }
 itertools = "0.14"
-redb = "2"
+redb = "3.0.2"
 crossbeam = "0.8.2"
 #encryption
 pkcs5 = { version = "0.7.1", features = [ "pbes2", "alloc" ] }
-rust-argon2 = "2.0"
+rust-argon2 = "3.0.0"
 aes-gcm = { version = "0.10", features = [ "std" ] }
 chacha20poly1305 = "0.10"
-typenum = "1.16.0"
+typenum = "1.18.0"
 cbc = { version = "0.1.2", features = [ "alloc" , "std"] }
 aes = "0.8.3"
 #compression
-zstd = "0.13"
-lz4_flex = "0.11"
-ordered-float = "4"
+zstd = "0.13.3"
+lz4_flex = "0.11.5"
+ordered-float = "5.0.0"
 #Hashing
 digest = { version = "0.10.6", features = [ "alloc" ] }
-blake3 = { version = "1.5", features = [ "traits-preview" ] }
+blake3 = { version = "1.8.2", features = [ "traits-preview" ] }
 blake2 = "0.10.6"
-sha2 = "0.10.6"
+sha2 = "0.10.9"
 sha3 = "0.10.8"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 #signing
-ed25519-dalek = { version = "2.0", features = [ "digest" ] }
+ed25519-dalek = { version = "2.2.0", features = [ "digest" ] }
 # optional deps for features
-serde = { version = "1", features = ["derive"], optional = true }
+serde = { version = "1.0.226", features = ["derive"], optional = true }
 log = { version = "0.4", optional = true }
 hex = { version = "0.4", optional = true }
 
 # platform specific dependencies
 [target.'cfg(target_family = "unix")'.dependencies]
-xattr = "1"
+xattr = "1.6.1"
 posix-acl = "1.1.0"
 
 [features]

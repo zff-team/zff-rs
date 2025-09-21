@@ -7,7 +7,7 @@ use crate::{
 };
 
 // - external
-use redb::Database;
+use redb::{Database, ReadableDatabase};
 use blake3::Hash as Blake3Hash;
 
 /// The [ChunkDeduplicationMap] stores the chunk size of the appropriate chunk.

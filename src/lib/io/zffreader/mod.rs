@@ -46,7 +46,7 @@ use super::*;
 type ArcZffReaderMetadata<R> = Arc<ZffReaderGeneralMetadata<R>>;
 
 // - external
-use redb::{Database, ReadableTable};
+use redb::{Database, ReadableTable, ReadableDatabase};
 #[cfg(feature = "log")]
 use log::{debug, trace};
 
