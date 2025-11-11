@@ -352,6 +352,8 @@ pub enum ObjectType {
 	Physical = 0,
 	/// An object, containing logical files.
 	Logical = 1,
+	/// A virtual object.
+	Virtual = 2,
 }
 
 impl fmt::Display for ObjectType {
@@ -359,6 +361,7 @@ impl fmt::Display for ObjectType {
 		let msg = match self {
 			ObjectType::Physical => "Physical",
 			ObjectType::Logical => "Logical",
+			ObjectType::Virtual => "Virtual",
 		};
 		write!(f, "{}", msg)
 	}

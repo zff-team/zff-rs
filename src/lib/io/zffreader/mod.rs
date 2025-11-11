@@ -278,6 +278,7 @@ impl<R: Read + Seek> ZffReader<R> {
 				let obj_type = match obj_header.object_type {
 					HeaderObjectType::Physical => ObjectType::Physical,
 					HeaderObjectType::Logical => ObjectType::Logical,
+					HeaderObjectType::Virtual => ObjectType::Virtual,
 				};
 				map.insert(*object_number, obj_type);
 			} else {
