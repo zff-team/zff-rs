@@ -231,7 +231,6 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 				Some(segment) => {
-					debug!("123");
 					segment.seek(SeekFrom::Start(*header_offset))?;
 					//check encryption
 					if let Some(enc_info) = &enc_info {
