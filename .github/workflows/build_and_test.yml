@@ -22,7 +22,7 @@ jobs:
             libacl: libacl1-dev
             toolchain: stable
             target: x86_64-unknown-linux-gnu
-            name: Linux (Ubuntu 20.04)
+            name: Linux (Ubuntu 22.04)
           - os: ubuntu-latest
             libacl: "" # no libacl on ubuntu-latest for windows aarch64
             toolchain: nightly
@@ -50,8 +50,8 @@ jobs:
         components: clippy
         default: true
     
-    - name: Install acl-deps (Linux only)
-      if: matrix.os == 'ubuntu-20.04'
+    - name: Install deps (Linux only)
+      if: matrix.os == 'ubuntu-22.04'
       run: sudo apt-get install -y ${{ matrix.libacl }}
     
     - name: Install LLVM MinGW toolchain (Windows aarch64)
