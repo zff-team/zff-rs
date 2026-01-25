@@ -44,6 +44,7 @@ pub struct ChunkHeader {
     /// The flags of the chunked data.
     pub flags: ChunkFlags,
     /// The integrity hash (currently xxhash) of the chunked data.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::as_hex"))]
     pub integrity_hash: u64,
 }
 

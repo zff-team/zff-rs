@@ -52,6 +52,14 @@ impl ChunkMap for ChunkSamebytesMap {
 		&self.chunkmap
 	}
 
+	fn object_number(&self) -> u64 {
+		self.object_number
+	}
+
+	fn append(&mut self, mut map: Self) {
+		self.chunkmap.append(&mut map.flush());
+	}
+
 	fn set_target_size(&mut self, target_size: usize) {
 		self.target_size = target_size
 	}
@@ -75,6 +83,10 @@ impl ChunkMap for ChunkSamebytesMap {
 		} else {
 			false
 		}
+	}
+
+	fn is_empty(&self) -> bool {
+		self.chunkmap.is_empty()
 	}
 
 	fn decrypt_and_decode<K, A, D>(key: K, encryption_algorithm: A, data: &mut D, chunk_no: u64) -> Result<Self> 

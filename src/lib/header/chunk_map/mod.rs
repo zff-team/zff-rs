@@ -77,6 +77,15 @@ pub struct ChunkMaps {
 }
 
 impl ChunkMaps {
+	/// Generates a new map
+	pub fn new(header_map: ChunkHeaderMap, same_bytes_map: ChunkSamebytesMap, duplicate_chunks: ChunkDeduplicationMap) -> Self {
+		Self {
+			header_map,
+			same_bytes_map,
+			duplicate_chunks
+		}
+	}
+
 	/// checks if all maps are empty.
 	pub fn is_empty(&self) -> bool {
 		self.header_map.chunkmap().is_empty() && 
@@ -100,9 +109,15 @@ impl Serialize for ChunkMaps {
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("ChunkMaps", 6)?;
-        state.serialize_field(string_to_str(self.header_map.to_string()), &self.header_map)?;
-		state.serialize_field(string_to_str(self.same_bytes_map.to_string()), &self.same_bytes_map)?;
-		state.serialize_field(string_to_str(self.duplicate_chunks.to_string()), &self.duplicate_chunks)?;
+        if !self.header_map.is_empty() {
+			state.serialize_field(string_to_str(self.header_map.to_string()), &self.header_map)?;
+		}
+		if !self.same_bytes_map.is_empty() {
+			state.serialize_field(string_to_str(self.same_bytes_map.to_string()), &self.same_bytes_map)?;
+		}
+		if !self.duplicate_chunks.is_empty() {
+			state.serialize_field(string_to_str(self.duplicate_chunks.to_string()), &self.duplicate_chunks)?;
+		}
         state.end()
     }
 }
@@ -135,6 +150,9 @@ pub trait ChunkMap {
     /// Checks if the map is full (returns true if, returns false if not).
 	fn is_full(&self) -> bool;
 
+	/// Checks if the inner map is empty
+	fn is_empty(&self) -> bool;
+
     /// The encoded size of this map.
 	fn current_size(&self) -> usize;
 
@@ -143,6 +161,12 @@ pub trait ChunkMap {
 
     /// Returns a reference to the inner map
 	fn chunkmap(&self) -> &BTreeMap<u64, Self::Value>;
+
+	/// Appends another chunkmap to this map
+	fn append(&mut self, map: Self);
+
+	/// Returns the corresponding object number of the inner map
+	fn object_number(&self) -> u64;
 
 	/// Sets the appropriate object number
 	fn set_object_number(&mut self, object_number: u64);
