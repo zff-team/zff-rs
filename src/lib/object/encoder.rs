@@ -1,20 +1,11 @@
 // - STD
-use std::io::{Read, Cursor, Seek};
-use std::path::PathBuf;
-use std::fs::File;
-use std::collections::HashMap;
+use std::io::{Read, Seek};
 use std::time::SystemTime;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-#[cfg(target_family = "unix")]
-use std::os::unix::fs::MetadataExt;
-#[cfg(target_family = "unix")]
-use std::os::unix::fs::FileTypeExt;
-
 use crate::PreparedChunk;
-#[cfg(target_family = "unix")]
-use crate::SpecialFileEncodingInformation;
+use crate::object::logical_object_source::LogicalObjectSource;
 // - internal
 use crate::{
 	Result,
@@ -25,7 +16,6 @@ use crate::{
 	Signature,
 	ZffError,
 	ZffErrorKind,
-	FileTypeEncodingInformation,
 	constants::*,
 };
 
@@ -37,8 +27,6 @@ use crate::{
 		ObjectHeader, 
 		HashHeader,
 		HashValue,
-		FileHeader,
-		FileType,
 		EncryptionInformation,
 		DeduplicationMetadata,
 	},
@@ -149,7 +137,7 @@ impl<R: Read> ObjectEncoder<R> {
 	pub fn files_left(&self) -> Option<u64> {
 		match self {
 			ObjectEncoder::Physical(_) => None,
-			ObjectEncoder::Logical(obj) => Some(obj.files.len() as u64),
+			ObjectEncoder::Logical(obj) => Some(obj.logical_object_source.remaining_elements()),
 		}
 	}
 }
@@ -342,7 +330,7 @@ pub struct LogicalObjectEncoder {
 	/// The appropriate original object header
 	obj_header: ObjectHeader,
 	//encoded_header_remaining_bytes: usize,
-	files: Vec<(PathBuf, FileHeader)>,
+	logical_object_source: Box<dyn LogicalObjectSource>,
 	current_file_encoder: Option<FileEncoder>,
 	current_file_header_read: bool,
 	current_file_number: u64,
@@ -350,9 +338,6 @@ pub struct LogicalObjectEncoder {
 	encryption_key: Option<Vec<u8>>,
 	signing_key: Option<SigningKey>,
 	current_chunk_number: u64,
-	symlink_real_paths: HashMap<u64, PathBuf>,
-	hardlink_map: HashMap<u64, u64>, //<filenumber, filenumber of hardlink>
-	directory_children: HashMap<u64, Vec<u64>>, //<directory file number, Vec<child filenumber>>
 	object_footer: ObjectFooterLogical,
 	empty_file_eof: bool,
 }
@@ -381,16 +366,11 @@ impl LogicalObjectEncoder {
 	}
 
 	/// Returns a new [LogicalObjectEncoder] by the given values.
-	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		obj_header: ObjectHeader,
-		files: Vec<(PathBuf, FileHeader)>,
-		root_dir_filenumbers: Vec<u64>,
+		mut logical_object_source: Box<dyn LogicalObjectSource>,
 		hash_types: Vec<HashType>,
 		signing_key_bytes: Option<Vec<u8>>,
-		symlink_real_paths: HashMap<u64, PathBuf>, //File number <-> Symlink real path
-		hardlink_map: HashMap<u64, u64>, // <filenumber, filenumber of hardlink>
-		directory_children: HashMap<u64, Vec<u64>>,
 		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
 
 		// ensures that the encryption key is available in decrypted form.
@@ -419,86 +399,39 @@ impl LogicalObjectEncoder {
 
 		let encoding_thread_pool_manager = Rc::new(RefCell::new(encoding_thread_pool_manager));
 
-		let mut files = files;
-		let (path, current_file_header) = match files.pop() {
-			Some((path, header)) => (path, header),
-			None => return Err(ZffError::new(
-				ZffErrorKind::Missing,
-				ERROR_NO_INPUT_FILE))
-		};
-		//open first file path - if the path is not accessable, create an empty reader.
-		#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
-		let reader = match File::open(&path) {
-			Ok(reader) => Box::new(reader),
-			Err(_) => create_empty_reader()
-		};
-
-		let current_file_number = current_file_header.file_number;
-
 		let encryption_information = if let Some(encryption_key) = &encryption_key {
 			obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm.clone()))
 		} else {
 			None
 		};
 
-		let filetype_encoding_information = match current_file_header.file_type {
-			FileType::File => FileTypeEncodingInformation::File,
-			FileType::Directory => {
-				let mut children = Vec::new();
-				for child in directory_children.get(&current_file_number).unwrap_or(&Vec::new()) {
-					children.push(*child);
-				};
-				FileTypeEncodingInformation::Directory(children)
-			},
-			FileType::Symlink => {
-				let real_path = symlink_real_paths.get(&current_file_number).unwrap_or(&PathBuf::new()).clone();
-				FileTypeEncodingInformation::Symlink(real_path)
-			},
-			FileType::Hardlink => {
-				let hardlink_filenumber = hardlink_map.get(&current_file_number).unwrap_or(&0);
-				FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
-			},
-			#[cfg(target_family = "windows")]
-			FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
-			#[cfg(target_family = "unix")]
-			FileType::SpecialFile => {
-				let metadata = std::fs::metadata(&path)?;
-
-				let specialfile_info = if metadata.file_type().is_char_device() {
-					SpecialFileEncodingInformation::Char(metadata.rdev())
-				} else if metadata.file_type().is_block_device() {
-					SpecialFileEncodingInformation::Block(metadata.rdev())
-				} else if metadata.file_type().is_fifo() {
-					SpecialFileEncodingInformation::Fifo(metadata.rdev())
-				} else if metadata.file_type().is_socket() {
-					SpecialFileEncodingInformation::Socket(metadata.rdev())
-				} else {
-					return Err(ZffError::new(
-						ZffErrorKind::Unsupported,
-						ERROR_UNKNOWN_SPECIAL_FILETYPE));
-				};
-				FileTypeEncodingInformation::SpecialFile(specialfile_info)
-			},
+		let (filetype_encoding_information, file_header) = match logical_object_source.next() {
+			Some((encoder, header)) => (encoder?, header),
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing,
+				ERROR_NO_INPUT_FILE))
 		};
 
+		let current_file_number = file_header.file_number;
+
+
 		let first_file_encoder = Some(FileEncoder::new(
-			current_file_header,
+			file_header,
 			obj_header.clone(),
-			Box::new(reader), 
+			filetype_encoding_information, 
 			Rc::clone(&encoding_thread_pool_manager),
 			signing_key.clone(),
 			encryption_information, 
-			current_chunk_number, 
-			filetype_encoding_information)?);
+			current_chunk_number)?);
 		
 		let mut object_footer = ObjectFooterLogical::new_empty(obj_header.object_number);
-		for filenumber in root_dir_filenumbers {
-			object_footer.add_root_dir_filenumber(filenumber)
+		for filenumber in logical_object_source.root_dir_filenumbers() {
+			object_footer.add_root_dir_filenumber(*filenumber)
 		};
 
 		Ok(Self {
 			obj_header,
-			files,
+			logical_object_source,
 			current_file_encoder: first_file_encoder,
 			current_file_header_read: false,
 			current_file_number,
@@ -506,9 +439,6 @@ impl LogicalObjectEncoder {
 			encryption_key,
 			signing_key,
 			current_chunk_number,
-			symlink_real_paths,
-			hardlink_map,
-			directory_children,
 			object_footer,
 			empty_file_eof: false,
 		})
@@ -584,9 +514,9 @@ impl LogicalObjectEncoder {
 
 				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
-				
-				let (path, current_file_header) = match self.files.pop() {
-					Some((path, header)) => (path, header),
+
+				let (filetype_encoding_information, current_file_header) = match self.logical_object_source.next() {
+					Some((enc_info, header)) => (enc_info?, header),
 					None => {
 						// if no files left, the acquisition ends and the date will be written to the object footer.
 						// The appropriate file footer will be returned.
@@ -595,70 +525,23 @@ impl LogicalObjectEncoder {
 						return Ok(EncodingState::PreparedData(prepared_file_footer));
 					}
 				};
-
-				#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
-				let reader = match File::open(&path) {
-					Ok(reader) => Box::new(reader),
-					Err(_) => create_empty_reader()
-				};
-		     	
-				self.current_file_number = current_file_header.file_number;
-
 				let encryption_information = if let Some(encryption_key) = &self.encryption_key {
 					self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(
 						encryption_key.to_vec(), enc_header.algorithm.clone()))
 				} else {
 					None
 				};
-
-				let filetype_encoding_information = match current_file_header.file_type {
-					FileType::File => FileTypeEncodingInformation::File,
-					FileType::Directory => {
-						let mut children = Vec::new();
-						for child in self.directory_children.get(&self.current_file_number).unwrap_or(&Vec::new()) {
-							children.push(*child);
-						};
-						FileTypeEncodingInformation::Directory(children)
-					},
-					FileType::Symlink => {
-						let real_path = self.symlink_real_paths.get(&self.current_file_number).unwrap_or(&PathBuf::new()).clone();
-						FileTypeEncodingInformation::Symlink(real_path)
-					},
-					FileType::Hardlink => {
-						let hardlink_filenumber = self.hardlink_map.get(&self.current_file_number).unwrap_or(&0);
-						FileTypeEncodingInformation::Hardlink(*hardlink_filenumber)
-					},
-					#[cfg(target_family = "windows")]
-					FileType::SpecialFile => unreachable!("Special files are not supported on Windows"),
-					#[cfg(target_family = "unix")]
-					FileType::SpecialFile => {
-						let metadata = std::fs::metadata(&path)?;
-		
-						let specialfile_info = if metadata.file_type().is_char_device() {
-							SpecialFileEncodingInformation::Char(metadata.rdev())
-						} else if metadata.file_type().is_block_device() {
-							SpecialFileEncodingInformation::Block(metadata.rdev())
-						} else if metadata.file_type().is_fifo() {
-							SpecialFileEncodingInformation::Fifo(metadata.rdev())
-						} else if metadata.file_type().is_socket() {
-							SpecialFileEncodingInformation::Socket(metadata.rdev())
-						} else {
-							return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
-						};
-						FileTypeEncodingInformation::SpecialFile(specialfile_info)
-					},
-				};
+				self.current_file_number = current_file_header.file_number;
        			
 			    self.current_file_header_read = false;
 				self.current_file_encoder = Some(FileEncoder::new(
 					current_file_header, 
 					self.obj_header.clone(),
-					reader, 
+					filetype_encoding_information, 
 					Rc::clone(&self.encoding_thread_pool_manager),
 					self.signing_key.clone(),
 					encryption_information, 
-					self.current_chunk_number, 
-					filetype_encoding_information)?);
+					self.current_chunk_number)?);
 				Ok(EncodingState::PreparedData(prepared_file_footer))
 			},
 			None => {
@@ -673,10 +556,4 @@ impl LogicalObjectEncoder {
 		self.encryption_key.clone()
 	}
 
-}
-
-fn create_empty_reader() -> Box<dyn Read> {
-	let buffer = Vec::<u8>::new();
-	let cursor = Cursor::new(buffer);
-	Box::new(cursor)
 }

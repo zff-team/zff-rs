@@ -180,7 +180,7 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
     /// Returns a new ZffWriter with the given values.
     pub fn with_data(
         physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
-		logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>
+		logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>, //<ObjectHeader, input_files>
 		hash_types: Vec<HashType>,
         params: ZffCreationParameters<C>,
         output: ZffFilesOutput,
@@ -863,7 +863,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 
 fn setup_container<R: Read, C: Read + Seek>(
     physical_objects: HashMap<ObjectHeader, R>,
-    logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>,
+    logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
     hash_types: Vec<HashType>,
     params: ZffCreationParameters<C>,
     output: ZffFilesOutput) -> Result<ZffWriter<R, C>> {

@@ -8,10 +8,12 @@ use std::thread::{self};
 use std::io::{copy as io_copy, Read, Seek};
 
 // - modules
-mod encoder; 
+mod encoder;
+mod logical_object_source;
 
 // - re-exports
 pub use encoder::*;
+pub use logical_object_source::*;
 
 // - internal
 use crate::{

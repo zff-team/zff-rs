@@ -8,9 +8,9 @@ pub mod zffwriter;
 
 // - STD
 use std::io::{Read, copy as io_copy, Seek};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::fs::{Metadata, read_link, File, read_dir};
+use std::fs::{Metadata, File, read_dir};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -25,6 +25,7 @@ use std::os::windows::fs::MetadataExt;
 // - internal
 use crate::{
     Result,
+    object::LogicalObjectSource,
     header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationMetadata, MetadataExtendedValue},
     footer::{MainFooter, SegmentFooter},
     ZffError,
@@ -305,7 +306,7 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
     timestamps
 }
 
-fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+pub(crate) fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
     let metadata = std::fs::symlink_metadata(path)?;
 
     let filetype = if metadata.file_type().is_dir() {
@@ -372,7 +373,7 @@ pub(crate) fn get_posix_acls(acl: &PosixACL, default_acls: Option<&PosixACL>) ->
 // ... None, if there is no other hardlink available to this file or if there is another hardlink available to this file, but this is the first of the hardlinked files, you've read.
 // ... Some(filenumber), if there is another hardlink available and already was read.
 #[cfg(target_family = "unix")]
-fn add_to_hardlink_map(hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>, metadata: &Metadata, filenumber: u64) -> Option<u64> {
+pub(crate) fn add_to_hardlink_map(hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>, metadata: &Metadata, filenumber: u64) -> Option<u64> {
     if metadata.nlink() > 1 {
         match hardlink_map.get_mut(&metadata.dev()) {
             Some(inner_map) => match inner_map.get_mut(&metadata.ino()) {
@@ -492,19 +493,19 @@ fn setup_physical_object_encoder<R: Read>(
 
 /// This function sets up the [ObjectEncoder] for the logical objects.
 fn setup_logical_object_encoder<R: Read>(
-    logical_objects: HashMap<ObjectHeader, Vec<PathBuf>>,
+    logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
     hash_types: &Vec<HashType>,
     signature_key_bytes: &Option<Vec<u8>>,
     chunk_number: u64,
     object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
-    for (logical_object_header, input_files) in logical_objects {
+    for (logical_object_header, logical_object_source) in logical_objects {
         #[cfg(feature = "log")]
-        info!("Collecting files and folders for logical object {} using following paths: {:?}",
-            logical_object_header.object_number, input_files);
+        info!("Setting up logical object encoder for object {}",
+            logical_object_header.object_number);
 
         let lobj = setup_logical_object(
             logical_object_header,
-            input_files,
+            logical_object_source,
             hash_types,
             signature_key_bytes,
             chunk_number)?;
@@ -515,145 +516,21 @@ fn setup_logical_object_encoder<R: Read>(
 
 fn setup_logical_object(
     logical_object_header: ObjectHeader,
-    input_files: Vec<PathBuf>,
+    logical_object_source: Box<dyn LogicalObjectSource>,
     hash_types: &Vec<HashType>,
     signature_key_bytes: &Option<Vec<u8>>,
     chunk_number: u64) -> Result<LogicalObjectEncoder> {
-
-    let mut current_file_number = 0;
-    let mut parent_file_number = 0;
-    let mut directories_to_traversal = VecDeque::new(); // <(path, parent_file_number, current_file_number)>
-    let mut files = Vec::new();
-    let mut symlink_real_paths = HashMap::new();
-    let mut directory_children = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
-    let mut root_dir_filenumbers = Vec::new();
-
-    let mut hardlink_map = HashMap::new();
-
-    //files in virtual root folder
-    for path in input_files {
-        current_file_number += 1;
-
-        let metadata = match check_and_get_metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(_) => continue,
-        };
-
-        root_dir_filenumbers.push(current_file_number);
-        if metadata.file_type().is_dir() {
-            directories_to_traversal.push_back((path, parent_file_number, current_file_number));
-        } else {
-            if metadata.file_type().is_symlink() {
-                // the error case should not reached, but if, then the target can't be read (and the file is "empty").
-                match read_link(&path) {
-                    Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
-                    Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
-                };
-            }
-            let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
-                Ok(file_header) => file_header,
-                Err(_) => continue,
-            };
-
-            //test if file is readable and exists.
-            check_file_accessibility(&path, &mut file_header);
-
-            // add the file to the hardlink map
-            add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
-
-            files.push((path.clone(), file_header));
-        }
-    }
-
-    // - traverse files in subfolders
-    while let Some((current_dir, dir_parent_file_number, dir_current_file_number)) = directories_to_traversal.pop_front() {
-        parent_file_number = dir_current_file_number;
-        // creates an iterator to iterate over all files in the appropriate directory
-        // if the directory can not be read e.g. due a permission error, the metadata
-        // of the directory will be stored in the container as an empty directory.
-        let element_iterator = match create_iterator(
-            current_dir,
-            &mut hardlink_map,
-            dir_current_file_number,
-            dir_parent_file_number,
-            &mut directory_children,
-            &mut files,
-            ) {
-            Ok(iterator) => iterator,
-            Err(_) => continue,
-        };
-
-        // handle files in current folder
-        for inner_element in element_iterator {
-            #[cfg_attr(not(feature = "log"), allow(unused_variables))]
-            let inner_element = match inner_element {
-                Ok(element) => element,
-                Err(e) => {
-                    // not sure if this can be reached, as we checked a few things before.
-                    #[cfg(feature = "log")]
-                    debug!("Error while trying to unwrap the inner element of the element iterator: {e}.");
-                    continue;
-                }
-            };
-
-            let metadata = match check_and_get_metadata(inner_element.path()) {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-
-            current_file_number += 1;
-
-            if metadata.file_type().is_dir() {
-                directories_to_traversal.push_back((inner_element.path(), parent_file_number, current_file_number));
-            } else {
-                if let Some(files_vec) = directory_children.get_mut(&parent_file_number) {
-                    files_vec.push(current_file_number);
-                } else {
-                    directory_children.insert(parent_file_number, Vec::new());
-                    directory_children.get_mut(&parent_file_number).unwrap().push(current_file_number);
-                };
-
-                match read_link(inner_element.path()) {
-                    Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
-                    Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
-                };
-                let path = inner_element.path().clone();
-                let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
-                    Ok(file_header) => file_header,
-                    Err(_) => continue,
-                };
-
-                //test if file is readable and exists.
-                check_file_accessibility(inner_element.path(), &mut file_header);
-                
-                add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
-
-                files.push((inner_element.path().clone(), file_header));
-            }
-        }
-    }
-
-    #[cfg(target_family = "unix")]
-    let hardlink_map = transform_hardlink_map(hardlink_map, &mut files)?;
-
-    #[cfg(target_family = "windows")]
-    let hardlink_map = HashMap::new();
-
     let log_obj = LogicalObjectEncoder::new(
         logical_object_header,
-        files,
-        root_dir_filenumbers,
+        logical_object_source,
         hash_types.to_owned(),
         signature_key_bytes.clone(),
-        symlink_real_paths,
-        hardlink_map,
-        directory_children,
         chunk_number)?;
     Ok(log_obj)
 }
 
 
-fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
+pub(crate) fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 	match std::fs::symlink_metadata(path.as_ref()) {
 		Ok(metadata) => Ok(metadata),
 		Err(e) => {
@@ -667,7 +544,7 @@ fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
 }
 
 #[cfg_attr(not(feature = "log"), allow(unused_variables))]
-fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeader) {
+pub(crate) fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeader) {
 	match File::open(path.as_ref()) {
 		Ok(_) => (),
 		Err(e) => {
@@ -680,7 +557,7 @@ fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeade
 	};
 }
 
-fn create_iterator<C: AsRef<Path>>(
+pub(crate) fn create_iterator<C: AsRef<Path>>(
 	current_dir: C,
 	hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>,
 	dir_current_file_number: u64,
@@ -730,7 +607,7 @@ fn create_iterator<C: AsRef<Path>>(
 }
 
 #[cfg(target_family = "unix")]
-fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: &mut Vec<(PathBuf, FileHeader)>) -> Result<HashMap<u64, u64>> {
+pub(crate) fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: &mut Vec<(PathBuf, FileHeader)>) -> Result<HashMap<u64, u64>> {
 	let mut inner_hardlink_map = HashMap::new();
 	for (path, file_header) in files {
 		let metadata = metadata(path)?;
@@ -748,7 +625,7 @@ fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: 
 
 fn prepare_object_header<R: Read>(
     physical_objects: &mut HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
-	logical_objects: &mut HashMap<ObjectHeader, Vec<PathBuf>>, //<ObjectHeader, input_files>,
+	logical_objects: &mut HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
     extender_parameter: &Option<ZffExtenderParameter>
 ) -> Result<()> {
     let mut next_object_number = match &extender_parameter {
@@ -770,14 +647,14 @@ fn prepare_object_header<R: Read>(
     physical_objects.extend(modify_map_phy);
 
     let mut modify_map_log = HashMap::new();
-    for (mut header, input_files) in logical_objects.drain() {
+    for (mut header, logical_object_source) in logical_objects.drain() {
         //check if all EncryptionHeader are contain a decrypted encryption key.
         check_encryption_key_in_header(&header)?;        
         // modifies the appropriate object numbers to the right values.
         header.object_number = next_object_number;
         next_object_number += 1;
         
-        modify_map_log.insert(header, input_files);
+        modify_map_log.insert(header, logical_object_source);
     }
     logical_objects.extend(modify_map_log);
 

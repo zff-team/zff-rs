@@ -3,12 +3,8 @@ use std::io::{Read, Cursor, Seek};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::cell::RefCell;
-
 use std::time::SystemTime;
 
-use crate::header::{ChunkFlags, ChunkHeader};
-use crate::io::BufferedChunk;
-use crate::PreparedChunk;
 // - internal
 use crate::{
 	header::{FileHeader, HashHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationMetadata},
@@ -17,7 +13,9 @@ use crate::{
 use crate::{
 	Result,
 	EncodingState,
-	io::buffer_chunk,
+	io::{buffer_chunk, BufferedChunk},
+	PreparedChunk,
+	header::{ChunkFlags, ChunkHeader},
 	HeaderCoding,
 	ValueEncoder,
 	EncodingThreadPoolManager,
@@ -33,8 +31,23 @@ use time::OffsetDateTime;
 use ed25519_dalek::SigningKey;
 
 /// This enum contains the information, which are needed to encode the different file types.
-#[derive(Debug)]
 pub enum FileTypeEncodingInformation {
+	/// A regular file, which contains a Reader to the inner file content.
+	File(Box<dyn Read>),
+	/// A directory with the given children.
+	Directory(Vec<u64>), // directory children,
+	/// A symlink with the given real path.
+	Symlink(PathBuf), // symlink real path
+	/// A hardlink with the given twin filenumber.
+	Hardlink(u64), // hardlink filenumber
+	/// A special file with the given special file information.
+	#[cfg(target_family = "unix")]
+	SpecialFile(SpecialFileEncodingInformation), // special file information (rdev, type_flag)
+}
+
+/// This enum contains the information, which are needed to encode the different file types.
+#[derive(Debug)]
+pub enum _FileTypeEncodingInformation {
 	/// A regular file.
 	File,
 	/// A directory with the given children.
@@ -68,8 +81,7 @@ pub struct FileEncoder {
 	file_header: FileHeader,
 	/// The appropriate [ObjectHeader].
 	object_header: ObjectHeader,
-	/// The underlying [File](std::fs::File) object to read from.
-	underlying_file: Box<dyn Read>,
+	filetype_encoding_information: FileTypeEncodingInformation,
 	/// The optional signing key, to sign the hashes.
 	signing_key: Option<SigningKey>,
 	/// optional encryption information, to encrypt the data with the given key and algorithm
@@ -84,26 +96,22 @@ pub struct FileEncoder {
 	read_bytes_underlying_data: u64,
 	acquisition_start: u64,
 	acquisition_end: u64,
-	filetype_encoding_information: FileTypeEncodingInformation,
 }
 
 impl FileEncoder {
 	/// creates a new [FileEncoder] with the given values.
-	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		file_header: FileHeader,
 		object_header: ObjectHeader,
-		file: Box<dyn Read>,
+		filetype_encoding_information: FileTypeEncodingInformation,
 		encoding_thread_pool_manager: Rc<RefCell<EncodingThreadPoolManager>>,
 		signing_key: Option<SigningKey>,
 		encryption_information: Option<EncryptionInformation>,
-		current_chunk_number: u64,
-		filetype_encoding_information: FileTypeEncodingInformation) -> Result<FileEncoder> {
+		current_chunk_number: u64) -> Result<FileEncoder> {
 		
 		Ok(Self {
 			file_header,
 			object_header,
-			underlying_file: Box::new(file),
 			encoding_thread_pool_manager,
 			signing_key,
 			encryption_information,
@@ -142,7 +150,7 @@ impl FileEncoder {
 		let chunk_size = self.object_header.chunk_size as usize;
 		let mut eof = false;
 
-		let buffered_chunk = match &self.filetype_encoding_information {
+		let buffered_chunk = match &mut self.filetype_encoding_information {
 			FileTypeEncodingInformation::Directory(directory_children) => {
 				let encoded_directory_children = if directory_children.is_empty() {
 					Vec::<u64>::new().encode_directly()
@@ -181,8 +189,8 @@ impl FileEncoder {
 					BufferedChunk::default()
 				}	
 			},
-			FileTypeEncodingInformation::File => {
-				let buffered_chunk = buffer_chunk(&mut self.underlying_file, chunk_size)?;
+			FileTypeEncodingInformation::File(ref mut reader) => {
+				let buffered_chunk = buffer_chunk(reader, chunk_size)?;
 				self.read_bytes_underlying_data += buffered_chunk.bytes_read;
 				buffered_chunk
 			},
