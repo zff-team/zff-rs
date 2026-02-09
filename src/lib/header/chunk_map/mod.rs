@@ -1,45 +1,15 @@
-// - STD
-use core::borrow::Borrow;
-use std::path::Path;
-use std::cmp::PartialEq;
-use std::collections::{HashMap, BTreeMap, HashSet};
-use std::io::{Cursor, Read, Seek};
-use std::fmt;
+// - Parent
+use super::*;
 
 // - modules
 mod chunk_header;
 mod chunk_same_bytes;
 mod chunk_deduplication;
 
-// - use
+// - re-exports
 pub use chunk_header::*;
 pub use chunk_same_bytes::*;
 pub use chunk_deduplication::*;
-
-// - internal
-use crate::{
-	header::ChunkHeader,
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	ZffError,
-    ZffErrorKind,
-    EncryptionAlgorithm,
-    Encryption,
-    constants::*,
-};
-
-#[cfg(feature = "serde")]
-use crate::helper::string_to_str;
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-	ser::{Serializer, SerializeStruct},
-};
 
 #[repr(C)]
 #[derive(Debug)]

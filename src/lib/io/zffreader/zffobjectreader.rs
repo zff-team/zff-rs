@@ -1,18 +1,4 @@
-// - STD
-use std::io::Cursor;
-use std::collections::BTreeSet;
-
-
-// - internal
-use crate::{
-	footer::{
-		EncryptedObjectFooter, ObjectFooterLogical, ObjectFooterPhysical, ObjectFooterVirtual
-	},
-	header::{
-		EncryptedObjectHeader, HashHeader, VirtualMappingInformation},
-	helper::find_vmi_offset,
-};
-
+// - Parent
 use super::*;
 
 #[derive(Debug)]
@@ -486,19 +472,46 @@ pub(crate) struct ZffObjectReaderVirtual<R: Read + Seek> {
 
 impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 	/// creates a new [ZffObjectReaderVirtual] with the given metadata.
-	pub fn with_data(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
+	pub fn with_data(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 		let object_header = metadata.object_header(&object_no).unwrap().clone();
 		let object_footer = match metadata.object_footer(&object_no) {
 			Some(ObjectFooter::Virtual(footer)) => footer.clone(),
 			_ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
 		};
-		Self {
+
+		let vmi_segment_no = object_footer.virtual_object_map_segment_no;
+		let vmi_offset = object_footer.virtual_object_map_offset;
+
+		let virtual_object_map = {
+			let mut segments = metadata.segments.write().unwrap();
+			let segment = match segments.get_mut(&vmi_segment_no) {
+				Some(segment) => segment,
+				None => return Err(ZffError::new(
+					ZffErrorKind::Missing,
+					format!("{ERROR_MISSING_SEGMENT}{vmi_segment_no}"))),
+			};
+			segment.seek(SeekFrom::Start(vmi_offset))?;
+			if let Some(encryption_header) = &object_header.encryption_header {
+				let key = match encryption_header.get_encryption_key() {
+					Some(key) => key,
+					None => return Err(ZffError::new(
+						ZffErrorKind::EncryptionError,
+						ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
+				};
+				let enc_info = EncryptionInformation::new(key, encryption_header.algorithm.clone());
+				VirtualObjectMap::decode_encrypted_structure_with_key(segment, enc_info, object_no)?
+			} else {
+				VirtualObjectMap::decode_directly(segment)?
+			}
+		};
+
+		Ok(Self {
 			metadata,
 			object_header,
 			object_footer,
-			virtual_object_map: BTreeSet::new(), //TODO: Fill this map with the appropriate data :D !!!
+			virtual_object_map: virtual_object_map.offsetmaps,
 			position: 0,
-		}
+		})
 	}
 
 	/// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader).
@@ -516,21 +529,22 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 		ObjectFooter::Virtual(self.object_footer.clone())
 	}
 
-	/// fills the internal virtual_object_map with the given data.
-	pub fn fill_object_map(&mut self, virtual_object_map: BTreeSet<BTreeMap<u64, (u64, u64)>>) {
-		self.virtual_object_map = virtual_object_map;
-	}
 }
 
 impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
 		let mut read_bytes = 0; // number of bytes which are written to buffer
-		
+
 		'outer: loop {
+			let current_offset = self.position + read_bytes as u64;
+			if current_offset >= self.object_footer.length_of_data {
+				break;
+			}
+
 			// find the appropriate mapping information.
 			let virtual_mapping_information = match get_vmi_info(
-				&self.virtual_object_map, 
-				self.position, 
+				&self.virtual_object_map,
+				current_offset,
 				Arc::clone(&self.metadata)) {
 				Ok(mi) => mi,
 				Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
@@ -555,8 +569,7 @@ impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
 				let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
 					vec![samebyte; chunk_size as usize]
 				} else {
-					let object_no = &self.object_header.object_number;
-					get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
+					get_chunk_data(&vmi_obj_no, Arc::clone(&self.metadata), current_chunk_number)?
 				};
 
 				let mut should_break = false;
@@ -671,8 +684,8 @@ impl<R: Read + Seek> ZffObjectReaderEncrypted<R> {
 					Arc::clone(&self.metadata))?)),
 			ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
 				ZffObjectReaderVirtual::with_data(
-					obj_no, 
-					Arc::clone(&self.metadata)))),
+					obj_no,
+					Arc::clone(&self.metadata))?)),
 		};
 
 		Ok(obj_reader)

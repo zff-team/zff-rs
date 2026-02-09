@@ -1,14 +1,11 @@
+// - Parent
+use super::{*, header::*, footer::*, io::{buffer_chunk, BufferedChunk}};
+
 // - modules
 mod encoder;
 
 // - re-exports
 pub use encoder::*;
-
-// - internal
-use crate::{
-	header::{FileHeader, FileType},
-	footer::FileFooter,
-};
 
 /// The [File] contains the appropriate [FileHeader] and [FileFooter] of a dumped [File].
 /// Also this struct contains a position value for a [Reader](std::io::Read).

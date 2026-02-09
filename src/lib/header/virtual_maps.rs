@@ -1,30 +1,5 @@
-// - STD
-use std::borrow::Borrow;
-use std::cmp::PartialEq;
-use std::io::{Cursor, Read};
-use std::fmt;
-use std::collections::{BTreeMap, BTreeSet};
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
-	header::EncryptionInformation,
-	Encryption,
-	constants::*,
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
-
+// - Parent
+use super::*;
 
 /// Contains the information of the appropriate virtual mapping.
 /// The counterpart offset has to be stored outside of this structure (in the [VirtualObjectMap]).

@@ -1,18 +1,5 @@
-// STD
-use std::collections::{BTreeMap, BTreeSet};
-
-// internal
-use crate::{Result, ZffError, ZffErrorKind, constants::*};
-
-// external
-#[cfg(feature = "log")]
-use log::debug;
-#[cfg(feature = "serde")]
-use hex::FromHex;
-#[cfg(feature = "serde")]
-use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
-#[cfg(feature = "serde")]
-use serde::Deserialize;
+// - Parent
+use super::*;
 
 #[cfg(feature = "serde")]
 pub(crate) fn string_to_str(s: String) -> &'static str {
@@ -28,13 +15,13 @@ where
 }
 
 pub(crate) fn find_vmi_offset(offset_maps: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offset: u64) -> Option<(u64, u64)> {
-    let set_index = binary_search_for_map_in_set(offset_maps, offset).ok()?;
+    let set_index = binary_search_for_map_in_set(offset_maps, offset)?;
     let map = offset_maps.iter().nth(set_index)?;
     let (_, (segment_no, offset)) = map.range(..=offset).next_back()?;
     Some((*segment_no, *offset))
 }
 
-fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offset: u64) -> Result<usize> {
+fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offset: u64) -> Option<usize> {
     // The zombie counter is used to prevent infinite loops (if the set is malformed, etc.)
     let mut zombie_counter = 0;
     let mut low = 0;
@@ -43,14 +30,14 @@ fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offse
         if zombie_counter > DEFAULT_BINARY_SEARCH_MAX_ITERATIONS {
             #[cfg(feature = "log")]
             debug!("Malformed VMI map. Exiting.");
-            return Err(ZffError::new(ZffErrorKind::NotFound,ERROR_BINARY_SEARCH_EXCEEDED_MAX_ITERATIONS));
+            return None;
         }
         let mid = (low + high) / 2;
-        let lowest_offset = set.iter().nth(mid).unwrap().keys().next().unwrap(); //TODO: remove unwraps
-        let highest_offset = set.iter().nth(mid).unwrap().keys().next_back().unwrap(); //TODO: remove unwraps
+        let lowest_offset = set.iter().nth(mid)?.keys().next()?;
+        let highest_offset = set.iter().nth(mid)?.keys().next_back()?;
         if lowest_offset <= &offset && highest_offset >= &offset {
             // returns the appropriate set index
-            return Ok(mid);
+            return Some(mid);
         } else if lowest_offset > &offset {
             // search left
             high = mid - 1;
@@ -63,7 +50,7 @@ fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offse
     }
     #[cfg(feature = "log")]
     debug!("Empty map");
-    Err(ZffError::new(ZffErrorKind::NotFound, ERROR_MAP_EMPTY))
+    None
 }
 
 

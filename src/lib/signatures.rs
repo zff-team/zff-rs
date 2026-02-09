@@ -1,25 +1,5 @@
-// - external
-use ed25519_dalek::{
-	SigningKey,
-	VerifyingKey,
-	Signature as Ed25519Signature,
-	Signer,
-	Verifier,
-	KEYPAIR_LENGTH,
-	SECRET_KEY_LENGTH,
-	PUBLIC_KEY_LENGTH
-};
-use rand::{rng, RngCore};
-use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
-
-// - internal
-use crate::{
-	Result,
-	ZffError,
-	ZffErrorKind,
-	constants::*,
-};
-
+// - Parent
+use super::*;
 
 /// structure contains serveral methods to handle signing of chunked data.
 pub struct Signature;

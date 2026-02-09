@@ -1,23 +1,5 @@
-// - STD
-use core::borrow::Borrow;
-use std::collections::BTreeMap;
-use std::io::{Read, Seek, SeekFrom};
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
-	Encryption,
-	CompressionAlgorithm,
-	ChunkContent,
-	decompress_buffer,
-	header::{SegmentHeader, ObjectHeader, EncryptionInformation, EncryptedObjectHeader, ChunkFlags, ChunkHeader},
-	footer::{SegmentFooter, ObjectFooter, EncryptedObjectFooter},
-	constants::*,
-};
+// - Parent
+use super::{*, header::*, footer::*};
 
 // - external
 #[cfg(feature = "log")]

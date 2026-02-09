@@ -1,8 +1,5 @@
-// - STD
-use std::fmt;
-use std::io::{Read, Seek, SeekFrom};
-use std::collections::{HashMap, BTreeMap};
-use std::sync::{Arc, RwLock};
+// - Parent
+use super::{*, header::ObjectType as HeaderObjectType};
 
 // - modules
 mod zffobjectreader;
@@ -11,34 +8,6 @@ mod redb_handling;
 // - re-exports
 pub use zffobjectreader::*;
 pub(crate) use redb_handling::*;
-
-// - internal
-use crate::{
-	Segment,
-	HeaderCoding,
-	ValueDecoder,
-	footer::{
-		FileFooter,
-		SegmentFooter,
-		ObjectFooter,
-	},
-	helper::get_segment_of_chunk_no,
-	header::{
-		EncryptionInformation, 
-		SegmentHeader, 
-		ObjectType as HeaderObjectType,
-		ChunkFlags,
-		ChunkHeaderMap,
-		ChunkSamebytesMap,
-		ChunkDeduplicationMap,
-		ChunkMap,
-		ChunkMapType,
-		ChunkHeader,
-	},
-	ChunkContent,
-};
-
-use super::*;
 
 // - type definitions
 // This is a Arc instead of a Rc to optain more flexibility by using the [ZffReader] 
@@ -1022,7 +991,7 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 		ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
 			ZffObjectReaderLogical::with_obj_metadata_recommended(obj_number, Arc::clone(&metadata))?)),
 		ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
-			ZffObjectReaderVirtual::with_data(obj_number, Arc::clone(&metadata)))),
+			ZffObjectReaderVirtual::with_data(obj_number, Arc::clone(&metadata))?)),
 	};
 	#[cfg(feature = "log")]
 	debug!("Object reader for object {obj_number} successfully initialized");

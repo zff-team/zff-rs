@@ -1,34 +1,5 @@
-// - STD
-use std::io::{Read, Cursor, Seek};
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::time::SystemTime;
-
-// - internal
-use crate::{
-	header::{FileHeader, HashHeader, HashValue, EncryptionInformation, ObjectHeader, DeduplicationMetadata},
-	footer::FileFooter,
-};
-use crate::{
-	Result,
-	EncodingState,
-	io::{buffer_chunk, BufferedChunk},
-	PreparedChunk,
-	header::{ChunkFlags, ChunkHeader},
-	HeaderCoding,
-	ValueEncoder,
-	EncodingThreadPoolManager,
-	Signature,
-	chunking,
-};
-
-#[cfg(feature = "log")]
-use crate::hashes_to_log;
-
-// - external
-use time::OffsetDateTime;
-use ed25519_dalek::SigningKey;
+// - Parent
+use super::*;
 
 /// This enum contains the information, which are needed to encode the different file types.
 pub enum FileTypeEncodingInformation {

@@ -1,21 +1,5 @@
-// - STD
-use std::collections::{HashMap, BTreeMap};
-use std::io::Cursor;
-use std::fmt;
-
-// - internal
-use crate::{
-	HeaderCoding, Result, ValueDecoder, ValueEncoder, DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER, FOOTER_IDENTIFIER_SEGMENT_FOOTER, INITIAL_CHUNK_NUMBER
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
-
-
+// - Parent
+use super::*;
 
 /// The SegmentFooter is a footer which is be written at the end of each segment.
 /// 

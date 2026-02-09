@@ -1,20 +1,5 @@
-// - STD
-use std::fs::OpenOptions;
-use std::io::{Seek, SeekFrom, Write};
-use std::ops::{Add, AddAssign};
-
 // Parent
 use super::*;
-
-// - internal
-use crate::{
-    footer::SegmentFooter, header::{ChunkMapType, ChunkMaps, SegmentHeader, ChunkMap},
-    Segment,
-    HeaderCoding,
-    ValueDecoder,
-    EncodingState,
-    file_extension_next_value,
-};
 
 #[derive(Debug, Clone, Default)]
 enum ReadBytes {

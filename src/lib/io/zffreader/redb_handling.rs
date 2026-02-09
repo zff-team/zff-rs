@@ -1,8 +1,6 @@
 // - Parent
 use super::*;
 
-// - external
-
 // Will copy a redb to another redb.
 pub(crate) fn copy_redb(input_db: &Database, output_db: &mut Database) -> Result<()> {
 	// prepare read context of input_db

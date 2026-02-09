@@ -1,37 +1,5 @@
-// - STD
-use std::borrow::Borrow;
-use std::fmt;
-
-// - internal
-use crate::{
-	Result, SCRYPT_DERIVED_KEY_LENGTH_AES_128, SCRYPT_DERIVED_KEY_LENGTH_AES_256
-};
-
-// - external
-use pkcs5::{
-	EncryptionScheme,
-	pbes2::Parameters as PBES2Parameters,
-	scrypt::Params as ScryptParams
-};
-use argon2::{Config, Variant, Version, ThreadMode};
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
-use aes_gcm::{
-	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
-	aead::Aead,
-};
-use chacha20poly1305::ChaCha20Poly1305;
-use byteorder::{LittleEndian, WriteBytesExt};
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use typenum::consts::U12;
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
-
-
-// - type definitions
-type Nonce = AesGcmNonce<U12>; //use the (by NIST) recommended nonce size of 96-bit.
+// - Parent
+use super::*;
 
 /// Defines all encryption algorithms (for use in data and header encryption), which are implemented in zff.
 #[repr(u8)]
@@ -110,7 +78,6 @@ impl fmt::Display for PBEScheme {
     }
 }
 
-//TODO: improve this to implement most of the encoding steps in trait methods.
 /// trait to implement the zff encryption for the appropriate type.
 pub trait Encryption {
 	/// Encrypts the message, using the type specific nonce padding.

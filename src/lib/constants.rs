@@ -1,6 +1,5 @@
-// - external
-use redb::TableDefinition;
-use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
+// - Parent
+use super::*;
 
 // identifier: magic bytes
 /// The identifier of the [DescriptionHeader](crate::header::DescriptionHeader).
@@ -99,8 +98,6 @@ pub(crate) const NO_ENCRYPTION_DETECTED: &str = "No encryption detected.";
 pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str = "Trying to decrypt unencryted object.";
 pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
 pub(crate) const ERROR_UNSUPPORTED_VERSION: &str = "Unsupported version: ";
-pub(crate) const ERROR_BINARY_SEARCH_EXCEEDED_MAX_ITERATIONS: &str = "Binary search exceeded max iterations.";
-pub(crate) const ERROR_MAP_EMPTY: &str = "Map is empty.";
 pub(crate) const ERROR_WRONG_SIGNATURE_KEY_LENGTH: &str = "Wrong signature key length.";
 pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_SAMEBYTE: &str = "Could not find expected samebyte in chunk content.";
 pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP: &str = "Could not find expected chunk number in map: ";

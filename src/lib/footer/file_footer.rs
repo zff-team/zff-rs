@@ -1,33 +1,5 @@
-// - STD
-use core::borrow::Borrow;
-use std::io::{Cursor, Read};
-use std::fmt;
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueDecoder,
-	ValueEncoder,
-	Encryption,
-	ZffError,
-	ZffErrorKind,
-	encryption::EncryptionAlgorithm,
-	FOOTER_IDENTIFIER_FILE_FOOTER,
-	DEFAULT_LENGTH_HEADER_IDENTIFIER,
-	DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-	DEFAULT_FOOTER_VERSION_FILE_FOOTER,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
-};
-use crate::header::{
-	HashHeader,
-	EncryptionInformation,
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::Serialize;
-
+// - Parent
+use super::*;
 
 /// The file footer is written at the end of each acquired file.
 /// 

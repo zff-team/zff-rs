@@ -1,25 +1,5 @@
-// - STD
-use core::borrow::Borrow;
-use std::io::{Cursor, Read};
-use std::collections::HashMap;
-use std::fmt;
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueDecoder,
-	ValueEncoder,
-	ZffError,
-	ZffErrorKind,
-	Encryption,
-	EncryptionAlgorithm,
-	constants::*,
-};
-use crate::header::{
-	HashHeader,
-	EncryptionInformation,
-};
+// - Parent
+use super::*;
 
 // - modules
 mod object_footer_physical;
@@ -30,15 +10,6 @@ mod object_footer_virtual;
 pub use object_footer_physical::*;
 pub use object_footer_logical::*;
 pub use object_footer_virtual::*;
-
-// - external
-use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
-
 
 /// Each object contains its own object footer.
 #[derive(Debug, Clone, PartialEq, Eq)]

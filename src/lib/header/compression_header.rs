@@ -1,30 +1,5 @@
-// - STD
-use std::io::Cursor;
-use std::fmt;
-
-use crate::constants::DEFAULT_HEADER_VERSION_COMPRESSION_HEADER;
-// - internal
-use crate::{
-	Result,
-	ZffError,
-	ZffErrorKind,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	CompressionAlgorithm,
-};
-
-use crate::{
-	HEADER_IDENTIFIER_COMPRESSION_HEADER,
-	ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM,
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
+// - Parent
+use super::*;
 
 /// Header for the data compression parameters.\
 /// This header is part of the main header.

@@ -1,35 +1,8 @@
+// - Parent
+use super::*;
+
 // - STD
-
-use std::io::{Cursor, Read};
-use std::fmt;
-use std::cmp::{PartialEq,Eq};
 use std::hash::{Hash, Hasher};
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	Encryption,
-	ValueEncoder,
-	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
-	constants::*,
-};
-
-use crate::header::{
-	EncryptionHeader,
-	CompressionHeader,
-	DescriptionHeader,
-};
-
-// - external
-use byteorder::{ReadBytesExt, LittleEndian};
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
 
 /// Holds the appropriate object flags:
 /// - the encryption flag, if the appropriate object is encrypted.

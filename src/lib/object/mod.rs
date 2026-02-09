@@ -1,11 +1,5 @@
-// - STD
-use std::sync::{
-    Arc,
-    RwLock, RwLockReadGuard,
-};
-use std::collections::HashMap;
-use std::thread::{self};
-use std::io::{copy as io_copy, Read, Seek};
+// - Parent
+use super::{*, header::*, io::*};
 
 // - modules
 mod encoder;
@@ -14,22 +8,6 @@ mod logical_object_source;
 // - re-exports
 pub use encoder::*;
 pub use logical_object_source::*;
-
-// - internal
-use crate::{
-    Result,
-    header::{CompressionHeader, ChunkHeader},
-    HashType,
-    Hash,
-    CompressionAlgorithm,
-	PreparedChunk,
-    io::{buffer_chunk, check_same_byte, calculate_xxhash},
-	header::{ChunkFlags, DeduplicationMetadata},
-	error::{ZffError, ZffErrorKind},
-	encryption::{Encryption, EncryptionAlgorithm},
-	ChunkContent,
-	constants::*,
-};
 
 /// Indicates if the data are compressed or not.
 /// This enum is used to avoid unnecessary copy operations.
@@ -562,7 +540,7 @@ pub(crate) fn chunking<R: Read + Seek>(
 				Some(algorithm) => algorithm,
 				None => return Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 			};
-			//TODO: check to encrypt the content if the chunked data also in the "compression_thread"?.
+			//TODO: check to encrypt the content if the chunked data also in the "compression_thread" -> performance?.
 			Vec::<u8>::encrypt(
 				encryption_key,
 				&chunked_data,

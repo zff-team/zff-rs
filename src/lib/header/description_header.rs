@@ -1,34 +1,5 @@
-// - STD
-use std::io::Cursor;
-use std::io::Read;
-use std::collections::HashMap;
-use std::fmt;
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	ZffError,
-	ZffErrorKind,
-};
-
-#[cfg(feature = "serde")]
-use crate::helper::string_to_str;
-
-use crate::constants::*;
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	ser::{
-		Serialize,
-		Serializer,
-		SerializeStruct,
-	},
-	Deserialize,
-};
+// - Parent
+use super::*;
 
 /// The description header contains all data, which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).
 /// 

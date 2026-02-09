@@ -1,38 +1,5 @@
-// STD
-use std::io::{Read,Cursor};
-use std::fmt;
-
-use crate::constants::DEFAULT_HEADER_VERSION_PBE_HEADER;
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	KDFScheme,
-	PBEScheme,
-	ZffError,
-	ZffErrorKind,
-};
-
-use crate::{
-	HEADER_IDENTIFIER_PBE_HEADER,
-	PBE_KDF_PARAMETERS_PBKDF2,
-	PBE_KDF_PARAMETERS_SCRYPT,
-	PBE_KDF_PARAMETERS_ARGON2ID,
-	ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF,
-	ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME,
-	ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME,
-	METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN,
-};
-
-// - external
-use byteorder::{BigEndian, ReadBytesExt};
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
+// - Parent
+use super::*;
 
 /// The pbe header contains all informations for the encryption of the encryption key.
 /// 

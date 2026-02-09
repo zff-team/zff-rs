@@ -1,18 +1,5 @@
-// - STD
-use std::io::Read;
-use std::borrow::Borrow;
-use std::fmt;
-
-
-// - internal
-use crate::Result;
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
+// - Parent
+use super::*;
 
 /// Defines all compression algorithms, which are implemented in zff.
 #[repr(u8)]

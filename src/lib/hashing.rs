@@ -1,19 +1,5 @@
-// - STD
-use std::fmt;
-
-// - external
-use blake3::Hasher as Blake3;
-use blake2::Blake2b512;
-use sha2::{Sha256, Sha512};
-use sha3::Sha3_256;
-use digest::{DynDigest, Digest};
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
-#[cfg(feature = "log")]
-use log::debug;
+// - Parent
+use super::*;
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]

@@ -1,23 +1,5 @@
-// - STD
-use std::io::Cursor;
-use std::fmt;
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-	HEADER_IDENTIFIER_SEGMENT_HEADER,
-	DEFAULT_HEADER_VERSION_SEGMENT_HEADER,
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
+// - Parent
+use super::*;
 
 /// The [SegmentHeader] contains a lot of initial metadata of the appropriate segment. Each segment has its own segment header.\
 /// The following metadata are included in the [SegmentHeader]:

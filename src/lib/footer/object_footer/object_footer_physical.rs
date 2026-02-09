@@ -1,4 +1,4 @@
-// - internal
+// - Parent
 use super::*;
 
 /// An [ObjectFooterPhysical] is written at the end of each physical object.

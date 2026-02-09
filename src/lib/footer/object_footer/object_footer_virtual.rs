@@ -1,4 +1,4 @@
-// - internal
+// - Parent
 use super::*;
 
 /// An [ObjectFooterVirtual] is written at the end of an virtual object.

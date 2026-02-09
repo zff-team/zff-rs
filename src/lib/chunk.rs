@@ -1,9 +1,5 @@
-// - internal
-use crate::{
-	header::{ChunkFlags, ChunkHeader}, 
-	io::calculate_xxhash, 
-	Result,
-};
+// - Parent
+use super::{*, header::*, io::*};
 
 /// This struct represents a full [Chunk] (decrypted and uncompressed) - The raw chunk data, the flags and the size.
 pub struct Chunk {

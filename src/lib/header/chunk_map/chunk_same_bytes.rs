@@ -1,12 +1,6 @@
 // - parent
 use super::*;
 
-// - internal
-use crate::{
-    HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP,
-	DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP,
-};
-
 /// The [ChunkSamebytesMap] stores the chunk size of the appropriate chunk.
 #[derive(Debug,Clone,PartialEq,Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]

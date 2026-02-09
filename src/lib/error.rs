@@ -1,30 +1,5 @@
-// - STD
-use std::fmt;
-use std::string::FromUtf8Error;
-use std::io;
-use std::collections::TryReserveError;
-use std::num::ParseIntError;
-
-// - internal
-
-// - external
-use pkcs5::Error as PKCS5CryptoError;
-use pkcs5::scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
-use aes_gcm::aead::Error as AesError;
-use digest::InvalidLength;
-use ed25519_dalek::ed25519::Error as Ed25519Error;
-use base64::DecodeError as Base64DecodingError;
-use lz4_flex::frame::Error as Lz4Error;
-use time::error::ComponentRange as ComponentRangeError;
-use redb::{
-	DatabaseError as RedbError, 
-	TransactionError as RedbTransactionError, 
-	TableError as RedbTableError, 
-	StorageError as RedbStorageError,
-	CommitError as RedbCommitError
-	};
-use argon2::Error as Argon2Error;
-use cbc::cipher::block_padding::UnpadError as AesCbcError;
+// - Parent
+use super::*;
 
 /// The main error-type of this crate.
 #[derive(Debug)]
@@ -258,8 +233,8 @@ impl From<RedbError> for ZffError {
 	}
 }
 
-impl From<io::Error> for ZffError {
-	fn from(e: io::Error) -> ZffError {
+impl From<std::io::Error> for ZffError {
+	fn from(e: std::io::Error) -> ZffError {
 		let err_msg = e.to_string();
 		ZffError::new_with_source(ZffErrorKind::IO, Some(Box::new(e)), err_msg)
 	}

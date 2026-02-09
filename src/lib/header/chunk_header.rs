@@ -1,35 +1,5 @@
-// - STD
-use std::io::{Cursor, Read};
-use std::fmt;
-
-// - internal
-use crate::{
-	Result,
-	HeaderCoding,
-	ValueEncoder,
-	ValueDecoder,
-};
-
-use crate::{
-	HEADER_IDENTIFIER_CHUNK_HEADER,
-    DEFAULT_HEADER_VERSION_CHUNK_HEADER,
-    ERROR_FLAG_VALUE,
-	COMPRESSION_FLAG_VALUE,
-	SAME_BYTES_FLAG_VALUE,
-	DUPLICATION_FLAG_VALUE,
-	ENCRYPTION_FLAG_VALUE,
-	EMPTY_FILE_FLAG_VALUE,
-    VIRTUAL_FLAG_VALUE,
-    METADATA_EXT_TYPE_IDENTIFIER_U8,
-    METADATA_EXT_TYPE_IDENTIFIER_CHUNK_HEADER,
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
+// - Parent
+use super::*;
 
 /// Header for the chunked data (typically stored in a chunk header map).
 /// The Header doesn't contain a chunk number, because it is stored in a map with the chunk number as key.

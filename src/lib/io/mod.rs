@@ -1,56 +1,14 @@
+// - Parent
+use super::{*, header::*, footer::*, helper::*};
+
+// - STD
+use std::fs::File;
+
 // - modules
-/// provides [ZffWriter](crate::io::zffwriter::ZffWriter) and some helper functions to create or extend zff containers.
-//pub mod zffwriter; //TODO: remove
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
 pub mod zffreader;
 /// provides [ZffWriter] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
 pub mod zffwriter;
-
-// - STD
-use std::io::{Read, copy as io_copy, Seek};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::fs::{Metadata, File, read_dir};
-use std::thread::sleep;
-use std::time::Duration;
-
-#[cfg(target_family = "unix")]
-use std::os::unix::fs::MetadataExt;
-#[cfg(target_family = "unix")]
-use std::fs::metadata;
-
-#[cfg(target_family = "windows")]
-use std::os::windows::fs::MetadataExt;
-
-// - internal
-use crate::{
-    Result,
-    object::LogicalObjectSource,
-    header::{FileHeader, FileType, CompressionHeader, ObjectHeader, DeduplicationMetadata, MetadataExtendedValue},
-    footer::{MainFooter, SegmentFooter},
-    ZffError,
-    ZffErrorKind,
-    ObjectEncoder,
-    CompressionAlgorithm,
-    PhysicalObjectEncoder,
-    LogicalObjectEncoder,
-    PreparedData,
-    hashing::HashType,
-    constants::*,
-};
-
-// - external
-use xxhash_rust::xxh3::xxh3_64;
-use ed25519_dalek::SigningKey;
-#[cfg(target_family = "unix")]
-use time::OffsetDateTime;
-#[cfg(target_family = "unix")]
-use posix_acl::{PosixACL, Qualifier, ACLEntry};
-#[cfg(target_family = "unix")]
-use xattr::XAttrs;
-
-#[cfg(feature = "log")]
-use log::{info, warn, debug};
 
 #[derive(Debug, Clone)]
 struct ZffExtenderParameter {

@@ -1,12 +1,6 @@
 // - parent
 use super::*;
 
-// - internal
-use crate::{
-    HEADER_IDENTIFIER_CHUNK_OFFSET_MAP,
-	DEFAULT_HEADER_VERSION_CHUNK_OFFSET_MAP,
-};
-
 /// The Chunkmap stores the information where the each appropriate chunk could be found.
 #[derive(Debug,Clone,PartialEq,Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]

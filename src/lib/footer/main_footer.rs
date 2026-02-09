@@ -1,27 +1,5 @@
-// - STD
-use std::io::Cursor;
-use std::collections::BTreeMap;
-use std::fmt;
-
-// - internal
-use crate::{ 
-	HeaderCoding, 
-	Result, 
-	ValueDecoder, 
-	ValueEncoder, 
-	ZffErrorKind, 
-	ENCODING_KEY_DESCRIPTION_NOTES, 
-	FOOTER_IDENTIFIER_MAIN_FOOTER,
-	DEFAULT_FOOTER_VERSION_MAIN_FOOTER
-};
-
-// - external
-#[cfg(feature = "serde")]
-use serde::{
-	Deserialize,
-	Serialize,
-};
-
+// - Parent
+use super::*;
 
 /// The main footer is the last thing, which is written at the end of the last segment.\
 /// This footer contains a lot of variable information about the zff container (e.g. number of segments, ...).

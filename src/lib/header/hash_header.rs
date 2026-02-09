@@ -1,36 +1,5 @@
-// - STD
-use std::io::{Cursor, Read};
-use std::fmt;
-
-#[cfg(feature = "serde")]
-use std::collections::HashMap;
-
-use crate::constants::{DEFAULT_HEADER_VERSION_HASH_HEADER, DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER};
-// - internal
-use crate::{
-	Result,
-	ValueEncoder,
-	ValueDecoder,
-	HeaderCoding,
-	HashType,
-	ZffError,
-	ZffErrorKind,
-	HEADER_IDENTIFIER_HASH_HEADER,
-	HEADER_IDENTIFIER_HASH_VALUE,
-	ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE,
-};
-
-// - external
-use ed25519_dalek::SIGNATURE_LENGTH;
-#[cfg(feature = "serde")]
-use serde::{
-	Serialize,
-	ser::{Serializer, SerializeStruct},
-};
-#[cfg(feature = "serde")]
-use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
-#[cfg(feature = "serde")]
-use hex;
+// - Parent
+use super::*;
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of various footers and contains 0 or more hash values of the dumped data.\

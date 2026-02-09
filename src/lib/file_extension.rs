@@ -1,11 +1,5 @@
-use crate::{
-	Result,
-	ZffError,
-	ZffErrorKind,
-	FILE_EXTENSION_START,
-	FILE_EXTENSION_START_PRE9,
-	FILE_EXTENSION_PARSER_ERROR,
-};
+// - Parent
+use super::*;
 
 /// Returns the next file extension value.
 /// # Example

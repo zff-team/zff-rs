@@ -1,5 +1,4 @@
-
-// - internal
+// - Parent
 use super::*;
 
 /// An [ObjectFooterLogical] is written at the end of each logical object container.
