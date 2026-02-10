@@ -213,7 +213,6 @@ impl Iterator for LogicalObjectSourceFilesystem {
 	}
 }
 
-
 fn gen_filetype_encoding_information(
 	filesystem_data: &LogicalObjectSourceFilesystem) -> Result<FileTypeEncodingInformation> {
 	let (path, current_file_header) = &filesystem_data.files[filesystem_data.iterator_index];

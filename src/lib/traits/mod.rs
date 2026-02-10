@@ -4,6 +4,7 @@ use super::*;
 // - modules
 mod header_coding;
 mod logical_object_source;
+mod trait_implementations;
 mod value_decoder;
 mod value_encoder;
 
