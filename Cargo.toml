@@ -61,6 +61,7 @@ default = []
 serde = ["dep:serde", "dep:hex", "ordered-float/serde"]
 log = ["dep:log", "dep:hex"]
 input_tar = ["dep:tar"]
+alternative_inputs = ["input_tar"]
 
 [dev-dependencies]
 hex = "0.4.3"

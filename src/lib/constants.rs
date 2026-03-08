@@ -221,15 +221,15 @@ pub const DEFAULT_CHUNKMAP_SIZE: u64 = 32768;
 
 
 // file metadata extended values
-#[cfg(target_family = "unix")]
+#[cfg(any(target_family = "unix", feature = "alternative_inputs"))]
 pub(crate) const METADATA_EXT_KEY_DEVID: &str = "devid";
-#[cfg(target_family = "unix")]
+#[cfg(any(target_family = "unix", feature = "alternative_inputs"))]
 pub(crate) const METADATA_EXT_KEY_INODE: &str = "inode";
-#[cfg(target_family = "unix")]
+#[cfg(any(target_family = "unix", feature = "alternative_inputs"))]
 pub(crate) const METADATA_EXT_KEY_MODE: &str = "mode";
-#[cfg(target_family = "unix")]
+#[cfg(any(target_family = "unix", feature = "alternative_inputs"))]
 pub(crate) const METADATA_EXT_KEY_UID: &str = "uid";
-#[cfg(target_family = "unix")]
+#[cfg(any(target_family = "unix", feature = "alternative_inputs"))]
 pub(crate) const METADATA_EXT_KEY_GID: &str = "gid";
 #[cfg(target_os = "windows")]
 pub(crate) const METADATA_EXT_DW_FILE_ATTRIBUTES: &str = "dwFileAttributes";

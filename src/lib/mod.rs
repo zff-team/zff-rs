@@ -118,6 +118,7 @@ use sha2::{Sha256, Sha512};
 use sha3::Sha3_256;
 #[cfg(feature = "input_tar")]
 use tar::{Archive, EntryType, Entry};
+use time::OffsetDateTime;
 use typenum::consts::U12;
 use xxhash_rust::xxh3::xxh3_64;
 
@@ -140,8 +141,6 @@ use redb::{
 use argon2::Error as Argon2Error;
 use cbc::cipher::block_padding::UnpadError as AesCbcError;
 
-#[cfg(target_family = "unix")]
-use time::OffsetDateTime;
 #[cfg(target_family = "unix")]
 use posix_acl::{PosixACL, Qualifier, ACLEntry};
 #[cfg(target_family = "unix")]

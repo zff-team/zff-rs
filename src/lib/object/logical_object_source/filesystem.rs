@@ -93,6 +93,7 @@ impl LogicalObjectSourceFilesystem {
 				check_file_accessibility(&path, &mut file_header);
 
 				// add the file to the hardlink map
+				#[cfg(target_family = "unix")]
 				add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 
 				files.push((PathBuf::from(path.as_ref()), file_header));
@@ -160,6 +161,7 @@ impl LogicalObjectSourceFilesystem {
 					//test if file is readable and exists.
 					check_file_accessibility(inner_element.path(), &mut file_header);
 					
+					#[cfg(target_family = "unix")]
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
 
 					files.push((inner_element.path().clone(), file_header));
