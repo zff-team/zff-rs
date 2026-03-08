@@ -119,6 +119,9 @@ pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable pos
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
 
+#[cfg(feature = "input_tar")]
+pub(crate) const ERROR_TAR_ENCODING_ERROR_NO_FILENAME: &str = "Missing filename for tar entry ";
+
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
 pub(crate) const DEFAULT_LENGTH_VALUE_HEADER_LENGTH: usize = 8;

@@ -16,22 +16,6 @@ pub enum FileTypeEncodingInformation {
 	SpecialFile(SpecialFileEncodingInformation), // special file information (rdev, type_flag)
 }
 
-/// This enum contains the information, which are needed to encode the different file types.
-#[derive(Debug)]
-pub enum _FileTypeEncodingInformation {
-	/// A regular file.
-	File,
-	/// A directory with the given children.
-	Directory(Vec<u64>), // directory children,
-	/// A symlink with the given real path.
-	Symlink(PathBuf), // symlink real path
-	/// A hardlink with the given twin filenumber.
-	Hardlink(u64), // hardlink filenumber
-	/// A special file with the given special file information.
-	#[cfg(target_family = "unix")]
-	SpecialFile(SpecialFileEncodingInformation), // special file information (rdev, type_flag)
-}
-
 /// This enum contains the information, which are needed to encode the different special file types.
 #[cfg(target_family = "unix")]
 #[derive(Debug)]

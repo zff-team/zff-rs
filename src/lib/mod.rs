@@ -116,6 +116,8 @@ use rand::{rng, RngCore, rngs::StdRng, SeedableRng};
 use redb::{Database, ReadableDatabase, TableDefinition};
 use sha2::{Sha256, Sha512};
 use sha3::Sha3_256;
+#[cfg(feature = "input_tar")]
+use tar::{Archive, EntryType, Entry};
 use typenum::consts::U12;
 use xxhash_rust::xxh3::xxh3_64;
 

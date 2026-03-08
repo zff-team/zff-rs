@@ -33,6 +33,7 @@ impl fmt::Display for FileType {
 	}
 }
 
+//TODO: is this necessary or could this be removeed?
 /// Defines all unix special file types
 #[repr(u8)]
 #[non_exhaustive]

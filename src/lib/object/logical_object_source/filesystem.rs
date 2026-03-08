@@ -21,7 +21,7 @@ pub struct LogicalObjectSourceFilesystem {
 
 impl LogicalObjectSource for LogicalObjectSourceFilesystem {
 	fn remaining_elements(&self) -> u64 {
-		(self.files.len() - self.iterator_index) as u64
+		self.iterator_index as u64
 	}
 
 	fn root_dir_filenumbers(&self) -> &Vec<u64> {
