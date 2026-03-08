@@ -2,7 +2,7 @@
 use super::{*, header::*};
 
 /// Trait for abstracting different file input sources for [LogicalObjectEncoder].
-pub trait LogicalObjectSource: Iterator<Item = (Result<FileTypeEncodingInformation>, FileHeader)> {
+pub trait LogicalObjectSource: Iterator<Item = Result<(FileTypeEncodingInformation, FileHeader)>> {
 	/// Returns the remaining elements of the inner iterator
 	fn remaining_elements(&self) -> u64;
 

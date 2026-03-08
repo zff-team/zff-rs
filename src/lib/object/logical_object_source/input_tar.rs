@@ -1,36 +1,12 @@
 // - Parent
 use super::*;
 
+// - internal
+use helper::result_combine;
+
 /// A [LogicalObjectSource] implementation for reading entries from a TAR archive.
-///
-/// # Example
-/// ```no_run
-/// use std::io::Cursor;
-/// use tar::{Archive, Builder};
-/// use zff::{LogicalObjectSource, LogicalObjectSourceTar};
-///
-/// // Build a tiny TAR archive in memory.
-/// let mut tar_bytes = Vec::new();
-/// {
-///     let mut builder = Builder::new(&mut tar_bytes);
-///     builder.append_data(
-///         &mut tar::Header::new_gnu(),
-///         "hello.txt",
-///         Cursor::new(b"hello world"),
-///     )?;
-///     builder.finish()?;
-/// }
-///
-/// // Create a TAR-backed logical object source.
-/// let archive = Archive::new(Cursor::new(tar_bytes));
-/// let source = LogicalObjectSourceTar::try_from(archive)?;
-///
-/// assert_eq!(source.remaining_elements(), 1);
-/// assert_eq!(source.root_dir_filenumbers().len(), 1);
-/// # Ok::<(), zff::ZffError>(())
-/// ```
-pub struct LogicalObjectSourceTar<R: Read + Seek> {
-    entries: Vec<(TarEntryReader<R>, FileHeader)>,
+pub struct LogicalObjectSourceTar {
+    entries: VecDeque<(TarEntryReader, FileHeader)>,
     iterator_index: usize,
     root_dir_filenumbers: Vec<u64>,
     symlink_real_paths: HashMap<u64, PathBuf>,
@@ -38,11 +14,11 @@ pub struct LogicalObjectSourceTar<R: Read + Seek> {
     directory_children: HashMap<u64, Vec<u64>>,
 }
 
-impl<R: Read + Seek + 'static> LogicalObjectSource for LogicalObjectSourceTar<R> {
+impl LogicalObjectSource for LogicalObjectSourceTar {
 	fn remaining_elements(&self) -> u64 {
 		(self.entries.len() - self.iterator_index) as u64
 	}
-
+ 
 	fn root_dir_filenumbers(&self) -> &Vec<u64> {
 		&self.root_dir_filenumbers
 	}
@@ -60,18 +36,26 @@ impl<R: Read + Seek + 'static> LogicalObjectSource for LogicalObjectSourceTar<R>
 	}
 }
 
-impl<R: Read + Seek> TryFrom<Archive<R>> for LogicalObjectSourceTar<R> {
+impl TryFrom<&Path> for LogicalObjectSourceTar {
     type Error = ZffError;
 
-    fn try_from(mut archive: Archive<R>) -> Result<Self> {
+    fn try_from(archive_path: &Path) -> Result<Self> {
+        //TODO: check if this is an tar archive and return Err if not?
+        let file = std::fs::File::open(&archive_path)?;
+        let decompressor = phollpers::compression::decompress(file)?;
+        let mut archive = Archive::new(decompressor);
+
+        let tar_entry_reader_file = std::fs::File::open(&archive_path)?;
+        let decompressor = phollpers::compression::decompress(tar_entry_reader_file)?;
+        let tar_stream_state_rc = Rc::new(RefCell::new(TarStreamState::new(decompressor)));
+
         // to preserve all metadata stuff
         archive.set_unpack_xattrs(true);
         archive.set_preserve_mtime(true);
         archive.set_preserve_ownerships(true);
         archive.set_preserve_permissions(true);
 
-        let mut temp_tar_entries_metadata = Vec::new();
-        let mut tar_entry_reader_vec = Vec::new();
+        let mut entries = VecDeque::new();
         let mut root_dir_filenumbers = Vec::new();
         let mut directory_children = HashMap::<u64, Vec<u64>>::new(); //<file number of directory, Vec<filenumber of child>>
         let mut current_file_number = 0;
@@ -163,23 +147,16 @@ impl<R: Read + Seek> TryFrom<Archive<R>> for LogicalObjectSourceTar<R> {
                 hardlink_map.insert(current_file_number, hardlink_filenumber);
             }
             let fileheader = get_file_header_tar(&entry, filetype, filename, current_file_number, parent_filenumber)?;
+            let entry_start_offset = entry.raw_file_position();
+            let entry_size = entry.size();
+            let entry_reader_rc_clone = Rc::clone(&tar_stream_state_rc);
+            let tar_entry_reader = TarEntryReader::new(entry_reader_rc_clone, entry_start_offset, entry_size);
 
-            let size = entry.size();
-            let offset = entry.raw_file_position();
-
-            temp_tar_entries_metadata.push((offset, size, fileheader));
-        }
-
-        let inner_reader = archive.into_inner();
-        let rc = Rc::new(RefCell::new(inner_reader));
-        for (offset, size, fileheader) in temp_tar_entries_metadata.drain(..) {
-            let inner_rc = Rc::clone(&rc);
-            let tar_entry_reader = TarEntryReader::new(inner_rc, offset, size);
-            tar_entry_reader_vec.push((tar_entry_reader, fileheader))
+            entries.push_back((tar_entry_reader, fileheader));
         }
 
         Ok(Self {
-            entries: tar_entry_reader_vec,
+            entries,
             iterator_index: 0,
             root_dir_filenumbers,
             symlink_real_paths,
@@ -189,75 +166,30 @@ impl<R: Read + Seek> TryFrom<Archive<R>> for LogicalObjectSourceTar<R> {
     }
 }
 
-fn gen_filetype_encoding_information<R: Read+Seek + 'static>(
-	logical_object_source: &LogicalObjectSourceTar<R>) -> Result<FileTypeEncodingInformation> {
+impl TryFrom<&PathBuf> for LogicalObjectSourceTar {
+    type Error = ZffError;
 
-	let (entry_reader, current_file_header) = logical_object_source.entries[logical_object_source.iterator_index].clone();
-	let current_file_number = current_file_header.file_number;
-
-	match current_file_header.file_type {
-		FileType::File => {
-			#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
-			Ok(FileTypeEncodingInformation::File(Box::new(entry_reader)))
-		},
-		FileType::Directory => {
-			let mut children = Vec::new();
-			for child in logical_object_source.directory_children.get(&current_file_number).unwrap_or(&Vec::new()) {
-				children.push(*child);
-			};
-			Ok(FileTypeEncodingInformation::Directory(children))
-		},
-		FileType::Symlink => {
-			let real_path = logical_object_source
-										.symlink_real_paths
-										.get(&current_file_number)
-										.unwrap_or(&PathBuf::new())
-										.clone();
-			Ok(FileTypeEncodingInformation::Symlink(real_path))
-		},
-		FileType::Hardlink => {
-			let hardlink_filenumber = logical_object_source.hardlink_map.get(&current_file_number).unwrap_or(&0);
-			Ok(FileTypeEncodingInformation::Hardlink(*hardlink_filenumber))
-		},
-		#[cfg(target_family = "windows")]
-		FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
-		#[cfg(target_family = "unix")]
-		FileType::SpecialFile => {
-            todo!()
-			/*let metadata = match std::fs::metadata(&path) {
-				Ok(metadata) => metadata,
-				Err(e) => return Err(e.into()),
-			};
-
-			let specialfile_info = if metadata.file_type().is_char_device() {
-				SpecialFileEncodingInformation::Char(metadata.rdev())
-			} else if metadata.file_type().is_block_device() {
-				SpecialFileEncodingInformation::Block(metadata.rdev())
-			} else if metadata.file_type().is_fifo() {
-				SpecialFileEncodingInformation::Fifo(metadata.rdev())
-			} else if metadata.file_type().is_socket() {
-				SpecialFileEncodingInformation::Socket(metadata.rdev())
-			} else {
-				return Err(ZffError::new(
-					ZffErrorKind::Unsupported,
-					ERROR_UNKNOWN_SPECIAL_FILETYPE));
-			};
-			Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))*/
-		},
-	}
+    fn try_from(archive_path: &PathBuf) -> Result<Self> {
+        Self::try_from(archive_path.as_path())
+    }
 }
 
-impl<R: Read+Seek + 'static> Iterator for LogicalObjectSourceTar<R> {
-	type Item = (Result<FileTypeEncodingInformation>, FileHeader);
+impl TryFrom<PathBuf> for LogicalObjectSourceTar {
+    type Error = ZffError;
+
+    fn try_from(archive_path: PathBuf) -> Result<Self> {
+        Self::try_from(archive_path.as_path())
+    }
+}
+
+impl Iterator for LogicalObjectSourceTar {
+	type Item = Result<(FileTypeEncodingInformation, FileHeader)>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.iterator_index == self.entries.len() {
-			return None;
-		}
-        let (_, file_header) = &self.entries[self.iterator_index];
-		self.iterator_index += 1;
-		let filetype_encoding_information = gen_filetype_encoding_information(&self);
-		Some((filetype_encoding_information, file_header.clone()))
+        let (tar_entry_reader, file_header) = self.entries.pop_front()?;
+		let filetype_encoding_information = gen_filetype_encoding_information(self, tar_entry_reader, &file_header);
+        self.iterator_index += 1;
+		Some(result_combine((filetype_encoding_information, file_header)))
 	}
 
 	fn count(self) -> usize
@@ -265,59 +197,137 @@ impl<R: Read+Seek + 'static> Iterator for LogicalObjectSourceTar<R> {
 			Self: Sized, {
 		self.entries.len()
 	}
-
-	fn last(self) -> Option<Self::Item>
-		where
-			Self: Sized, {
-		if self.entries.is_empty() {
-			return None
-		};
-		let (_, file_header) = &self.entries[self.entries.len()-1];
-		let filetype_encoding_information = gen_filetype_encoding_information(&self);
-		Some((filetype_encoding_information, file_header.clone()))
-	}
 }
 
-/// Contains the inner tar archive entry position and size.
-/// A slice from offset to offset + size contains the raw file bytes.
-struct TarEntryReader<R: Read + Seek> {
-    inner: Rc<RefCell<R>>,
-    offset: u64,
-    size: u64,
-    position: u64,
-}
+fn gen_filetype_encoding_information(logical_object_source: &LogicalObjectSourceTar,
+    tar_entry_reader: TarEntryReader,
+    current_file_header: &FileHeader) -> Result<FileTypeEncodingInformation> {
+        let current_file_number = current_file_header.file_number;
 
-impl<R: Read + Seek> Clone for TarEntryReader<R> {
-    fn clone(&self) -> Self {
-        TarEntryReader {
-            inner: Rc::clone(&self.inner),
-            offset: self.offset,
-            size: self.size,
-            position: self.position,
+        match current_file_header.file_type {
+            FileType::File => {
+                #[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
+                Ok(FileTypeEncodingInformation::File(Box::new(tar_entry_reader)))
+            },
+            FileType::Directory => {
+                let mut children = Vec::new();
+                for child in logical_object_source.directory_children.get(&current_file_number).unwrap_or(&Vec::new()) {
+                    children.push(*child);
+                };
+                Ok(FileTypeEncodingInformation::Directory(children))
+            },
+            FileType::Symlink => {
+                let real_path = logical_object_source
+                                            .symlink_real_paths
+                                            .get(&current_file_number)
+                                            .unwrap_or(&PathBuf::new())
+                                            .clone();
+                Ok(FileTypeEncodingInformation::Symlink(real_path))
+            },
+            FileType::Hardlink => {
+                let hardlink_filenumber = logical_object_source.hardlink_map.get(&current_file_number).unwrap_or(&0);
+                Ok(FileTypeEncodingInformation::Hardlink(*hardlink_filenumber))
+            },
+            #[cfg(target_family = "windows")]
+            FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
+            #[cfg(target_family = "unix")]
+            FileType::SpecialFile => {
+                todo!()
+                /*let metadata = match std::fs::metadata(&path) {
+                    Ok(metadata) => metadata,
+                    Err(e) => return Err(e.into()),
+                };
+
+                let specialfile_info = if metadata.file_type().is_char_device() {
+                    SpecialFileEncodingInformation::Char(metadata.rdev())
+                } else if metadata.file_type().is_block_device() {
+                    SpecialFileEncodingInformation::Block(metadata.rdev())
+                } else if metadata.file_type().is_fifo() {
+                    SpecialFileEncodingInformation::Fifo(metadata.rdev())
+                } else if metadata.file_type().is_socket() {
+                    SpecialFileEncodingInformation::Socket(metadata.rdev())
+                } else {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Unsupported,
+                        ERROR_UNKNOWN_SPECIAL_FILETYPE));
+                };
+                Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))*/
+            },
         }
-    }
+    
 }
 
-impl<R: Read + Seek> TarEntryReader<R> {
-    fn new(inner: Rc<RefCell<R>>, offset: u64, size: u64) -> Self {
+struct TarStreamState {
+    reader: Box<dyn Read>,
+    absolute_pos: u64,
+}
+
+impl TarStreamState {
+    fn new<R: Read + 'static>(reader: R) -> Self {
         Self {
-            inner,
-            offset,
-            size,
-            position: 0,
+            reader: Box::new(reader),
+            absolute_pos: 0
         }
+    }
+
+    fn skip_to(&mut self, target: u64) -> std::io::Result<()> {
+        if target < self.absolute_pos {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "cannot seek backwards in forward tar stream",
+            ));
+        }
+        let mut remaining = target - self.absolute_pos;
+        let mut scratch = [0u8; 8192];
+        while remaining > 0 {
+            let want = remaining.min(scratch.len() as u64) as usize;
+            let n = self.reader.read(&mut scratch[..want])?;
+            if n == 0 {
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected EOF while skipping")); //TODO: move string to constants
+            }
+            remaining -= n as u64;
+            self.absolute_pos += n as u64;
+        }
+        Ok(())
     }
 }
 
-impl<R: Read + Seek> Read for TarEntryReader<R> {
+struct TarEntryReader {
+    shared: Rc<RefCell<TarStreamState>>,
+    start: u64,
+    len: u64,
+    consumed: u64,
+    activated: bool,
+}
+
+impl TarEntryReader {
+    fn new(shared: Rc<RefCell<TarStreamState>>, start: u64, len: u64) -> Self {
+        Self { shared, start, len, consumed: 0, activated: false }
+    }
+}
+
+impl Read for TarEntryReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let remaining = self.size - self.position;
-        if remaining == 0 { return Ok(0); }
-        let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
-        let mut inner = self.inner.borrow_mut();
-        inner.seek(SeekFrom::Start(self.offset + self.position))?;
-        let n = inner.read(&mut buf[..to_read])?;
-        self.position += n as u64;
+        if self.consumed >= self.len || buf.is_empty() {
+            return Ok(0);
+        }
+
+        let mut st = self.shared.borrow_mut();
+
+        if !self.activated {
+            st.skip_to(self.start)?;
+            self.activated = true;
+        }
+
+        let remaining = (self.len - self.consumed) as usize;
+        let want = remaining.min(buf.len());
+        let n = st.reader.read(&mut buf[..want])?;
+        if n == 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected EOF in tar entry")); //TODO: move string to constants
+        }
+
+        self.consumed += n as u64;
+        st.absolute_pos += n as u64;
         Ok(n)
     }
 }
@@ -335,7 +345,7 @@ fn check_root_path<P: AsRef<Path>>(path: P) -> bool {
     }
 }
 
-fn get_file_header_tar<R: Read + Seek, F: Into<String>>(
+fn get_file_header_tar<R: Read, F: Into<String>>(
     entry: &Entry<R>,
     filetype: FileType,
     filename: F,
@@ -353,7 +363,7 @@ fn get_file_header_tar<R: Read + Seek, F: Into<String>>(
     Ok(file_header)
 }
 
-fn get_metadata_ext_tar<R: Read+Seek>(entry: &Entry<R>) -> Result<HashMap<String, MetadataExtendedValue>> {
+fn get_metadata_ext_tar<R: Read>(entry: &Entry<R>) -> Result<HashMap<String, MetadataExtendedValue>> {
     let mut metadata_ext = HashMap::new();
     let header = entry.header();
     if let Ok(mode) = header.mode() {

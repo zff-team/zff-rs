@@ -128,3 +128,8 @@ pub fn get_segment_of_chunk_no(chunk_no: u64, mainfooter_chunkmap: &BTreeMap<u64
     // so we should return None.
     None
 }
+
+pub(crate) fn result_combine<T, V>(t: (Result<T>, V)) -> Result<(T, V)> {
+    let (r, x) = t;
+    r.map(|v| (v, x))
+}

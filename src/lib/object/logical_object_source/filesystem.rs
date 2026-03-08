@@ -4,6 +4,9 @@ use super::*;
 // - STD
 use std::fs::File;
 
+// internal
+use helper::result_combine;
+
 // - external
 #[cfg(feature = "log")]
 use log::debug;
@@ -183,7 +186,7 @@ impl LogicalObjectSourceFilesystem {
 }
 
 impl Iterator for LogicalObjectSourceFilesystem {
-	type Item = (Result<FileTypeEncodingInformation>, FileHeader);
+	type Item = Result<(FileTypeEncodingInformation, FileHeader)>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		if self.iterator_index == 0 {
@@ -192,7 +195,7 @@ impl Iterator for LogicalObjectSourceFilesystem {
 		self.iterator_index -= 1;
 		let (_, file_header) = &self.files[self.iterator_index];
 		let filetype_encoding_information = gen_filetype_encoding_information(&self);
-		Some((filetype_encoding_information, file_header.clone()))
+		Some(result_combine((filetype_encoding_information, file_header.clone())))
 	}
 
 	fn count(self) -> usize
@@ -209,7 +212,7 @@ impl Iterator for LogicalObjectSourceFilesystem {
 		};
 		let (_, file_header) = &self.files[0];
 		let filetype_encoding_information = gen_filetype_encoding_information(&self);
-		Some((filetype_encoding_information, file_header.clone()))
+		Some(result_combine((filetype_encoding_information, file_header.clone())))
 	}
 }
 

@@ -329,6 +329,7 @@ impl LogicalObjectEncoder {
 	/// Returns the encoded footer for this object.
 	/// Sets the acquisition end timestamp of the object footer to current system time.
 	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
+		self.object_footer.replace_root_dir_filenumbers(self.logical_object_source.root_dir_filenumbers());
 		let systemtime = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		self.object_footer.set_acquisition_end(systemtime);
 		if let Some(encryption_key) = &self.encryption_key {
@@ -389,7 +390,7 @@ impl LogicalObjectEncoder {
 		};
 
 		let (filetype_encoding_information, file_header) = match logical_object_source.next() {
-			Some((encoder, header)) => (encoder?, header),
+			Some(res) => res?,
 			None => return Err(ZffError::new(
 				ZffErrorKind::Missing,
 				ERROR_NO_INPUT_FILE))
@@ -407,10 +408,7 @@ impl LogicalObjectEncoder {
 			encryption_information, 
 			current_chunk_number)?);
 		
-		let mut object_footer = ObjectFooterLogical::new_empty(obj_header.object_number);
-		for filenumber in logical_object_source.root_dir_filenumbers() {
-			object_footer.add_root_dir_filenumber(*filenumber)
-		};
+		let object_footer = ObjectFooterLogical::new_empty(obj_header.object_number);
 
 		Ok(Self {
 			obj_header,
@@ -499,7 +497,7 @@ impl LogicalObjectEncoder {
 				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
 
 				let (filetype_encoding_information, current_file_header) = match self.logical_object_source.next() {
-					Some((enc_info, header)) => (enc_info?, header),
+					Some(res) => res?,
 					None => {
 						// if no files left, the acquisition ends and the date will be written to the object footer.
 						// The appropriate file footer will be returned.

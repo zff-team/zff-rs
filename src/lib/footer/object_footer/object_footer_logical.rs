@@ -75,6 +75,12 @@ impl ObjectFooterLogical {
 		self.root_dir_filenumbers.push(filenumber)
 	}
 
+	/// Replaces the underlying [Vec] with the given one.
+	pub fn replace_root_dir_filenumbers(&mut self, filenumbers: &Vec<u64>) {
+		self.root_dir_filenumbers.clear();
+		self.root_dir_filenumbers.extend(filenumbers.iter().copied());
+	}
+
 	/// returns the underlying [Vec] of the filenumbers of the appropriate files in the root directory as a reference.
 	pub fn root_dir_filenumbers(&self) -> &Vec<u64> {
 		&self.root_dir_filenumbers

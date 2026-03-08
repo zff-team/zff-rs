@@ -316,6 +316,13 @@ impl From<InvalidLength> for ZffError {
 	}
 }
 
+impl From<Box<dyn std::error::Error>> for ZffError {
+	fn from(e: Box<dyn std::error::Error>) -> Self {
+		let err_msg = e.to_string();
+		ZffError::new(ZffErrorKind::Invalid, err_msg)
+	}
+}
+
 /// Contains the variants/kinds of errors, which could be find in this crate.
 #[derive(Debug, Clone)]
 pub enum ZffErrorKind {
