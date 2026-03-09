@@ -1,5 +1,7 @@
 // - Parent
-use super::{*, helper::*};
+use super::*;
+#[cfg(feature = "alternative_inputs")]
+use super::helper::*;
 
 // - modules
 mod segment_header;

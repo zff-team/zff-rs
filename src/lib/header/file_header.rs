@@ -230,6 +230,7 @@ impl FileHeader {
 			2 => FileType::Directory,
 			3 => FileType::Symlink,
 			4 => FileType::Hardlink,
+			5 => FileType::SpecialFile,
 			_ => return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE))
 		};
 		let filename = String::decode_directly(inner_content)?;
@@ -417,6 +418,36 @@ impl MetadataExtendedValue {
 			MetadataExtendedValue::Bool(value) => Box::new(value),
 		}
 	}
+
+	/// Returns plain, unencoded bytes for byte-backed variants.
+	///
+	/// This returns `Some(&[u8])` for:
+	/// - [`MetadataExtendedValue::String`] via [`str::as_bytes`]
+	/// - [`MetadataExtendedValue::ByteArray`]
+	///
+	/// For all other variants this returns `None`.
+	pub fn to_vec(&self) -> Option<Vec<u8>> {
+		match self {
+			MetadataExtendedValue::U8(v) => Some(vec![*v]),
+			MetadataExtendedValue::U16(v) => Some(v.to_le_bytes().to_vec()),
+			MetadataExtendedValue::U32(v) => Some(v.to_le_bytes().to_vec()),
+			MetadataExtendedValue::U64(v) => Some(v.to_le_bytes().to_vec()),
+			MetadataExtendedValue::I8(v) => Some(vec![*v as u8]),
+			MetadataExtendedValue::I16(v) => Some(v.to_le_bytes().to_vec()),
+			MetadataExtendedValue::I32(v) => Some(v.to_le_bytes().to_vec()),
+			MetadataExtendedValue::I64(v) => Some(v.to_le_bytes().to_vec()),
+			MetadataExtendedValue::F32(v) => Some(v.into_inner().to_le_bytes().to_vec()),
+			MetadataExtendedValue::F64(v) => Some(v.into_inner().to_le_bytes().to_vec()),
+			MetadataExtendedValue::Bool(v) => Some(vec![u8::from(*v)]),
+			MetadataExtendedValue::String(v) => Some(v.as_bytes().to_vec()),
+			MetadataExtendedValue::ByteArray(v) => Some(v.clone()),
+			MetadataExtendedValue::Hashmap(_) => None,
+			MetadataExtendedValue::BTreeMap(_) => None,
+			MetadataExtendedValue::Vector(_) => None,
+		}
+	}
+
+
 }
 
 impl ValueEncoder for Vec<MetadataExtendedValue> {

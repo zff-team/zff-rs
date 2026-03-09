@@ -135,6 +135,7 @@ pub(crate) fn result_combine<T, V>(t: (Result<T>, V)) -> Result<(T, V)> {
 }
 
 /// merges the major and minor rdev to a single rdev.
+#[cfg(feature = "alternative_inputs")]
 pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
     let major = major as u64;
     let minor = minor as u64;
@@ -142,4 +143,49 @@ pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
     ((major & 0xfff) << 8)
         | (minor & 0xff)
         | ((minor & !0xff) << 12)
+}
+
+#[cfg(feature = "alternative_inputs")]
+pub(crate) fn parse_unix_timestamp_nanos(s: &str) -> Option<u64> {
+    let bytes = s.as_bytes();
+
+    let mut secs: u64 = 0;
+    let mut nanos: u64 = 0;
+    let mut seen_dot = false;
+    let mut frac_digits = 0usize;
+
+    for &b in bytes {
+        if b == b'.' {
+            if seen_dot {
+                return None; // second dot
+            }
+            seen_dot = true;
+            continue;
+        }
+
+        if !b.is_ascii_digit() {
+            return None;
+        }
+
+        let digit = (b - b'0') as u64;
+
+        if !seen_dot {
+            secs = secs.checked_mul(10)?.checked_add(digit)?;
+        } else {
+            if frac_digits < 9 {
+                nanos = nanos.checked_mul(10)?.checked_add(digit)?;
+                frac_digits += 1;
+            }
+            // extra digits silently ignored
+        }
+    }
+
+    // scale to nanoseconds
+    if seen_dot {
+        for _ in frac_digits..9 {
+            nanos = nanos.checked_mul(10)?;
+        }
+    }
+
+    secs.checked_mul(1_000_000_000)?.checked_add(nanos)
 }

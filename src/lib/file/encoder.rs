@@ -13,7 +13,7 @@ pub enum FileTypeEncodingInformation {
 	Hardlink(u64), // hardlink filenumber
 	/// A special file with the given special file information.
 	#[cfg(target_family = "unix")]
-	SpecialFile(SpecialFileEncodingInformation), // special file information (rdev, type_flag)
+	SpecialFile(SpecialFileEncodingInformation), // special file information (rdev)
 }
 
 /// This enum contains the information, which are needed to encode the different special file types.
