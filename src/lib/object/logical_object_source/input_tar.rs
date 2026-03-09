@@ -2,7 +2,7 @@
 use super::*;
 
 // - internal
-use helper::result_combine;
+use helper::{result_combine, makedev};
 
 /// A [LogicalObjectSource] implementation for reading entries from a TAR archive.
 pub struct LogicalObjectSourceTar {
@@ -12,6 +12,7 @@ pub struct LogicalObjectSourceTar {
     symlink_real_paths: HashMap<u64, PathBuf>,
     hardlink_map: HashMap<u64, u64>,
     directory_children: HashMap<u64, Vec<u64>>,
+    special_files_rdev_map: HashMap<u64, SpecialFileEncodingInformation>, //filenumber, SpecialFile(merged rdev)
 }
 
 impl LogicalObjectSource for LogicalObjectSourceTar {
@@ -61,6 +62,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
         let mut current_file_number = 0;
         let mut symlink_real_paths = HashMap::new();
         let mut parent_dir_filenumber_map = HashMap::new();
+        let mut special_files_rdev_map = HashMap::new();
 
         let mut path_to_filenumber_map = HashMap::new();
         let mut hardlink_map = HashMap::new();
@@ -84,11 +86,32 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             };
             match filetype {
                 FileType::File | FileType::Directory | FileType::SpecialFile => {
+                    // this map will be used by EntryType::Link (hardlinks), so the
+                    // hardlinks can "linked" to the original data (see zff format specification)
+                    // and be added to the hardlink_map.
                     let path = entry.path()?;
                     path_to_filenumber_map.insert(path.to_path_buf(), current_file_number);
                 },
                 _ => () //Symlinks and other hardlinks should not be added.
             }
+
+            // This will merge the appropriate rdev major and rdev minor to a single rdev
+            // value. The method should be equivalent to the libc makedev implementation.
+            // This part is only necessary for special files. If major/minor rdev are not
+            // given, the value will be just 0.
+            if filetype == FileType::SpecialFile {
+                let major = entry.header().device_major().ok().flatten().unwrap_or(0);
+                let minor = entry.header().device_minor().ok().flatten().unwrap_or(0);
+                let rdev = makedev(major, minor);
+                let speical_file = match entry.header().entry_type() {
+                    EntryType::Char => SpecialFileEncodingInformation::Char(rdev),
+                    EntryType::Block => SpecialFileEncodingInformation::Block(rdev),
+                    EntryType::Fifo => SpecialFileEncodingInformation::Fifo(rdev),
+                    _ => unreachable!(), //should be handled before.
+                };
+                special_files_rdev_map.insert(current_file_number, speical_file);
+            }
+
             let path = entry.path()?;
             let filename = match path.file_name() {
                 Some(filename) => filename.to_str().unwrap().to_string(), //TODO: check if unwrap() needs to be handled.
@@ -162,6 +185,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             symlink_real_paths,
             hardlink_map,
             directory_children: directory_children,
+            special_files_rdev_map,
         })
     }
 }
@@ -199,7 +223,7 @@ impl Iterator for LogicalObjectSourceTar {
 	}
 }
 
-fn gen_filetype_encoding_information(logical_object_source: &LogicalObjectSourceTar,
+fn gen_filetype_encoding_information(logical_object_source: &mut LogicalObjectSourceTar,
     tar_entry_reader: TarEntryReader,
     current_file_header: &FileHeader) -> Result<FileTypeEncodingInformation> {
         let current_file_number = current_file_header.file_number;
@@ -232,26 +256,11 @@ fn gen_filetype_encoding_information(logical_object_source: &LogicalObjectSource
             FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
             #[cfg(target_family = "unix")]
             FileType::SpecialFile => {
-                todo!()
-                /*let metadata = match std::fs::metadata(&path) {
-                    Ok(metadata) => metadata,
-                    Err(e) => return Err(e.into()),
+                let specialfile_info = match logical_object_source.special_files_rdev_map.remove(&current_file_number) {
+                    Some(info) => info,
+                    None => unreachable!(), //should already be handled in construction phase. Should never reached.
                 };
-
-                let specialfile_info = if metadata.file_type().is_char_device() {
-                    SpecialFileEncodingInformation::Char(metadata.rdev())
-                } else if metadata.file_type().is_block_device() {
-                    SpecialFileEncodingInformation::Block(metadata.rdev())
-                } else if metadata.file_type().is_fifo() {
-                    SpecialFileEncodingInformation::Fifo(metadata.rdev())
-                } else if metadata.file_type().is_socket() {
-                    SpecialFileEncodingInformation::Socket(metadata.rdev())
-                } else {
-                    return Err(ZffError::new(
-                        ZffErrorKind::Unsupported,
-                        ERROR_UNKNOWN_SPECIAL_FILETYPE));
-                };
-                Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))*/
+                Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))
             },
         }
     

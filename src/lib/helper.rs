@@ -133,3 +133,13 @@ pub(crate) fn result_combine<T, V>(t: (Result<T>, V)) -> Result<(T, V)> {
     let (r, x) = t;
     r.map(|v| (v, x))
 }
+
+/// merges the major and minor rdev to a single rdev.
+pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
+    let major = major as u64;
+    let minor = minor as u64;
+    
+    ((major & 0xfff) << 8)
+        | (minor & 0xff)
+        | ((minor & !0xff) << 12)
+}
