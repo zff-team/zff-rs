@@ -100,7 +100,7 @@ pub struct FileHeader {
 	/// The appropriate filetype.
 	pub file_type: FileType,
 	/// The appropriate filename. 
-	pub filename: String,
+	pub filename: PlatformString,
 	/// The parent file number of this file. Will be 0, if the parent is the root directory.
 	pub parent_file_number: u64,
 	/// A [HashMap] of the metadata of this file. The keys are the names of the metadata and the values are the values of the metadata.
@@ -109,16 +109,16 @@ pub struct FileHeader {
 
 impl FileHeader {
 	/// creates a new [FileHeader] with the given values.
-	pub fn new<F: Into<String>>(
+	pub fn new(
 		file_number: u64,
 		file_type: FileType,
-		filename: F,
+		filename: PlatformString,
 		parent_file_number: u64,
 		metadata_ext: HashMap<String, MetadataExtendedValue>) -> FileHeader {
 		Self {
 			file_number,
 			file_type,
-			filename: filename.into(),
+			filename,
 			parent_file_number,
 			metadata_ext
 		}
@@ -221,7 +221,7 @@ impl FileHeader {
 	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(inner_content: &mut R) -> Result<(
 		FileType,
-		String, //Filename
+		PlatformString, //Filename
 		u64, //parent_file_number
 		HashMap<String, MetadataExtendedValue>,
 		)> {
@@ -233,7 +233,7 @@ impl FileHeader {
 			5 => FileType::SpecialFile,
 			_ => return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE))
 		};
-		let filename = String::decode_directly(inner_content)?;
+		let filename = PlatformString::decode_directly(inner_content)?;
 		let parent_file_number = u64::decode_directly(inner_content)?;
 		let metadata_ext = HashMap::<String, MetadataExtendedValue>::decode_directly(inner_content)?;
 		let inner_content = (
@@ -327,6 +327,11 @@ pub enum MetadataExtendedValue {
 	Vector(Vec<MetadataExtendedValue>),
 	/// represents a bool value
 	Bool(bool),
+	/// Represents a platform-native string.
+	///
+	/// Note: serde serialization is lossy and intended for human-readable output.
+	/// The binary zff encoding remains lossless. See [`PlatformString`] for details.
+	PlatformString(PlatformString),
 }
 
 #[cfg(feature = "serde")]
@@ -370,6 +375,7 @@ impl Serialize for MetadataExtendedValue {
 				state.end()
 			},
 			MetadataExtendedValue::Bool(value) => serializer.serialize_bool(*value),
+			MetadataExtendedValue::PlatformString(value) => serializer.serialize_str(&value.to_string_lossy()),
 		}
 	}
 }
@@ -394,6 +400,7 @@ impl MetadataExtendedValue {
 			MetadataExtendedValue::F64(value) => Box::new(value),
 			MetadataExtendedValue::Vector(value) => Box::new(value),
 			MetadataExtendedValue::Bool(value) => Box::new(value),
+			MetadataExtendedValue::PlatformString(value) => Box::new(value)
 		}
 	}
 
@@ -416,6 +423,7 @@ impl MetadataExtendedValue {
 			MetadataExtendedValue::F64(value) => Box::new(value),
 			MetadataExtendedValue::Vector(value) => Box::new(value),
 			MetadataExtendedValue::Bool(value) => Box::new(value),
+			MetadataExtendedValue::PlatformString(value) => Box::new(value)
 		}
 	}
 
@@ -444,6 +452,7 @@ impl MetadataExtendedValue {
 			MetadataExtendedValue::Hashmap(_) => None,
 			MetadataExtendedValue::BTreeMap(_) => None,
 			MetadataExtendedValue::Vector(_) => None,
+			MetadataExtendedValue::PlatformString(is) => Some(is.clone().into_bytes()),
 		}
 	}
 
@@ -524,6 +533,7 @@ impl ValueEncoder for MetadataExtendedValue {
 			MetadataExtendedValue::F64(value) => value.identifier(),
 			MetadataExtendedValue::Vector(value) => value.identifier(),
 			MetadataExtendedValue::Bool(value) => value.identifier(),
+			MetadataExtendedValue::PlatformString(value) => value.identifier()
 		}
 	}
 
@@ -545,6 +555,7 @@ impl ValueEncoder for MetadataExtendedValue {
 			MetadataExtendedValue::F64(value) => value.encode_with_identifier(),
 			MetadataExtendedValue::Vector(value) => value.encode_with_identifier(),
 			MetadataExtendedValue::Bool(value) => value.encode_with_identifier(),
+			MetadataExtendedValue::PlatformString(value) => value.encode_with_identifier(),
 		}
 	}
 }
@@ -596,6 +607,7 @@ impl ValueDecoder for MetadataExtendedValue {
 				Ok(MetadataExtendedValue::Vector(vec))
 			},
 			METADATA_EXT_TYPE_IDENTIFIER_BOOL => Ok(MetadataExtendedValue::Bool(bool::decode_directly(data)?)),
+			METADATA_EXT_TYPE_IDENTIFIER_PLATFORM_STRING => Ok(MetadataExtendedValue::PlatformString(PlatformString::decode_directly(data)?)),
 			_ => Err(ZffError::new(
 				ZffErrorKind::Unsupported, 
 				format!("{ERROR_UNSUPPORTED_METADATA_EXT}{identifier}"))),

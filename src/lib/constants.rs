@@ -121,6 +121,12 @@ pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number i
 
 #[cfg(feature = "input_tar")]
 pub(crate) const ERROR_TAR_ENCODING_ERROR_NO_FILENAME: &str = "Missing filename for tar entry ";
+#[cfg(feature = "input_tar")]
+pub(crate) const ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF: &str = "unexpected EOF in tar entry";
+#[cfg(feature = "input_tar")]
+pub(crate) const ERROR_ENCODING_TAR_NO_BACKWARD: &str = "cannot seek backwards in forward tar stream";
+#[cfg(feature = "input_tar")]
+pub(crate) const ERROR_TAR_PREPROCESSED_ENTRY: &str ="cannot process the entry type. This tar entry type should already be preprocessed. This is an application bug. The appropriate entry type is: ";
 
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
@@ -297,6 +303,7 @@ pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F32: u8 = 0x0C;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F64: u8 = 0x0D;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VEC: u8 = 0x0E;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BOOL: u8 = 0x0F;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_PLATFORM_STRING: u8 = 0x10;
 // - self defined types
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_CHUNK_HEADER: u8 = 0xFE;
 // - unknown type

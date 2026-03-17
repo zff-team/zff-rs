@@ -119,7 +119,7 @@ impl FileEncoder {
 				buffered_chunk
 			},
 			FileTypeEncodingInformation::Symlink(symlink_real_path) => {
-				let encoded_symlink_real_path = symlink_real_path.to_string_lossy().encode_directly();
+				let encoded_symlink_real_path = PlatformString::from(symlink_real_path.as_os_str()).encode_directly();
 				let mut cursor = Cursor::new(&encoded_symlink_real_path);
 				cursor.set_position(self.read_bytes_underlying_data);
 				let buffered_chunk = buffer_chunk(&mut cursor, chunk_size)?;

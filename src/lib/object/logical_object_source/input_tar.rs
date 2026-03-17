@@ -41,7 +41,8 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
     type Error = ZffError;
 
     fn try_from(archive_path: &Path) -> Result<Self> {
-        //TODO: check if this is an tar archive and return Err if not?
+        //TODO: check if this is an tar archive and return Err if not -
+        // tar could have some magic bytes?
         let file = std::fs::File::open(&archive_path)?;
         let decompressor = phollpers::compression::decompress(file)?;
         let mut archive = Archive::new(decompressor);
@@ -84,7 +85,9 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                 EntryType::Fifo => FileType::SpecialFile,
                 EntryType::Directory => FileType::Directory,
                 EntryType::Continuous => FileType::File,
-                _ => unreachable!()
+                EntryType::GNULongName | EntryType::GNULongLink | EntryType::XHeader | EntryType::XGlobalHeader => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
+                EntryType::GNUSparse => todo!(),
+                _ => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
             };
             match filetype {
                 FileType::File | FileType::Directory | FileType::SpecialFile => {
@@ -117,10 +120,10 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
 
             let path = entry.path()?;
             let filename = match path.file_name() {
-                Some(filename) => filename.to_str().unwrap().to_string(), //TODO: check if unwrap() needs to be handled.
+                Some(filename) => filename,
                 None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
                     format!("{ERROR_TAR_ENCODING_ERROR_NO_FILENAME} {:?}", path)))
-            };
+            }.into();
 
             // check if file path is root file
             let parent_filenumber = if check_root_path(path) {
@@ -287,7 +290,7 @@ impl TarStreamState {
         if target < self.absolute_pos {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "cannot seek backwards in forward tar stream", //TODO: move str to constants
+                ERROR_ENCODING_TAR_NO_BACKWARD,
             ));
         }
         let mut remaining = target - self.absolute_pos;
@@ -296,7 +299,7 @@ impl TarStreamState {
             let want = remaining.min(scratch.len() as u64) as usize;
             let n = self.reader.read(&mut scratch[..want])?;
             if n == 0 {
-                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected EOF while skipping")); //TODO: move string to constants
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF));
             }
             remaining -= n as u64;
             self.absolute_pos += n as u64;
@@ -336,7 +339,7 @@ impl Read for TarEntryReader {
         let want = remaining.min(buf.len());
         let n = st.reader.read(&mut buf[..want])?;
         if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "unexpected EOF in tar entry")); //TODO: move string to constants
+            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF));
         }
 
         self.consumed += n as u64;
@@ -368,10 +371,10 @@ fn check_root_path<P: AsRef<Path>>(path: P) -> bool {
     }
 }
 
-fn get_file_header_tar<R: Read, F: Into<String>>(
+fn get_file_header_tar<R: Read>(
     entry: &mut Entry<R>,
     filetype: FileType,
-    filename: F,
+    filename: PlatformString,
     current_file_number: u64, 
     parent_file_number: u64) -> Result<FileHeader> {
 
@@ -380,7 +383,7 @@ fn get_file_header_tar<R: Read, F: Into<String>>(
     let file_header = FileHeader::new(
                     current_file_number,
                     filetype,
-                    filename.into(),
+                    filename,
                     parent_file_number,
                     metadata_ext);
     Ok(file_header)

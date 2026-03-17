@@ -173,7 +173,11 @@ impl From<ZffError> for std::io::Error {
 
 impl From<&ZffError> for ZffError {
 	fn from(e: &ZffError) -> ZffError {
-		e.into()
+		Self {
+			details: e.details.clone(),
+			source: None,
+			kind: e.kind.clone(),
+		}
 	}
 }
 

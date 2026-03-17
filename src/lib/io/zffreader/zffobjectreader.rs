@@ -709,7 +709,7 @@ pub struct FileMetadata {
 	/// The appropriate type of the file.
 	pub file_type: FileType,
 	/// The appropriate filename.
-	pub filename: Option<String>,
+	pub filename: Option<PlatformString>,
 	/// The metadata of the appropriate file.
 	pub metadata_ext: HashMap<String, MetadataExtendedValue>,
 	/// The timestamp when the acquisition has started.

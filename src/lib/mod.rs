@@ -19,11 +19,16 @@ use std::sync::{
     Arc,
     RwLock, RwLockReadGuard,
 };
+use std::ffi::{OsStr, OsString};
 use std::thread::{self};
 use std::time::SystemTime;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::path::{PathBuf, Path};
+#[cfg(target_family = "unix")]
+use std::os::unix::ffi::OsStringExt;
+#[cfg(target_family = "windows")]
+use std::os::windows::ffi::OsStrExt;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::MetadataExt;
 #[cfg(target_family = "unix")]
@@ -59,6 +64,7 @@ mod object;
 mod file;
 mod segment;
 mod chunk;
+mod platform_string;
 
 // - re-exports
 pub use hashing::*;
@@ -73,6 +79,7 @@ pub use object::*;
 pub use file::*;
 pub use segment::*;
 pub use chunk::*;
+pub use platform_string::*;
 
 // - types
 /// Result for std::result::Result<T, ZffError>.

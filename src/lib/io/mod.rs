@@ -194,10 +194,11 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataE
 
     // timestamps
     let timestamps = get_time_from_metadata(&metadata);
-    let atime = timestamps.get(METADATA_ATIME).unwrap();
-    let mtime = timestamps.get(METADATA_MTIME).unwrap();
-    let ctime = timestamps.get(METADATA_CTIME).unwrap();
-    let btime = timestamps.get(METADATA_BTIME).unwrap();
+
+    let atime = timestamps.atime;
+    let mtime = timestamps.mtime;
+    let ctime = timestamps.ctime;
+    let btime = timestamps.btime;
 
     metadata_ext.insert(METADATA_ATIME.into(), atime.into());
     metadata_ext.insert(METADATA_MTIME.into(), mtime.into());
@@ -232,9 +233,26 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataE
 }
 
 #[cfg(target_family = "unix")]
-fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
-    let mut timestamps = HashMap::new();
+pub(crate) struct MetadataTimestamps {
+    atime: u64,
+    mtime: u64,
+    ctime: u64,
+    btime: u64
+}
 
+impl MetadataTimestamps {
+    fn new(atime: u64, mtime: u64, ctime: u64, btime: u64) -> Self {
+        Self {
+            atime,
+            mtime,
+            ctime,
+            btime
+        }
+    }
+}
+
+#[cfg(target_family = "unix")]
+fn get_time_from_metadata(metadata: &Metadata) -> MetadataTimestamps {
     let atime = match metadata.accessed() {
         Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
         Err(_) => 0
@@ -256,12 +274,7 @@ fn get_time_from_metadata(metadata: &Metadata) -> HashMap<&str, u64> {
         Err(_) => 0
     };
 
-    timestamps.insert("atime", atime);
-    timestamps.insert("mtime", mtime);
-    timestamps.insert("ctime", ctime);
-    timestamps.insert("btime", btime);
-
-    timestamps
+    MetadataTimestamps::new(atime, mtime, ctime, btime)
 }
 
 pub(crate) fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
@@ -278,9 +291,9 @@ pub(crate) fn get_file_header(path: &Path, current_file_number: u64, parent_file
     };
 
     let filename = match path.file_name() {
-        Some(filename) => filename.to_string_lossy(),
-        None => path.to_string_lossy(),
-    };
+        Some(filename) => filename,
+        None => path.as_os_str(),
+    }.into();
 
     let metadata_ext = get_metadata_ext(path);
 

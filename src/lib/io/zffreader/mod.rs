@@ -100,13 +100,11 @@ impl PreloadedChunkMaps {
 	///   - convert the existing preloaded (in-memory) chunkmap to the Redb (copy the content) and use the Redb as the appropriate preloaded chunkmap.
 	fn set_mode_redb(&mut self, mut db: Database) -> Result<()> {
 		match self {
-			PreloadedChunkMaps::None => *self = PreloadedChunkMaps::Redb(db),
+			PreloadedChunkMaps::None => (),
 			PreloadedChunkMaps::InMemory(map) => convert_in_memory_preloaded_chunkmaps_into_redb(&mut db, map)?,
-			PreloadedChunkMaps::Redb(old_db) => {
-				copy_redb(old_db, &mut db)?;
-				*self = PreloadedChunkMaps::Redb(db);
-			},
+			PreloadedChunkMaps::Redb(old_db) => copy_redb(old_db, &mut db)?,
 		};
+		*self = PreloadedChunkMaps::Redb(db);
 		Ok(())
 	}
 
@@ -335,7 +333,10 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// as BTreeMap<u64, u64> (chunk_no / appropriate xxhash)
 	pub fn get_xxhashmaps_unencrypted(&self) -> Result<BTreeMap<u64, u64>> {
 		let mut map = BTreeMap::new();
-		let mut segments = self.metadata.segments.write().unwrap();
+		let mut segments = match self.metadata.segments.write() {
+			Ok(segments) => segments,
+			Err(e) => return Err(ZffError::new(ZffErrorKind::IO, e.to_string())) //TODO: more detailed error handling.
+		};
 		for segment in segments.values_mut() {
 			let map_table = segment.footer().chunk_header_map_table.clone();
 			//trying to decode the map entries - will fail if the map is encrypted.
@@ -348,7 +349,7 @@ impl<R: Read + Seek> ZffReader<R> {
 														.for_each(|(chunk_no, header) | {
 															map.insert(*chunk_no, header.integrity_hash);
 														}),
-					Err(e) => panic!("{e}"),
+					Err(e) => return Err(e),
 				}
 			}
 		}

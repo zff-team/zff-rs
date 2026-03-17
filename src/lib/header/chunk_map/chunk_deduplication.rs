@@ -253,8 +253,10 @@ impl DeduplicationChunkMap {
 			DeduplicationChunkMap::Redb(db) => {
 				let read_txn = db.begin_read()?;
 				let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
-				let mut inner_vec = table.get(xxhash)?.ok_or(
-					ZffError::new(ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))?.value();
+				let mut inner_vec = match table.get(xxhash)? {
+					Some(ag_vec) => ag_vec.value(),
+					None => Vec::new()
+				};
 				if !inner_vec.contains(&chunk_no) {
 					inner_vec.push(chunk_no);
 				};
