@@ -86,7 +86,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                 EntryType::Directory => FileType::Directory,
                 EntryType::Continuous => FileType::File,
                 EntryType::GNULongName | EntryType::GNULongLink | EntryType::XHeader | EntryType::XGlobalHeader => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
-                EntryType::GNUSparse => todo!(),
+                EntryType::GNUSparse => FileType::File,
                 _ => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
             };
             match filetype {
