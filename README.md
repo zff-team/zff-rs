@@ -1,43 +1,103 @@
-# Zff
+# Zff – A Modern Forensic Container Format
 
 [![crate][crate-image]][crate-link]
 [![Docs][docs-image]][docs-link]
 ![Apache2/MIT licensed][license-image]
 ![Rust Version][rustc-image]
-[![website][website-image]][website-link]
 [![codeberg][codeberg-image]][codeberg-link]
 
-Zff (Z forensic file format) is file format to store and handle the contents and structure of a partial or entire disk image, physical memory or logical file/folder structures.
-The focus of zff is on speed, security and modularity in concert with forensic requirements. The modular design promises high maintainability and scalability.
-Zff is an alternative to the ewf and aff file formats and is not compatible with them.
+zff is a modern forensic container format designed for **high-performance acquisition, extensibility, scalability, and implementation clarity**.
+
+Its modular design enables **maintainability and scalability** while supporting a wide range of forensic workflows.
+
+It supports both **physical and logical evidence**, streaming workflows, optional encryption and signing, deduplication, and multiple objects per container.
+
+zff is not intended as a drop-in replacement for all existing forensic exchange formats (such as EWF or AFF4).  
+Instead, it provides a **clean, well-defined, and performant foundation** for building forensic tooling.
+
+---
+
+## Design Goals
+
+- High-throughput acquisition and processing
+- Support for both physical and logical evidence
+- Streamable format design
+- Clear and maintainable implementation
+- Modern compression and cryptographic primitives
+- Extensibility without excessive complexity
+
+## Non-Goals
+
+- Immediate full interoperability with all existing forensic tools
+- Replicating legacy format behavior or constraints
 
 See at the [wiki](https://github.com/ph0llux/zff/wiki) to learn more about the specification.
 
-## Features included in Zff(v3) (most of them are optional)
+## Features (Zff v3)
 
-- ⚡ modern, blazingly fast methods to compress the dumped data (like Zstd or Lz4) ⚡
-- 🔒 the data can optionally be stored encrypted. Strong AEAD and PBE algorithms are used.  🔒
-- ☄ The format is built to be streamable (e.g. you could stream a zff dump/container via HTTP). ☄
-- 🪂 Zff can handle both: logical dumps (like filesystem extractions) and physical dumps (like dd dumps). 🪂
-- 🌐️ It is possible to build a virtual object to setup proper reading of the content (e.g. to define RAIDs). 🌐️
-- ♊️ Zff can deduplicate the data to ensure the best usage of the available storage. ♊️
-- 🤹 The format is built to be splitable in multiple files. 🤹
-- 🍱 You can store multiple dumps within one zff-container and extend an existing zff container with additional dumps. 🍱
-- 🛡 To prevent manipulation attacks, the data can be stored signed. 🛡
-- 🔗 Fast and modern hash algorithms are used to ensure the integrity of stored data. 🔗
+- Physical and logical acquisition support
+- Chunk-based storage model
+- Streamable container format
+- Optional compression (e.g. zstd, lz4)
+- Optional encryption and signing
+- Deduplication support
+- Multiple objects per container
+- Virtual objects (e.g. RAID reconstruction)
+- Cross-platform support
+
+## Why zff?
+
+Existing forensic formats each have strengths:
+
+- **EWF (E01/L01)**: widely used and broadly supported
+- **AFF4**: flexible and conceptually powerful
+
+However, they also involve trade-offs in areas such as:
+
+- implementation complexity
+- extensibility
+- consistency across tooling
+- adoption of modern compression and cryptographic primitives
+
+zff explores a different design approach:
+
+- a simpler and more consistent implementation model
+- modern performance characteristics
+- explicit support for both physical and logical evidence
+- full control over format evolution and tooling
+
+The goal is not to replace existing formats universally,  
+but to provide a solid foundation for new forensic workflows.
 
 ## Zff tools and libraries
 
 There are several tools (and this library) to work with zff containers (or acquire them). All tools and libraries are written in pure Rust.
 
-| Name | Type | Description | Crates.io | MRSV
-|------|:----:|:------------|:---------:|:----:|
-| [zff](https://github.com/ph0llux/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 1.67.1 |
-| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] | 1.67.1 |
-| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] | 1.70.0 |
-| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 1.67.1 |
+| Name | Type | Description | Crates.io |
+|------|:----:|:------------|:---------:|
+| [zff](https://github.com/ph0llux/zff)  | library | Library to handle the zff format | [![crates.io][zff-crates-io-image]][zff-crates-io-link] | 
+| [zffacquire](https://github.com/ph0llux/zffacquire) | binary | Tool to acquire disk images in zff format | [![crates.io][zffacquire-crates-io-image]][zffacquire-crates-io-link] |
+| [zffanalyze](https://github.com/ph0llux/zffanalyze) | binary | Tool to get information about a zff container | [![crates.io][zffanalyze-crates-io-image]][zffanalyze-crates-io-link] |
+| [zffmount](https://github.com/ph0llux/zffmount) | binary | Tool to mount a zff container with FUSE (similar to xmount) | [![crates.io][zffmount-crates-io-image]][zffmount-crates-io-link] | 
 
-## Benchmarks
+## Performance Notes
+
+zff is designed for high performance through:
+
+- chunk-based processing
+- modern compression algorithms (e.g. zstd, lz4)
+- efficient streaming design
+- implementation in Rust
+
+---
+
+### Project Benchmarks
+
+The following benchmarks evaluate the performance of **zff tooling** compared to selected acquisition tools.
+
+> ⚠️ These results reflect **tool-level performance under specific conditions**, not a universal comparison of the underlying formats.
+
+#### Test Setup
 
 The following benchmarks were all run on a notebook, which has the following specifications:
 - Lenovo Thinkbook 14S Yoga ITL  
@@ -48,6 +108,10 @@ The installed operating system was Gentoo Linux.
 Input and output storage device was the internal NVMe.  
 
 The following benchmark was created for a \~20GB prebuilt image, which was generated using [the benchmark script](/benchmarks/gen_benchmark_image.sh).
+
+#### Results
+
+> [WARNING!] Comparisons reflect specific tool implementations and configurations, not inherent properties of the formats themselves.
 
 ![Acquisition time](/benchmarks/acquisition_time.png)  
 
@@ -64,16 +128,6 @@ The following benchmark was created for a \~20GB prebuilt image, which was gener
 ¹¹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy```  
 ¹²using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy --threads 8```  
 ¹³using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c lz4```  
-
-As you can see, zffacquire is in most cases much faster than the other tools - even if you store the data encrypted. Using zffacquire with the default values gives no performance disadvantage. The situation is different, of course, with an additional signature operation (but the same would also apply to Guymager with "HashVerifyDest" and/or "HashVerifySrc" enabled).  
-\ 
-zffacquire and linpmem produce very good benchmarks using lz4 (which just goes to show how much switching compression algorithms can do!).  
-\ 
-Two of the acquired images (The Guymager-e01-image at number 1, acquired in the benchmark process above and the zff-z01-image acquired with the default options of zffacquire, see above at number 6), the acquired Ex01-image (number 7) and the acquired Aff-image (by Guymager, see number 2), were used as the basis for the read speed benchmark.
-For the benchmark, xmount and zffmount was used to FUSE mount the appropriate images. Next, dd was used to benchmark the read speed.  
-\ 
-Unfortunately, I have not found an official reference tool that could have been used to FUSE mount aff4 images (neither on www.aff4.org nor on docs.aff4.org).
-If someone can tell me one, I will update the benchmarks appropriately.
 
 ![Read speed](/benchmarks/read_speed_dd.png)
 \
@@ -107,9 +161,53 @@ dd if=/tmp/ewfmount/ewfacquired.dd of=/dev/null bs=1M
 xmount --in ewf guymager.e01 /tmp/ewfmount
 dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
 ```
+
+### Interpretation
+
+The results indicate that zff-based tooling can achieve competitive throughput in this specific setup.
+
+However, performance depends heavily on:
+
+- dataset characteristics
+- compression configuration
+- hardware (CPU vs I/O bound)
+- implementation details of the compared tools
+
+In particular, comparisons involving AFF4 should be interpreted carefully, as publicly available implementations differ significantly in feature coverage and performance behavior.
+
+---
+
+### Limitations
+
+- Benchmarks were conducted on a single system and dataset
+- Different tools expose different defaults and feature sets
+- Not all formats have equally mature or comparable tooling
+- Results should be considered **indicative, not definitive**
+
+## Project Scope
+
+zff is both:
+
+- a **file format specification**
+- a **reference implementation and tooling ecosystem**
+
+The current implementation aims to:
+
+- provide a complete and consistent reference
+- validate format design decisions in practice
+- enable real-world forensic workflows
+
+Future development will focus on:
+
+- improving tooling and usability
+- expanding format features where necessary
+- maintaining backward compatibility where possible
+
+
+
 ## Zff layout
 
-See the [wiki](https://github.com/ph0llux/zff/wiki) for further information.
+See at the [wiki](https://github.com/ph0llux/zff/wiki) for further information.
 
 ## License
 
