@@ -163,7 +163,7 @@ impl Encryption for Vec<u8> {
 /// ```
 pub fn gen_random_key(length: usize) -> Vec<u8> {
 	let mut key = vec!(0u8; length/8);
-	let mut rng = StdRng::from_os_rng();
+	let mut rng = rand::rng();
 	rng.fill_bytes(&mut key);
 	key
 }
@@ -171,7 +171,7 @@ pub fn gen_random_key(length: usize) -> Vec<u8> {
 /// Generates a new random IV/Nonce as ```[u8; 16]``` for use in PBE header.
 pub fn gen_random_iv() -> [u8; 16] {
 	let mut iv = [0; 16];
-	let mut rng = StdRng::from_os_rng();
+	let mut rng = rand::rng();
 	rng.fill_bytes(&mut iv);
 	iv
 }
@@ -179,7 +179,7 @@ pub fn gen_random_iv() -> [u8; 16] {
 /// Generates a new random salt as ```[u8; 32]``` for use in PBE header.
 pub fn gen_random_salt() -> [u8; 32] {
 	let mut salt = [0; 32];
-	let mut rng = StdRng::from_os_rng();
+	let mut rng = rand::rng();
 	rng.fill_bytes(&mut salt);
 	salt
 }
@@ -187,7 +187,7 @@ pub fn gen_random_salt() -> [u8; 32] {
 /// Generates a new random IV/Nonce as ```[u8; 12]``` for use in encryption header.
 pub fn gen_random_header_nonce() -> [u8; 12] {
 	let mut nonce = [0; 12];
-	let mut rng = StdRng::from_os_rng();
+	let mut rng = rand::rng();
 	rng.fill_bytes(&mut nonce);
 	nonce
 }

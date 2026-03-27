@@ -7,7 +7,7 @@ pub struct Signature;
 impl Signature {
 	/// generates a new, random keypair.
 	pub fn new_signing_key() -> SigningKey {
-		let mut csprng = rng();
+		let mut csprng = rand::rng();
 		let mut secret_key = [0u8; SECRET_KEY_LENGTH];
 		csprng.fill_bytes(&mut secret_key);
 		SigningKey::from_bytes(&secret_key)

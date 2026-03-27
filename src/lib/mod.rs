@@ -119,7 +119,7 @@ use pkcs5::{
 	pbes2::Parameters as PBES2Parameters,
 	scrypt::Params as ScryptParams
 };
-use rand::{rng, RngCore, rngs::StdRng, SeedableRng};
+use rand::prelude::*;
 use redb::{Database, ReadableDatabase, TableDefinition};
 use sha2::{Sha256, Sha512};
 use sha3::Sha3_256;
