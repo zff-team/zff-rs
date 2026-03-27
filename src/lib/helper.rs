@@ -135,7 +135,7 @@ pub(crate) fn result_combine<T, V>(t: (Result<T>, V)) -> Result<(T, V)> {
 }
 
 /// merges the major and minor rdev to a single rdev.
-#[cfg(feature = "alternative_inputs")]
+#[cfg(feature = "input_tar")]
 pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
     let major = major as u64;
     let minor = minor as u64;
@@ -145,7 +145,7 @@ pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
         | ((minor & !0xff) << 12)
 }
 
-#[cfg(feature = "alternative_inputs")]
+#[cfg(feature = "input_tar")]
 pub(crate) fn parse_unix_timestamp_nanos(s: &str) -> Option<u64> {
     let bytes = s.as_bytes();
 

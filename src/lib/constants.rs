@@ -127,6 +127,8 @@ pub(crate) const ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF: &str = "unexpected EOF
 pub(crate) const ERROR_ENCODING_TAR_NO_BACKWARD: &str = "cannot seek backwards in forward tar stream";
 #[cfg(feature = "input_tar")]
 pub(crate) const ERROR_TAR_PREPROCESSED_ENTRY: &str ="cannot process the entry type. This tar entry type should already be preprocessed. This is an application bug. The appropriate entry type is: ";
+#[cfg(feature = "input_tar")]
+pub(crate) const ERROR_TAR_MISSING_HARDLINK_TARGET: &str = "Missing hardlink target for tar entry"; 
 
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;

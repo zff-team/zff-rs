@@ -166,7 +166,10 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             if filetype == FileType::Hardlink {
                 let target = match entry.link_name()? {
                     Some(linkname_path) => linkname_path.to_path_buf(),
-                    None => unreachable!(), //TODO: handle this. This is definitly a broken tar archive.
+                    None => return Err(ZffError::new(
+                        ZffErrorKind::Invalid,
+                        format!("{ERROR_TAR_MISSING_HARDLINK_TARGET} {:?}", entry.path()?.into_owned()),
+                    )),
                 };
                 let hardlink_filenumber = match path_to_filenumber_map.get(&target) {
                     Some(filenumber) => *filenumber,
