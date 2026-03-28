@@ -44,6 +44,8 @@ pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL: u32 = 0x7A666650;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL: u32 = 0x7A66664C;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL: u32 = 0x7a666656;
+pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL_LOGICAL: u32 = 0x7a666636;
+pub(crate) const FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_FOOTER: u32 = 0x7a666637;
 pub(crate) const FOOTER_IDENTIFIER_FILE_FOOTER: u32 = 0x7A666649;
 
 pub(crate) const PBE_KDF_PARAMETERS_PBKDF2: u32 = 0x6B646670;
@@ -211,6 +213,10 @@ pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 2;
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 2;
 /// current footer version for the [ObjectFooterVirtual](crate::footer::ObjectFooterVirtual) structure.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
+/// current footer version of the [ObjectFooterVirtualLogical](crate::footer::ObjectFooterVirtualLogical) structure.
+pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL_LOGICAL: u8 = 1;
+/// current footer version of the [VirtualLogicalFileFooter](crate::footer::VirtualLogicalFileFooter) structure.
+pub const DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_FOOTER: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::footer::SegmentFooter).
 pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 3;
 /// current footer version for the [MainFooter](crate::footer::MainFooter).

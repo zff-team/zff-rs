@@ -2,13 +2,7 @@
 use super::*;
 
 /// An [ObjectFooterVirtual] is written at the end of an virtual object.
-/// This footer contains various information about the acquisition process:
-/// - the acquisition start time
-/// - the acquisition start time
-/// - the size of the (uncompressed and unencrypted) underlying data
-/// - the first chunk number, which is used for this physical dump
-/// - the total number of chunks, used for this physical dump
-/// - a hash header with the appropriate hash values of the underlying physical dump
+/// This footer contains various information about the virtual data.
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterVirtual {
@@ -83,7 +77,6 @@ impl ObjectFooterVirtual {
 		Ok(vec)
 	}
 
-	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
 		u64, //creation_timestamp
 		Vec<u64>, //passive_objects

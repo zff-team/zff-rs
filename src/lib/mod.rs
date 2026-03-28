@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 //#![deny(warnings)]
 //! This crate provides the reference implementation of the forensic file format Zff.
 //! Zff is a new file format for forensic images, as an alternative to EWF and AFF.

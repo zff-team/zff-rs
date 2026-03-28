@@ -28,6 +28,8 @@ pub enum ObjectType {
 	Logical,
 	/// Virtual object,
 	Virtual,
+	/// Virtual logical object,
+	VirtualLogical,
 	/// Encrypted object (physical or logical)
 	Encrypted,
 }
@@ -38,6 +40,7 @@ impl fmt::Display for ObjectType {
     		ObjectType::Physical => "physical",
     		ObjectType::Logical => "logical",
     		ObjectType::Virtual => "virtual",
+			ObjectType::VirtualLogical => "virtuallogical",
     		ObjectType::Encrypted => "encrypted",
     	};
         write!(f, "{value}")
@@ -246,6 +249,7 @@ impl<R: Read + Seek> ZffReader<R> {
 					HeaderObjectType::Physical => ObjectType::Physical,
 					HeaderObjectType::Logical => ObjectType::Logical,
 					HeaderObjectType::Virtual => ObjectType::Virtual,
+					HeaderObjectType::VirtualLogical => ObjectType::VirtualLogical,
 				};
 				map.insert(*object_number, obj_type);
 			} else {

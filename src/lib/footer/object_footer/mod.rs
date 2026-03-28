@@ -5,11 +5,13 @@ use super::*;
 mod object_footer_physical;
 mod object_footer_logical;
 mod object_footer_virtual;
+mod object_footer_virtual_logical;
 
 // - re-exports
 pub use object_footer_physical::*;
 pub use object_footer_logical::*;
 pub use object_footer_virtual::*;
+pub use object_footer_virtual_logical::*;
 
 /// Each object contains its own object footer.
 #[derive(Debug, Clone, PartialEq, Eq)]

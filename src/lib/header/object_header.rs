@@ -327,6 +327,8 @@ pub enum ObjectType {
 	Logical = 1,
 	/// A virtual object.
 	Virtual = 2,
+	/// A virtual object for logical files.
+	VirtualLogical = 3,
 }
 
 impl fmt::Display for ObjectType {
@@ -335,6 +337,7 @@ impl fmt::Display for ObjectType {
 			ObjectType::Physical => "Physical",
 			ObjectType::Logical => "Logical",
 			ObjectType::Virtual => "Virtual",
+			ObjectType::VirtualLogical => "VirtualLogical",
 		};
 		write!(f, "{}", msg)
 	}
