@@ -1,3 +1,5 @@
+use aes_gcm::aead::rand_core::le;
+
 // - Parent
 use super::*;
 
@@ -334,6 +336,42 @@ pub struct VirtualLogicalFileMap {
     pub extents: BTreeMap<u64, VirtualLogicalFileExtent>, // file_offset -> extent
 }
 
+impl VirtualLogicalFileMap {
+	pub fn new(extents: BTreeMap<u64, VirtualLogicalFileExtent>) -> Self {
+		Self {
+			extents
+		}
+	}
+}
+
+impl HeaderCoding for VirtualLogicalFileMap {
+	type Item = Self;
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_MAP
+	}
+	fn identifier() -> u32 {
+		FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_MAP
+	}
+
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = vec![Self::version()];
+		vec.append(&mut self.extents.encode_directly());
+		vec
+	}
+
+	fn decode_content(data: Vec<u8>) -> Result<Self> {
+		let mut cursor = Cursor::new(data);
+		Self::check_version(&mut cursor)?;
+		let extents = BTreeMap::<u64, VirtualLogicalFileExtent>::decode_directly(&mut cursor)?;
+		Ok(Self::new(extents))
+	}
+
+	fn struct_name() -> &'static str {
+		"VirtualLogicalFileMap"
+	}
+}
+
+
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualLogicalFileExtent {
@@ -345,4 +383,42 @@ pub struct VirtualLogicalFileExtent {
     pub source_offset: u64,
     /// The length of this data section (**must** always be >=1!).
     pub length: u64,
+}
+
+impl VirtualLogicalFileExtent {
+	pub fn new(source_object_number: u64, source_file_number: u64, source_offset: u64, length: u64) -> Self {
+		Self {
+			source_object_number,
+			source_file_number,
+			source_offset,
+			length,
+		}
+	}
+}
+
+impl ValueEncoder for VirtualLogicalFileExtent {
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_VLFE	
+	}
+
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = vec![];
+		vec.append(&mut self.source_object_number.encode_directly());
+		vec.append(&mut self.source_file_number.encode_directly());
+		vec.append(&mut self.source_offset.encode_directly());
+		vec.append(&mut self.length.encode_directly());
+		vec
+	}
+}
+
+impl ValueDecoder for VirtualLogicalFileExtent {
+	type Item = Self;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
+		let source_object_number = u64::decode_directly(data)?;
+		let source_file_number = u64::decode_directly(data)?;
+		let source_offset = u64::decode_directly(data)?;
+		let length = u64::decode_directly(data)?;
+		Ok(Self::new(source_object_number, source_file_number, source_offset, length))
+	}
 }

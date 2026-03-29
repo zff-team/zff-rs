@@ -46,6 +46,7 @@ pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL: u32 = 0x7A66664C;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL: u32 = 0x7a666656;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL_LOGICAL: u32 = 0x7a666636;
 pub(crate) const FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_FOOTER: u32 = 0x7a666637;
+pub(crate) const FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_MAP: u32 = 0x7a666638;
 pub(crate) const FOOTER_IDENTIFIER_FILE_FOOTER: u32 = 0x7A666649;
 
 pub(crate) const PBE_KDF_PARAMETERS_PBKDF2: u32 = 0x6B646670;
@@ -217,6 +218,10 @@ pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL_LOGICAL: u8 = 1;
 /// current footer version of the [VirtualLogicalFileFooter](crate::footer::VirtualLogicalFileFooter) structure.
 pub const DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_FOOTER: u8 = 1;
+/// current footer version of the [VirtualLogicalFileMap](crate::footer::VirtualLogicalFileMap) structure.
+pub const DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_MAP: u8 = 1;
+/// current footer version of the [VirtualLogicalFileExtent](crate::footer::VirtualLogicalFileExtent) structure.
+pub const DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_EXTENT: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::footer::SegmentFooter).
 pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 3;
 /// current footer version for the [MainFooter](crate::footer::MainFooter).
@@ -313,6 +318,7 @@ pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VEC: u8 = 0x0E;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BOOL: u8 = 0x0F;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_PLATFORM_STRING: u8 = 0x10;
 // - self defined types
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VLFE: u8 = 0xFE;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_CHUNK_HEADER: u8 = 0xFE;
 // - unknown type
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN: u8 = 0xFF;
