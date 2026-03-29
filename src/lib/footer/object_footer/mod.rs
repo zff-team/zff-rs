@@ -23,6 +23,8 @@ pub enum ObjectFooter {
 	Logical(ObjectFooterLogical),
 	/// Footer of a virtual object.
 	Virtual(ObjectFooterVirtual),
+	/// Footer of a virtual logical object
+	VirtualLogical(ObjectFooterVirtualLogical),
 }
 
 impl ObjectFooter {
@@ -32,6 +34,7 @@ impl ObjectFooter {
 			ObjectFooter::Physical(_) => ObjectFooterPhysical::version(),
 			ObjectFooter::Logical(_) => ObjectFooterLogical::version(),
 			ObjectFooter::Virtual(_) => ObjectFooterVirtual::version(),
+			ObjectFooter::VirtualLogical(_) => ObjectFooterVirtualLogical::version(),
 		}
 	}
 
@@ -85,6 +88,7 @@ impl ObjectFooter {
 			ObjectFooter::Physical(footer) => footer.object_number,
 			ObjectFooter::Logical(footer) => footer.object_number,
 			ObjectFooter::Virtual(footer) => footer.object_number,
+			ObjectFooter::VirtualLogical(footer) => footer.object_number,
 		}
 	}
 
@@ -94,6 +98,7 @@ impl ObjectFooter {
 			ObjectFooter::Physical(footer) => footer.acquisition_start,
 			ObjectFooter::Logical(footer) => footer.acquisition_start,
 			ObjectFooter::Virtual(footer) => footer.creation_timestamp,
+			ObjectFooter::VirtualLogical(footer) => footer.creation_timestamp,
 		}
 	}
 
@@ -103,6 +108,7 @@ impl ObjectFooter {
 			ObjectFooter::Physical(footer) => footer.acquisition_end,
 			ObjectFooter::Logical(footer) => footer.acquisition_end,
 			ObjectFooter::Virtual(footer) => footer.creation_timestamp,
+			ObjectFooter::VirtualLogical(footer) => footer.creation_timestamp,
 		}
 	}
 }

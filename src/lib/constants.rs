@@ -117,6 +117,7 @@ pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the c
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT: &str = "Operation not available for virtual objects.";
+pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_LOGICAL_OBJECT: &str = "Operation not available for virtual logical objects.";
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
 

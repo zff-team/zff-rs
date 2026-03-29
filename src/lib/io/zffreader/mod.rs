@@ -271,6 +271,7 @@ impl<R: Read + Seek> ZffReader<R> {
 				ZffObjectReader::Physical(_) => { map.insert(*k, ObjectType::Physical); },
 				ZffObjectReader::Logical(_) => { map.insert(*k, ObjectType::Logical); },
 				ZffObjectReader::Virtual(_) => { map.insert(*k, ObjectType::Virtual); },
+				ZffObjectReader::VirtualLogical(_) => { map.insert(*k, ObjectType::VirtualLogical); },
 			};
 		};
 		map
@@ -431,6 +432,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			ZffObjectReader::Physical(_) => ObjectType::Physical,
 			ZffObjectReader::Logical(_) => ObjectType::Logical,
 			ZffObjectReader::Virtual(_) => ObjectType::Virtual,
+			ZffObjectReader::VirtualLogical(_) => ObjectType::VirtualLogical,
 			ZffObjectReader::Encrypted(_) => ObjectType::Encrypted,
 		};
 		self.object_reader.insert(object_number, decrypted_reader);
@@ -679,6 +681,9 @@ impl<R: Read + Seek> ZffReader<R> {
 			Some(ZffObjectReader::Logical(reader)) => {
 				Ok(reader.filemetadata()?)
 			},
+			Some(ZffObjectReader::VirtualLogical(reader)) => {
+				Ok(reader.filemetadata()?)
+			},
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
@@ -697,6 +702,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn current_fileheader(&mut self) -> Result<FileHeader> {
 		match self.object_reader.get(&self.active_object) {
 			Some(ZffObjectReader::Logical(reader)) => reader.current_fileheader(),
+			Some(ZffObjectReader::VirtualLogical(reader)) => reader.current_fileheader(),
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
@@ -713,6 +719,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	pub fn current_filefooter(&mut self) -> Result<FileFooter> {
 		match self.object_reader.get(&self.active_object) {
 			Some(ZffObjectReader::Logical(reader)) => reader.current_filefooter(),
+			Some(ZffObjectReader::VirtualLogical(reader)) => reader.current_filefooter(),
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
@@ -730,6 +737,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			ZffObjectReader::Physical(reader) => Ok(reader.object_header_ref()),
 			ZffObjectReader::Logical(reader) => Ok(reader.object_header_ref()),
 			ZffObjectReader::Virtual(reader) => Ok(reader.object_header_ref()),
+			ZffObjectReader::VirtualLogical(reader) => Ok(reader.object_header_ref()),
 			ZffObjectReader::Encrypted(_) => Err(ZffError::new(ZffErrorKind::Invalid, ""))
 		}
 	}
@@ -744,6 +752,7 @@ impl<R: Read + Seek> ZffReader<R> {
 			ZffObjectReader::Physical(reader) => Ok(reader.object_footer()),
 			ZffObjectReader::Logical(reader) => Ok(reader.object_footer()),
 			ZffObjectReader::Virtual(reader) => Ok(reader.object_footer()),
+			ZffObjectReader::VirtualLogical(reader) => Ok(reader.object_footer()),
 			ZffObjectReader::Encrypted(_) => Err(ZffError::new(ZffErrorKind::Invalid, ""))
 		}
 	}
@@ -997,6 +1006,8 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 			ZffObjectReaderLogical::with_obj_metadata_recommended(obj_number, Arc::clone(&metadata))?)),
 		ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
 			ZffObjectReaderVirtual::with_data(obj_number, Arc::clone(&metadata))?)),
+		ObjectFooter::VirtualLogical(_) => ZffObjectReader::VirtualLogical(Box::new(
+			ZffObjectReaderVirtualLogical::with_data(obj_number, Arc::clone(&metadata))?)),
 	};
 	#[cfg(feature = "log")]
 	debug!("Object reader for object {obj_number} successfully initialized");
@@ -1215,6 +1226,10 @@ fn get_chunks_of_unencrypted_object<R: Read + Seek>(
 			chunk_numbers.dedup();
 			chunk_numbers
 		},
+		ZffObjectReader::VirtualLogical(reader) => {
+			//TODO: not sure if I should return chunk numbers...I'll skip this and check this later
+			Vec::new()
+		},
 		ZffObjectReader::Encrypted(_) => {
 			return Err(ZffError::new(
 				ZffErrorKind::EncryptionError, 
@@ -1230,6 +1245,7 @@ fn get_enc_info_from_obj_reader<R: Read + Seek>(object_reader: &ZffObjectReader<
 		ZffObjectReader::Physical(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
 		ZffObjectReader::Virtual(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
 		ZffObjectReader::Logical(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
+		ZffObjectReader::VirtualLogical(reader) => EncryptionInformation::try_from(reader.object_header_ref()),
 		ZffObjectReader::Encrypted(_) => return Err(ZffError::new(
 			ZffErrorKind::EncryptionError, 
 			ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
