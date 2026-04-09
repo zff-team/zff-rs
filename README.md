@@ -32,7 +32,7 @@ Instead, it provides a **clean, well-defined, and performant foundation** for bu
 - Immediate full interoperability with all existing forensic tools
 - Replicating legacy format behavior or constraints
 
-See at the [wiki]([codeberg-wiki]) to learn more about the specification.
+See at the [wiki](https://codeberg.org/zff-team/zff-rs/wiki) to learn more about the specification.
 
 ## Features (Zff v3)
 
@@ -208,7 +208,7 @@ Future development will focus on:
 
 ## Zff layout
 
-See at the [wiki]([codeberg-wiki]) for further information.
+See at the [wiki](https://codeberg.org/zff-team/zff-rs/wiki) for further information.
 
 ## License
 
