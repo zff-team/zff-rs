@@ -39,19 +39,19 @@ impl<R: Read + Seek> ZffObjectReaderEncrypted<R> {
 
 		let obj_reader = match decrypted_footer {
 			ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
-				ZffObjectReaderPhysical::with_metadata(
+				ZffObjectReaderPhysical::new(
 					obj_no, 
 					Arc::clone(&self.metadata)))),
 			ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
-				ZffObjectReaderLogical::with_obj_metadata_recommended(
+				ZffObjectReaderLogical::new(
 					obj_no, 
 					Arc::clone(&self.metadata))?)),
 			ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
-				ZffObjectReaderVirtual::with_data(
+				ZffObjectReaderVirtual::new(
 					obj_no,
 					Arc::clone(&self.metadata))?)),
 			ObjectFooter::VirtualLogical(_) => ZffObjectReader::VirtualLogical(Box::new(
-				ZffObjectReaderVirtualLogical::with_data(
+				ZffObjectReaderVirtualLogical::new(
 					obj_no,
 					Arc::clone(&self.metadata))?)),
 		};

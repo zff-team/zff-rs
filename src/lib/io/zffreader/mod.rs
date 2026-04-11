@@ -676,50 +676,10 @@ impl<R: Read + Seek> ZffReader<R> {
 	/// - the active object is not a "logical" object.  
 	/// - the active file number was not set.  
 	/// - no object was set as active.  
-	pub fn current_filemetadata(&self) -> Result<&FileMetadata> {
+	pub fn filemetadata(&mut self) -> Result<&FileMetadata> {
 		match self.object_reader.get(&self.active_object) {
-			Some(ZffObjectReader::Logical(reader)) => {
-				Ok(reader.filemetadata()?)
-			},
-			Some(ZffObjectReader::VirtualLogical(reader)) => {
-				Ok(reader.filemetadata()?)
-			},
-			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
-			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-			None => Err(ZffError::new(
-				ZffErrorKind::Missing, 
-				format!("{ERROR_MISSING_OBJECT_NO}{}", self.active_object))),
-		}
-	}
-
-	/// Returns the [FileHeader] of the appropriate active file.
-	/// # Error
-	/// May fail if   
-	/// - the active object is not a "logical" object.  
-	/// - the active file number was not set.  
-	/// - no object was set as active.  
-	pub fn current_fileheader(&mut self) -> Result<FileHeader> {
-		match self.object_reader.get(&self.active_object) {
-			Some(ZffObjectReader::Logical(reader)) => reader.current_fileheader(),
-			Some(ZffObjectReader::VirtualLogical(reader)) => reader.current_fileheader(),
-			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
-			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
-			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
-			None => Err(ZffError::new(ZffErrorKind::Missing, self.active_object.to_string())),
-		}
-	}
-
-	/// Returns the [FileFooter] of the appropriate active file.
-	/// # Error
-	/// May fail if   
-	/// - the active object is not a "logical" object.  
-	/// - the active file number was not set.  
-	/// - no object was set as active.  
-	pub fn current_filefooter(&mut self) -> Result<FileFooter> {
-		match self.object_reader.get(&self.active_object) {
-			Some(ZffObjectReader::Logical(reader)) => reader.current_filefooter(),
-			Some(ZffObjectReader::VirtualLogical(reader)) => reader.current_filefooter(),
+			Some(ZffObjectReader::Logical(reader)) => reader.filemetadata(),
+			Some(ZffObjectReader::VirtualLogical(reader)) => reader.filemetadata(),
 			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
 			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
 			Some(ZffObjectReader::Virtual(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT)),
@@ -1001,13 +961,13 @@ fn initialize_unencrypted_object_reader<R: Read + Seek>(
 	metadata.object_metadata.write().unwrap().insert(obj_number, obj_metadata);
 	let obj_reader = match footer {
 		ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
-			ZffObjectReaderPhysical::with_metadata(obj_number, Arc::clone(&metadata)))),
+			ZffObjectReaderPhysical::new(obj_number, Arc::clone(&metadata)))),
 		ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
-			ZffObjectReaderLogical::with_obj_metadata_recommended(obj_number, Arc::clone(&metadata))?)),
+			ZffObjectReaderLogical::new(obj_number, Arc::clone(&metadata))?)),
 		ObjectFooter::Virtual(_) => ZffObjectReader::Virtual(Box::new(
-			ZffObjectReaderVirtual::with_data(obj_number, Arc::clone(&metadata))?)),
+			ZffObjectReaderVirtual::new(obj_number, Arc::clone(&metadata))?)),
 		ObjectFooter::VirtualLogical(_) => ZffObjectReader::VirtualLogical(Box::new(
-			ZffObjectReaderVirtualLogical::with_data(obj_number, Arc::clone(&metadata))?)),
+			ZffObjectReaderVirtualLogical::new(obj_number, Arc::clone(&metadata))?)),
 	};
 	#[cfg(feature = "log")]
 	debug!("Object reader for object {obj_number} successfully initialized");
@@ -1210,8 +1170,9 @@ fn get_chunks_of_unencrypted_object<R: Read + Seek>(
 		ZffObjectReader::Logical(reader) => {
 			let mut chunk_numbers = Vec::new();
 			for filemetadata in reader.files().values() {
-				let first_chunk_no = filemetadata.first_chunk_number;
-				let last_chunk_no = filemetadata.number_of_chunks + first_chunk_no - 1;
+				// unwrap is safe here: you cannot initialize a ZffObjectReaderLogical with a [VirtualFileFooter].
+				let first_chunk_no = filemetadata.first_chunk_number().unwrap();
+				let last_chunk_no = filemetadata.number_of_chunks().unwrap() + first_chunk_no - 1;
 				chunk_numbers.extend(first_chunk_no..=last_chunk_no);
 			}
 			chunk_numbers

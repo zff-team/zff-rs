@@ -18,7 +18,7 @@ pub(crate) struct ZffObjectReaderVirtual<R: Read + Seek> {
 
 impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 	/// creates a new [ZffObjectReaderVirtual] with the given metadata.
-	pub fn with_data(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
+	pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 		let object_header = metadata.object_header(&object_no).unwrap().clone();
 		let object_footer = match metadata.object_footer(&object_no) {
 			Some(ObjectFooter::Virtual(footer)) => footer.clone(),

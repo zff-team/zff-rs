@@ -13,7 +13,7 @@ pub(crate) struct ZffObjectReaderPhysical<R: Read + Seek> {
 
 impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 	/// creates a new [ZffObjectReaderPhysical] with the given metadata.
-	pub fn with_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
+	pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
 		let object_header = metadata.object_header(&object_no).unwrap().clone();
 		let object_footer = match metadata.object_footer(&object_no) {
 			Some(ObjectFooter::Physical(footer)) => footer.clone(),
