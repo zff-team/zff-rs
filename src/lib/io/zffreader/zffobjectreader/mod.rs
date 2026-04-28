@@ -15,15 +15,18 @@ pub(crate) use zffobjectreader_physical::*;
 pub(crate) use zffobjectreader_virtual::*;
 pub(crate) use zffobjectreader_virtual_logical::*;
 
+type ArcFileMetadaMap = Arc<HashMap<u64, FileMetadata>>;
+
 #[derive(Debug)]
 pub(crate) struct ObjectMetadata {
 	pub header: ObjectHeader,
 	pub footer: ObjectFooter,
+	pub files: Option<ArcFileMetadaMap>,
 }
 
 impl ObjectMetadata {
 	pub(crate) fn new(header: ObjectHeader, footer: ObjectFooter) -> Self {
-		Self { header, footer }
+		Self { header, footer, files: None }
 	}
 }
 

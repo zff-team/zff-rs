@@ -7,13 +7,17 @@ mod encoder;
 // - re-exports
 pub use encoder::*;
 
+pub struct FileMapPosition {
+	pub segment_no: u64,
+	pub offset: u64
+}
+
 /// The [FileMetadata] contains the appropriate metadata for a zff logical file or a zff virtual logical file.
 /// Also this struct contains a position value for a [Reader](std::io::Read).
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct FileMetadata {
-	header: FileHeader,
-	footer: FileFooterW,
-	pub position: u64,
+pub struct FileMetadata {
+	pub header: FileHeader,
+	pub footer: FileFooterW,
 }
 
 impl FileMetadata {
@@ -22,7 +26,6 @@ impl FileMetadata {
 		Self {
 			header,
 			footer: FileFooterW::FileFooter(footer),
-			position: 0
 		}
 	}
 
@@ -31,7 +34,6 @@ impl FileMetadata {
 		Self {
 			header,
 			footer: FileFooterW::VirtualFileFooter(footer),
-			position: 0
 		}
 	}
 
@@ -49,9 +51,16 @@ impl FileMetadata {
 		}
 	}
 
-	/// Returns a copy of the inner [FileHeader].
-	pub fn fileheader(&self) -> FileHeader {
-		self.header.clone()
+	/// Returns the segmentnumber and offset of the appropriate filemap, in case of [VirtualFileFooter].
+	/// Returns None in case of [FileFooter].
+	pub(crate) fn filemap_position(&self) -> Result<FileMapPosition> {
+		match &self.footer {
+			FileFooterW::FileFooter(_) => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_MISSING_VLFM)),
+			FileFooterW::VirtualFileFooter(footer) => Ok(FileMapPosition {
+				segment_no: footer.file_map_segment_no,
+				offset: footer.file_map_offset
+			})
+		}
 	}
 
 	/// returns the parent file number
@@ -69,14 +78,6 @@ impl FileMetadata {
 		match &self.footer {
 			FileFooterW::FileFooter(footer) => footer.length_of_data,
 			FileFooterW::VirtualFileFooter(footer) => footer.length_of_data,
-		}
-	}
-
-	/// Returns the segment number and offset of the virtual logical file map.
-	pub(crate) fn virtual_file_map_info(&self) -> Option<(u64, u64)> {
-		match &self.footer {
-			FileFooterW::FileFooter(_) => None,
-			FileFooterW::VirtualFileFooter(footer) => Some((footer.file_map_segment_no, footer.file_map_offset)),
 		}
 	}
 }

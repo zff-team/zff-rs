@@ -171,6 +171,13 @@ impl From<ZffError> for std::io::Error {
 	}
 }
 
+impl<T> From<std::sync::PoisonError<T>> for ZffError {
+	fn from(_value: std::sync::PoisonError<T>) -> Self {
+		let err_msg = "PoisonError"; //TODO!
+		ZffError::new(ZffErrorKind::PoisonError, err_msg)
+	}
+}
+
 impl From<&ZffError> for ZffError {
 	fn from(e: &ZffError) -> ZffError {
 		Self {
@@ -332,6 +339,8 @@ impl From<Box<dyn std::error::Error>> for ZffError {
 pub enum ZffErrorKind {
 	/// An IO Error.
 	IO,
+	/// An RwLockGuard error,
+	PoisonError,
 	/// Contains an error within an encryption or decryption process.
 	EncryptionError,
 	/// Contains an error within a signing or verification process.
@@ -367,6 +376,7 @@ impl fmt::Display for ZffErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let err_msg = match self {
 			ZffErrorKind::IO => "IO",
+			ZffErrorKind::PoisonError => "PoisonError",
 			ZffErrorKind::EncryptionError => "Encryption",
 			ZffErrorKind::SigningError => "Signing",
 			ZffErrorKind::EncodingError => "Encoding",

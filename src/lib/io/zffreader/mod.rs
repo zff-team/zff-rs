@@ -6,7 +6,7 @@ mod zffobjectreader;
 mod redb_handling;
 
 // - re-exports
-pub use zffobjectreader::*;
+pub(crate) use zffobjectreader::*;
 pub(crate) use redb_handling::*;
 
 // - type definitions
@@ -120,7 +120,7 @@ impl PreloadedChunkMaps {
 #[derive(Debug)]
 pub(crate) struct ZffReaderGeneralMetadata<R: Read + Seek> {
 	pub segments: Arc<RwLock<HashMap<u64, Segment<R>>>>, //<segment number, Segment>
-	pub object_metadata: Arc<RwLock<BTreeMap<u64, ObjectMetadata>>>, //<object number, ObjectMetadata> //TODO: ObjectMetadata should be a Arc<RwLock>> which is present in the appropriate ZffObjectReader
+	pub object_metadata: Arc<RwLock<BTreeMap<u64, ObjectMetadata>>>, //<object number, ObjectMetadata>
 	pub main_footer: MainFooter,
 	pub preloaded_chunkmaps: Arc<RwLock<PreloadedChunkMaps>>,
 }
@@ -134,11 +134,6 @@ impl<R: Read + Seek> ZffReaderGeneralMetadata<R> {
 			preloaded_chunkmaps: Arc::new(RwLock::new(PreloadedChunkMaps::default())),
 		}
 	}
-
-	// Returns a reference of the appropriate [ObjectHeader](crate::header::ObjectHeader) to the given Object number.
-	//pub fn object_header_ref(&self, object_no: &u64) -> Option<&ObjectHeader> {
-	//	Some(&self.object_metadata.get(object_no)?.header)
-	//}
 
 	/// Returns a Clone of the appropriate [ObjectHeader](crate::header::ObjectHeader) to the given Object number.
 	pub fn object_header(&self, object_no: &u64) -> Option<ObjectHeader> {
@@ -293,12 +288,14 @@ impl<R: Read + Seek> ZffReader<R> {
 
 	///  Sets an appropriate file as active to read or seek from this object.
 	///  # Error
-	///  This method fails, if the appropriate object type is not "logical" or if no file for the appropriate file number exists.
+	///  This method fails, if the appropriate object type is not "logical" or "virtual logical",
+	///  or if no file for the appropriate file number exists.
 	///  Will also fail, if no object was activated by using the set_active_object() method.
 	pub fn set_active_file(&mut self, filenumber: u64) -> Result<()> {
 		if let Some(object_reader) = self.object_reader.get_mut(&self.active_object) {
 			match object_reader {
 				ZffObjectReader::Logical(reader) => reader.set_active_file(filenumber),
+				ZffObjectReader::VirtualLogical(reader) => reader.set_active_file(filenumber),
 				_ => Err(ZffError::new(
 					ZffErrorKind::Invalid,
 					 self.active_object.to_string()))
@@ -745,41 +742,6 @@ impl<R: Read + Seek> Seek for ZffReader<R> {
 		};
 		object_reader.seek(seek_from)
 	}
-}
-
-fn extract_recommended_metadata(fileheader: &FileHeader) -> HashMap<String, MetadataExtendedValue> {
-	let mut metadata = HashMap::new();
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_ATIME) {
-		metadata.insert(METADATA_ATIME.to_string(), value.clone());
-	}
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_MTIME) {
-		metadata.insert(METADATA_MTIME.to_string(), value.clone());
-	}
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_CTIME) {
-		metadata.insert(METADATA_CTIME.to_string(), value.clone());
-	}
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_BTIME) {
-		metadata.insert(METADATA_BTIME.to_string(), value.clone());
-	}
-
-	#[cfg(target_family = "unix")]
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_UID) {
-		metadata.insert(METADATA_EXT_KEY_UID.to_string(), value.clone());
-	}
-	#[cfg(target_family = "unix")]
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_GID) {
-		metadata.insert(METADATA_EXT_KEY_GID.to_string(), value.clone());
-	}
-	#[cfg(target_family = "unix")]
-	if let Some(value) = fileheader.metadata_ext.get(METADATA_EXT_KEY_MODE) {
-		metadata.insert(METADATA_EXT_KEY_MODE.to_string(), value.clone());
-	}
-
-	metadata
-}
-
-fn extract_all_metadata(fileheader: &FileHeader) -> HashMap<String, MetadataExtendedValue> {
-	fileheader.metadata_ext.clone()
 }
 
 enum Footer {

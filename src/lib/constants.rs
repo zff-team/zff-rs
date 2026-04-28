@@ -110,14 +110,15 @@ pub(crate) const ERROR_UNKNOWN_SPECIAL_FILETYPE: &str = "Unknown file type";
 pub(crate) const ERROR_UNSUPPORTED_METADATA_EXT: &str = "Unsupported metadata extended type identifier: ";
 pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segment footer";
 pub(crate) const ERROR_UNDECODABLE_MAIN_FOOTER: &str = "Could not decode main footer";
-pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str = "Could not read header offsets of object no. ";
-pub(crate) const ERROR_UNREADABLE_FILE_FOOTER_OFFSET_NO: &str = "Could not read footer offsets of file no. ";
 pub(crate) const ERROR_CHUNK_IS_ENCRYPTED_: &str = "The chunk is encrypted; chunk no ";
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT: &str = "Operation not available for virtual objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_LOGICAL_OBJECT: &str = "Operation not available for virtual logical objects.";
+pub(crate) const ERROR_ZFFREADER_MISSING_VLFM: &str = "Missing virtual logical file map information for virtual file: ";
+pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VLFM: &str = "Missing offset in virtual logical file map: ";
+pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str = "Necessary passive object is not initialized/decrypted correctly: Object no. ";
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
 

@@ -4,7 +4,7 @@ use super::*;
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualFileFooter {
-    pub file_number: u64,
+    pub filenumber: u64,
     pub hash_header: HashHeader,
     pub length_of_data: u64,
     // where to find this file's mapping/extents
@@ -13,15 +13,15 @@ pub struct VirtualFileFooter {
 }
 
 impl VirtualFileFooter {
-	/// creates a new FileFooter by given values/hashes.
+	/// creates a new VirtualFileFooter by given values/hashes.
 	pub fn new(
-		file_number: u64,
+		filenumber: u64,
 		hash_header: HashHeader, 
 		length_of_data: u64, 
 		file_map_segment_no: u64, 
 		file_map_offset: u64) -> Self {
 		Self {
-			file_number,
+			filenumber,
 			hash_header,
 			length_of_data,
 			file_map_segment_no,
@@ -64,14 +64,14 @@ impl VirtualFileFooter {
 	{
 		let mut vec = Vec::new();
 		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.file_number.encode_directly());
+		vec.append(&mut self.filenumber.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
 
-		let encrypted_data = FileFooter::encrypt(
+		let encrypted_data = VirtualFileFooter::encrypt(
 			key, data_to_encrypt,
-			self.file_number,
+			self.filenumber,
 			algorithm
 			)?;
 		vec.append(&mut encrypted_data.encode_directly());
@@ -93,17 +93,17 @@ impl VirtualFileFooter {
 		data.read_exact(&mut header_content)?;
 		let mut cursor = Cursor::new(header_content);
 		Self::check_version(&mut cursor)?;
-		let file_number = u64::decode_directly(&mut cursor)?;
+		let filenumber = u64::decode_directly(&mut cursor)?;
 		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
 		let algorithm = &encryption_information.borrow().algorithm;
-		let decrypted_data = FileFooter::decrypt(
+		let decrypted_data = Self::decrypt(
 			&encryption_information.borrow().encryption_key, 
 			encrypted_data, 
-			file_number, 
+			filenumber, 
 			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
 		let (hash_header, length_of_data, file_map_segment_no, file_map_offset) = Self::decode_inner_content(&mut cursor)?;
-		Ok(Self::new(file_number, hash_header, length_of_data, file_map_segment_no, file_map_offset))
+		Ok(Self::new(filenumber, hash_header, length_of_data, file_map_segment_no, file_map_offset))
 	}
 
 	#[allow(clippy::type_complexity)]
@@ -138,7 +138,7 @@ impl HeaderCoding for VirtualFileFooter {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.file_number.encode_directly());
+		vec.append(&mut self.filenumber.encode_directly());
 		vec.append(&mut self.encode_content());
 		vec
 	}
@@ -146,9 +146,9 @@ impl HeaderCoding for VirtualFileFooter {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
-		let file_number = u64::decode_directly(&mut cursor)?;
+		let filenumber = u64::decode_directly(&mut cursor)?;
 		let (hash_header, length_of_data, file_map_segment_no, file_map_offset) = Self::decode_inner_content(&mut cursor)?;
-		Ok(Self::new(file_number, hash_header, length_of_data, file_map_segment_no, file_map_offset))
+		Ok(Self::new(filenumber, hash_header, length_of_data, file_map_segment_no, file_map_offset))
 	}
 
 	fn struct_name() -> &'static str {
@@ -156,19 +156,77 @@ impl HeaderCoding for VirtualFileFooter {
 	}
 }
 
+impl Encryption for VirtualFileFooter {
+	fn crypto_nonce_padding() -> u8 {
+		0b00001000 //TODO: move all crypto paddings to constants (#codeCleanup)
+	}
+}
+
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualLogicalFileMap {
+	/// The corresponding file number.
+	pub filenumber: u64, // Note: The filenumber at this point seems redundant, but is necessary to calculate the encryption nonce.
     /// A map with the offset parts of the virtual file and the appropriate
     /// mapping.
     pub extents: BTreeMap<u64, VirtualLogicalFileExtent>, // file_offset -> extent
 }
 
 impl VirtualLogicalFileMap {
-	pub fn new(extents: BTreeMap<u64, VirtualLogicalFileExtent>) -> Self {
+	pub fn new(filenumber: u64, extents: BTreeMap<u64, VirtualLogicalFileExtent>) -> Self {
 		Self {
+			filenumber,
 			extents
 		}
+	}
+
+	fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
+	where
+		K: AsRef<[u8]>,
+		A: Borrow<EncryptionAlgorithm>,
+	{
+		let mut vec = Vec::new();
+		vec.append(&mut Self::version().encode_directly());
+		vec.append(&mut self.filenumber.encode_directly());
+
+		let mut data_to_encrypt = Vec::new();
+		data_to_encrypt.append(&mut self.extents.encode_directly());
+
+		let encrypted_data = VirtualFileFooter::encrypt(
+			key, data_to_encrypt,
+			self.filenumber,
+			algorithm
+			)?;
+		vec.append(&mut encrypted_data.encode_directly());
+		Ok(vec)
+	}
+
+	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader].
+	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader].
+	pub fn decode_encrypted_footer_with_key<R, E>(data: &mut R, encryption_information: E) -> Result<Self>
+	where
+		R: Read,
+		E: Borrow<EncryptionInformation>
+	{
+		if !Self::check_identifier(data) {
+			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
+		};
+		let header_length = Self::decode_header_length(data)? as usize;
+		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+		data.read_exact(&mut header_content)?;
+		let mut cursor = Cursor::new(header_content);
+		Self::check_version(&mut cursor)?;
+		let filenumber = u64::decode_directly(&mut cursor)?;
+		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
+		let algorithm = &encryption_information.borrow().algorithm;
+		let decrypted_data = Self::decrypt(
+			&encryption_information.borrow().encryption_key, 
+			encrypted_data, 
+			filenumber, 
+			algorithm)?;
+		let mut cursor = Cursor::new(decrypted_data);
+		let extends = BTreeMap::<u64, VirtualLogicalFileExtent>::decode_directly(&mut cursor)?;
+		Ok(Self::new(filenumber, extends))
 	}
 }
 
@@ -183,6 +241,7 @@ impl HeaderCoding for VirtualLogicalFileMap {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
+		vec.append(&mut self.filenumber.encode_directly());
 		vec.append(&mut self.extents.encode_directly());
 		vec
 	}
@@ -190,12 +249,29 @@ impl HeaderCoding for VirtualLogicalFileMap {
 	fn decode_content(data: Vec<u8>) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
+		let filenumber = u64::decode_directly(&mut cursor)?;
 		let extents = BTreeMap::<u64, VirtualLogicalFileExtent>::decode_directly(&mut cursor)?;
-		Ok(Self::new(extents))
+		Ok(Self::new(filenumber, extents))
 	}
 
 	fn struct_name() -> &'static str {
 		"VirtualLogicalFileMap"
+	}
+}
+
+impl Encryption for VirtualLogicalFileMap {
+	fn crypto_nonce_padding() -> u8 {
+		0b01111111 //TODO: move all crypto paddings to constants (#codeCleanup)
+	}
+}
+
+impl From<VirtualLogicalFileMap> for Vec<(u64, VirtualLogicalFileExtent)> {
+	fn from(vlfm: VirtualLogicalFileMap) -> Self {
+		let mut new_vec = Vec::new();
+		for (virtual_offset, vlfe) in vlfm.extents {
+			new_vec.push((virtual_offset, vlfe));
+		}
+		new_vec
 	}
 }
 
@@ -206,7 +282,7 @@ pub struct VirtualLogicalFileExtent {
     /// The appropriate source object of the underlying data
     pub source_object_number: u64,
     /// The appropriate source file number of the underlying data
-    pub source_file_number: u64,
+    pub source_filenumber: u64,
     /// The appropriate source offset at which the data section starts and from which it should be read.
     pub source_offset: u64,
     /// The length of this data section (**must** always be >=1!).
@@ -214,10 +290,10 @@ pub struct VirtualLogicalFileExtent {
 }
 
 impl VirtualLogicalFileExtent {
-	pub fn new(source_object_number: u64, source_file_number: u64, source_offset: u64, length: u64) -> Self {
+	pub fn new(source_object_number: u64, source_filenumber: u64, source_offset: u64, length: u64) -> Self {
 		Self {
 			source_object_number,
-			source_file_number,
+			source_filenumber,
 			source_offset,
 			length,
 		}
@@ -232,7 +308,7 @@ impl ValueEncoder for VirtualLogicalFileExtent {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = vec![];
 		vec.append(&mut self.source_object_number.encode_directly());
-		vec.append(&mut self.source_file_number.encode_directly());
+		vec.append(&mut self.source_filenumber.encode_directly());
 		vec.append(&mut self.source_offset.encode_directly());
 		vec.append(&mut self.length.encode_directly());
 		vec
@@ -244,9 +320,9 @@ impl ValueDecoder for VirtualLogicalFileExtent {
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
 		let source_object_number = u64::decode_directly(data)?;
-		let source_file_number = u64::decode_directly(data)?;
+		let source_filenumber = u64::decode_directly(data)?;
 		let source_offset = u64::decode_directly(data)?;
 		let length = u64::decode_directly(data)?;
-		Ok(Self::new(source_object_number, source_file_number, source_offset, length))
+		Ok(Self::new(source_object_number, source_filenumber, source_offset, length))
 	}
 }

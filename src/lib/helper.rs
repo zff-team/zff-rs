@@ -21,6 +21,8 @@ pub(crate) fn find_vmi_offset(offset_maps: &BTreeSet<BTreeMap<u64, (u64, u64)>>,
     Some((*segment_no, *offset))
 }
 
+
+//TODO: should be replaced in future with a more coonvenient option with better performance.
 fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offset: u64) -> Option<usize> {
     // The zombie counter is used to prevent infinite loops (if the set is malformed, etc.)
     let mut zombie_counter = 0;
@@ -53,6 +55,29 @@ fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offse
     None
 }
 
+#[inline]
+pub fn floor_vec_entry<T>(items: &[(u64, T)], key: u64) -> Option<&(u64, T)> {
+    match items.binary_search_by_key(&key, |(k, _)| *k) {
+        Ok(i) => items.get(i),
+        Err(0) => None,
+        Err(i) => items.get(i - 1),
+    }
+}
+
+#[inline]
+pub fn floor_vec_value<T>(items: &[(u64, T)], key: u64) -> Option<&T> {
+    floor_vec_entry(items, key).map(|(_, v)| v)
+}
+
+#[inline]
+pub fn floor_btree_entry<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<(&u64, &T)> {
+    map.range(..=key).next_back()
+}
+
+#[inline]
+pub fn floor_btree_value<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<&T> {
+    floor_btree_entry(map, key).map(|(_, v)| v)
+}
 
 #[cfg(feature = "serde")]
 /// Serializes `buffer` to a lowercase hex string.
@@ -106,7 +131,7 @@ pub fn base64_to_buffer<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>,
 
 
 /// Returns the segment number of a given chunk number.
-pub fn get_segment_of_chunk_no(chunk_no: u64, mainfooter_chunkmap: &BTreeMap<u64, u64>) -> Option<u64> {
+pub(crate) fn get_segment_of_chunk_no(chunk_no: u64, mainfooter_chunkmap: &BTreeMap<u64, u64>) -> Option<u64> {
     // If the chunk_no is exactly matched, return the corresponding value.
     if let Some(&value) = mainfooter_chunkmap.get(&chunk_no) {
         return Some(value);

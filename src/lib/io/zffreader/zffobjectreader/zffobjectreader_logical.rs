@@ -9,7 +9,10 @@ pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterLogical,
 	active_file: u64, // filenumber of active file
-	files: HashMap<u64, FileMetadata>,//<filenumber, metadata>,
+	file_positions: HashMap<u64, u64>, //<filenumber, position>
+	// this one is "redundant", the data is already available via the ArcZffReaderMetadata - but you can much more easier
+	// access them with that additional hashmap.
+	files: Arc<HashMap<u64, FileMetadata>>, //<filenumber, FileMetadata>
 }
 
 impl<R: Read + Seek> ZffObjectReaderLogical<R> {
@@ -39,8 +42,9 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			None
 		};
 
-		// reads all file header and appropriate footer and fill the files-map. Sets the File number 1 active.
+		// reads all file header and appropriate footer and fill the files-map/file_positions-map. Sets the File number 1 active.
 		let mut files = HashMap::new();
+		let mut file_positions = HashMap::new();
 		for (filenumber, header_segment_number) in object_footer.file_header_segment_numbers() {
 			#[cfg(feature = "log")]
 			debug!("Initialize file {filenumber}");
@@ -86,17 +90,25 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			};
 			let metadata = FileMetadata::with_file_footer(fileheader, filefooter);
 			files.insert(*filenumber, metadata);
+			file_positions.insert(*filenumber, 0);
 		}
 
+		let files = Arc::new(files);
 		#[cfg(feature = "log")]
 		debug!("{} files were successfully initialized for logical object {}.", files.len(), object_header.object_number);
+		{
+			let mut metadata_guard = metadata.object_metadata.write().unwrap();
+			// unwrap is safe here, we've already used this before to obtain the appropriate object header and footer ;)
+			metadata_guard.get_mut(&object_no).unwrap().files = Some(Arc::clone(&files));
+		}
 
 		Ok(Self {
 			metadata,
 			object_header,
 			object_footer,
 			active_file: 1,
-			files,
+			file_positions,
+			files
 		})
 	}
 
@@ -143,19 +155,21 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 
 impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-		let filemetadata = match self.files.get_mut(&self.active_file) {
+		let filemetadata = match self.files.get(&self.active_file) {
 			Some(metadata) => metadata,
 			None => return Err(
 				std::io::Error::new(
 					std::io::ErrorKind::Other, 
 					format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file))),
 		};
+		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
+		let position = self.file_positions.get_mut(&self.active_file).unwrap();
 		let chunk_size = self.object_header.chunk_size;
 		//unwrap is safe here: we've never initialized FileMetadata for ZffObjectReaderLogical with ::with_virtual_file_footer().
 		let first_chunk_number = filemetadata.first_chunk_number().unwrap();
 		let last_chunk_number = first_chunk_number + filemetadata.number_of_chunks().unwrap() - 1;
-		let mut current_chunk_number = (first_chunk_number * chunk_size + filemetadata.position) / chunk_size;
-		let mut inner_position = (filemetadata.position % chunk_size) as usize; // the inner chunk position
+		let mut current_chunk_number = (first_chunk_number * chunk_size + *position) / chunk_size;
+		let mut inner_position = (*position % chunk_size) as usize; // the inner chunk position
 		let mut read_bytes = 0; // number of bytes which are written to buffer
 		loop {
 			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
@@ -173,7 +187,7 @@ impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 			inner_position = 0;
 			current_chunk_number += 1;
 		}
-		filemetadata.position += read_bytes as u64;
+		*position += read_bytes as u64;
 		Ok(read_bytes)
 	}
 }
@@ -181,33 +195,35 @@ impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 impl<R: Read + Seek> Seek for ZffObjectReaderLogical<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 
-		let filemetadata = match self.files.get_mut(&self.active_file) {
+		let filemetadata = match self.files.get(&self.active_file) {
 			Some(metadata) => metadata,
 			None => return Err(
 				std::io::Error::new(
 					std::io::ErrorKind::Other, 
 					format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file))),
 		};
+		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
+		let position = self.file_positions.get_mut(&self.active_file).unwrap();
 
 		match seek_from {
 			SeekFrom::Start(value) => {
-				filemetadata.position = value;
+				*position = value;
 			},
-			SeekFrom::Current(value) => if filemetadata.position as i64 + value < 0 {
+			SeekFrom::Current(value) => if *position as i64 + value < 0 {
 				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
-					filemetadata.position += value as u64;
+					*position += value as u64;
 			} else {
-				filemetadata.position -= value as u64;
+				*position -= value as u64;
 			},
-			SeekFrom::End(value) => if filemetadata.position as i64 + value < 0 {
+			SeekFrom::End(value) => if *position as i64 + value < 0 {
 				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
-					filemetadata.position = filemetadata.length_of_data() + value as u64;
+					*position = filemetadata.length_of_data() + value as u64;
 			} else {
-				filemetadata.position = filemetadata.length_of_data() - value as u64;
+				*position = filemetadata.length_of_data() - value as u64;
 			},
 		}
-		Ok(filemetadata.position)
+		Ok(*position)
 	}
 }
