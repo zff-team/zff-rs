@@ -14,47 +14,6 @@ where
     s.serialize_str(&format!("0x{:X}", x))
 }
 
-pub(crate) fn find_vmi_offset(offset_maps: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offset: u64) -> Option<(u64, u64)> {
-    let set_index = binary_search_for_map_in_set(offset_maps, offset)?;
-    let map = offset_maps.iter().nth(set_index)?;
-    let (_, (segment_no, offset)) = map.range(..=offset).next_back()?;
-    Some((*segment_no, *offset))
-}
-
-
-//TODO: should be replaced in future with a more coonvenient option with better performance.
-fn binary_search_for_map_in_set(set: &BTreeSet<BTreeMap<u64, (u64, u64)>>, offset: u64) -> Option<usize> {
-    // The zombie counter is used to prevent infinite loops (if the set is malformed, etc.)
-    let mut zombie_counter = 0;
-    let mut low = 0;
-    let mut high = set.len() - 1;
-    while low <= high {
-        if zombie_counter > DEFAULT_BINARY_SEARCH_MAX_ITERATIONS {
-            #[cfg(feature = "log")]
-            debug!("Malformed VMI map. Exiting.");
-            return None;
-        }
-        let mid = (low + high) / 2;
-        let lowest_offset = set.iter().nth(mid)?.keys().next()?;
-        let highest_offset = set.iter().nth(mid)?.keys().next_back()?;
-        if lowest_offset <= &offset && highest_offset >= &offset {
-            // returns the appropriate set index
-            return Some(mid);
-        } else if lowest_offset > &offset {
-            // search left
-            high = mid - 1;
-            zombie_counter += 1;
-        } else {
-            // search right
-            low = mid + 1;
-            zombie_counter += 1;
-        }
-    }
-    #[cfg(feature = "log")]
-    debug!("Empty map");
-    None
-}
-
 #[inline]
 pub fn floor_vec_entry<T>(items: &[(u64, T)], key: u64) -> Option<&(u64, T)> {
     match items.binary_search_by_key(&key, |(k, _)| *k) {

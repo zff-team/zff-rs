@@ -135,14 +135,14 @@ impl EncryptionHeader {
 						PBEScheme::AES128CBC => decrypt_pbkdf2sha256_aes128cbc(
 							iterations,
 							&salt,
-							&self.pbe_header.pbencryption_nonce,
+							self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
 						PBEScheme::AES256CBC => decrypt_pbkdf2sha256_aes256cbc(
 							iterations,
 							&salt,
-							&self.pbe_header.pbencryption_nonce,
+							self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -162,7 +162,7 @@ impl EncryptionHeader {
 							p,
 							r,
 							&salt,
-							&self.pbe_header.pbencryption_nonce,
+							self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),
@@ -171,7 +171,7 @@ impl EncryptionHeader {
 							p,
 							r,
 							&salt,
-							&self.pbe_header.pbencryption_nonce,
+							self.pbe_header.pbencryption_nonce,
 							&password,
 							&self.encrypted_encryption_key
 							),

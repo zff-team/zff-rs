@@ -6,15 +6,9 @@ use super::*;
 use crate::hashes_to_log;
 
 use crate::{
-	header::{
-		ObjectHeader, 
-		HashHeader,
-		HashValue,
-		EncryptionInformation,
-		DeduplicationMetadata,
-	},
-	footer::{ObjectFooterPhysical, ObjectFooterLogical},
-	FileEncoder,
+	FileEncoder, footer::{ObjectFooterLogical, ObjectFooterPhysical, ObjectFooterVirtual}, header::{
+		DeduplicationMetadata, EncryptionInformation, HashHeader, HashValue, ObjectHeader
+	}
 };
 use super::chunking;
 
@@ -43,6 +37,20 @@ pub(crate) enum PreparedData {
 	PreparedFileHeader(Vec<u8>),
 	/// A prepared file footer.
 	PreparedFileFooter(Vec<u8>),
+	/// A VLFM
+	PreparedVLFM(Vec<u8>),
+}
+
+impl PreparedData {
+	/// Returns a reference to the inner data
+	pub fn inner_data_ref(&self) -> &Vec<u8> {
+		match self {
+			Self::PreparedChunk(value) => &value.data,
+			Self::PreparedFileFooter(value) => value,
+			Self::PreparedFileHeader(value) => value,
+			Self::PreparedVLFM(value) => value
+		}
+	}
 }
 
 /// An encoder for each object. This is a wrapper Enum for [PhysicalObjectEncoder] and [LogicalObjectEncoder].
@@ -537,4 +545,11 @@ impl LogicalObjectEncoder {
 		self.encryption_key.clone()
 	}
 
+}
+
+/// The [VirtualObjectEncoder] can be used to encode a logical object.
+pub struct VirtualObjectEncoder {
+	/// The appropriate original object header
+	obj_header: ObjectHeader,
+	obj_footer: ObjectFooterVirtual,
 }

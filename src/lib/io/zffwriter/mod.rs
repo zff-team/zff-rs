@@ -744,11 +744,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                             },
                             PreparedDataQueueState::Data => {
                                 let data = match &self.in_progress_data.current_prepared_data_queue {
-                                    Some(prepared_data) => match prepared_data {
-                                        PreparedData::PreparedChunk(prepared_chunk) => &prepared_chunk.data,
-                                        PreparedData::PreparedFileHeader(ref prepared_file_header) => prepared_file_header,
-                                        PreparedData::PreparedFileFooter(ref prepared_file_footer) => prepared_file_footer,
-                                    },
+                                    Some(prepared_data) => prepared_data.inner_data_ref(),
                                     None => unreachable!(),
                                 };
                                 self.in_progress_data.current_encoded_chunked_data = data.to_vec();

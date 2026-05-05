@@ -1,23 +1,30 @@
 // - Parent
 use super::*;
 
-/// An [ObjectFooterVirtual] is written at the end of an virtual object.
-/// This footer contains various information about the virtual data.
+/// An [ObjectFooterVirtual] is written at the end of an virtual logical object.
+/// This footer contains various information about the underlying virtual files:
+/// - information about the underlying folder structure
+/// - appropriate file headers and [VirtualFileFooter] for each virtual file
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterVirtual {
-	/// The object number of the footer.
-	pub object_number: u64,
-	/// UNIX timestamp when the creation of this objects has started.
-	pub creation_timestamp: u64,
-	/// A list of all objects which are affected by this virtual object.
+    /// The object number of the footer.
+    pub object_number: u64,
+    /// UNIX timestamp when the creation of this objects has started.
+    pub creation_timestamp: u64,
+    /// A list of all objects which are affected by this virtual object.
+    /// This is mostly necessary to identify affected objects in case of 
+    /// encryption.
 	pub passive_objects: Vec<u64>,
-	/// The length of the original data in bytes.
-	pub length_of_data: u64,
-	/// The map of to the highest layer.
-	pub virtual_object_map_offset: u64,
-	/// The map of the segments to the appropriate next layer
-	pub virtual_object_map_segment_no: u64,
+    pub root_dir_filenumbers: Vec<u64>,
+    pub file_header_segment_numbers: HashMap<u64, u64>,
+    pub file_header_offsets: HashMap<u64, u64>,
+    /// instead of file_footer_offsets pointing to classic FileFooter only,
+    /// point to a new virtual logical file footer.
+    /// The classic FileFooter contains several necessary metadata, thus using
+    /// a virtual logical file footer is necessary.
+    pub file_footer_segment_numbers: HashMap<u64, u64>,
+    pub file_footer_offsets: HashMap<u64, u64>,
 }
 
 impl ObjectFooterVirtual {
@@ -25,16 +32,20 @@ impl ObjectFooterVirtual {
 	pub fn with_data(object_number: u64, 
 		creation_timestamp: u64, 
 		passive_objects: Vec<u64>,
-		length_of_data: u64,
-		virtual_object_map_offset: u64,
-		virtual_object_map_segment_no: u64) -> Self {
+		root_dir_filenumbers: Vec<u64>,
+		file_header_segment_numbers: HashMap<u64, u64>,
+        file_header_offsets: HashMap<u64, u64>,
+        file_footer_segment_numbers: HashMap<u64, u64>,
+        file_footer_offsets: HashMap<u64, u64>,) -> Self {
 		Self {
 			object_number,
 			creation_timestamp,
 			passive_objects,
-			length_of_data,
-			virtual_object_map_offset,
-			virtual_object_map_segment_no,
+			root_dir_filenumbers,
+			file_header_segment_numbers,
+			file_header_offsets,
+            file_footer_segment_numbers,
+            file_footer_offsets,
 		}
 	}
 
@@ -42,9 +53,11 @@ impl ObjectFooterVirtual {
 		let mut vec = Vec::new();
 		vec.append(&mut self.creation_timestamp.encode_directly());
 		vec.append(&mut self.passive_objects.encode_directly());
-		vec.append(&mut self.length_of_data.encode_directly());
-		vec.append(&mut self.virtual_object_map_offset.encode_directly());
-		vec.append(&mut self.virtual_object_map_segment_no.encode_directly());
+		vec.append(&mut self.root_dir_filenumbers.encode_directly());
+		vec.append(&mut self.file_header_segment_numbers.encode_directly());
+		vec.append(&mut self.file_header_offsets.encode_directly());
+        vec.append(&mut self.file_footer_segment_numbers.encode_directly());
+		vec.append(&mut self.file_footer_offsets.encode_directly());
 		vec
 	}
 
@@ -80,21 +93,27 @@ impl ObjectFooterVirtual {
 	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
 		u64, //creation_timestamp
 		Vec<u64>, //passive_objects
-		u64, //length_of_data
-		u64, //virtual_object_map_offset
-		u64, //virtual_object_map_segment_no,
+		Vec<u64>, //root_dir filenumbers
+        HashMap<u64, u64>, //file_header_segment_numbers
+        HashMap<u64, u64>, //file_header_offsets
+        HashMap<u64, u64>, //file_footer_segment_numbers
+        HashMap<u64, u64>, //file_footer_offsets
 		)> {
 		let creation_timestamp = u64::decode_directly(data)?;
 		let passive_objects = Vec::<u64>::decode_directly(data)?;
-		let length_of_data = u64::decode_directly(data)?;
-		let virtual_object_map_offset = u64::decode_directly(data)?;
-		let virtual_object_map_segment_no = u64::decode_directly(data)?;
+		let root_dir_filenumbers = Vec::<u64>::decode_directly(data)?;
+        let file_header_segment_numbers = HashMap::<u64, u64>::decode_directly(data)?;
+        let file_header_offsets = HashMap::<u64, u64>::decode_directly(data)?;
+        let file_footer_segment_numbers = HashMap::<u64, u64>::decode_directly(data)?;
+        let file_footer_offsets = HashMap::<u64, u64>::decode_directly(data)?;
 		Ok((
 			creation_timestamp,
 			passive_objects,
-			length_of_data,
-			virtual_object_map_offset,
-			virtual_object_map_segment_no,
+			root_dir_filenumbers,
+            file_header_segment_numbers,
+            file_header_offsets,
+            file_footer_segment_numbers,
+            file_footer_offsets,
 			))
 	}
 }
@@ -107,12 +126,12 @@ impl fmt::Display for ObjectFooterVirtual {
 }
 
 impl HeaderCoding for ObjectFooterVirtual {
-	type Item = ObjectFooterVirtual;
+	type Item = Self;
 	fn version() -> u8 { 
-		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL_LOGICAL
 	}
 	fn identifier() -> u32 {
-		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
+		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL_LOGICAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
@@ -129,128 +148,25 @@ impl HeaderCoding for ObjectFooterVirtual {
 		if encryption_flag {
 			return Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_MISSING_ENCRYPTION_HEADER_KEY));
 		}
-		let (creation_timestamp, 
+		let (creation_timestamp,
 			passive_objects,
-			length_of_data,
-			virtual_object_map_offset,
-			virtual_object_map_segment_no) = Self::decode_inner_content(&mut cursor)?;
+			root_dir_filenumbers,
+            file_header_segment_numbers,
+            file_header_offsets,
+            file_footer_segment_numbers,
+            file_footer_offsets,) = Self::decode_inner_content(&mut cursor)?;
 		Ok(Self::with_data(
 			object_number,
 			creation_timestamp, 
 			passive_objects,
-			length_of_data,
-			virtual_object_map_offset,
-			virtual_object_map_segment_no))
+			root_dir_filenumbers,
+			file_header_segment_numbers,
+			file_header_offsets,
+            file_footer_segment_numbers,
+            file_footer_offsets))
 	}
 
 	fn struct_name() -> &'static str {
 		"ObjectFooterVirtual"
-	}
-}
-
-/// Represents an encrypted object footer of a virtual object.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize))]
-#[cfg_attr(feature = "serde", derive(Deserialize))]
-pub struct EncryptedObjectFooterVirtual {
-	/// The appropriate object number.
-	pub object_number: u64,
-	/// The underlying data in encrypted form.
-	pub encrypted_data: Vec<u8>,
-}
-
-impl EncryptedObjectFooterVirtual {
-	/// Creates a new [EncryptedObjectFooterPhysical] by the given values.
-	pub fn with_data(object_number: u64, encrypted_data: Vec<u8>) -> Self {
-		Self {
-			object_number,
-			encrypted_data,
-		}
-	}
-
-	/// Tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterVirtual is still available.
-	pub fn decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
-	where
-		A: Borrow<EncryptionAlgorithm>,
-		K: AsRef<[u8]>,
-	{
-		self.inner_decrypt(key, algorithm)
-	}
-
-	/// Tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
-	pub fn decrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
-	where
-		A: Borrow<EncryptionAlgorithm>,
-		K: AsRef<[u8]>,
-	{
-		self.inner_decrypt(key, algorithm)
-	}
-
-	fn inner_decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
-	where
-		A: Borrow<EncryptionAlgorithm>,
-		K: AsRef<[u8]>,
-	{
-		let content = ObjectFooter::decrypt(
-			key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
-		let mut cursor = Cursor::new(content);
-		let (creation_timestamp, 
-			passive_objects, 
-			length_of_data,
-			virtual_object_map_offset,
-			virtual_object_map_segment_no) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
-		Ok(ObjectFooterVirtual::with_data(
-			self.object_number,
-			creation_timestamp,
-			passive_objects,
-			length_of_data,
-			virtual_object_map_offset,
-			virtual_object_map_segment_no))
-	}
-}
-
-// - implement fmt::Display
-impl fmt::Display for EncryptedObjectFooterVirtual {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", Self::struct_name())
-	}
-}
-
-impl HeaderCoding for EncryptedObjectFooterVirtual {
-	type Item = EncryptedObjectFooterVirtual;
-	fn version() -> u8 { 
-		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
-	}
-	fn identifier() -> u32 {
-		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
-	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut true.encode_directly()); // encryption flag
-		vec.append(&mut self.encrypted_data.encode_directly());
-		vec
-	}
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
-		let mut cursor = Cursor::new(data);
-		let version = u8::decode_directly(&mut cursor)?;
-		if version != DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL {
-			return Err(ZffError::new(ZffErrorKind::Unsupported, format!("{ERROR_UNSUPPORTED_VERSION}{version}")))
-		};
-		let object_number = u64::decode_directly(&mut cursor)?;
-		let encryption_flag = bool::decode_directly(&mut cursor)?;
-		if !encryption_flag {
-			return Err(ZffError::new(
-				ZffErrorKind::EncryptionError, 
-				ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN));
-		}
-		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
-		Ok(Self::with_data(
-			object_number,
-			encrypted_data))
-	}
-
-	fn struct_name() -> &'static str {
-		"EncryptedObjectFooterVirtual"
 	}
 }

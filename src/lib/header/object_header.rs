@@ -203,7 +203,7 @@ impl ObjectHeader {
 			1 => ObjectType::Logical,
 			value => return Err(ZffError::new(
 				ZffErrorKind::Invalid, 
-				format!("{ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE}{value}"))),
+				format!("{ERROR_INVALID_TYPE_FLAG_VALUE}{value}"))),
 		};
 		let inner_content = (
 			chunk_size,
@@ -327,8 +327,6 @@ pub enum ObjectType {
 	Logical = 1,
 	/// A virtual object.
 	Virtual = 2,
-	/// A virtual object for logical files.
-	VirtualLogical = 3,
 }
 
 impl fmt::Display for ObjectType {
@@ -337,7 +335,6 @@ impl fmt::Display for ObjectType {
 			ObjectType::Physical => "Physical",
 			ObjectType::Logical => "Logical",
 			ObjectType::Virtual => "Virtual",
-			ObjectType::VirtualLogical => "VirtualLogical",
 		};
 		write!(f, "{}", msg)
 	}

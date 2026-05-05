@@ -88,7 +88,7 @@ type Nonce = AesGcmNonce<U12>; //use the (by NIST) recommended nonce size of 96-
 
 // - external
 use std::any::Any;
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{block_padding::Pkcs7, BlockModeEncrypt, BlockModeDecrypt, KeyIvInit};
 use aes_gcm::{
 	Aes256Gcm, Aes128Gcm, Nonce as AesGcmNonce, KeyInit,
 	aead::Aead,
@@ -146,7 +146,6 @@ use redb::{
 	CommitError as RedbCommitError
 	};
 use argon2::Error as Argon2Error;
-use cbc::cipher::block_padding::UnpadError as AesCbcError;
 
 #[cfg(target_family = "unix")]
 use posix_acl::{PosixACL, Qualifier, ACLEntry};

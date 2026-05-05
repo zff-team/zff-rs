@@ -5,13 +5,7 @@ use super::*;
 
 impl ValueEncoder for bool {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		if *self {
-			vec.push(1_u8);
-		} else {
-			vec.push(0_u8);
-		};
-		vec
+		vec![u8::from(*self)]
 	}
 
 	fn identifier(&self) -> u8 {
@@ -31,9 +25,7 @@ impl ValueEncoder for u8 {
 
 impl ValueEncoder for u16 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -43,9 +35,7 @@ impl ValueEncoder for u16 {
 
 impl ValueEncoder for u32 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -55,9 +45,7 @@ impl ValueEncoder for u32 {
 
 impl ValueEncoder for u64 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -77,9 +65,7 @@ impl ValueEncoder for i8 {
 
 impl ValueEncoder for i16 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -89,9 +75,7 @@ impl ValueEncoder for i16 {
 
 impl ValueEncoder for i32 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -101,9 +85,7 @@ impl ValueEncoder for i32 {
 
 impl ValueEncoder for i64 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -113,9 +95,7 @@ impl ValueEncoder for i64 {
 
 impl ValueEncoder for f32 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -125,9 +105,7 @@ impl ValueEncoder for f32 {
 
 impl ValueEncoder for f64 {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_le_bytes().to_vec());
-		vec
+		self.to_le_bytes().to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -137,9 +115,7 @@ impl ValueEncoder for f64 {
 
 impl ValueEncoder for [u8; 12] {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_vec());
-		vec
+		self.to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -149,9 +125,7 @@ impl ValueEncoder for [u8; 12] {
 
 impl ValueEncoder for [u8; 16] {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_vec());
-		vec
+		self.to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -161,9 +135,7 @@ impl ValueEncoder for [u8; 16] {
 
 impl ValueEncoder for [u8; 32] {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_vec());
-		vec
+		self.to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -173,9 +145,7 @@ impl ValueEncoder for [u8; 32] {
 
 impl ValueEncoder for [u8; 64] {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut self.to_vec());
-		vec
+		self.to_vec()
 	}
 
 	fn identifier(&self) -> u8 {
@@ -185,10 +155,10 @@ impl ValueEncoder for [u8; 64] {
 
 impl ValueEncoder for String {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let string_length = self.len() as u64;
-		vec.append(&mut string_length.to_le_bytes().to_vec());
-		vec.append(&mut self.as_bytes().to_vec());
+		let string_length = self.len();
+		let mut vec = Vec::with_capacity(string_length + 8);
+		vec.extend_from_slice(&string_length.to_le_bytes());
+		vec.extend_from_slice(&self.as_bytes());
 		vec
 	}
 
@@ -199,10 +169,10 @@ impl ValueEncoder for String {
 
 impl ValueEncoder for str {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		let string_length = self.len() as u64;
-		vec.append(&mut string_length.to_le_bytes().to_vec());
-		vec.append(&mut self.as_bytes().to_vec());
+		let string_length = self.len();
+		let mut vec = Vec::with_capacity(string_length + 8);
+		vec.extend_from_slice(&string_length.to_le_bytes());
+		vec.extend_from_slice(&self.as_bytes());
 		vec
 	}
 
@@ -228,10 +198,11 @@ impl ValueEncoder for Vec<u8> {
 
 impl ValueEncoder for Vec<u64> {
 	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut (self.len() as u64).encode_directly());
+		let mut vec = Vec::with_capacity(8 + self.len() * 8);
+		vec.extend_from_slice(&(self.len() as u64).to_le_bytes());
+
 		for value in self {
-			vec.append(&mut value.encode_directly());
+			vec.extend_from_slice(&value.to_le_bytes());
 		}
 		vec
 	}
@@ -241,11 +212,13 @@ impl ValueEncoder for Vec<u64> {
 	}
 
 	fn encode_with_identifier(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
+		let mut vec = Vec::with_capacity(1 + 8 + self.len() * 9);
 		vec.push(self.identifier());
-		vec.append(&mut (self.len() as u64).encode_directly());
+		vec.extend_from_slice(&(self.len() as u64).to_le_bytes());
+
 		for value in self {
-			vec.append(&mut value.encode_with_identifier());
+			vec.push(value.identifier());
+			vec.extend_from_slice(&value.to_le_bytes());
 		}
 		vec
 	}

@@ -99,7 +99,7 @@ pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
 pub(crate) const ERROR_MISSING_ENCRYPTION_HEADER_KEY: &str = "Trying to decode encrypted content, but encryption header or key is missing.";
 pub(crate) const NO_ENCRYPTION_DETECTED: &str = "No encryption detected.";
 pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str = "Trying to decrypt unencryted object.";
-pub(crate) const ERROR_INVALID_OBJECT_TYPE_FLAG_VALUE: &str = "Invalid object type flag value:";
+pub(crate) const ERROR_INVALID_TYPE_FLAG_VALUE: &str = "Invalid type flag value:";
 pub(crate) const ERROR_UNSUPPORTED_VERSION: &str = "Unsupported version: ";
 pub(crate) const ERROR_WRONG_SIGNATURE_KEY_LENGTH: &str = "Wrong signature key length.";
 pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_SAMEBYTE: &str = "Could not find expected samebyte in chunk content.";
@@ -112,12 +112,12 @@ pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segm
 pub(crate) const ERROR_UNDECODABLE_MAIN_FOOTER: &str = "Could not decode main footer";
 pub(crate) const ERROR_CHUNK_IS_ENCRYPTED_: &str = "The chunk is encrypted; chunk no ";
 pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
+pub(crate) const ERROR_ZFFREADER_OPERATION: &str = "Operation not available.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT: &str = "Operation not available for virtual objects.";
-pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_LOGICAL_OBJECT: &str = "Operation not available for virtual logical objects.";
-pub(crate) const ERROR_ZFFREADER_MISSING_VLFM: &str = "Missing virtual logical file map information for virtual file: ";
-pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VLFM: &str = "Missing offset in virtual logical file map: ";
+pub(crate) const ERROR_ZFFREADER_MISSING_VFM: &str = "Missing virtual file map information for virtual file: ";
+pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VFM: &str = "Missing offset in virtual file map: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str = "Necessary passive object is not initialized/decrypted correctly: Object no. ";
 
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
@@ -216,13 +216,13 @@ pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 2;
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 2;
 /// current footer version for the [ObjectFooterVirtual](crate::footer::ObjectFooterVirtual) structure.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
-/// current footer version of the [ObjectFooterVirtualLogical](crate::footer::ObjectFooterVirtualLogical) structure.
+/// current footer version of the [ObjectFooterVirtual](crate::footer::ObjectFooterVirtual) structure.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL_LOGICAL: u8 = 1;
-/// current footer version of the [VirtualLogicalFileFooter](crate::footer::VirtualLogicalFileFooter) structure.
+/// current footer version of the [VirtualFileFooter](crate::footer::VirtualFileFooter) structure.
 pub const DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_FOOTER: u8 = 1;
-/// current footer version of the [VirtualLogicalFileMap](crate::footer::VirtualLogicalFileMap) structure.
+/// current footer version of the [VirtualFileMap](crate::footer::VirtualFileMap) structure.
 pub const DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_MAP: u8 = 1;
-/// current footer version of the [VirtualLogicalFileExtent](crate::footer::VirtualLogicalFileExtent) structure.
+/// current footer version of the [VirtualFileExtent](crate::footer::VirtualFileExtent) structure.
 pub const DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_EXTENT: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::footer::SegmentFooter).
 pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 3;
@@ -318,9 +318,17 @@ pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F32: u8 = 0x0C;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_F64: u8 = 0x0D;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VEC: u8 = 0x0E;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_BOOL: u8 = 0x0F;
-pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_PLATFORM_STRING: u8 = 0x10;
 // - self defined types
-pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VLFE: u8 = 0xFE;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_PLATFORM_STRING: u8 = 0xFB;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VFFC: u8 = 0xFC;
+pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_VLFE: u8 = 0xFD;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_CHUNK_HEADER: u8 = 0xFE;
 // - unknown type
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN: u8 = 0xFF;
+
+// Virtual file footer content flags
+pub const VIRTUALFILEFOOTERCONTENT_VLFM: u8 = 0x00000000;
+pub const VIRTUALFILEFOOTERCONTENT_DIRECTORY: u8 = 0x00000001;
+pub const VIRTUALFILEFOOTERCONTENT_SYMLINK: u8 = 0x00000002;
+pub const VIRTUALFILEFOOTERCONTENT_HARDLINK: u8 = 0x00000003;
+pub const VIRTUALFILEFOOTERCONTENT_SPECIAL_FILE: u8 = 0x00000004;

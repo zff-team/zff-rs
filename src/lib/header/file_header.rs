@@ -37,7 +37,7 @@ impl fmt::Display for FileType {
 /// Defines all unix special file types
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq,Hash)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq,Hash)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum SpecialFileType {
@@ -47,6 +47,8 @@ pub enum SpecialFileType {
 	Char = 1,
 	/// Represents a block device.
 	Block = 2,
+	/// Represents a socket
+	Socket = 3,
 }
 
 impl TryFrom<u8> for SpecialFileType {
@@ -56,6 +58,7 @@ impl TryFrom<u8> for SpecialFileType {
 			0 => Ok(SpecialFileType::Fifo),
 			1 => Ok(SpecialFileType::Char),
 			2 => Ok(SpecialFileType::Block),
+			3 => Ok(SpecialFileType::Socket),
 			_ => Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE)),
 		}
 	}
@@ -68,6 +71,7 @@ impl TryFrom<&u8> for SpecialFileType {
 			0 => Ok(SpecialFileType::Fifo),
 			1 => Ok(SpecialFileType::Char),
 			2 => Ok(SpecialFileType::Block),
+			3 => Ok(SpecialFileType::Socket),
 			_ => Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE)),
 		}
 	}
@@ -79,6 +83,7 @@ impl fmt::Display for SpecialFileType {
 			SpecialFileType::Fifo => "Fifo",
 			SpecialFileType::Char => "Char",
 			SpecialFileType::Block => "Block",
+			SpecialFileType::Socket => "Socket",
 		};
 		write!(f, "{}", msg)
 	}

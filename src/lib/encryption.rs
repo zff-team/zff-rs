@@ -199,10 +199,10 @@ pub fn gen_random_header_nonce() -> [u8; 12] {
 pub fn encrypt_pbkdf2sha256_aes128cbc(
 	iterations: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	plaintext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.encrypt(password, plaintext)?)
 }
@@ -214,10 +214,10 @@ pub fn encrypt_pbkdf2sha256_aes128cbc(
 pub fn encrypt_pbkdf2sha256_aes256cbc(
 	iterations: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	plaintext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	let cipher = encryption_scheme.encrypt(password, plaintext)?;
 	Ok(cipher)
@@ -230,10 +230,10 @@ pub fn encrypt_pbkdf2sha256_aes256cbc(
 pub fn decrypt_pbkdf2sha256_aes128cbc(
 	iterations: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	ciphertext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.decrypt(password, ciphertext)?)
 }
@@ -245,10 +245,10 @@ pub fn decrypt_pbkdf2sha256_aes128cbc(
 pub fn decrypt_pbkdf2sha256_aes256cbc(
 	iterations: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	ciphertext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_pbkdf2_sha256_aes256cbc(iterations, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.decrypt(password, ciphertext)?)
 }
@@ -262,10 +262,10 @@ pub fn encrypt_scrypt_aes128cbc(
 	r: u32,
 	p: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	plaintext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_scrypt_aes128cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.encrypt(password, plaintext)?)
 }
@@ -279,10 +279,10 @@ pub fn encrypt_scrypt_aes256cbc(
 	r: u32,
 	p: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	plaintext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_scrypt_aes256cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.encrypt(password, plaintext)?)
 }
@@ -296,10 +296,10 @@ pub fn decrypt_scrypt_aes128cbc(
 	r: u32,
 	p: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	plaintext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::scrypt_aes128cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_128)?, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_scrypt_aes128cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.decrypt(password, plaintext)?)
 }
@@ -313,10 +313,10 @@ pub fn decrypt_scrypt_aes256cbc(
 	r: u32,
 	p: u32,
 	salt: &[u8; 32],
-	aes_iv: &[u8; 16],
+	aes_iv: [u8; 16],
 	password: impl AsRef<[u8]>,
 	plaintext: &[u8]) -> Result<Vec<u8>> {
-	let params = PBES2Parameters::scrypt_aes256cbc(ScryptParams::new(logn, r, p, SCRYPT_DERIVED_KEY_LENGTH_AES_256)?, salt, aes_iv)?;
+	let params = PBES2Parameters::generate_scrypt_aes256cbc(ScryptParams::new(logn, r, p)?, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
 	Ok(encryption_scheme.decrypt(password, plaintext)?)
 }
@@ -428,12 +428,12 @@ where
 
 	match scheme {
 		PBEScheme::AES128CBC => {
-			let key = &hash[0..16];
-			Ok(Aes128CbcEnc::new(key.into(), aes_iv.into()).encrypt_padded_vec_mut::<Pkcs7>(plaintext.as_ref()))
+			let key: [u8; 16] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+			Ok(Aes128CbcEnc::new(&key.into(), aes_iv.into()).encrypt_padded_vec::<Pkcs7>(plaintext.as_ref()))
 		},
 		PBEScheme::AES256CBC => {
-			let key = &hash[0..32];
-			Ok(Aes256CbcEnc::new(key.into(), aes_iv.into()).encrypt_padded_vec_mut::<Pkcs7>(plaintext.as_ref()))
+			let key: [u8; 32] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+			Ok(Aes256CbcEnc::new(&key.into(), aes_iv.into()).encrypt_padded_vec::<Pkcs7>(plaintext.as_ref()))
 		},
 	}
 }
@@ -461,12 +461,12 @@ where
 
 	match scheme {
 		PBEScheme::AES128CBC => {
-			let key = &hash[0..16];
-			Ok(Aes128CbcDec::new(key.into(), aes_iv.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphertext.as_ref())?)
+			let key: [u8; 16] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+			Ok(Aes128CbcDec::new(&key.into(), aes_iv.into()).decrypt_padded_vec::<Pkcs7>(ciphertext.as_ref())?)
 		},
 		PBEScheme::AES256CBC => {
-			let key = &hash[0..32];
-			Ok(Aes256CbcDec::new(key.into(), aes_iv.into()).decrypt_padded_vec_mut::<Pkcs7>(ciphertext.as_ref())?)
+			let key: [u8; 32] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+			Ok(Aes256CbcDec::new(&key.into(), aes_iv.into()).decrypt_padded_vec::<Pkcs7>(ciphertext.as_ref())?)
 		},
 	}
 }

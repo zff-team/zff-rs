@@ -1,6 +1,12 @@
 // - Parent
 use super::*;
 
+// - external
+use aes_gcm::aes::cipher::InvalidLength as AesInvalidLengthError;
+use aes::cipher::{
+	block_padding::Error as AesBlockpaddingError,
+};
+
 /// The main error-type of this crate.
 #[derive(Debug)]
 pub struct ZffError {
@@ -195,13 +201,6 @@ impl From<ParseIntError> for ZffError {
 	}
 }
 
-impl From<AesCbcError> for ZffError {
-	fn from(e: AesCbcError) -> ZffError {
-		let err_msg = e.to_string();
-		ZffError::new_with_source(ZffErrorKind::EncryptionError, Some(Box::new(e)), err_msg)
-	}
-}
-
 impl From<Argon2Error> for ZffError {
 	fn from(e: Argon2Error) -> ZffError {
 		let err_msg = e.to_string();
@@ -291,6 +290,21 @@ impl From<Ed25519Error> for ZffError {
 		ZffError::new_with_source(ZffErrorKind::SigningError, Some(Box::new(e)), err_msg)
 	}
 }
+
+impl From<AesBlockpaddingError> for ZffError {
+	fn from(e: AesBlockpaddingError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new_with_source(ZffErrorKind::EncryptionError, Some(Box::new(e)), err_msg)
+	}
+}
+
+impl From<AesInvalidLengthError> for ZffError {
+	fn from(e: AesInvalidLengthError) -> ZffError {
+		let err_msg = e.to_string();
+		ZffError::new_with_source(ZffErrorKind::EncryptionError, Some(Box::new(e)), err_msg)
+	}
+}
+
 
 impl From<Base64DecodingError> for ZffError {
 	fn from(e: Base64DecodingError) -> ZffError {

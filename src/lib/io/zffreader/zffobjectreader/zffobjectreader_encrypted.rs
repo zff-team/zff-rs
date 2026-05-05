@@ -50,10 +50,6 @@ impl<R: Read + Seek> ZffObjectReaderEncrypted<R> {
 				ZffObjectReaderVirtual::new(
 					obj_no,
 					Arc::clone(&self.metadata))?)),
-			ObjectFooter::VirtualLogical(_) => ZffObjectReader::VirtualLogical(Box::new(
-				ZffObjectReaderVirtualLogical::new(
-					obj_no,
-					Arc::clone(&self.metadata))?)),
 		};
 
 		Ok(obj_reader)

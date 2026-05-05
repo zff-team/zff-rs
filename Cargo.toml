@@ -21,16 +21,16 @@ doc = true
 crate-type = ["lib"]
 
 [dependencies]
-aes = "0.8.3"
+aes = "0.9.0"
 aes-gcm = { version = "0.10", features = [ "std" ] }
 base64 = "0.22"
-blake2 = "0.10.6"
+blake2 = "0.11.0-rc.6" #TODO: must be stable before stable release of zff-rs
 blake3 = { version = "1.8.3", features = [ "traits-preview" ] }
 byteorder = "1.4.3"
 chacha20poly1305 = "0.10"
-cbc = { version = "0.1.2", features = [ "alloc" , "std"] }
+cbc = { version = "0.2.0", features = [ "alloc" ] }
 crossbeam = "0.8.2"
-digest = { version = "0.10.7", features = [ "alloc" ] }
+digest = { version = "0.11.2", features = [ "alloc" ] }
 ed25519-dalek = { version = "2.2.0", features = [ "digest" ] }
 hex = { version = "0.4", optional = true }
 itertools = "0.14"
@@ -38,13 +38,13 @@ log = { version = "0.4.29", optional = true }
 lz4_flex = "0.13.0"
 ordered-float = "5.2.0"
 phollpers = { version = "0.1.0", features = ["compression"]}
-pkcs5 = { version = "0.7.1", features = [ "pbes2", "alloc" ] }
-rand = { version = "0.10.0", features = ["sys_rng"]}
-redb = "3.1.1"
+pkcs5 = { version = "0.8.0", features = [ "pbes2", "alloc" ] }
+rand = { version = "0.10.1", features = ["sys_rng"]}
+redb = "4.1.0"
 rust-argon2 = "3.0.0"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
-sha2 = "0.10.9"
-sha3 = "0.10.8"
+sha2 = "0.11.0"
+sha3 = "0.11.0"
 tar = { version = "0.4.45", optional = true }
 time = { version = "0.3.47" }
 typenum = "1.19.0"

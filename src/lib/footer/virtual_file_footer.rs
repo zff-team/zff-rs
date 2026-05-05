@@ -1,15 +1,99 @@
 // - Parent
 use super::*;
 
+
+#[derive(Debug,Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub enum VirtualFileFooterContent {
+	FileMap(u64, u64), // contains (segment_no, offset) the appropriate filemap
+	Directory(Vec<u64>),
+	Symlink(PlatformString),
+	Hardlink(u64),
+	SpecialFile(u64, SpecialFileType) //rdev-id, type
+}
+
+impl VirtualFileFooterContent {
+	fn flag(&self) -> u8 {
+		match self {
+			VirtualFileFooterContent::FileMap(_, _) => VIRTUALFILEFOOTERCONTENT_VLFM,
+			VirtualFileFooterContent::Directory(_) => VIRTUALFILEFOOTERCONTENT_DIRECTORY,
+			VirtualFileFooterContent::Symlink(_) => VIRTUALFILEFOOTERCONTENT_SYMLINK,
+			VirtualFileFooterContent::Hardlink(_) => VIRTUALFILEFOOTERCONTENT_HARDLINK,
+			VirtualFileFooterContent::SpecialFile(_, _) => VIRTUALFILEFOOTERCONTENT_SPECIAL_FILE,
+		}
+	}
+
+	fn encode_content(&self) -> Vec<u8> {
+		match self {
+			VirtualFileFooterContent::FileMap(segment_no, offset) => {
+				let mut vec = segment_no.encode_directly();
+				vec.append(&mut offset.encode_directly());
+				vec
+			},
+			VirtualFileFooterContent::Directory(filenumbers) => filenumbers.encode_directly(),
+			VirtualFileFooterContent::Symlink(symlink) => symlink.encode_directly(),
+			VirtualFileFooterContent::Hardlink(hardlink) => hardlink.encode_directly(),
+			VirtualFileFooterContent::SpecialFile(rdev_id, stype) => {
+				let mut vec = rdev_id.encode_directly();
+				vec.append(&mut (*stype as u8).encode_directly());
+				vec
+			}
+		}
+	}
+}
+
+impl ValueEncoder for VirtualFileFooterContent {
+	fn identifier(&self) -> u8 {
+		METADATA_EXT_TYPE_IDENTIFIER_VFFC
+	}
+
+	fn encode_directly(&self) -> Vec<u8> {
+		let mut vec = self.flag().encode_directly();
+		vec.append(&mut self.encode_content());
+		vec
+	}
+}
+
+impl ValueDecoder for VirtualFileFooterContent {
+	type Item = Self;
+
+	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
+		let flag = u8::decode_directly(data)?;
+		match flag {
+			VIRTUALFILEFOOTERCONTENT_VLFM =>  {
+				let segment_no = u64::decode_directly(data)?;
+				let offset = u64::decode_directly(data)?;
+				Ok(Self::FileMap(segment_no, offset))
+			},
+			VIRTUALFILEFOOTERCONTENT_DIRECTORY => {
+				let filenumbers = Vec::<u64>::decode_directly(data)?;
+				Ok(Self::Directory(filenumbers))
+			},
+			VIRTUALFILEFOOTERCONTENT_SYMLINK => {
+				let symlink_path = PlatformString::decode_directly(data)?;
+				Ok(Self::Symlink(symlink_path))
+			},
+			VIRTUALFILEFOOTERCONTENT_HARDLINK => {
+				let filenumber = u64::decode_directly(data)?;
+				Ok(Self::Hardlink(filenumber))
+			},
+			VIRTUALFILEFOOTERCONTENT_SPECIAL_FILE => {
+				let rdev_id = u64::decode_directly(data)?;
+				let special_file_type = SpecialFileType::try_from(u8::decode_directly(data)?)?;
+				Ok(Self::SpecialFile(rdev_id, special_file_type))
+			},
+			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_INVALID_TYPE_FLAG_VALUE)),
+		}
+	}
+}
+
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualFileFooter {
     pub filenumber: u64,
     pub hash_header: HashHeader,
     pub length_of_data: u64,
-    // where to find this file's mapping/extents
-    pub file_map_segment_no: u64,
-    pub file_map_offset: u64,
+    pub vffc: VirtualFileFooterContent,
 }
 
 impl VirtualFileFooter {
@@ -18,14 +102,12 @@ impl VirtualFileFooter {
 		filenumber: u64,
 		hash_header: HashHeader, 
 		length_of_data: u64, 
-		file_map_segment_no: u64, 
-		file_map_offset: u64) -> Self {
+		vffc: VirtualFileFooterContent) -> Self {
 		Self {
 			filenumber,
 			hash_header,
 			length_of_data,
-			file_map_segment_no,
-			file_map_offset,
+			vffc
 		}
 	}
 
@@ -33,8 +115,7 @@ impl VirtualFileFooter {
 		let mut vec = Vec::new();
 		vec.append(&mut self.hash_header.encode_directly());
 		vec.append(&mut self.length_of_data.encode_directly());
-		vec.append(&mut self.file_map_segment_no.encode_directly());
-		vec.append(&mut self.file_map_offset.encode_directly());
+		vec.append(&mut self.vffc.encode_directly());
 		vec
 	}
 
@@ -102,27 +183,24 @@ impl VirtualFileFooter {
 			filenumber, 
 			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
-		let (hash_header, length_of_data, file_map_segment_no, file_map_offset) = Self::decode_inner_content(&mut cursor)?;
-		Ok(Self::new(filenumber, hash_header, length_of_data, file_map_segment_no, file_map_offset))
+		let (hash_header, length_of_data, vffc) = Self::decode_inner_content(&mut cursor)?;
+		Ok(Self::new(filenumber, hash_header, length_of_data, vffc))
 	}
 
 	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(inner_content: &mut R) -> Result<(
 		HashHeader, //HashHeader
 		u64, //length_of_data
-		u64, // file_map_segment_no,
-		u64, // file_map_offset
+		VirtualFileFooterContent,
 		)> {
 		let hash_header = HashHeader::decode_directly(inner_content)?;
 		let length_of_data = u64::decode_directly(inner_content)?;
-		let file_map_segment_no = u64::decode_directly(inner_content)?;
-		let file_map_offset = u64::decode_directly(inner_content)?;
+		let vffc = VirtualFileFooterContent::decode_directly(inner_content)?;
 
 		let inner_content = (
 			hash_header,
 			length_of_data,
-			file_map_segment_no,
-			file_map_offset);
+			vffc);
 		Ok(inner_content)
 	}
 }
@@ -147,8 +225,8 @@ impl HeaderCoding for VirtualFileFooter {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let filenumber = u64::decode_directly(&mut cursor)?;
-		let (hash_header, length_of_data, file_map_segment_no, file_map_offset) = Self::decode_inner_content(&mut cursor)?;
-		Ok(Self::new(filenumber, hash_header, length_of_data, file_map_segment_no, file_map_offset))
+		let (hash_header, length_of_data, vffc) = Self::decode_inner_content(&mut cursor)?;
+		Ok(Self::new(filenumber, hash_header, length_of_data, vffc))
 	}
 
 	fn struct_name() -> &'static str {
@@ -164,16 +242,16 @@ impl Encryption for VirtualFileFooter {
 
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct VirtualLogicalFileMap {
+pub struct VirtualFileMap {
 	/// The corresponding file number.
 	pub filenumber: u64, // Note: The filenumber at this point seems redundant, but is necessary to calculate the encryption nonce.
     /// A map with the offset parts of the virtual file and the appropriate
     /// mapping.
-    pub extents: BTreeMap<u64, VirtualLogicalFileExtent>, // file_offset -> extent
+    pub extents: BTreeMap<u64, VirtualFileExtent>, // file_offset -> extent
 }
 
-impl VirtualLogicalFileMap {
-	pub fn new(filenumber: u64, extents: BTreeMap<u64, VirtualLogicalFileExtent>) -> Self {
+impl VirtualFileMap {
+	pub fn new(filenumber: u64, extents: BTreeMap<u64, VirtualFileExtent>) -> Self {
 		Self {
 			filenumber,
 			extents
@@ -225,12 +303,12 @@ impl VirtualLogicalFileMap {
 			filenumber, 
 			algorithm)?;
 		let mut cursor = Cursor::new(decrypted_data);
-		let extends = BTreeMap::<u64, VirtualLogicalFileExtent>::decode_directly(&mut cursor)?;
+		let extends = BTreeMap::<u64, VirtualFileExtent>::decode_directly(&mut cursor)?;
 		Ok(Self::new(filenumber, extends))
 	}
 }
 
-impl HeaderCoding for VirtualLogicalFileMap {
+impl HeaderCoding for VirtualFileMap {
 	type Item = Self;
 	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_MAP
@@ -250,23 +328,23 @@ impl HeaderCoding for VirtualLogicalFileMap {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let filenumber = u64::decode_directly(&mut cursor)?;
-		let extents = BTreeMap::<u64, VirtualLogicalFileExtent>::decode_directly(&mut cursor)?;
+		let extents = BTreeMap::<u64, VirtualFileExtent>::decode_directly(&mut cursor)?;
 		Ok(Self::new(filenumber, extents))
 	}
 
 	fn struct_name() -> &'static str {
-		"VirtualLogicalFileMap"
+		"VirtualFileMap"
 	}
 }
 
-impl Encryption for VirtualLogicalFileMap {
+impl Encryption for VirtualFileMap {
 	fn crypto_nonce_padding() -> u8 {
 		0b01111111 //TODO: move all crypto paddings to constants (#codeCleanup)
 	}
 }
 
-impl From<VirtualLogicalFileMap> for Vec<(u64, VirtualLogicalFileExtent)> {
-	fn from(vlfm: VirtualLogicalFileMap) -> Self {
+impl From<VirtualFileMap> for Vec<(u64, VirtualFileExtent)> {
+	fn from(vlfm: VirtualFileMap) -> Self {
 		let mut new_vec = Vec::new();
 		for (virtual_offset, vlfe) in vlfm.extents {
 			new_vec.push((virtual_offset, vlfe));
@@ -278,7 +356,7 @@ impl From<VirtualLogicalFileMap> for Vec<(u64, VirtualLogicalFileExtent)> {
 
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
-pub struct VirtualLogicalFileExtent {
+pub struct VirtualFileExtent {
     /// The appropriate source object of the underlying data
     pub source_object_number: u64,
     /// The appropriate source file number of the underlying data
@@ -289,7 +367,7 @@ pub struct VirtualLogicalFileExtent {
     pub length: u64,
 }
 
-impl VirtualLogicalFileExtent {
+impl VirtualFileExtent {
 	pub fn new(source_object_number: u64, source_filenumber: u64, source_offset: u64, length: u64) -> Self {
 		Self {
 			source_object_number,
@@ -300,7 +378,7 @@ impl VirtualLogicalFileExtent {
 	}
 }
 
-impl ValueEncoder for VirtualLogicalFileExtent {
+impl ValueEncoder for VirtualFileExtent {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_VLFE	
 	}
@@ -315,7 +393,7 @@ impl ValueEncoder for VirtualLogicalFileExtent {
 	}
 }
 
-impl ValueDecoder for VirtualLogicalFileExtent {
+impl ValueDecoder for VirtualFileExtent {
 	type Item = Self;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
