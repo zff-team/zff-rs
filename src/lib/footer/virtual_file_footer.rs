@@ -12,6 +12,19 @@ pub enum VirtualFileFooterContent {
 	SpecialFile(u64, SpecialFileType) //rdev-id, type
 }
 
+impl From<VirtualFileContent> for VirtualFileFooterContent {
+	fn from(value: VirtualFileContent) -> Self {
+		match value {
+			VirtualFileContent::Directory(value) => Self::Directory(value),
+			VirtualFileContent::FileMap(_) => Self::FileMap(0, 0),
+			VirtualFileContent::FileMapPosition(seg, off) => Self::FileMap(seg, off),
+			VirtualFileContent::Hardlink(value) => Self::Hardlink(value),
+			VirtualFileContent::SpecialFile(val1, val2) => Self::SpecialFile(val1, val2),
+			VirtualFileContent::Symlink(value) => Self::Symlink(value),
+		}
+	}
+}
+
 impl VirtualFileFooterContent {
 	fn flag(&self) -> u8 {
 		match self {
@@ -101,7 +114,7 @@ impl VirtualFileFooter {
 	pub fn new(
 		filenumber: u64,
 		hash_header: HashHeader, 
-		length_of_data: u64, 
+		length_of_data: u64,
 		vffc: VirtualFileFooterContent) -> Self {
 		Self {
 			filenumber,
@@ -258,7 +271,7 @@ impl VirtualFileMap {
 		}
 	}
 
-	fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
+	pub fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
@@ -270,7 +283,7 @@ impl VirtualFileMap {
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.extents.encode_directly());
 
-		let encrypted_data = VirtualFileFooter::encrypt(
+		let encrypted_data = Self::encrypt(
 			key, data_to_encrypt,
 			self.filenumber,
 			algorithm

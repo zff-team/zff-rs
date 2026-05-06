@@ -7,12 +7,14 @@ mod logical_object_source;
 mod trait_implementations;
 mod value_decoder;
 mod value_encoder;
+mod virtual_object_source;
 
 // - re-exports
 pub use header_coding::*;
 pub use logical_object_source::*;
 pub use value_decoder::*;
 pub use value_encoder::*;
+pub use virtual_object_source::*;
 
 /// encodes a given key.
 fn encode_key(key: &str) -> Vec<u8> {

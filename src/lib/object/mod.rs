@@ -3,11 +3,19 @@ use super::{*, header::*, io::*};
 
 // - modules
 mod encoder;
+mod logical_encoder;
 mod logical_object_source;
+mod physical_encoder;
+mod virtual_encoder;
+mod virtual_object_source;
 
 // - re-exports
 pub use encoder::*;
+pub use logical_encoder::*;
 pub use logical_object_source::*;
+pub use physical_encoder::*;
+pub use virtual_encoder::*;
+pub use virtual_object_source::*;
 
 /// Indicates if the data are compressed or not.
 /// This enum is used to avoid unnecessary copy operations.

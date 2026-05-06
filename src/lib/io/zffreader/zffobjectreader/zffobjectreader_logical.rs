@@ -1,3 +1,6 @@
+// - STD
+use std::io::Error as IoError;
+
 // - Parent
 use super::*;
 
@@ -13,6 +16,7 @@ pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
 	// this one is "redundant", the data is already available via the ArcZffReaderMetadata - but you can much more easier
 	// access them with that additional hashmap.
 	files: Arc<HashMap<u64, FileMetadata>>, //<filenumber, FileMetadata>
+	reader_cache: Cursor<Vec<u8>>, //cache which holds the current chunk content (for performance purposes)
 }
 
 impl<R: Read + Seek> ZffObjectReaderLogical<R> {
@@ -108,7 +112,8 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			object_footer,
 			active_file: 1,
 			file_positions,
-			files
+			files,
+			reader_cache: Cursor::new(Vec::new()),
 		})
 	}
 
@@ -132,6 +137,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_FILE_NUMBER}{filenumber}")))
 		}
+		self.reader_cache.get_mut().clear();
 		Ok(())
 	}
 
@@ -151,17 +157,10 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 	pub(crate) fn files(&self) -> &HashMap<u64, FileMetadata> {
 		&self.files
 	}
-}
 
-impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
-	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-		let filemetadata = match self.files.get(&self.active_file) {
-			Some(metadata) => metadata,
-			None => return Err(
-				std::io::Error::new(
-					std::io::ErrorKind::Other, 
-					format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file))),
-		};
+	// Returns true if cache would filled, false if cache is empty (end of reader is reached).
+	fn refill_reader_cache(&mut self) -> std::io::Result<bool> {
+		let filemetadata = self.files.get(&self.active_file).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
 		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
 		let position = self.file_positions.get_mut(&self.active_file).unwrap();
 		let chunk_size = self.object_header.chunk_size;
@@ -170,31 +169,46 @@ impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 		let last_chunk_number = first_chunk_number + filemetadata.number_of_chunks().unwrap() - 1;
 		let mut current_chunk_number = (first_chunk_number * chunk_size + *position) / chunk_size;
 		let mut inner_position = (*position % chunk_size) as usize; // the inner chunk position
-		let mut read_bytes = 0; // number of bytes which are written to buffer
-		loop {
-			if read_bytes == buffer.len() || current_chunk_number > last_chunk_number {
-				break;
-			}
 
-			let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
-				vec![samebyte; chunk_size as usize]
-			} else {
-				let object_no = &self.object_header.object_number;
-				get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
-			};
-			let mut cursor = Cursor::new(&chunk_data[inner_position..]);
-			read_bytes += cursor.read(&mut buffer[read_bytes..])?;
-			inner_position = 0;
-			current_chunk_number += 1;
+		if current_chunk_number > last_chunk_number {
+			return Ok(false)
 		}
-		*position += read_bytes as u64;
+
+		let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
+			vec![samebyte; chunk_size as usize]
+		} else {
+			let object_no = &self.object_header.object_number;
+			get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
+		};
+		{
+			let inner = self.reader_cache.get_mut();
+			inner.clear();
+			inner.extend_from_slice(&chunk_data[inner_position..]);
+		}
+		Ok(true)
+	}
+}
+
+impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+		let mut read_bytes = 0;
+		while read_bytes < buffer.len() {
+            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() {
+				if !self.refill_reader_cache()? {
+					break;
+				}
+            }
+            let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
+            read_bytes += written;
+			// unwrap is safe here: we have called refill_reader_cache() before which calls self.file.get(&self.acitve_file).
+			*self.file_positions.get_mut(&self.active_file).unwrap() += written as u64;
+        }
 		Ok(read_bytes)
 	}
 }
 
 impl<R: Read + Seek> Seek for ZffObjectReaderLogical<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
-
 		let filemetadata = match self.files.get(&self.active_file) {
 			Some(metadata) => metadata,
 			None => return Err(

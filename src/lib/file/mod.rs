@@ -17,6 +17,16 @@ pub struct VirtualFileFooterMetadata {
     pub vfc: VirtualFileContent,
 }
 
+impl VirtualFileFooterMetadata {
+	fn new(hash_header: HashHeader, length_of_data: u64, vfc: VirtualFileContent) -> Self {
+		Self {
+			hash_header,
+			length_of_data,
+			vfc
+		}
+	}
+}
+
 impl From<VirtualFileFooter> for VirtualFileFooterMetadata {
 	fn from(vff: VirtualFileFooter) -> Self {
 		Self {

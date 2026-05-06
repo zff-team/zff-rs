@@ -175,6 +175,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_FILE_NUMBER}{filenumber}")))
 		}
+		self.reader_cache.get_mut().clear();
 		Ok(())
 	}
 
@@ -285,7 +286,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 					get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
 				}
 			},
-			_ => unimplemented!()
+			_ => unimplemented!() //TODO
 		};
 		{
 			let inner = self.reader_cache.get_mut();
@@ -297,7 +298,6 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 	}
 }
 
-//TODO: cache unread bytes of appropriate chunks to avoid multiple I/O reads? -> Also in physical/logical objects?
 /// Reads from current active file.
 impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {

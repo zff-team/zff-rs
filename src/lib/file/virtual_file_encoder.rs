@@ -1,2 +1,65 @@
 // - Parent
 use super::*;
+
+pub struct VirtualFileEncoder {
+    /// The appropriate [FileHeader].
+	pub file_header: FileHeader,
+    /// The appropriate [VirtualFileFooter].
+    pub file_footer: VirtualFileFooter,
+    pub vfm: Option<VirtualFileMap>,
+    /// optional encryption information, to encrypt the data with the given key and algorithm
+	encryption_information: Option<EncryptionInformation>,
+}
+
+impl VirtualFileEncoder {
+    pub fn new(
+		file_header: FileHeader, 
+		file_footer: VirtualFileFooter, 
+		vfm: Option<VirtualFileMap>,
+		encryption_information: Option<EncryptionInformation>) -> Self {
+        Self {
+            file_header,
+            file_footer,
+            vfm,
+            encryption_information,
+        }
+    }
+
+    /// Returns a reference of the appropriate file header
+	pub fn file_header_ref(&self) -> &FileHeader {
+		&self.file_header
+	}
+
+    /// Returns the underlying encoded header
+	pub fn encoded_header(&self) -> Vec<u8> {
+		if let Some(enc_info) = &self.encryption_information {
+			//unwrap should be safe here, because we have already testet this before.
+	    	self.file_header.encode_encrypted_header_directly(enc_info).unwrap()
+	    } else {
+	    	self.file_header.encode_directly()
+	    }
+	}
+
+	/// Returns the encoded VFM
+	pub fn encoded_vfm(&self) -> Result<Option<Vec<u8>>> {
+		if let Some(vfm) = &self.vfm {
+			if let Some(enc_info) = &self.encryption_information {
+				Ok(Some(vfm.encode_encrypted_footer(&enc_info.encryption_key, &enc_info.algorithm)?))
+			} else {
+				Ok(Some(vfm.encode_directly()))
+			}
+		} else {
+			Ok(None)
+		}
+	}
+
+    /// Returns the appropriate encoded [VirtualFileFooter].
+	pub fn encoded_footer(&self) -> Vec<u8> {
+		if let Some(enc_info) = &self.encryption_information {
+            //unwrap should be safe here, because we have already testet this before.
+	    	self.file_footer.encode_encrypted_header_directly(enc_info).unwrap()
+	    } else {
+	    	self.file_footer.encode_directly()
+	    }
+	}
+}
