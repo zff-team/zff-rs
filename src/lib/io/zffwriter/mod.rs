@@ -166,11 +166,12 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
     pub fn with_data(
         physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>, //<ObjectHeader, input_files>
+        virtual_obects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
 		hash_types: Vec<HashType>,
         params: ZffCreationParameters<C>,
         output: ZffFilesOutput,
     ) -> Result<Self> {
-        setup_container(physical_objects, logical_objects, hash_types, params, output)
+        setup_container(physical_objects, logical_objects, virtual_obects, hash_types, params, output)
     }
 
     /// Returns the current chunk number.
@@ -271,7 +272,7 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
                 },
             };
 
-            let mut buffer = vec![0u8; DEFAULT_BUFFER_SIZE as usize];
+            let mut buffer = vec![0u8; DEFAULT_BUFFER_SIZE];
             
             loop {
                 match self.read(&mut buffer) {
@@ -536,17 +537,14 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                         SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
                     };
 
-                    match self.read_state {
-                        ReadState::SegmentFooter => {
-                            self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
-                            self.in_progress_data.segment_footer.set_length_of_segment(
-                                self.in_progress_data.bytes_read.current_segment + 
-                                self.in_progress_data.segment_footer.encode_directly().len() as u64);
-                            self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
-                            self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
-                        },
-                        _ => (),
-                    };
+                    if let ReadState::SegmentFooter = self.read_state {
+                    self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
+                    self.in_progress_data.segment_footer.set_length_of_segment(
+                    self.in_progress_data.bytes_read.current_segment +
+                    self.in_progress_data.segment_footer.encode_directly().len() as u64);
+                    self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
+                    self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
+                    }
                 },
 
                 ReadState::LastChunkHeaderMapOfObject => {
@@ -609,7 +607,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                     // this will only fail in case of encryption errrors - which should be happend before
                     let object_footer = match self.current_object_encoder.get_encoded_footer() {
                         Ok(obj_footer) => obj_footer,
-                        Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
+                        Err(e) => return Err(std::io::Error::other(e)),
                     };
                     self.in_progress_data.segment_footer.add_object_footer_offset(
                         self.current_object_encoder.obj_number(), 
@@ -706,11 +704,8 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                             },
                             PreparedDataQueueState::SameBytes => {
                                 let samebytes = match &self.in_progress_data.current_prepared_data_queue {
-                                    Some(prepared_data) => match prepared_data {
-                                        PreparedData::PreparedChunk(prepared_chunk) => prepared_chunk.samebytes,
-                                        _ => unreachable!(),
-                                    },
-                                    None => unreachable!(),
+                                    Some(PreparedData::PreparedChunk(prepared_chunk)) => prepared_chunk.samebytes,
+                                    _ => unreachable!(),
                                 };
                                 if let Some(samebytes) = samebytes {
                                     if !self.in_progress_data.chunkmaps.same_bytes_map.add_chunk_entry(current_chunk_number, samebytes) {
@@ -725,11 +720,8 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
                             },
                             PreparedDataQueueState::Deduplication => {
                                 let deduplication = match &self.in_progress_data.current_prepared_data_queue {
-                                    Some(prepared_data) => match prepared_data {
-                                        PreparedData::PreparedChunk(prepared_chunk) => prepared_chunk.duplicated,
-                                        _ => unreachable!(),
-                                    },
-                                    None => unreachable!(),
+                                    Some(PreparedData::PreparedChunk(prepared_chunk)) => prepared_chunk.duplicated,
+                                    _ => unreachable!(),
                                 };
                                 if let Some(deduplication) = deduplication {
                                     if !self.in_progress_data.chunkmaps.duplicate_chunks.add_chunk_entry(current_chunk_number, deduplication) {
@@ -845,11 +837,13 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
 fn setup_container<R: Read, C: Read + Seek>(
     physical_objects: HashMap<ObjectHeader, R>,
     logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
+    virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
     hash_types: Vec<HashType>,
     params: ZffCreationParameters<C>,
     output: ZffFilesOutput) -> Result<ZffWriter<R, C>> {
     let mut physical_objects = physical_objects;
     let mut logical_objects = logical_objects;
+    let mut virtual_objects = virtual_objects;
 
     let mut total_bytes_read = 0;
 
@@ -896,10 +890,10 @@ fn setup_container<R: Read, C: Read + Seek>(
 
     //initially check if all EncryptionHeader are contain a decrypted encryption key for physical and logical objects.
     // uses check_encryption_key_in_header for all ObjectHeader in physical_objects and logical_objects:
-    prepare_object_header(&mut physical_objects, &mut logical_objects, &extender_parameter)?;
+    prepare_object_header(&mut physical_objects, &mut logical_objects, &mut virtual_objects, &extender_parameter)?;
 
     let signature_key_bytes = &params.signature_key.as_ref().map(|signing_key| signing_key.to_bytes().to_vec());
-    let mut object_encoder = Vec::with_capacity(physical_objects.len()+logical_objects.len());
+    let mut object_encoder = Vec::with_capacity(physical_objects.len()+logical_objects.len()+virtual_objects.len());
 
     let initial_chunk_number = if let Some(extender_parameter) = &extender_parameter {
         extender_parameter.initial_chunk_number
@@ -921,6 +915,10 @@ fn setup_container<R: Read, C: Read + Seek>(
         initial_chunk_number,
         &mut object_encoder)?;
 
+    setup_virtual_object_encoder(
+        virtual_objects,
+        &mut object_encoder)?;
+
     object_encoder.reverse();
     let mut current_object_encoder = match object_encoder.pop() {
         Some(creator_obj_encoder) => creator_obj_encoder,
@@ -932,7 +930,7 @@ fn setup_container<R: Read, C: Read + Seek>(
     let mut in_progress_data = build_in_progress_data(&params);
     let mut output = output;
 
-    let read_state = if let Some(_) = &extender_parameter {
+    let read_state = if extender_parameter.is_some() {
         ReadState::ObjectHeader
     } else {
         ReadState::SegmentHeader

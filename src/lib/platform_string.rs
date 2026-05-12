@@ -197,6 +197,10 @@ impl ValueEncoder for PlatformString {
     fn identifier(&self) -> u8 {
         METADATA_EXT_TYPE_IDENTIFIER_PLATFORM_STRING
     }
+
+    fn encoded_size(&self) -> usize {
+        1 + 8 + self.as_bytes().len()
+    }
 }
 
 impl ValueDecoder for PlatformString {

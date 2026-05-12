@@ -1,6 +1,6 @@
 // - Parent
 use super::*;
-#[cfg(feature = "alternative_inputs")]
+#[cfg(feature = "serde")]
 use super::helper::*;
 
 // - modules

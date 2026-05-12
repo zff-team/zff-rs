@@ -48,13 +48,13 @@ impl HeaderCoding for HashHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.hashes.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.hashes.encode_directly());
 
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<HashHeader> {
+	fn decode_content(data: &[u8]) -> Result<HashHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
@@ -144,17 +144,17 @@ impl HeaderCoding for HashValue {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.push(self.hash_type.clone() as u8);
-		vec.append(&mut self.hash.encode_directly());
+		vec.extend_from_slice(&self.hash.encode_directly());
 		match self.ed25519_signature {
 			None => (),
-			Some(signature) => vec.append(&mut signature.encode_directly()),
+			Some(signature) => vec.extend_from_slice(&signature.encode_directly()),
 		};
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<HashValue> {
+	fn decode_content(data: &[u8]) -> Result<HashValue> {
 		let mut cursor = Cursor::new(&data);
 		Self::check_version(&mut cursor)?;
 		let hash_type = match u8::decode_directly(&mut cursor)? {

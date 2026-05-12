@@ -485,6 +485,34 @@ fn setup_logical_object_encoder<R: Read>(
     Ok(())
 }
 
+/// This function sets up the [ObjectEncoder] for the virtual objects.
+fn setup_virtual_object_encoder<R: Read>(
+    virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
+    object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
+    for (virtual_object_header, virtual_object_source) in virtual_objects {
+        #[cfg(feature = "log")]
+        info!("Setting up virtual object encoder for object {}",
+            virtual_object_header.object_number);
+
+        let vobj = setup_virtual_object(
+            virtual_object_header,
+            virtual_object_source)?;
+        object_encoder.push(ObjectEncoder::Virtual(Box::new(vobj)));
+    }
+    Ok(())
+}
+
+fn setup_virtual_object(
+    virtual_object_header: ObjectHeader,
+    virtual_object_source: Box<dyn VirtualObjectSource>,
+    ) -> Result<VirtualObjectEncoder> {
+    let virt_obj = VirtualObjectEncoder::new(
+        virtual_object_header,
+        virtual_object_source)?;
+    Ok(virt_obj)
+}
+
+
 fn setup_logical_object(
     logical_object_header: ObjectHeader,
     logical_object_source: Box<dyn LogicalObjectSource>,
@@ -554,10 +582,7 @@ pub(crate) fn create_iterator<C: AsRef<Path>>(
 		directory_children.insert(dir_parent_file_number, Vec::new());
 		directory_children.get_mut(&dir_parent_file_number).unwrap().push(dir_current_file_number);
 	};
-	let mut file_header = match get_file_header(current_dir.as_ref(), dir_current_file_number, dir_parent_file_number) {
-		Ok(file_header) => file_header,
-		Err(e) => return Err(e),
-	};
+	let mut file_header = get_file_header(current_dir.as_ref(), dir_current_file_number, dir_parent_file_number)?;
 
 	let iterator = match read_dir(current_dir.as_ref()) {
 		Ok(iterator) => iterator,
@@ -597,6 +622,7 @@ pub(crate) fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64
 fn prepare_object_header<R: Read>(
     physical_objects: &mut HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 	logical_objects: &mut HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
+    virtual_objects: &mut HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
     extender_parameter: &Option<ZffExtenderParameter>
 ) -> Result<()> {
     let mut next_object_number = match &extender_parameter {
@@ -628,6 +654,18 @@ fn prepare_object_header<R: Read>(
         modify_map_log.insert(header, logical_object_source);
     }
     logical_objects.extend(modify_map_log);
+
+    let mut modify_map_virt = HashMap::new();
+    for (mut header, virtual_object_source) in virtual_objects.drain() {
+        //check if all EncryptionHeader are contain a decrypted encryption key.
+        check_encryption_key_in_header(&header)?;        
+        // modifies the appropriate object numbers to the right values.
+        header.object_number = next_object_number;
+        next_object_number += 1;
+        
+        modify_map_virt.insert(header, virtual_object_source);
+    }
+    virtual_objects.extend(modify_map_virt);
 
     Ok(())
 }

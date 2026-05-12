@@ -18,7 +18,7 @@ pub enum FileTypeEncodingInformation {
 
 /// This enum contains the information, which are needed to encode the different special file types.
 #[cfg(target_family = "unix")]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum SpecialFileEncodingInformation {
 	/// A fifo file with the given rdev-id.
 	Fifo(u64), // fifo(rdev),
@@ -179,10 +179,10 @@ impl FileEncoder {
 			return Ok(EncodingState::ReadEOF);
 		} else if buffered_chunk.buffer.is_empty() && self.read_bytes_underlying_data == 0 {
 			//this case is the "file is empty".
-			let mut flags = ChunkFlags::default();
-			flags.empty_file = true;
-			let mut chunk_header = ChunkHeader::default();
-			chunk_header.flags = flags;
+			let chunk_header = ChunkHeader { 
+				flags: ChunkFlags { empty_file: true, ..Default::default() }, 
+				..Default::default() 
+			};
 			let prepared_chunk = PreparedChunk::new(Vec::new(), chunk_header, None, None);
 			return Ok(EncodingState::PreparedChunk(prepared_chunk))
 		};

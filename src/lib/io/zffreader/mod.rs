@@ -109,7 +109,7 @@ impl PreloadedChunkMaps {
 	}
 
 	fn get_samebyte(&self, chunk_no: u64) -> Option<u8> {
-		extract_samebyte_from_preloaded_chunkmap(&self, chunk_no)
+		extract_samebyte_from_preloaded_chunkmap(self, chunk_no)
 	}
 }
 
@@ -262,7 +262,6 @@ impl<R: Read + Seek> ZffReader<R> {
 				ZffObjectReader::Physical(_) => { map.insert(*k, ObjectType::Physical); },
 				ZffObjectReader::Logical(_) => { map.insert(*k, ObjectType::Logical); },
 				ZffObjectReader::Virtual(_) => { map.insert(*k, ObjectType::Virtual); },
-				ZffObjectReader::Virtual(_) => { map.insert(*k, ObjectType::Virtual); },
 			};
 		};
 		map
@@ -280,6 +279,19 @@ impl<R: Read + Seek> ZffReader<R> {
 				ZffErrorKind::Missing,
 				format!("{ERROR_MISSING_OBJECT_NO}{object_number}")))
 		}
+	}
+
+	/// Pre-initializes all filemaps of the active virtual object.
+	/// This can speed up later file access, but increases memory usage.
+	///
+	/// If the active object is not a virtual object, this method does nothing.
+	/// # Error
+	/// Fails if the filemaps of the active virtual object cannot be initialized.
+	pub fn preinitialize_virtual_object_filemaps(&mut self) -> Result<()> {
+		if let Some(ZffObjectReader::Virtual(obj_reader)) = self.object_reader.get_mut(&self.active_object) {
+			obj_reader.initialize_filemaps()?
+		}
+		Ok(())
 	}
 
 	///  Sets an appropriate file as active to read or seek from this object.
@@ -343,7 +355,7 @@ impl<R: Read + Seek> ZffReader<R> {
 				match ChunkHeaderMap::decode_directly( segment) {
 					Ok(inner_map) => inner_map
 														.chunkmap()
-														.into_iter()
+														.iter()
 														.for_each(|(chunk_no, header) | {
 															map.insert(*chunk_no, header.integrity_hash);
 														}),
@@ -384,7 +396,7 @@ impl<R: Read + Seek> ZffReader<R> {
 		let object_number = segment.get_object_number(chunk_no)?;
 		let object_metadata = self.metadata.object_metadata.read().unwrap();
 		let object_header = match object_metadata.get(&object_number) {
-			Some(ref metadata) => &metadata.header,
+			Some(metadata) => &metadata.header,
 			None => return Err(ZffError::new(ZffErrorKind::Missing, format!("{ERROR_MISSING_OBJECT_NO}{object_number}"))),
 		};
 
@@ -653,10 +665,7 @@ impl<R: Read + Seek> ZffReader<R> {
 	fn unencrypted_object_no(&self) -> Vec<u64> {
 		let mut obj_numbers = Vec::new();
 		for (obj_no, reader) in &self.object_reader {
-			match reader {
-				ZffObjectReader::Encrypted(_) => continue,
-				_ => (),
-			};
+			if let ZffObjectReader::Encrypted(_) = reader { continue };
 			obj_numbers.push(*obj_no);
 		};
 		obj_numbers
@@ -720,7 +729,7 @@ impl<R: Read + Seek> Read for ZffReader<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		let object_reader = match self.object_reader.get_mut(&self.active_object) {
 			Some(object_reader) => object_reader,
-			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
+			None => return Err(std::io::Error::other(format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 		};
 		object_reader.read(buffer)
 	}
@@ -730,7 +739,7 @@ impl<R: Read + Seek> Seek for ZffReader<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
 		let object_reader = match self.object_reader.get_mut(&self.active_object) {
 			Some(object_reader) => object_reader,
-			None => return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
+			None => return Err(std::io::Error::other(format!("{ERROR_ZFFREADER_MISSING_OBJECT}{}", self.active_object)))
 		};
 		object_reader.seek(seek_from)
 	}
@@ -811,7 +820,7 @@ where
 		// unwrap should be safe here, while we already checked that this method only will be called from [ZffObjectReader]-methods.
 		//let object_header_ref = metadata.object_header_ref(&current_object_no).unwrap();
 		let object_metadata = metadata.object_metadata.read().unwrap();
-		let object_header_ref = &object_metadata.get(&current_object_no).unwrap().header;
+		let object_header_ref = &object_metadata.get(current_object_no).unwrap().header;
 		let enc_information = EncryptionInformation::try_from(object_header_ref).ok();
 		let compression_algorithm = &object_header_ref.compression_header.algorithm;
 		original_chunk_size = object_header_ref.chunk_size;
@@ -824,8 +833,9 @@ where
 			optional_chunk_size,
 			optional_chunk_flags.clone()) {
 			Ok(data) => data,
-			Err(e) => match e.kind() {
-				error => return Err(std::io::Error::new(std::io::ErrorKind::Other, error.to_string())) 
+			Err(e) => {
+				let error = e.kind();
+				return Err(std::io::Error::other(error.to_string()))
 			},
 		}
 	};
@@ -873,7 +883,7 @@ fn initialize_object_reader<R: Read + Seek>(
 		None => return Err(ZffError::new(
 			ZffErrorKind::Missing, 
 			segment_no_header.to_string())),
-		Some(segment) => if segment.read_object_header(object_number).is_ok() { false } else { true },
+		Some(segment) => segment.read_object_header(object_number).is_err(),
 	};
 	if encrypted {
 		initialize_encrypted_object_reader(
@@ -996,7 +1006,7 @@ fn extract_chunk_header_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedCh
 	match preloaded_chunkmap {
 		PreloadedChunkMaps::None => None,
 		PreloadedChunkMaps::InMemory(preloaded_maps) => {
-			preloaded_maps.chunk_header.get(&chunk_number).map(|header| header.clone()) //TODO: find a more efficient way?
+			preloaded_maps.chunk_header.get(&chunk_number).cloned() //TODO: find a more efficient way?
 		},
 		PreloadedChunkMaps::Redb(db) => {
 			let read_txn = db.begin_read().ok()?;
@@ -1081,7 +1091,7 @@ fn extract_deduplication_chunks_from_preloaded_chunkmap(preloaded_chunkmap: &Pre
   			let read_txn = db.begin_read().ok()?;
     		let table = read_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE).ok()?;
     		let value = table.get(&chunk_number).ok()??.value();
-			Some(value.into())
+			Some(value)
 		}
 	}
 }
@@ -1098,7 +1108,7 @@ fn extract_samebyte_from_preloaded_chunkmap(preloaded_chunkmap: &PreloadedChunkM
 			let read_txn = db.begin_read().ok()?;
     		let table = read_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE).ok()?;
     		let value = table.get(&chunk_number).ok()??.value();
-    		Some(value.into())
+    		Some(value)
 		}
 	}
 }

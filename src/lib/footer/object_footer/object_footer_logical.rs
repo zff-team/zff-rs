@@ -76,9 +76,9 @@ impl ObjectFooterLogical {
 	}
 
 	/// Replaces the underlying [Vec] with the given one.
-	pub fn replace_root_dir_filenumbers(&mut self, filenumbers: &Vec<u64>) {
+	pub fn replace_root_dir_filenumbers(&mut self, filenumbers: &[u64]) {
 		self.root_dir_filenumbers.clear();
-		self.root_dir_filenumbers.extend(filenumbers.iter().copied());
+		self.root_dir_filenumbers.extend_from_slice(filenumbers);
 	}
 
 	/// returns the underlying [Vec] of the filenumbers of the appropriate files in the root directory as a reference.
@@ -152,13 +152,13 @@ impl ObjectFooterLogical {
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.acquisition_start.encode_directly());
-		vec.append(&mut self.acquisition_end.encode_directly());
-		vec.append(&mut self.root_dir_filenumbers.encode_directly());
-		vec.append(&mut self.file_header_segment_numbers.encode_directly());
-		vec.append(&mut self.file_header_offsets.encode_directly());
-		vec.append(&mut self.file_footer_segment_numbers.encode_directly());
-		vec.append(&mut self.file_footer_offsets.encode_directly());
+		vec.extend_from_slice(&self.acquisition_start.encode_directly());
+		vec.extend_from_slice(&self.acquisition_end.encode_directly());
+		vec.extend_from_slice(&self.root_dir_filenumbers.encode_directly());
+		vec.extend_from_slice(&self.file_header_segment_numbers.encode_directly());
+		vec.extend_from_slice(&self.file_header_offsets.encode_directly());
+		vec.extend_from_slice(&self.file_footer_segment_numbers.encode_directly());
+		vec.extend_from_slice(&self.file_footer_offsets.encode_directly());
 		vec
 	}
 
@@ -182,12 +182,12 @@ impl ObjectFooterLogical {
 			self.object_number.encode_directly().len() +
 			true.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut true.encode_directly()); // encryption flag
-		vec.append(&mut encrypted_content.encode_directly());
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&true.encode_directly()); // encryption flag
+		vec.extend_from_slice(&encrypted_content.encode_directly());
 
 		Ok(vec)
 	}
@@ -239,12 +239,12 @@ impl HeaderCoding for ObjectFooterLogical {
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut false.encode_directly()); // encryption flag
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&false.encode_directly()); // encryption flag
+		vec.extend_from_slice(&self.encode_content());
 		vec
 	}
-	fn decode_content(data: Vec<u8>) -> Result<ObjectFooterLogical> {
+	fn decode_content(data: &[u8]) -> Result<ObjectFooterLogical> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let object_number = u64::decode_directly(&mut cursor)?;
@@ -349,12 +349,12 @@ impl HeaderCoding for EncryptedObjectFooterLogical {
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut true.encode_directly()); // encryption flag
-		vec.append(&mut self.encrypted_data.encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&true.encode_directly()); // encryption flag
+		vec.extend_from_slice(&self.encrypted_data.encode_directly());
 		vec
 	}
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let object_number = u64::decode_directly(&mut cursor)?;

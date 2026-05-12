@@ -24,11 +24,11 @@ impl ZffError {
 	/// ```
 	/// use zff::{ZffError, ZffErrorKind, Result};
 	/// fn my_func() -> Result<()> {
-	/// 	let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+	///     let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
 	///     let custom_error = ZffError::new_with_source(
 	///                                ZffErrorKind::Custom,
-	/// 							   Some(Box::new(io_error)),
-	/// 							   "My detailed custom error message");
+	///                                Some(Box::new(io_error)),
+	///                                "My detailed custom error message");
 	///        Err(custom_error)
 	/// }
 	/// fn main() {
@@ -173,7 +173,7 @@ impl fmt::Display for ZffError {
 impl From<ZffError> for std::io::Error {
 	fn from(e: ZffError) -> std::io::Error {
 		let err_msg = e.details;
-		std::io::Error::new(std::io::ErrorKind::Other, err_msg)
+		std::io::Error::other(err_msg)
 	}
 }
 

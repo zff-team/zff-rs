@@ -42,15 +42,22 @@ impl HeaderCoding for ChunkHeader {
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
-		vec.append(&mut self.offset.encode_directly());
-        vec.append(&mut self.size.encode_directly());
-        vec.append(&mut self.flags.encode_directly());
-        vec.append(&mut self.integrity_hash.encode_directly());
+		let mut vec = Vec::with_capacity(
+			Self::version().encoded_size() +
+			self.offset.encoded_size() +
+			self.size.encoded_size() +
+			self.flags.encoded_size() +
+			self.integrity_hash.encoded_size()
+		);
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.offset.encode_directly());
+        vec.extend_from_slice(&self.size.encode_directly());
+        vec.extend_from_slice(&self.flags.encode_directly());
+        vec.extend_from_slice(&self.integrity_hash.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let offset = u64::decode_directly(&mut cursor)?;
@@ -80,6 +87,10 @@ impl ValueEncoder for ChunkHeader {
     fn encode_directly(&self) -> Vec<u8> {
         HeaderCoding::encode_directly(self)
     }
+
+	fn encoded_size(&self) -> usize {
+		self.header_size()
+	}
 }
 
 impl ValueDecoder for ChunkHeader {
@@ -172,6 +183,10 @@ impl ValueEncoder for ChunkFlags {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_U8
+	}
+
+	fn encoded_size(&self) -> usize {
+		1
 	}
 }
 

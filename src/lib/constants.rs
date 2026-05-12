@@ -43,8 +43,7 @@ pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
 pub(crate) const FOOTER_IDENTIFIER_MAIN_FOOTER: u32 = 0x7A66664D;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL: u32 = 0x7A666650;
 pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_LOGICAL: u32 = 0x7A66664C;
-pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL: u32 = 0x7a666656;
-pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL_LOGICAL: u32 = 0x7a666636;
+pub(crate) const FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL: u32 = 0x7a666636;
 pub(crate) const FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_FOOTER: u32 = 0x7a666637;
 pub(crate) const FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_MAP: u32 = 0x7a666638;
 pub(crate) const FOOTER_IDENTIFIER_FILE_FOOTER: u32 = 0x7A666649;
@@ -115,7 +114,6 @@ pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the c
 pub(crate) const ERROR_ZFFREADER_OPERATION: &str = "Operation not available.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
 pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
-pub(crate) const ERROR_ZFFREADER_OPERATION_VIRTUAL_OBJECT: &str = "Operation not available for virtual objects.";
 pub(crate) const ERROR_ZFFREADER_MISSING_VFM: &str = "Missing virtual file map information for virtual file: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VFM: &str = "Missing offset in virtual file map: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str = "Necessary passive object is not initialized/decrypted correctly: Object no. ";
@@ -124,15 +122,15 @@ pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable pos
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
 
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) const ERROR_TAR_ENCODING_ERROR_NO_FILENAME: &str = "Missing filename for tar entry ";
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) const ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF: &str = "unexpected EOF in tar entry";
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) const ERROR_ENCODING_TAR_NO_BACKWARD: &str = "cannot seek backwards in forward tar stream";
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) const ERROR_TAR_PREPROCESSED_ENTRY: &str ="cannot process the entry type. This tar entry type should already be preprocessed. This is an application bug. The appropriate entry type is: ";
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) const ERROR_TAR_MISSING_HARDLINK_TARGET: &str = "Missing hardlink target for tar entry"; 
 
 // Default values
@@ -143,8 +141,6 @@ pub(crate) const DEFAULT_WAIT_TIME_IO_INTERRUPT_RETRY: u64 = 6000; // in millise
 pub(crate) const DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT: u8 = 11;
 
 pub(crate) const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
-
-pub(crate) const DEFAULT_BINARY_SEARCH_MAX_ITERATIONS: u32 = 1000;
 
 /// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
@@ -242,15 +238,15 @@ pub const DEFAULT_CHUNKMAP_SIZE: u64 = 32768;
 
 
 // file metadata extended values
-#[cfg(any(target_family = "unix", feature = "input_tar"))]
+#[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_DEVID: &str = "devid";
-#[cfg(any(target_family = "unix", feature = "input_tar"))]
+#[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_INODE: &str = "inode";
-#[cfg(any(target_family = "unix", feature = "input_tar"))]
+#[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_MODE: &str = "mode";
-#[cfg(any(target_family = "unix", feature = "input_tar"))]
+#[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_UID: &str = "uid";
-#[cfg(any(target_family = "unix", feature = "input_tar"))]
+#[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_GID: &str = "gid";
 #[cfg(target_os = "windows")]
 pub(crate) const METADATA_EXT_DW_FILE_ATTRIBUTES: &str = "dwFileAttributes";
@@ -283,10 +279,6 @@ pub const PRELOADED_CHUNK_XXHASH_MAP_TABLE: TableDefinition<u64, u64> = TableDef
 pub const PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
 /// Table name for the redb preloaded chunk duplication map
 pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_dedup_map");
-
-// - Encryption parameters
-pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_128: usize = 16; // in bytes
-pub(crate) const SCRYPT_DERIVED_KEY_LENGTH_AES_256: usize = 32; // in bytes
 
 // Unix ACLs
 #[cfg(target_family = "unix")]
@@ -327,8 +319,8 @@ pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_CHUNK_HEADER: u8 = 0xFE;
 pub(crate) const METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN: u8 = 0xFF;
 
 // Virtual file footer content flags
-pub const VIRTUALFILEFOOTERCONTENT_VLFM: u8 = 0x00000000;
-pub const VIRTUALFILEFOOTERCONTENT_DIRECTORY: u8 = 0x00000001;
-pub const VIRTUALFILEFOOTERCONTENT_SYMLINK: u8 = 0x00000002;
-pub const VIRTUALFILEFOOTERCONTENT_HARDLINK: u8 = 0x00000003;
-pub const VIRTUALFILEFOOTERCONTENT_SPECIAL_FILE: u8 = 0x00000004;
+pub(crate) const VIRTUALFILEFOOTERCONTENT_VFM: u8 = 0x00000000;
+pub(crate) const VIRTUALFILEFOOTERCONTENT_DIRECTORY: u8 = 0x00000001;
+pub(crate) const VIRTUALFILEFOOTERCONTENT_SYMLINK: u8 = 0x00000002;
+pub(crate) const VIRTUALFILEFOOTERCONTENT_HARDLINK: u8 = 0x00000003;
+pub(crate) const VIRTUALFILEFOOTERCONTENT_SPECIAL_FILE: u8 = 0x00000004;

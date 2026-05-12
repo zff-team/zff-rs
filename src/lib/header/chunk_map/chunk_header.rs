@@ -38,7 +38,7 @@ impl ChunkMap for ChunkHeaderMap {
 	fn current_size(&self) -> usize {
 		match self.chunkmap.first_key_value() {
 			Some(_) => self.chunkmap.len() * (8 + 38) + 8, //8 -> 8bytes for the chunk no, 8 bytes for the encoded chunk header.
-			None => return 0,
+			None => 0,
 		}
 	}
 
@@ -107,9 +107,9 @@ impl ChunkMap for ChunkHeaderMap {
 		Self: HeaderCoding, {
 		let mut vec = Vec::new();
 		let encoded_map = Self::encode_map(self);
-		let mut encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
-		let mut encoded_version = Self::version().encode_directly();
-		let mut encoded_object_number = self.object_number.encode_directly();
+		let encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
+		let encoded_version = Self::version().encode_directly();
+		let encoded_object_number = self.object_number.encode_directly();
 		let identifier = Self::identifier();
 		let encoded_header_length = (
 			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
@@ -117,11 +117,11 @@ impl ChunkMap for ChunkHeaderMap {
 			encoded_object_number.len() +
 			encrypted_map.len() +
 			encoded_version.len()) as u64;
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_version);
-		vec.append(&mut encoded_object_number);
-		vec.append(&mut encrypted_map);
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+		vec.extend_from_slice(&encoded_version);
+		vec.extend_from_slice(&encoded_object_number);
+		vec.extend_from_slice(&encrypted_map);
 		Ok(vec)
 	}
 }
@@ -139,13 +139,13 @@ impl HeaderCoding for ChunkHeaderMap {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut self.chunkmap.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&self.chunkmap.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;

@@ -186,12 +186,12 @@ pub trait ChunkMap {
     Self: HeaderCoding,
 	{
 		let mut vec = Vec::new();
-		let mut encrypted_map = self.encrypt_encoded_map(key, encryption_algorithm, chunk_no)?;
+		let encrypted_map = self.encrypt_encoded_map(key, encryption_algorithm, chunk_no)?;
 		let identifier = Self::identifier();
 		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encrypted_map.len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encrypted_map);
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+		vec.extend_from_slice(&encrypted_map);
 
 		Ok(vec)
 	}

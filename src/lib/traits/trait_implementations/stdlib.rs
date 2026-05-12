@@ -11,6 +11,10 @@ impl ValueEncoder for bool {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_BOOL
 	}
+
+	fn encoded_size(&self) -> usize {
+		1
+	}
 }
 
 impl ValueEncoder for u8 {
@@ -20,6 +24,10 @@ impl ValueEncoder for u8 {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_U8
+	}
+
+	fn encoded_size(&self) -> usize {
+		1
 	}
 }
 
@@ -31,6 +39,10 @@ impl ValueEncoder for u16 {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_U16
 	}
+
+	fn encoded_size(&self) -> usize {
+		2
+	}
 }
 
 impl ValueEncoder for u32 {
@@ -40,6 +52,10 @@ impl ValueEncoder for u32 {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_U32
+	}
+
+	fn encoded_size(&self) -> usize {
+		4
 	}
 }
 
@@ -51,6 +67,10 @@ impl ValueEncoder for u64 {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_U64
 	}
+
+	fn encoded_size(&self) -> usize {
+		8
+	}
 }
 
 impl ValueEncoder for i8 {
@@ -60,6 +80,10 @@ impl ValueEncoder for i8 {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_I8
+	}
+
+	fn encoded_size(&self) -> usize {
+		1
 	}
 }
 
@@ -71,6 +95,10 @@ impl ValueEncoder for i16 {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_I16
 	}
+
+	fn encoded_size(&self) -> usize {
+		2
+	}
 }
 
 impl ValueEncoder for i32 {
@@ -80,6 +108,10 @@ impl ValueEncoder for i32 {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_I32
+	}
+
+	fn encoded_size(&self) -> usize {
+		4
 	}
 }
 
@@ -91,6 +123,10 @@ impl ValueEncoder for i64 {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_I64
 	}
+
+	fn encoded_size(&self) -> usize {
+		8
+	}
 }
 
 impl ValueEncoder for f32 {
@@ -100,6 +136,10 @@ impl ValueEncoder for f32 {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_F32
+	}
+
+	fn encoded_size(&self) -> usize {
+		4
 	}
 }
 
@@ -111,6 +151,10 @@ impl ValueEncoder for f64 {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_F64
 	}
+
+	fn encoded_size(&self) -> usize {
+		8
+	}
 }
 
 impl ValueEncoder for [u8; 12] {
@@ -120,6 +164,10 @@ impl ValueEncoder for [u8; 12] {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
+	}
+
+	fn encoded_size(&self) -> usize {
+		12
 	}
 }
 
@@ -131,6 +179,10 @@ impl ValueEncoder for [u8; 16] {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
 	}
+
+	fn encoded_size(&self) -> usize {
+		16
+	}
 }
 
 impl ValueEncoder for [u8; 32] {
@@ -140,6 +192,10 @@ impl ValueEncoder for [u8; 32] {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
+	}
+
+	fn encoded_size(&self) -> usize {
+		32
 	}
 }
 
@@ -151,6 +207,10 @@ impl ValueEncoder for [u8; 64] {
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
 	}
+
+	fn encoded_size(&self) -> usize {
+		64
+	}
 }
 
 impl ValueEncoder for String {
@@ -158,12 +218,16 @@ impl ValueEncoder for String {
 		let string_length = self.len();
 		let mut vec = Vec::with_capacity(string_length + 8);
 		vec.extend_from_slice(&string_length.to_le_bytes());
-		vec.extend_from_slice(&self.as_bytes());
+		vec.extend_from_slice(self.as_bytes());
 		vec
 	}
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_STRING
+	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self.len()
 	}
 }
 
@@ -172,12 +236,16 @@ impl ValueEncoder for str {
 		let string_length = self.len();
 		let mut vec = Vec::with_capacity(string_length + 8);
 		vec.extend_from_slice(&string_length.to_le_bytes());
-		vec.extend_from_slice(&self.as_bytes());
+		vec.extend_from_slice(self.as_bytes());
 		vec
 	}
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_STRING
+	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self.len()
 	}
 }
 
@@ -193,6 +261,10 @@ impl ValueEncoder for Vec<u8> {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_BYTEARRAY
+	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self.len()
 	}
 }
 
@@ -221,6 +293,10 @@ impl ValueEncoder for Vec<u64> {
 			vec.extend_from_slice(&value.to_le_bytes());
 		}
 		vec
+	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self.len() * 8
 	}
 }
 
@@ -253,6 +329,13 @@ where
 		}
 		vec
 	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self
+			.iter()
+			.map(|(key, value)| key.encoded_size() + value.encoded_size())
+			.sum::<usize>()
+	}
 }
 
 impl<K, V> ValueEncoder for BTreeMap<K, V>
@@ -284,6 +367,13 @@ where
 		}
 		vec
 	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self
+			.iter()
+			.map(|(key, value)| key.encoded_size() + value.encoded_size())
+			.sum::<usize>()
+	}
 }
 
 impl<K, A, B> ValueEncoder for BTreeMap<K, (A, B)> 
@@ -307,6 +397,14 @@ where
 		METADATA_EXT_TYPE_IDENTIFIER_BTREEMAP
 	}
 
+	fn encoded_size(&self) -> usize {
+		8 + self
+			.iter()
+			.map(|(key, (value_a, value_b))| {
+				key.encoded_size() + value_a.encoded_size() + value_b.encoded_size()
+			})
+			.sum::<usize>()
+	}
 }
 
 impl <K, A, B> ValueEncoder for BTreeSet<BTreeMap<K, (A, B)>> 
@@ -327,6 +425,10 @@ where
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_VEC
 	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self.iter().map(ValueEncoder::encoded_size).sum::<usize>()
+	}
 }
 
 impl<H> ValueEncoder for Vec<H>
@@ -344,6 +446,10 @@ where
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_VEC
+	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self.iter().map(HeaderCoding::header_size).sum::<usize>()
 	}
 }
 

@@ -32,7 +32,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 			let enc_info = EncryptionInformation::try_from(&self.object_header).ok();
 			read_virtual_filemap_by_filemap_position(Arc::clone(&self.metadata), *segment_no, *offset, enc_info)
 		} else {
-			return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_ZFFREADER_MISSING_VFM}{filenumber}")));
+			Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_ZFFREADER_MISSING_VFM}{filenumber}")))
 		}
 	}
 
@@ -105,19 +105,19 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 		for (filenumber, header_segment_number) in &object_footer.file_header_segment_numbers {
 			#[cfg(feature = "log")]
 			debug!("Initialize file {filenumber}");
-			let header_offset = match object_footer.file_header_offsets.get(&filenumber) {
+			let header_offset = match object_footer.file_header_offsets.get(filenumber) {
 				Some(offset) => offset,
 				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 			};
-			let (footer_segment_number, footer_offset) = match object_footer.file_footer_segment_numbers.get(&filenumber) {
+			let (footer_segment_number, footer_offset) = match object_footer.file_footer_segment_numbers.get(filenumber) {
 				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
-				Some(segment_no) => match object_footer.file_footer_offsets.get(&filenumber) {
+				Some(segment_no) => match object_footer.file_footer_offsets.get(filenumber) {
 					None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 					Some(offset) => (segment_no, offset),
 				}
 			};
 			let mut segments = metadata.segments.write().unwrap();
-			let fileheader = match segments.get_mut(&header_segment_number) {
+			let fileheader = match segments.get_mut(header_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
@@ -275,7 +275,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 													.get(&vfe.source_object_number)
 													.and_then(|files| files.get(&vfe.source_filenumber))
 													.ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{}", vfe.source_object_number)))?;
-				let first_chunk_number = source_filemetadata.first_chunk_number().ok_or(IoError::other(format!("{ERROR_MALFORMED_SEGMENT}")))?;
+				let first_chunk_number = source_filemetadata.first_chunk_number().ok_or(IoError::other(ERROR_MALFORMED_SEGMENT))?;
 
 				let source_position_absolute = vfe.source_offset + relative_position_virtual_file as u64;
 				let current_chunk_number = (first_chunk_number * source_chunk_size + source_position_absolute) / source_chunk_size;
@@ -303,10 +303,9 @@ impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
 		let mut read_bytes = 0;
 		while read_bytes < buffer.len() {
-            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() {
-				if !self.refill_reader_cache()? {
+            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() &&
+			!self.refill_reader_cache()? {
 					break;
-				}
             }
             let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
             read_bytes += written;
@@ -327,14 +326,14 @@ impl<R: Read + Seek> Seek for ZffObjectReaderVirtual<R> {
 				*position = value;
 			},
 			SeekFrom::Current(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
 					*position += value as u64;
 			} else {
 				*position -= value as u64;
 			},
 			SeekFrom::End(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
 					*position = filemetadata.length_of_data() + value as u64;
 			} else {

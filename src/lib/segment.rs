@@ -300,10 +300,7 @@ impl<R: Read + Seek> Segment<R> {
 impl<R: Read+Seek> Read for Segment<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		self.data.seek(SeekFrom::Start(self.raw_reader_position))?;
-		let read_bytes = match self.data.read(buffer) {
-			Ok(read_bytes) => read_bytes,
-			Err(e) => return Err(e)
-		};
+		let read_bytes = self.data.read(buffer)?;
 		self.raw_reader_position += read_bytes as u64;
 		Ok(read_bytes)
 	}

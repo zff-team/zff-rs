@@ -1,10 +1,6 @@
 // - Parent
 use super::*;
 
-
-#[cfg(feature = "log")]
-use crate::hashes_to_log;
-
 /// Returns the current state of encoding.
 #[derive(Debug, Clone, Default)]
 pub(crate) enum EncodingState {
@@ -86,15 +82,6 @@ impl<R: Read> ObjectEncoder<R> {
 			ObjectEncoder::Physical(obj) => obj.get_encoded_header(),
 			ObjectEncoder::Logical(obj) => obj.get_encoded_header(),
 			ObjectEncoder::Virtual(obj) => obj.get_encoded_header(),
-		}
-	}
-
-	/// returns the underlying encryption key (if available).
-	pub fn encryption_key(&self) -> Option<Vec<u8>> {
-		match self {
-			ObjectEncoder::Physical(obj) => obj.encryption_key.clone(),
-			ObjectEncoder::Logical(obj) => obj.encryption_key.clone(),
-			ObjectEncoder::Virtual(obj) => obj.encryption_key.clone(),
 		}
 	}
 

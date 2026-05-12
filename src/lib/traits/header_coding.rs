@@ -74,7 +74,7 @@ pub trait HeaderCoding {
 	}
 
 	/// decodes the content of the header.
-	fn decode_content(data: Vec<u8>) -> Result<Self::Item>;
+	fn decode_content(data: &[u8]) -> Result<Self::Item>;
 	
 	/// decodes the header directly.
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
@@ -87,7 +87,7 @@ pub trait HeaderCoding {
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
-		Self::decode_content(header_content)
+		Self::decode_content(&header_content)
 	}
 
 	/// Method to show the "name" of the appropriate struct (e.g. to use this with fmt::Display).

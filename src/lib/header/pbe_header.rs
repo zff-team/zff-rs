@@ -52,12 +52,12 @@ impl HeaderCoding for PBEHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version(), self.kdf_scheme.clone() as u8, self.encryption_scheme.clone() as u8];
-		vec.append(&mut self.kdf_parameters.encode_directly());
-		vec.append(&mut self.pbencryption_nonce.encode_directly());
+		vec.extend_from_slice(&self.kdf_parameters.encode_directly());
+		vec.extend_from_slice(&self.pbencryption_nonce.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<PBEHeader> {
+	fn decode_content(data: &[u8]) -> Result<PBEHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let kdf_scheme = match u8::decode_directly(&mut cursor)? {
@@ -115,6 +115,14 @@ impl ValueEncoder for KDFParameters {
 
 	fn identifier(&self) -> u8 {
 		METADATA_EXT_TYPE_IDENTIFIER_UNKNOWN
+	}
+
+	fn encoded_size(&self) -> usize {
+		match self {
+			KDFParameters::PBKDF2SHA256Parameters(params) => params.header_size(),
+			KDFParameters::ScryptParameters(params) => params.header_size(),
+			KDFParameters::Argon2idParameters(params) => params.header_size(),
+		}
 	}
 }
 
@@ -195,12 +203,12 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.iterations.encode_directly());
-		vec.append(&mut self.salt.encode_directly());
+		vec.extend_from_slice(&self.iterations.encode_directly());
+		vec.extend_from_slice(&self.salt.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<PBKDF2SHA256Parameters> {
+	fn decode_content(data: &[u8]) -> Result<PBKDF2SHA256Parameters> {
 		let mut cursor = Cursor::new(data);
 
 		let iterations = u32::decode_directly(&mut cursor)?;
@@ -257,14 +265,14 @@ impl HeaderCoding for ScryptParameters {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.logn.encode_directly());
-		vec.append(&mut self.r.encode_directly());
-		vec.append(&mut self.p.encode_directly());
-		vec.append(&mut self.salt.encode_directly());
+		vec.extend_from_slice(&self.logn.encode_directly());
+		vec.extend_from_slice(&self.r.encode_directly());
+		vec.extend_from_slice(&self.p.encode_directly());
+		vec.extend_from_slice(&self.salt.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<ScryptParameters> {
+	fn decode_content(data: &[u8]) -> Result<ScryptParameters> {
 		let mut cursor = Cursor::new(data);
 
 		let logn = u8::decode_directly(&mut cursor)?;
@@ -324,14 +332,14 @@ impl HeaderCoding for Argon2idParameters {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.mem_cost.encode_directly());
-		vec.append(&mut self.lanes.encode_directly());
-		vec.append(&mut self.iterations.encode_directly());
-		vec.append(&mut self.salt.encode_directly());
+		vec.extend_from_slice(&self.mem_cost.encode_directly());
+		vec.extend_from_slice(&self.lanes.encode_directly());
+		vec.extend_from_slice(&self.iterations.encode_directly());
+		vec.extend_from_slice(&self.salt.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<Argon2idParameters> {
+	fn decode_content(data: &[u8]) -> Result<Argon2idParameters> {
 		let mut cursor = Cursor::new(data);
 		let mem_cost = u32::decode_directly(&mut cursor)?;
 		let lanes = u32::decode_directly(&mut cursor)?;

@@ -227,13 +227,13 @@ impl HeaderCoding for EncryptionHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.pbe_header.encode_directly());
+		vec.extend_from_slice(&self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
-		vec.append(&mut self.encrypted_encryption_key.encode_directly());
+		vec.extend_from_slice(&self.encrypted_encryption_key.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<EncryptionHeader> {
+	fn decode_content(data: &[u8]) -> Result<EncryptionHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let pbe_header = PBEHeader::decode_directly(&mut cursor)?;

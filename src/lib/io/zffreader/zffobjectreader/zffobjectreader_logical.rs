@@ -167,8 +167,8 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		//unwrap is safe here: we've never initialized FileMetadata for ZffObjectReaderLogical with ::with_virtual_file_footer().
 		let first_chunk_number = filemetadata.first_chunk_number().unwrap();
 		let last_chunk_number = first_chunk_number + filemetadata.number_of_chunks().unwrap() - 1;
-		let mut current_chunk_number = (first_chunk_number * chunk_size + *position) / chunk_size;
-		let mut inner_position = (*position % chunk_size) as usize; // the inner chunk position
+		let current_chunk_number = (first_chunk_number * chunk_size + *position) / chunk_size;
+		let inner_position = (*position % chunk_size) as usize; // the inner chunk position
 
 		if current_chunk_number > last_chunk_number {
 			return Ok(false)
@@ -193,12 +193,12 @@ impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
 		let mut read_bytes = 0;
 		while read_bytes < buffer.len() {
-            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() {
-				if !self.refill_reader_cache()? {
+            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() &&
+			!self.refill_reader_cache()? {
 					break;
-				}
-            }
-            let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
+			}
+            
+			let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
             read_bytes += written;
 			// unwrap is safe here: we have called refill_reader_cache() before which calls self.file.get(&self.acitve_file).
 			*self.file_positions.get_mut(&self.active_file).unwrap() += written as u64;
@@ -212,8 +212,7 @@ impl<R: Read + Seek> Seek for ZffObjectReaderLogical<R> {
 		let filemetadata = match self.files.get(&self.active_file) {
 			Some(metadata) => metadata,
 			None => return Err(
-				std::io::Error::new(
-					std::io::ErrorKind::Other, 
+				std::io::Error::other(
 					format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file))),
 		};
 		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
@@ -224,14 +223,14 @@ impl<R: Read + Seek> Seek for ZffObjectReaderLogical<R> {
 				*position = value;
 			},
 			SeekFrom::Current(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
 					*position += value as u64;
 			} else {
 				*position -= value as u64;
 			},
 			SeekFrom::End(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
 					*position = filemetadata.length_of_data() + value as u64;
 			} else {

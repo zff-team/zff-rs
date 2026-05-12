@@ -1,17 +1,22 @@
 // - Parent
 use super::*;
 
+/// Encodes the a virtual file.
 pub struct VirtualFileEncoder {
     /// The appropriate [FileHeader].
 	pub file_header: FileHeader,
     /// The appropriate [VirtualFileFooter].
     pub file_footer: VirtualFileFooter,
+    /// The resolved virtual file map for regular virtual files, in case of a virtual regular file.
     pub vfm: Option<VirtualFileMap>,
-    /// optional encryption information, to encrypt the data with the given key and algorithm
+    /// optional encryption information, to encrypt the data with the given key and algorithm (if the appropriate
+	/// object is encrypted).
 	encryption_information: Option<EncryptionInformation>,
 }
 
 impl VirtualFileEncoder {
+    /// Creates a new [`VirtualFileEncoder`] from the header, footer, optional
+    /// virtual file map, and optional encryption information.
     pub fn new(
 		file_header: FileHeader, 
 		file_footer: VirtualFileFooter, 
@@ -30,7 +35,7 @@ impl VirtualFileEncoder {
 		&self.file_header
 	}
 
-    /// Returns the underlying encoded header
+    /// Returns the encoded [`FileHeader`].
 	pub fn encoded_header(&self) -> Vec<u8> {
 		if let Some(enc_info) = &self.encryption_information {
 			//unwrap should be safe here, because we have already testet this before.
@@ -40,7 +45,11 @@ impl VirtualFileEncoder {
 	    }
 	}
 
-	/// Returns the encoded VFM
+	/// Returns the encoded [`VirtualFileMap`], if this virtual file has one.
+	///
+	/// # Error
+	/// Returns an error if encoding the virtual file map with the configured
+	/// encryption settings fails.
 	pub fn encoded_vfm(&self) -> Result<Option<Vec<u8>>> {
 		if let Some(vfm) = &self.vfm {
 			if let Some(enc_info) = &self.encryption_information {

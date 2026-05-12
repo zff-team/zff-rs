@@ -53,14 +53,14 @@ impl HeaderCoding for SegmentHeader {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.unique_identifier.encode_directly());
-		vec.append(&mut self.segment_number.encode_directly());
-		vec.append(&mut self.chunkmap_size.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.unique_identifier.encode_directly());
+		vec.extend_from_slice(&self.segment_number.encode_directly());
+		vec.extend_from_slice(&self.chunkmap_size.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<SegmentHeader> {
+	fn decode_content(data: &[u8]) -> Result<SegmentHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
 		let unique_identifier = u64::decode_directly(&mut cursor)?;

@@ -50,6 +50,7 @@ impl SegmentFooter {
 	}
 
 	/// creates a new SegmentFooter.
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		length_of_segment: u64, 
 		object_header_offsets: HashMap<u64, u64>, 
@@ -116,19 +117,19 @@ impl HeaderCoding for SegmentFooter {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.length_of_segment.encode_directly());
-		vec.append(&mut self.object_header_offsets.encode_directly());
-		vec.append(&mut self.object_footer_offsets.encode_directly());
-		vec.append(&mut self.chunk_header_map_table.encode_directly());
-		vec.append(&mut self.chunk_samebytes_map_table.encode_directly());
-		vec.append(&mut self.chunk_dedup_map_table.encode_directly());
-		vec.append(&mut self.first_chunk_number.encode_directly());
-		vec.append(&mut self.footer_offset.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.length_of_segment.encode_directly());
+		vec.extend_from_slice(&self.object_header_offsets.encode_directly());
+		vec.extend_from_slice(&self.object_footer_offsets.encode_directly());
+		vec.extend_from_slice(&self.chunk_header_map_table.encode_directly());
+		vec.extend_from_slice(&self.chunk_samebytes_map_table.encode_directly());
+		vec.extend_from_slice(&self.chunk_dedup_map_table.encode_directly());
+		vec.extend_from_slice(&self.first_chunk_number.encode_directly());
+		vec.extend_from_slice(&self.footer_offset.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<SegmentFooter> {
+	fn decode_content(data: &[u8]) -> Result<SegmentFooter> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let length_of_segment = u64::decode_directly(&mut cursor)?;

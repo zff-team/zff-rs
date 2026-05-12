@@ -138,8 +138,8 @@ impl HeaderCoding for DescriptionHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.identifier_map.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.identifier_map.encode_directly());
 		vec
 	}
 
@@ -151,10 +151,10 @@ impl HeaderCoding for DescriptionHeader {
 		let header_length = Self::decode_header_length(data)? as usize;
 		let mut header_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 		data.read_exact(&mut header_content)?;
-		Self::decode_content(header_content)
+		Self::decode_content(&header_content)
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<DescriptionHeader> {
+	fn decode_content(data: &[u8]) -> Result<DescriptionHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let identifier_map = HashMap::<String, String>::decode_directly(&mut cursor)?;

@@ -5,7 +5,7 @@ use super::*;
 /// This footer contains various information about the underlying virtual files:
 /// - information about the underlying folder structure
 /// - appropriate file headers and [VirtualFileFooter] for each virtual file
-#[derive(Debug,Clone, PartialEq, Eq)]
+#[derive(Debug,Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ObjectFooterVirtual {
     /// The object number of the footer.
@@ -16,19 +16,36 @@ pub struct ObjectFooterVirtual {
     /// This is mostly necessary to identify affected objects in case of 
     /// encryption.
 	pub passive_objects: Vec<u64>,
+    /// The file numbers of the virtual object's root directories.
     pub root_dir_filenumbers: Vec<u64>,
+    /// Maps a file number to the segment number containing its [FileHeader].
     pub file_header_segment_numbers: HashMap<u64, u64>,
+    /// Maps a file number to the byte offset of its [FileHeader] inside the
+    /// corresponding segment.
     pub file_header_offsets: HashMap<u64, u64>,
     /// instead of file_footer_offsets pointing to classic FileFooter only,
     /// point to a new virtual logical file footer.
     /// The classic FileFooter contains several necessary metadata, thus using
     /// a virtual logical file footer is necessary.
+    /// Maps a file number to the segment number containing its
+    /// [VirtualFileFooter].
     pub file_footer_segment_numbers: HashMap<u64, u64>,
+    /// Maps a file number to the byte offset of its [VirtualFileFooter]
+    /// inside the corresponding segment.
     pub file_footer_offsets: HashMap<u64, u64>,
 }
 
 impl ObjectFooterVirtual {
-	/// creates a new [ObjectFooterVirtual] with the given values.
+	pub fn new_empty(object_number: u64) -> Self {
+		Self {
+			object_number,
+			..Default::default()
+		}
+	}
+
+	/// Creates a new [ObjectFooterVirtual] from the object metadata and the
+	/// location maps for the contained virtual files.
+	#[allow(clippy::too_many_arguments)]
 	pub fn with_data(object_number: u64, 
 		creation_timestamp: u64, 
 		passive_objects: Vec<u64>,
@@ -51,17 +68,21 @@ impl ObjectFooterVirtual {
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.creation_timestamp.encode_directly());
-		vec.append(&mut self.passive_objects.encode_directly());
-		vec.append(&mut self.root_dir_filenumbers.encode_directly());
-		vec.append(&mut self.file_header_segment_numbers.encode_directly());
-		vec.append(&mut self.file_header_offsets.encode_directly());
-        vec.append(&mut self.file_footer_segment_numbers.encode_directly());
-		vec.append(&mut self.file_footer_offsets.encode_directly());
+		vec.extend_from_slice(&self.creation_timestamp.encode_directly());
+		vec.extend_from_slice(&self.passive_objects.encode_directly());
+		vec.extend_from_slice(&self.root_dir_filenumbers.encode_directly());
+		vec.extend_from_slice(&self.file_header_segment_numbers.encode_directly());
+		vec.extend_from_slice(&self.file_header_offsets.encode_directly());
+        vec.extend_from_slice(&self.file_footer_segment_numbers.encode_directly());
+		vec.extend_from_slice(&self.file_footer_offsets.encode_directly());
 		vec
 	}
 
-	/// encrypts the object footer by the given encryption information and returns the encrypted object footer.
+	/// Encrypts and encodes this object footer using the given encryption
+	/// information.
+	///
+	/// # Error
+	/// Returns an error if encryption fails.
 	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
 	where
 		E: Borrow<EncryptionInformation>
@@ -80,16 +101,17 @@ impl ObjectFooterVirtual {
 			self.object_number.encode_directly().len() +
 			true.encode_directly().len() +
 			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.encode_directly());
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut true.encode_directly()); // encryption flag
-		vec.append(&mut encrypted_content.encode_directly());
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&true.encode_directly()); // encryption flag
+		vec.extend_from_slice(&encrypted_content.encode_directly());
 
 		Ok(vec)
 	}
 
+	#[allow(clippy::type_complexity)]
 	fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
 		u64, //creation_timestamp
 		Vec<u64>, //passive_objects
@@ -131,16 +153,16 @@ impl HeaderCoding for ObjectFooterVirtual {
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL_LOGICAL
 	}
 	fn identifier() -> u32 {
-		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL_LOGICAL
+		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.object_number.encode_directly());
-		vec.append(&mut false.encode_directly()); // encryption flag
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&false.encode_directly()); // encryption flag
+		vec.extend_from_slice(&self.encode_content());
 		vec
 	}
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;

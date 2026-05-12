@@ -14,6 +14,8 @@ where
     s.serialize_str(&format!("0x{:X}", x))
 }
 
+/// Returns the greatest key-value pair in the sorted slice whose key is less
+/// than or equal to `key`.
 #[inline]
 pub fn floor_vec_entry<T>(items: &[(u64, T)], key: u64) -> Option<&(u64, T)> {
     match items.binary_search_by_key(&key, |(k, _)| *k) {
@@ -23,16 +25,22 @@ pub fn floor_vec_entry<T>(items: &[(u64, T)], key: u64) -> Option<&(u64, T)> {
     }
 }
 
+/// Returns the value belonging to the greatest key in the sorted slice that is
+/// less than or equal to `key`.
 #[inline]
 pub fn floor_vec_value<T>(items: &[(u64, T)], key: u64) -> Option<&T> {
     floor_vec_entry(items, key).map(|(_, v)| v)
 }
 
+/// Returns the greatest key-value pair whose key is less than or equal to
+/// `key`.
 #[inline]
 pub fn floor_btree_entry<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<(&u64, &T)> {
     map.range(..=key).next_back()
 }
 
+/// Returns the value belonging to the greatest key that is less than or equal
+/// to `key`.
 #[inline]
 pub fn floor_btree_value<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<&T> {
     floor_btree_entry(map, key).map(|(_, v)| v)
@@ -119,7 +127,7 @@ pub(crate) fn result_combine<T, V>(t: (Result<T>, V)) -> Result<(T, V)> {
 }
 
 /// merges the major and minor rdev to a single rdev.
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
     let major = major as u64;
     let minor = minor as u64;
@@ -129,7 +137,7 @@ pub(crate) fn makedev(major: u32, minor: u32) -> u64 {
         | ((minor & !0xff) << 12)
 }
 
-#[cfg(feature = "input_tar")]
+#[cfg(feature = "los_tar")]
 pub(crate) fn parse_unix_timestamp_nanos(s: &str) -> Option<u64> {
     let bytes = s.as_bytes();
 
@@ -155,13 +163,11 @@ pub(crate) fn parse_unix_timestamp_nanos(s: &str) -> Option<u64> {
 
         if !seen_dot {
             secs = secs.checked_mul(10)?.checked_add(digit)?;
-        } else {
-            if frac_digits < 9 {
+        } else if frac_digits < 9 {
                 nanos = nanos.checked_mul(10)?.checked_add(digit)?;
                 frac_digits += 1;
-            }
-            // extra digits silently ignored
         }
+        // extra digits silently ignored
     }
 
     // scale to nanoseconds

@@ -47,7 +47,7 @@ impl LogicalObjectSource for LogicalObjectSourceFilesystem {
 impl<P: AsRef<Path>> TryFrom<Vec<P>> for LogicalObjectSourceFilesystem {
 	type Error = ZffError;
 	fn try_from(value: Vec<P>) -> Result<Self> {
-		Ok(Self::new(value)?)
+		Self::new(value)
 	}
 }
 
@@ -84,7 +84,7 @@ impl LogicalObjectSourceFilesystem {
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
 				}
-				let mut file_header = match get_file_header(&path.as_ref(), current_file_number, parent_file_number) {
+				let mut file_header = match get_file_header(path.as_ref(), current_file_number, parent_file_number) {
 					Ok(file_header) => file_header,
 					Err(_) => continue,
 				};
@@ -196,7 +196,7 @@ impl Iterator for LogicalObjectSourceFilesystem {
 		}
 		self.iterator_index -= 1;
 		let (_, file_header) = &self.files[self.iterator_index];
-		let filetype_encoding_information = gen_filetype_encoding_information(&self);
+		let filetype_encoding_information = gen_filetype_encoding_information(self);
 		Some(result_combine((filetype_encoding_information, file_header.clone())))
 	}
 
@@ -226,7 +226,7 @@ fn gen_filetype_encoding_information(
 	match current_file_header.file_type {
 		FileType::File => {
 			#[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
-			let reader = match File::open(&path) {
+			let reader = match File::open(path) {
 				Ok(reader) => Box::new(reader),
 				Err(_) => create_empty_reader()
 			};
@@ -255,10 +255,7 @@ fn gen_filetype_encoding_information(
 		FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
 		#[cfg(target_family = "unix")]
 		FileType::SpecialFile => {
-			let metadata = match std::fs::metadata(&path) {
-				Ok(metadata) => metadata,
-				Err(e) => return Err(e.into()),
-			};
+			let metadata = std::fs::metadata(path)?;
 
 			let specialfile_info = if metadata.file_type().is_char_device() {
 				SpecialFileEncodingInformation::Char(metadata.rdev())

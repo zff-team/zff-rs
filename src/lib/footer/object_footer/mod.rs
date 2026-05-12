@@ -65,13 +65,13 @@ impl ObjectFooter {
 				let length = Self::decode_header_length(data)? as usize;
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
-				Ok(ObjectFooter::Physical(ObjectFooterPhysical::decode_content(content_buffer)?))
+				Ok(ObjectFooter::Physical(ObjectFooterPhysical::decode_content(&content_buffer)?))
 			},
 			2 => {
 				let length = Self::decode_header_length(data)? as usize;
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
-				Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(content_buffer)?))
+				Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(&content_buffer)?))
 			},
 			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
@@ -189,13 +189,13 @@ impl EncryptedObjectFooter {
 				let length = Self::decode_header_length(data)? as usize;
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
-				Ok(EncryptedObjectFooter::Physical(EncryptedObjectFooterPhysical::decode_content(content_buffer)?))
+				Ok(EncryptedObjectFooter::Physical(EncryptedObjectFooterPhysical::decode_content(&content_buffer)?))
 			},
 			2 => {
 				let length = Self::decode_header_length(data)? as usize;
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
-				Ok(EncryptedObjectFooter::Logical(EncryptedObjectFooterLogical::decode_content(content_buffer)?))
+				Ok(EncryptedObjectFooter::Logical(EncryptedObjectFooterLogical::decode_content(&content_buffer)?))
 			},
 			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}

@@ -40,12 +40,12 @@ impl HeaderCoding for CompressionHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version(), self.algorithm.clone() as u8, self.level];
-		vec.append(&mut self.threshold.encode_directly());
+		vec.extend_from_slice(&self.threshold.encode_directly());
 		
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<CompressionHeader> {
+	fn decode_content(data: &[u8]) -> Result<CompressionHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let algorithm = match u8::decode_directly(&mut cursor) {

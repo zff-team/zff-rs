@@ -3,7 +3,7 @@ name = "zff"
 version = "3.0.0-rc.6"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2021"
-rust-version = "1.67.1"
+rust-version = "1.74.0"
 license = "MIT OR Apache-2.0"
 description = "This crate is a library to interact with zff, a file format for forensic images."
 readme = "./README.md"
@@ -60,8 +60,10 @@ posix-acl = "1.1.0"
 default = []
 serde = ["dep:serde", "dep:hex", "ordered-float/serde"]
 log = ["dep:log", "dep:hex"]
-input_tar = ["dep:tar"]
-alternative_inputs = ["input_tar"]
+logical_object_source_alternatives = ["los_tar"]
+los_tar = ["dep:tar"]
+virtual_object_sources = ["vos_tar"]
+vos_tar = ["dep:tar"]
 
 [dev-dependencies]
 hex = "0.4.3"

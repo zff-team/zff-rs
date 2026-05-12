@@ -2,7 +2,7 @@
 use super::*;
 
 // - internal
-use helper::{result_combine, makedev, parse_unix_timestamp_nanos};
+use helper::{result_combine, makedev};
 
 /// A [LogicalObjectSource] implementation for reading entries from a TAR archive.
 pub struct LogicalObjectSourceTar {
@@ -43,11 +43,11 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
     fn try_from(archive_path: &Path) -> Result<Self> {
         //TODO: check if this is an tar archive and return Err if not -
         // tar could have some magic bytes?
-        let file = std::fs::File::open(&archive_path)?;
+        let file = std::fs::File::open(archive_path)?;
         let decompressor = phollpers::compression::decompress(file)?;
         let mut archive = Archive::new(decompressor);
 
-        let tar_entry_reader_file = std::fs::File::open(&archive_path)?;
+        let tar_entry_reader_file = std::fs::File::open(archive_path)?;
         let decompressor = phollpers::compression::decompress(tar_entry_reader_file)?;
         let tar_stream_state_rc = Rc::new(RefCell::new(TarStreamState::new(decompressor)));
 
@@ -194,7 +194,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             root_dir_filenumbers,
             symlink_real_paths,
             hardlink_map,
-            directory_children: directory_children,
+            directory_children,
             special_files_rdev_map,
         })
     }
@@ -349,101 +349,4 @@ impl Read for TarEntryReader {
         st.absolute_pos += n as u64;
         Ok(n)
     }
-}
-
-// checks if a given path/file is "the root" or a full folder structure.
-// e.g. "/dev", "dev/", or "file.txt" are true, but "/dev/sda", "/decoder/file.txt"
-// "dev/sda" aren't.
-fn check_root_path<P: AsRef<Path>>(path: P) -> bool {
-    // This one is simple: if the path has a "/" (so it's absolute),
-    // The number of "components" is exactly 2 in case of "true" - for
-    // example: The components of "/dev" are "/" and "dev".
-    // The components of the relative path "dev/" are just ...
-    // a single one - "dev". 
-    // The components of "/dev/sda" are "/", "dev" and "sda" - 
-    // more that 2, so it is not a root file.
-    let count = if path.as_ref().has_root() {
-        2
-    } else {
-        1
-    };
-    if path.as_ref().components().count() == count {
-        true
-    } else {
-        false
-    }
-}
-
-fn get_file_header_tar<R: Read>(
-    entry: &mut Entry<R>,
-    filetype: FileType,
-    filename: PlatformString,
-    current_file_number: u64, 
-    parent_file_number: u64) -> Result<FileHeader> {
-
-    let metadata_ext = get_metadata_ext_tar(entry)?;
-
-    let file_header = FileHeader::new(
-                    current_file_number,
-                    filetype,
-                    filename,
-                    parent_file_number,
-                    metadata_ext);
-    Ok(file_header)
-}
-
-fn get_metadata_ext_tar<R: Read>(entry: &mut Entry<R>) -> Result<HashMap<String, MetadataExtendedValue>> {
-    let mut metadata_ext = HashMap::new();
-    let header = entry.header();
-    if let Ok(mode) = header.mode() {
-        metadata_ext.insert(METADATA_EXT_KEY_MODE.into(), mode.into());
-    }
-    if let Ok(uid) = header.uid() {
-        metadata_ext.insert(METADATA_EXT_KEY_UID.into(), uid.into());
-    }
-    if let Ok(gid) = header.gid() {
-        metadata_ext.insert(METADATA_EXT_KEY_GID.into(), gid.into());
-    }
-    if let Ok(mtime) = header.mtime() {
-        metadata_ext.insert(METADATA_MTIME.into(), mtime.into());
-    }
-
-    // entry.pax_extensions() returns possibly stored xattr's.
-    // We'll read them and store them in metada-extended map.
-    if let Some(pax_extensions) = entry.pax_extensions()? {
-        for ext_entry in pax_extensions {
-            let ext_entry = ext_entry?;
-            //try to use the UTF-8 version of the appropriate key
-            if let Ok(key) = ext_entry.key() {
-                //if the key is a valid UTF-8 version, we will also try to get an
-                // UTF-8 version of the appropriate value.
-                let ext_value = if let Ok(value) = ext_entry.value() {
-                    match key.trim() {
-                        METADATA_ATIME => MetadataExtendedValue::U64(parse_unix_timestamp_nanos(&value).unwrap_or(0)),
-                        METADATA_MTIME => MetadataExtendedValue::U64(parse_unix_timestamp_nanos(&value).unwrap_or(0)),
-                        METADATA_CTIME => MetadataExtendedValue::U64(parse_unix_timestamp_nanos(&value).unwrap_or(0)),
-                        METADATA_BTIME => MetadataExtendedValue::U64(parse_unix_timestamp_nanos(&value).unwrap_or(0)),
-                        // If the key is not in the predefined identifier list 
-                        // (see https://github.com/zff-team/zff-rs/wiki/Header-layout#file-metadata-extended-information),
-                        // but the value is a valid UTF-8 string (as checked earlier) - we nevertheless store the value as loose bytes
-                        // to avoid erroneously converted "strings".
-                        _ => MetadataExtendedValue::ByteArray(ext_entry.value_bytes().to_vec()),
-                    }
-                } else {
-                    MetadataExtendedValue::ByteArray(ext_entry.value_bytes().to_vec())
-                };
-                metadata_ext.insert(key.into(), ext_value);
-            } else {
-                // If the key is not a valid UTF-8 string, we'll log a warning.
-                // The specification of the metadata-extended HashMap defines the key as valid
-                // string. We can't store the key bytes, so we'll use a stringified b64 value of
-                // the appropriate key bytes.
-                let key = base64engine.encode(ext_entry.key_bytes());
-                let ext_value = MetadataExtendedValue::ByteArray(ext_entry.value_bytes().to_vec());
-                metadata_ext.insert(key.into(), ext_value);
-            }
-        }
-    }
-
-    Ok(metadata_ext)
 }

@@ -74,11 +74,10 @@ impl<R: Read + Seek> Read for ZffObjectReaderPhysical<R> {
 	fn read(&mut self, buffer: &mut [u8], ) -> std::io::Result<usize> {
 		let mut read_bytes = 0;
 		while read_bytes < buffer.len() {
-            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() {
-				if !self.refill_reader_cache()? {
-					break;
-				}
-            }
+            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() && 
+			!self.refill_reader_cache()? {
+				break;
+			}
             let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
             read_bytes += written;
 			self.position += written as u64;
@@ -94,14 +93,14 @@ impl<R: Read + Seek> Seek for ZffObjectReaderPhysical<R> {
 				self.position = value;
 			},
 			SeekFrom::Current(value) => if self.position as i64 + value < 0 {
-				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
 					self.position += value as u64;
 			} else {
 				self.position -= value as u64;
 			},
 			SeekFrom::End(value) => if self.position as i64 + value < 0 {
-				return Err(std::io::Error::new(std::io::ErrorKind::Other, ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
+				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
 			} else if value >= 0 {
 					self.position = self.object_footer.length_of_data + value as u64;
 			} else {

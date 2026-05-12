@@ -90,12 +90,12 @@ impl ObjectHeader {
 		K: AsRef<[u8]>,
 	{
 		let mut vec = Vec::new();
-		let mut encoded_header = self.encode_encrypted_header(key)?;
+		let encoded_header = self.encode_encrypted_header(key)?;
 		let identifier = HEADER_IDENTIFIER_OBJECT_HEADER;
 		let encoded_header_length = 4 + 8 + (encoded_header.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_header);
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+		vec.extend_from_slice(&encoded_header);
 
 		Ok(vec)
 	}
@@ -114,15 +114,15 @@ impl ObjectHeader {
 		};
 
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.object_number.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
 		let mut flags: u8 = 0;
 		flags += ENCRYPT_OBJECT_FLAG_VALUE;
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		vec.append(&mut flags.encode_directly());
-		vec.append(&mut encryption_header.encode_directly());
+		vec.extend_from_slice(&flags.encode_directly());
+		vec.extend_from_slice(&encryption_header.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
@@ -131,16 +131,16 @@ impl ObjectHeader {
 			key, data_to_encrypt,
 			self.object_number,
 			&encryption_header.algorithm)?;
-		vec.append(&mut encrypted_data.encode_directly());
+		vec.extend_from_slice(&encrypted_data.encode_directly());
 		Ok(vec)
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		
-		vec.append(&mut self.chunk_size.encode_directly());
-		vec.append(&mut self.compression_header.encode_directly());
-		vec.append(&mut self.description_header.encode_directly());
+		vec.extend_from_slice(&self.chunk_size.encode_directly());
+		vec.extend_from_slice(&self.compression_header.encode_directly());
+		vec.extend_from_slice(&self.description_header.encode_directly());
 		vec.push(self.object_type.clone() as u8);
 		vec
 	}
@@ -240,15 +240,15 @@ impl HeaderCoding for ObjectHeader {
 	/// encodes the (header) value/object directly (= without key).
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let mut encoded_object_number = self.object_number.encode_directly();
-		let mut encoded_header = self.encode_header();
+		let encoded_object_number = self.object_number.encode_directly();
+		let encoded_header = self.encode_header();
 		let identifier = Self::identifier();
 		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len() + encoded_object_number.len() + 1) as u64; //4 bytes identifier + 8 bytes for length + length of encoded content + len of object number + length of version
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
 		vec.push(Self::version());
-		vec.append(&mut encoded_object_number);
-		vec.append(&mut encoded_header);
+		vec.extend_from_slice(&encoded_object_number);
+		vec.extend_from_slice(&encoded_header);
 		vec
 	}
 
@@ -261,16 +261,16 @@ impl HeaderCoding for ObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		vec.append(&mut flags.encode_directly());
+		vec.extend_from_slice(&flags.encode_directly());
 		if let Some(encryption_header) = &self.encryption_header {
-			vec.append(&mut encryption_header.encode_directly())
+			vec.extend_from_slice(&encryption_header.encode_directly())
 		};
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&self.encode_content());
 
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<ObjectHeader> {
+	fn decode_content(data: &[u8]) -> Result<ObjectHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
@@ -430,19 +430,19 @@ impl HeaderCoding for EncryptedObjectHeader {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.object_number.encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
 		let mut flags: u8 = 0;
 		flags += ENCRYPT_OBJECT_FLAG_VALUE;
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
-		vec.append(&mut flags.encode_directly());
-		vec.append(&mut self.encryption_header.encode_directly());
-		vec.append(&mut self.encrypted_content.encode_directly());
+		vec.extend_from_slice(&flags.encode_directly());
+		vec.extend_from_slice(&self.encryption_header.encode_directly());
+		vec.extend_from_slice(&self.encrypted_content.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		let header_version = u8::decode_directly(&mut cursor)?;
 		if header_version != DEFAULT_HEADER_VERSION_OBJECT_HEADER {

@@ -24,4 +24,7 @@ pub trait ValueEncoder {
 
 	/// returns the identifier of the appropiate type.
 	fn identifier(&self) -> u8;
+
+	/// Returns the size of an encoded element.
+	fn encoded_size(&self) -> usize;
 }

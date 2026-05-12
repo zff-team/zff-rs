@@ -145,12 +145,12 @@ impl FileHeader {
 	{
 		let mut vec = Vec::new();
 		let encryption_information = encryption_information.borrow();
-		let mut encoded_header = self.encode_encrypted_header(&encryption_information.encryption_key, &encryption_information.algorithm)?;
+		let encoded_header = self.encode_encrypted_header(&encryption_information.encryption_key, &encryption_information.algorithm)?;
 		let identifier = HEADER_IDENTIFIER_FILE_HEADER;
 		let encoded_header_length = 4 + 8 + (encoded_header.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_header);
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+		vec.extend_from_slice(&encoded_header);
 
 		Ok(vec)
 	}
@@ -161,8 +161,8 @@ impl FileHeader {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.file_number.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.file_number.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
@@ -172,16 +172,16 @@ impl FileHeader {
 			self.file_number,
 			algorithm
 			)?;
-		vec.append(&mut encrypted_data.encode_directly());
+		vec.extend_from_slice(&encrypted_data.encode_directly());
 		Ok(vec)
 	}
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut (self.file_type.clone() as u8).encode_directly());
-		vec.append(&mut self.filename.encode_directly());
-		vec.append(&mut self.parent_file_number.encode_directly());
-		vec.append(&mut self.metadata_ext.encode_directly());
+		vec.extend_from_slice(&(self.file_type.clone() as u8).encode_directly());
+		vec.extend_from_slice(&self.filename.encode_directly());
+		vec.extend_from_slice(&self.parent_file_number.encode_directly());
+		vec.extend_from_slice(&self.metadata_ext.encode_directly());
 		vec
 	}
 
@@ -263,14 +263,14 @@ impl HeaderCoding for FileHeader {
 	
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.file_number.encode_directly());
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.file_number.encode_directly());
+		vec.extend_from_slice(&self.encode_content());
 		vec
 		
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<FileHeader> {
+	fn decode_content(data: &[u8]) -> Result<FileHeader> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
@@ -468,7 +468,7 @@ impl ValueEncoder for Vec<MetadataExtendedValue> {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		for value in self {
-			vec.append(&mut value.encode_directly());
+			vec.extend_from_slice(&value.encode_directly());
 		}
 		vec
 	}
@@ -480,21 +480,25 @@ impl ValueEncoder for Vec<MetadataExtendedValue> {
 	fn encode_with_identifier(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.push(self.identifier());
-		vec.append(&mut (self.len() as u64).encode_directly());
+		vec.extend_from_slice(&(self.len() as u64).encode_directly());
 		for value in self {
-			vec.append(&mut value.encode_with_identifier());
+			vec.extend_from_slice(&value.encode_with_identifier());
 		}
 		vec
+	}
+
+	fn encoded_size(&self) -> usize {
+		self.iter().map(ValueEncoder::encoded_size).sum()
 	}
 }
 
 impl ValueEncoder for HashMap<String, MetadataExtendedValue> {
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut (self.len() as u64).encode_directly());
+		vec.extend_from_slice(&(self.len() as u64).encode_directly());
 		for (key, value) in self {
-			vec.append(&mut key.encode_directly());
-			vec.append(&mut value.encode_with_identifier());
+			vec.extend_from_slice(&key.encode_directly());
+			vec.extend_from_slice(&value.encode_with_identifier());
 		}
 		vec
 	}
@@ -506,12 +510,19 @@ impl ValueEncoder for HashMap<String, MetadataExtendedValue> {
 	fn encode_with_identifier(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.push(self.identifier());
-		vec.append(&mut (self.len() as u64).encode_directly());
+		vec.extend_from_slice(&(self.len() as u64).encode_directly());
 		for (key, value) in self {
-			vec.append(&mut key.encode_directly());
-			vec.append(&mut value.encode_with_identifier());
+			vec.extend_from_slice(&key.encode_directly());
+			vec.extend_from_slice(&value.encode_with_identifier());
 		}
 		vec
+	}
+
+	fn encoded_size(&self) -> usize {
+		8 + self
+			.iter()
+			.map(|(key, value)| key.encoded_size() + value.encoded_size())
+			.sum::<usize>()
 	}
 }
 
@@ -561,6 +572,28 @@ impl ValueEncoder for MetadataExtendedValue {
 			MetadataExtendedValue::Vector(value) => value.encode_with_identifier(),
 			MetadataExtendedValue::Bool(value) => value.encode_with_identifier(),
 			MetadataExtendedValue::PlatformString(value) => value.encode_with_identifier(),
+		}
+	}
+
+	fn encoded_size(&self) -> usize {
+		match self {
+			MetadataExtendedValue::U8(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::U16(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::U32(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::U64(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::I8(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::I16(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::I32(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::I64(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::String(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::Hashmap(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::BTreeMap(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::ByteArray(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::F32(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::F64(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::Vector(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::Bool(value) => value.encode_with_identifier().len(),
+			MetadataExtendedValue::PlatformString(value) => value.encode_with_identifier().len(),
 		}
 	}
 }

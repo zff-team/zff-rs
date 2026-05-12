@@ -53,12 +53,12 @@ impl FileFooter {
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.acquisition_start.encode_directly());
-		vec.append(&mut self.acquisition_end.encode_directly());
-		vec.append(&mut self.hash_header.encode_directly());
-		vec.append(&mut self.first_chunk_number.encode_directly());
-		vec.append(&mut self.number_of_chunks.encode_directly());
-		vec.append(&mut self.length_of_data.encode_directly());
+		vec.extend_from_slice(&self.acquisition_start.encode_directly());
+		vec.extend_from_slice(&self.acquisition_end.encode_directly());
+		vec.extend_from_slice(&self.hash_header.encode_directly());
+		vec.extend_from_slice(&self.first_chunk_number.encode_directly());
+		vec.extend_from_slice(&self.number_of_chunks.encode_directly());
+		vec.extend_from_slice(&self.length_of_data.encode_directly());
 		vec
 	}
 
@@ -71,12 +71,12 @@ impl FileFooter {
 	{
 		let mut vec = Vec::new();
 		let encryption_information = encryption_information.borrow();
-		let mut encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
+		let encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
 		let identifier = Self::identifier();
 		let encoded_header_length = 4 + 8 + (encoded_footer.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_footer);
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+		vec.extend_from_slice(&encoded_footer);
 
 		Ok(vec)
 	}
@@ -87,8 +87,8 @@ impl FileFooter {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.file_number.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.file_number.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
@@ -98,7 +98,7 @@ impl FileFooter {
 			self.file_number,
 			algorithm
 			)?;
-		vec.append(&mut encrypted_data.encode_directly());
+		vec.extend_from_slice(&encrypted_data.encode_directly());
 		Ok(vec)
 	}
 
@@ -167,11 +167,11 @@ impl HeaderCoding for FileFooter {
 	}
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.file_number.encode_directly());
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&self.file_number.encode_directly());
+		vec.extend_from_slice(&self.encode_content());
 		vec
 	}
-	fn decode_content(data: Vec<u8>) -> Result<FileFooter> {
+	fn decode_content(data: &[u8]) -> Result<FileFooter> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;

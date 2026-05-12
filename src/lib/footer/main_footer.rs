@@ -25,6 +25,7 @@ pub struct MainFooter {
 	pub footer_offset: u64,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl MainFooter {
 	/// creates a new MainFooter with a given values.
 	pub fn new(
@@ -117,21 +118,21 @@ impl HeaderCoding for MainFooter {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.number_of_segments.encode_directly());
-		vec.append(&mut self.object_header.encode_directly());
-		vec.append(&mut self.object_footer.encode_directly());
-		vec.append(&mut self.chunk_header_maps.encode_directly());
-		vec.append(&mut self.chunk_samebytes_maps.encode_directly());
-		vec.append(&mut self.chunk_dedup_maps.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.number_of_segments.encode_directly());
+		vec.extend_from_slice(&self.object_header.encode_directly());
+		vec.extend_from_slice(&self.object_footer.encode_directly());
+		vec.extend_from_slice(&self.chunk_header_maps.encode_directly());
+		vec.extend_from_slice(&self.chunk_samebytes_maps.encode_directly());
+		vec.extend_from_slice(&self.chunk_dedup_maps.encode_directly());
 		if let Some(description_notes) = &self.description_notes {
-			vec.append(&mut description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
+			vec.extend_from_slice(&description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
 		};
-		vec.append(&mut self.footer_offset.encode_directly());
+		vec.extend_from_slice(&self.footer_offset.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<MainFooter> {
+	fn decode_content(data: &[u8]) -> Result<MainFooter> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let number_of_segments = u64::decode_directly(&mut cursor)?;

@@ -1,15 +1,26 @@
 // - Parent
 use super::*;
 
-
+/// Encodes the type-specific content stored in a [VirtualFileFooter].
+///
+/// For regular virtual files this stores the location of the serialized
+/// [VirtualFileMap], while other variants carry the data needed to represent
+/// directories, links, and special files directly in the footer (inline).
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VirtualFileFooterContent {
-	FileMap(u64, u64), // contains (segment_no, offset) the appropriate filemap
+	/// Contains the (segment_no, offset) tuple of the corresponding serialized
+	/// [`VirtualFileMap`].
+	FileMap(u64, u64),
+	/// Contains the file numbers of all direct children of the directory.
 	Directory(Vec<u64>),
+	/// Contains the symlink target path.
 	Symlink(PlatformString),
+	/// Contains the file number of the referenced hardlink target.
 	Hardlink(u64),
-	SpecialFile(u64, SpecialFileType) //rdev-id, type
+	/// Contains the merged rdev identifier and the corresponding special file
+	/// type.
+	SpecialFile(u64, SpecialFileType)
 }
 
 impl From<VirtualFileContent> for VirtualFileFooterContent {
@@ -28,7 +39,7 @@ impl From<VirtualFileContent> for VirtualFileFooterContent {
 impl VirtualFileFooterContent {
 	fn flag(&self) -> u8 {
 		match self {
-			VirtualFileFooterContent::FileMap(_, _) => VIRTUALFILEFOOTERCONTENT_VLFM,
+			VirtualFileFooterContent::FileMap(_, _) => VIRTUALFILEFOOTERCONTENT_VFM,
 			VirtualFileFooterContent::Directory(_) => VIRTUALFILEFOOTERCONTENT_DIRECTORY,
 			VirtualFileFooterContent::Symlink(_) => VIRTUALFILEFOOTERCONTENT_SYMLINK,
 			VirtualFileFooterContent::Hardlink(_) => VIRTUALFILEFOOTERCONTENT_HARDLINK,
@@ -40,7 +51,7 @@ impl VirtualFileFooterContent {
 		match self {
 			VirtualFileFooterContent::FileMap(segment_no, offset) => {
 				let mut vec = segment_no.encode_directly();
-				vec.append(&mut offset.encode_directly());
+				vec.extend_from_slice(&offset.encode_directly());
 				vec
 			},
 			VirtualFileFooterContent::Directory(filenumbers) => filenumbers.encode_directly(),
@@ -48,7 +59,7 @@ impl VirtualFileFooterContent {
 			VirtualFileFooterContent::Hardlink(hardlink) => hardlink.encode_directly(),
 			VirtualFileFooterContent::SpecialFile(rdev_id, stype) => {
 				let mut vec = rdev_id.encode_directly();
-				vec.append(&mut (*stype as u8).encode_directly());
+				vec.extend_from_slice(&(*stype as u8).encode_directly());
 				vec
 			}
 		}
@@ -62,8 +73,22 @@ impl ValueEncoder for VirtualFileFooterContent {
 
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = self.flag().encode_directly();
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&self.encode_content());
 		vec
+	}
+
+	fn encoded_size(&self) -> usize {
+		1 + match self {
+			VirtualFileFooterContent::FileMap(segment_no, offset) => {
+				segment_no.encoded_size() + offset.encoded_size()
+			},
+			VirtualFileFooterContent::Directory(filenumbers) => filenumbers.encoded_size(),
+			VirtualFileFooterContent::Symlink(symlink) => symlink.encoded_size(),
+			VirtualFileFooterContent::Hardlink(hardlink) => hardlink.encoded_size(),
+			VirtualFileFooterContent::SpecialFile(rdev_id, stype) => {
+				rdev_id.encoded_size() + (*stype as u8).encoded_size()
+			},
+		}
 	}
 }
 
@@ -73,7 +98,7 @@ impl ValueDecoder for VirtualFileFooterContent {
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
 		let flag = u8::decode_directly(data)?;
 		match flag {
-			VIRTUALFILEFOOTERCONTENT_VLFM =>  {
+			VIRTUALFILEFOOTERCONTENT_VFM =>  {
 				let segment_no = u64::decode_directly(data)?;
 				let offset = u64::decode_directly(data)?;
 				Ok(Self::FileMap(segment_no, offset))
@@ -95,22 +120,31 @@ impl ValueDecoder for VirtualFileFooterContent {
 				let special_file_type = SpecialFileType::try_from(u8::decode_directly(data)?)?;
 				Ok(Self::SpecialFile(rdev_id, special_file_type))
 			},
-			_ => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_INVALID_TYPE_FLAG_VALUE)),
+			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_INVALID_TYPE_FLAG_VALUE)),
 		}
 	}
 }
 
+/// Footer of a virtual logical file.
+///
+/// This footer stores the virtual file's file number, hash metadata, logical
+/// data length, and the type-specific [VirtualFileFooterContent].
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualFileFooter {
+    /// The file number of the virtual file this footer belongs to.
     pub filenumber: u64,
+    /// The hash information for the virtual file data.
     pub hash_header: HashHeader,
+    /// The logical length of the represented file data in bytes.
     pub length_of_data: u64,
+    /// The type-specific virtual file footer content.
     pub vffc: VirtualFileFooterContent,
 }
 
 impl VirtualFileFooter {
-	/// creates a new VirtualFileFooter by given values/hashes.
+	/// Creates a new [VirtualFileFooter] from the file number, hash
+	/// information, logical data length, and footer content.
 	pub fn new(
 		filenumber: u64,
 		hash_header: HashHeader, 
@@ -126,9 +160,9 @@ impl VirtualFileFooter {
 
 	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.append(&mut self.hash_header.encode_directly());
-		vec.append(&mut self.length_of_data.encode_directly());
-		vec.append(&mut self.vffc.encode_directly());
+		vec.extend_from_slice(&self.hash_header.encode_directly());
+		vec.extend_from_slice(&self.length_of_data.encode_directly());
+		vec.extend_from_slice(&self.vffc.encode_directly());
 		vec
 	}
 
@@ -141,12 +175,12 @@ impl VirtualFileFooter {
 	{
 		let mut vec = Vec::new();
 		let encryption_information = encryption_information.borrow();
-		let mut encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
+		let encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
 		let identifier = Self::identifier();
 		let encoded_header_length = 4 + 8 + (encoded_footer.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_footer);
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+		vec.extend_from_slice(&encoded_footer);
 
 		Ok(vec)
 	}
@@ -157,8 +191,8 @@ impl VirtualFileFooter {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.filenumber.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.filenumber.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.encode_content());
@@ -168,7 +202,7 @@ impl VirtualFileFooter {
 			self.filenumber,
 			algorithm
 			)?;
-		vec.append(&mut encrypted_data.encode_directly());
+		vec.extend_from_slice(&encrypted_data.encode_directly());
 		Ok(vec)
 	}
 
@@ -229,12 +263,12 @@ impl HeaderCoding for VirtualFileFooter {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.filenumber.encode_directly());
-		vec.append(&mut self.encode_content());
+		vec.extend_from_slice(&self.filenumber.encode_directly());
+		vec.extend_from_slice(&self.encode_content());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let filenumber = u64::decode_directly(&mut cursor)?;
@@ -253,6 +287,8 @@ impl Encryption for VirtualFileFooter {
 	}
 }
 
+/// Maps virtual file offsets to the source extents that provide the file's
+/// logical data.
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualFileMap {
@@ -264,6 +300,8 @@ pub struct VirtualFileMap {
 }
 
 impl VirtualFileMap {
+	/// Creates a new [`VirtualFileMap`] from the virtual file number and its
+	/// extent mapping.
 	pub fn new(filenumber: u64, extents: BTreeMap<u64, VirtualFileExtent>) -> Self {
 		Self {
 			filenumber,
@@ -271,14 +309,19 @@ impl VirtualFileMap {
 		}
 	}
 
+	/// Encrypts and encodes this virtual file map using the given key and
+	/// algorithm.
+	///
+	/// # Error
+	/// Returns an error if encryption fails.
 	pub fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
 	where
 		K: AsRef<[u8]>,
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let mut vec = Vec::new();
-		vec.append(&mut Self::version().encode_directly());
-		vec.append(&mut self.filenumber.encode_directly());
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.filenumber.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
 		data_to_encrypt.append(&mut self.extents.encode_directly());
@@ -288,7 +331,7 @@ impl VirtualFileMap {
 			self.filenumber,
 			algorithm
 			)?;
-		vec.append(&mut encrypted_data.encode_directly());
+		vec.extend_from_slice(&encrypted_data.encode_directly());
 		Ok(vec)
 	}
 
@@ -332,12 +375,12 @@ impl HeaderCoding for VirtualFileMap {
 
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
-		vec.append(&mut self.filenumber.encode_directly());
-		vec.append(&mut self.extents.encode_directly());
+		vec.extend_from_slice(&self.filenumber.encode_directly());
+		vec.extend_from_slice(&self.extents.encode_directly());
 		vec
 	}
 
-	fn decode_content(data: Vec<u8>) -> Result<Self> {
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let filenumber = u64::decode_directly(&mut cursor)?;
@@ -366,7 +409,8 @@ impl From<VirtualFileMap> for Vec<(u64, VirtualFileExtent)> {
 	}
 }
 
-
+/// Maps a contiguous byte range of a virtual file to a contiguous byte range in
+/// a source file stored in a zff object.
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualFileExtent {
@@ -376,11 +420,13 @@ pub struct VirtualFileExtent {
     pub source_filenumber: u64,
     /// The appropriate source offset at which the data section starts and from which it should be read.
     pub source_offset: u64,
-    /// The length of this data section (**must** always be >=1!).
+    /// The length of this data section (**must** always be >=1 - obviously :D).
     pub length: u64,
 }
 
 impl VirtualFileExtent {
+	/// Creates a new [`VirtualFileExtent`] describing one source-backed extent of
+	/// a virtual file.
 	pub fn new(source_object_number: u64, source_filenumber: u64, source_offset: u64, length: u64) -> Self {
 		Self {
 			source_object_number,
@@ -398,11 +444,18 @@ impl ValueEncoder for VirtualFileExtent {
 
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = vec![];
-		vec.append(&mut self.source_object_number.encode_directly());
-		vec.append(&mut self.source_filenumber.encode_directly());
-		vec.append(&mut self.source_offset.encode_directly());
-		vec.append(&mut self.length.encode_directly());
+		vec.extend_from_slice(&self.source_object_number.encode_directly());
+		vec.extend_from_slice(&self.source_filenumber.encode_directly());
+		vec.extend_from_slice(&self.source_offset.encode_directly());
+		vec.extend_from_slice(&self.length.encode_directly());
 		vec
+	}
+
+	fn encoded_size(&self) -> usize {
+		self.source_object_number.encoded_size()
+			+ self.source_filenumber.encoded_size()
+			+ self.source_offset.encoded_size()
+			+ self.length.encoded_size()
 	}
 }
 

@@ -9,16 +9,25 @@ mod virtual_file_encoder;
 pub use file_encoder::*;
 pub use virtual_file_encoder::*;
 
+/// Metadata extracted from a [VirtualFileFooter].
+///
+/// This type is the reader-facing representation of a virtual file footer and
+/// stores the footer information without the virtual file number, which is
+/// already available in the appropriate [FileHeader].
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct VirtualFileFooterMetadata {
+	/// The hash information for the virtual file data.
 	pub hash_header: HashHeader,
+	/// The logical length of the represented file data in bytes.
     pub length_of_data: u64,
+	/// The virtual file specific content description.
     pub vfc: VirtualFileContent,
 }
 
 impl VirtualFileFooterMetadata {
-	fn new(hash_header: HashHeader, length_of_data: u64, vfc: VirtualFileContent) -> Self {
+	/// Creates a new [VirtualFileFooterMetadata] from the given data.
+	pub fn new(hash_header: HashHeader, length_of_data: u64, vfc: VirtualFileContent) -> Self {
 		Self {
 			hash_header,
 			length_of_data,
@@ -38,15 +47,29 @@ impl From<VirtualFileFooter> for VirtualFileFooterMetadata {
 }
 
 
+/// Describes how a virtual file is represented inside a
+/// [VirtualFileFooterMetadata].
+///
+/// Depending on the virtual file type, the content either references a virtual
+/// file map for regular file data or stores the metadata needed to represent
+/// directories, links, and special files.
 #[derive(Debug,Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum VirtualFileContent {
-	FileMap(VirtualFileMap), // contains the real VFM
-	FileMapPosition(u64, u64), // contains (segment_no, offset) the appropriate filemap
+	/// Contains the resolved [VirtualFileMap] for a regular virtual file.
+	FileMap(VirtualFileMap),
+	/// Contains the (segment_no, offset) tuple pointing to the corresponding
+	/// serialized [VirtualFileMap].
+	FileMapPosition(u64, u64),
+	/// Contains the file numbers of all direct children of the directory.
 	Directory(Vec<u64>),
+	/// Contains the symlink target path.
 	Symlink(PlatformString),
+	/// Contains the file number of the referenced hardlink target.
 	Hardlink(u64),
-	SpecialFile(u64, SpecialFileType) //rdev-id, type
+	/// Contains the merged `rdev` identifier and the corresponding special file
+	/// type.
+	SpecialFile(u64, SpecialFileType)
 }
 
 impl From<VirtualFileFooterContent> for VirtualFileContent {
@@ -61,8 +84,12 @@ impl From<VirtualFileFooterContent> for VirtualFileContent {
 	}
 }
 
+/// References the location of a serialized [VirtualFileMap] inside a zff
+/// segment.
 pub struct FileMapPosition {
+	/// The segment number containing the serialized virtual file map.
 	pub segment_no: u64,
+	/// The byte offset of the serialized virtual file map inside the appropriate segment.
 	pub offset: u64
 }
 
@@ -75,8 +102,10 @@ impl From<(u64, u64)> for FileMapPosition {
 /// The [FileMetadata] contains the appropriate metadata for a zff logical file or a zff virtual logical file.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FileMetadata {
-	pub header: FileHeader,
-	pub footer: FileFooterMetadata,
+	/// The file header describing the logical or virtual file.
+	pub(crate) header: FileHeader,
+	/// The file footer metadata containing file-specific trailing information.
+	pub(crate) footer: FileFooterMetadata,
 }
 
 impl FileMetadata {
@@ -113,7 +142,7 @@ impl FileMetadata {
 	/// Returns None in case of [FileFooter].
 	pub(crate) fn vffc(&self) -> Result<&VirtualFileContent> {
 		match &self.footer {
-			FileFooterMetadata::FileFooter(_) => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_MISSING_VFM)),
+			FileFooterMetadata::FileFooter(_) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_MISSING_VFM)),
 			FileFooterMetadata::VirtualFileFooterMetadata(footer) => {
 				Ok(&footer.vfc)
 			}
