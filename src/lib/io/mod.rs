@@ -4,7 +4,7 @@ use super::{*, header::*, footer::*, helper::*};
 // - STD
 use std::fs::File;
 #[cfg(target_family = "unix")]
-use std;
+use std::os::unix::fs::FileTypeExt;
 
 // - modules
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
@@ -289,7 +289,19 @@ pub(crate) fn get_file_header(path: &Path, current_file_number: u64, parent_file
     } else if metadata.file_type().is_symlink() {
         FileType::Symlink
     } else {
-        return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
+        #[cfg(unix)]
+        {
+            let ft = metadata.file_type();
+            if ft.is_block_device() || ft.is_char_device() || ft.is_fifo() || ft.is_socket() {
+                FileType::SpecialFile
+            } else {
+                return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
+        }
     };
 
     let filename = match path.file_name() {
@@ -546,16 +558,20 @@ pub(crate) fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata
 
 #[cfg_attr(not(feature = "log"), allow(unused_variables))]
 pub(crate) fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mut FileHeader) {
-	match File::open(path.as_ref()) {
-		Ok(_) => (),
-		Err(e) => {
-			#[cfg(feature = "log")]
-			warn!("The content of the file {} can't be read, due the following error: {e}.\
-				The file will be stored as an empty file.", path.as_ref().display());
-			// set the "ua" tag and the full path in file metadata.
-			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string().into());
-		},
-	};
+    // If the file is a regular file, we have to ensure that the file content is accessable.
+    // If not, we have to store this information.
+    if file_header.file_type == FileType::File || file_header.file_type == FileType::Hardlink {
+        match File::open(path.as_ref()) {
+            Ok(_) => (),
+            Err(e) => {
+                #[cfg(feature = "log")]
+                warn!("The content of the file {} can't be read, due the following error: {e}.\
+                    The file will be stored as an empty file.", path.as_ref().display());
+                // set the "ua" tag and the full path in file metadata.
+                file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string().into());
+            },
+        }
+    };
 }
 
 pub(crate) fn create_iterator<C: AsRef<Path>>(
