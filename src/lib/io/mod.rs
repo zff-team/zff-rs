@@ -3,6 +3,8 @@ use super::{*, header::*, footer::*, helper::*};
 
 // - STD
 use std::fs::File;
+#[cfg(target_family = "unix")]
+use std;
 
 // - modules
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.

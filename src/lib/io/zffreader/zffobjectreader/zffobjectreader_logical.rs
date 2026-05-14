@@ -25,6 +25,47 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			Self::with_obj_metadata(object_no, metadata)
 	}
 
+	/// Returns the appropriate [FileHeader](crate::header::FileHeader) of the current active file.
+	pub fn current_fileheader(&self) -> Result<FileHeader> {
+		let header_segment_number = match self.object_footer.file_header_segment_numbers().get(&self.active_file) {
+			Some(no) => no,
+			None => return Err(ZffError::new(
+				ZffErrorKind::Missing,
+				format!("(current_fileheader) {ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
+		};
+		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
+			Some(offset) => offset,
+			None => return Err(ZffError::new(
+				ZffErrorKind::EncodingError, 
+				format!("{ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO}{}", self.object_header.object_number))),
+		};
+		let enc_info = if let Some(encryption_header) = &self.object_header.encryption_header {
+			let key = match encryption_header.get_encryption_key() {
+				Some(key) => key,
+				None => return Err(ZffError::new(
+					ZffErrorKind::EncryptionError, 
+					ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
+			};
+			Some(EncryptionInformation::new(key, encryption_header.algorithm.clone()))
+		} else {
+			None
+		};
+		match self.metadata.segments.write().unwrap().get_mut(header_segment_number) {
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
+			Some(segment) => {
+				segment.seek(SeekFrom::Start(*header_offset))?;
+				//check encryption
+				if let Some(enc_info) = &enc_info {
+					Ok(FileHeader::decode_encrypted_header_with_key(segment, enc_info)?)
+				} else {
+					Ok(FileHeader::decode_directly(segment)?)
+				}
+			}
+		}
+	}
+
 	fn with_obj_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 		#[cfg(feature = "log")]
 		debug!("Initialize logical object {}", object_no);
@@ -135,7 +176,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			Some(_) => self.active_file = filenumber,
 			None => return Err(ZffError::new(
 				ZffErrorKind::Missing, 
-				format!("{ERROR_MISSING_FILE_NUMBER}{filenumber}")))
+				format!("(set_active_file) {ERROR_MISSING_FILE_NUMBER}{filenumber}")))
 		}
 		self.reader_cache.get_mut().clear();
 		Ok(())
@@ -149,7 +190,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			Some(metadata) => Ok(metadata),
 			None => Err(ZffError::new(
 				ZffErrorKind::Missing, 
-				format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
+				format!("(filemetadata) {ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
 		}
 	}
 
@@ -160,9 +201,14 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 
 	// Returns true if cache would filled, false if cache is empty (end of reader is reached).
 	fn refill_reader_cache(&mut self) -> std::io::Result<bool> {
-		let filemetadata = self.files.get(&self.active_file).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
+		let filemetadata = self.files.get(&self.active_file).ok_or(IoError::other(format!("(refill_reader_cache) {ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
 		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
 		let position = self.file_positions.get_mut(&self.active_file).unwrap();
+
+		if *position >= filemetadata.length_of_data() {
+			return Ok(false);
+		}
+
 		let chunk_size = self.object_header.chunk_size;
 		//unwrap is safe here: we've never initialized FileMetadata for ZffObjectReaderLogical with ::with_virtual_file_footer().
 		let first_chunk_number = filemetadata.first_chunk_number().unwrap();
@@ -173,7 +219,6 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		if current_chunk_number > last_chunk_number {
 			return Ok(false)
 		}
-
 		let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
 			vec![samebyte; chunk_size as usize]
 		} else {
@@ -181,6 +226,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
 		};
 		{
+			self.reader_cache.set_position(0);
 			let inner = self.reader_cache.get_mut();
 			inner.clear();
 			inner.extend_from_slice(&chunk_data[inner_position..]);
@@ -197,7 +243,6 @@ impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
 			!self.refill_reader_cache()? {
 					break;
 			}
-            
 			let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
             read_bytes += written;
 			// unwrap is safe here: we have called refill_reader_cache() before which calls self.file.get(&self.acitve_file).

@@ -1,5 +1,6 @@
 // - Parent
 use super::*;
+use crate::footer::{VirtualFileExtent, VirtualFileMap};
 use crate::io::zffreader::ZffReader;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +50,10 @@ impl VosFileEntry {
 
 pub struct VirtualObjectSourceLogicalTar<R: Read + Seek> {
     entries: BTreeMap<u64, VosEntry>, //filenumber, entry data
+    index_pointer: u64,
+    source_object_number: u64,
+    source_filenumber: u64,
+    root_dir_filenumbers: Vec<u64>,
     zffreader: ZffReader<R>,
     hash_types: Vec<HashType>,
     signing_key_bytes: Option<Vec<u8>>,
@@ -228,26 +233,167 @@ impl<R: Read + Seek> VirtualObjectSourceLogicalTar<R> {
         Ok(Self {
             entries: vos_entries,
             zffreader,
+            index_pointer: 1,
+            source_object_number: object_number,
+            source_filenumber: file_number,
+            root_dir_filenumbers,
             hash_types,
             signing_key_bytes,
         })
+    }
+
+    fn hash_zffreader_range(&mut self, start: u64, len: u64) -> Result<HashHeader> {
+        self.zffreader.seek(SeekFrom::Start(start))?;
+
+        let mut hashers = self.new_hashers();
+        let mut remaining = len;
+        let mut buffer = [0u8; 64 * 1024];
+        while remaining > 0 {
+            let bytes_to_read = remaining.min(buffer.len() as u64) as usize;
+            self.zffreader.read_exact(&mut buffer[..bytes_to_read])?;
+            for (_, hasher) in &mut hashers {
+                hasher.update(&buffer[..bytes_to_read]);
+            }
+            remaining -= bytes_to_read as u64;
+        }
+
+        self.finalize_hashers(hashers)
+    }
+
+    fn hash_bytes(&self, data: &[u8]) -> Result<HashHeader> {
+        let mut hashers = self.new_hashers();
+        for (_, hasher) in &mut hashers {
+            hasher.update(data);
+        }
+        self.finalize_hashers(hashers)
+    }
+
+    fn new_hashers(&self) -> Vec<(HashType, Box<dyn DynDigest>)> {
+        self.hash_types
+            .iter()
+            .map(|hash_type| (hash_type.clone(), Hash::new_hasher(hash_type)))
+            .collect()
+    }
+
+    fn finalize_hashers(&self, hashers: Vec<(HashType, Box<dyn DynDigest>)>) -> Result<HashHeader> {
+        let signing_key = match &self.signing_key_bytes {
+            Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
+            None => None,
+        };
+        let mut hash_values = Vec::new();
+        for (hash_type, hasher) in hashers {
+            let hash = hasher.finalize().to_vec();
+            let signature = signing_key
+                .as_ref()
+                .map(|signing_key| Signature::sign(signing_key, &hash));
+            hash_values.push(HashValue::new(hash_type, hash, signature));
+        }
+
+        Ok(HashHeader::new(hash_values))
     }
 }
 
 impl<R: Read + Seek> VirtualObjectSource for VirtualObjectSourceLogicalTar<R> {
     fn remaining_elements(&self) -> u64 {
-        unimplemented!()
+        let number_of_entries = self.entries.len() as u64;
+        if self.index_pointer > number_of_entries {
+            0
+        } else {
+            number_of_entries - self.index_pointer + 1
+        }
     }
 
     fn root_dir_filenumbers(&self) -> &Vec<u64> {
-        unimplemented!()
+        &self.root_dir_filenumbers
     }
 }
 
 impl<R: Read + Seek> Iterator for VirtualObjectSourceLogicalTar<R> {
     type Item = Result<(FileHeader, VirtualFileFooterMetadata)>;
 
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.index_pointer = n as u64 - 1;
+        self.next()
+    }
+
+    fn last(self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        let mut voslt = self;
+        voslt.index_pointer = voslt.entries.len() as u64 - 1;
+        voslt.next()
+    }
+
     fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!()
+        let entry = self.entries.get(&self.index_pointer)?.clone();
+        self.index_pointer += 1;
+        let file_header = entry.file_header.clone();
+        let (hash_header, length, vfc) = match entry.payload {
+            VosEntryPayload::File(vos_file_entry) => {
+                let hash_header = match self.hash_zffreader_range(
+                    vos_file_entry.entry_start,
+                    vos_file_entry.entry_len,
+                ) {
+                    Ok(hash_header) => hash_header,
+                    Err(e) => return Some(Err(e)),
+                };
+                let virtual_file_map = if vos_file_entry.entry_len == 0 {
+                    VirtualFileMap::new(file_header.file_number, BTreeMap::new())
+                } else {
+                    let virtual_file_extent = VirtualFileExtent::new(
+                        self.source_object_number,
+                        self.source_filenumber,
+                        vos_file_entry.entry_start,
+                        vos_file_entry.entry_len,
+                    );
+                    let mut extents = BTreeMap::new();
+                    extents.insert(0, virtual_file_extent);
+                    VirtualFileMap::new(file_header.file_number, extents)
+                };
+                (hash_header, vos_file_entry.entry_len, VirtualFileContent::FileMap(virtual_file_map))
+            },
+            VosEntryPayload::Directory(children) => {
+                let hash_header = match self.hash_bytes(&children.encode_directly()) {
+                    Ok(hash_header) => hash_header,
+                    Err(e) => return Some(Err(e)),
+                };
+                (hash_header, children.encode_directly().len() as u64, VirtualFileContent::Directory(children))
+            },
+            VosEntryPayload::Symlink(target) => {
+                let target = PlatformString::from(target.as_os_str());
+                let encoded_target = target.encode_directly();
+                let hash_header = match self.hash_bytes(&encoded_target) {
+                    Ok(hash_header) => hash_header,
+                    Err(e) => return Some(Err(e)),
+                };
+                (hash_header, encoded_target.len() as u64, VirtualFileContent::Symlink(target))
+            },
+            VosEntryPayload::HardLink(target_filenumber) => {
+                let encoded_target = target_filenumber.encode_directly();
+                let hash_header = match self.hash_bytes(&encoded_target) {
+                    Ok(hash_header) => hash_header,
+                    Err(e) => return Some(Err(e)),
+                };
+                (hash_header, encoded_target.len() as u64, VirtualFileContent::Hardlink(target_filenumber))
+            },
+            VosEntryPayload::SpecialFile(special_file) => {
+                let (rdev_id, special_file_type) = match special_file {
+                    SpecialFileEncodingInformation::Fifo(rdev_id) => (rdev_id, SpecialFileType::Fifo),
+                    SpecialFileEncodingInformation::Char(rdev_id) => (rdev_id, SpecialFileType::Char),
+                    SpecialFileEncodingInformation::Block(rdev_id) => (rdev_id, SpecialFileType::Block),
+                    SpecialFileEncodingInformation::Socket(rdev_id) => (rdev_id, SpecialFileType::Socket),
+                };
+                let mut encoded_special_file = rdev_id.encode_directly();
+                encoded_special_file.extend_from_slice(&(special_file_type as u8).encode_directly());
+                let hash_header = match self.hash_bytes(&encoded_special_file) {
+                    Ok(hash_header) => hash_header,
+                    Err(e) => return Some(Err(e)),
+                };
+                (hash_header, encoded_special_file.len() as u64,VirtualFileContent::SpecialFile(rdev_id, special_file_type))
+            },
+        };
+        let virtual_file_footer_metadata = VirtualFileFooterMetadata::new(hash_header, length, vfc);
+        Some(Ok((file_header, virtual_file_footer_metadata)))
     }
 }

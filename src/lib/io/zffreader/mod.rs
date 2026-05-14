@@ -315,6 +315,42 @@ impl<R: Read + Seek> ZffReader<R> {
 		}
 	}
 
+	/// Returns the [FileHeader] of the appropriate active file.
+	/// # Error
+	/// May fail if   
+	/// - the active object is not a "logical" object.  
+	/// - the active file number was not set.  
+	/// - no object was set as active.  
+	pub fn current_fileheader(&mut self) -> Result<FileHeader> {
+		match self.object_reader.get(&self.active_object) {
+			Some(ZffObjectReader::Logical(reader)) => reader.current_fileheader(),
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			Some(ZffObjectReader::Virtual(reader)) => reader.current_fileheader(),
+			None => Err(ZffError::new(ZffErrorKind::Missing, self.active_object.to_string())),
+		}
+	}
+
+	/// Returns the [FileMetadata] of the appropriate active file.
+	/// # Error
+	/// May fail if   
+	/// - the active object is not a "logical" object.  
+	/// - the active file number was not set.  
+	/// - no object was set as active.  
+	pub fn current_filemetadata(&self) -> Result<&FileMetadata> {
+		match self.object_reader.get(&self.active_object) {
+			Some(ZffObjectReader::Logical(reader)) => {
+				Ok(reader.filemetadata()?)
+			},
+			Some(ZffObjectReader::Physical(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT)),
+			Some(ZffObjectReader::Encrypted(_)) => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT)),
+			Some(ZffObjectReader::Virtual(reader)) => reader.filemetadata(),
+			None => Err(ZffError::new(
+				ZffErrorKind::Missing, 
+				format!("{ERROR_MISSING_OBJECT_NO}{}", self.active_object))),
+		}
+	}
+
 	/// Will initialize the appropriate object.
 	/// # Error
 	/// May fail due to various conditions, e.g. corrupted or missing segments.

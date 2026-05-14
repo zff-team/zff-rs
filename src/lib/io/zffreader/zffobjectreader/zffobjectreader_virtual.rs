@@ -25,6 +25,14 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 			Self::with_obj_metadata(object_no, metadata)
 	}
 
+	/// Returns the [FileHeader] of the current active file
+	pub fn current_fileheader(&self) -> Result<FileHeader> {
+		let metadata = self.files
+		.get(&self.active_file)
+		.ok_or(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
+		Ok(metadata.header.clone())
+	}
+
 	/// Returns the VFM for the given filenumber by reading them directly from segment.
 	fn read_virtual_filemap(&self, filenumber: u64) -> Result<VirtualFileMap> {
 		let filemetadata = self.filemetadata_by_filenumber(filenumber)?;

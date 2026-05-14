@@ -103,9 +103,9 @@ impl From<(u64, u64)> for FileMapPosition {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FileMetadata {
 	/// The file header describing the logical or virtual file.
-	pub(crate) header: FileHeader,
+	pub header: FileHeader,
 	/// The file footer metadata containing file-specific trailing information.
-	pub(crate) footer: FileFooterMetadata,
+	pub footer: FileFooterMetadata,
 }
 
 impl FileMetadata {
@@ -125,14 +125,14 @@ impl FileMetadata {
 		}
 	}
 
-	pub(crate) fn first_chunk_number(&self) -> Option<u64> {
+	pub fn first_chunk_number(&self) -> Option<u64> {
 		match &self.footer {
 			FileFooterMetadata::VirtualFileFooterMetadata(_) => None,
 			FileFooterMetadata::FileFooter(footer) => Some(footer.first_chunk_number),
 		}
 	}
 
-	pub(crate) fn number_of_chunks(&self) -> Option<u64> {
+	pub fn number_of_chunks(&self) -> Option<u64> {
 		match &self.footer {
 			FileFooterMetadata::VirtualFileFooterMetadata(_) => None,
 			FileFooterMetadata::FileFooter(footer) => Some(footer.number_of_chunks),
@@ -169,7 +169,7 @@ impl FileMetadata {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum FileFooterMetadata {
+pub enum FileFooterMetadata {
 	FileFooter(FileFooter),
 	VirtualFileFooterMetadata(VirtualFileFooterMetadata),
 }

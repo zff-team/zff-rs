@@ -106,6 +106,7 @@ pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP: &str = "Coul
 pub(crate) const ERROR_NOT_IN_MAP: &str = "Data not in map";
 pub(crate) const ERROR_NO_INPUT_FILE: &str = "There is no input file";
 pub(crate) const ERROR_UNKNOWN_SPECIAL_FILETYPE: &str = "Unknown file type";
+pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str = "Could not read header offsets of object no. ";
 pub(crate) const ERROR_UNSUPPORTED_METADATA_EXT: &str = "Unsupported metadata extended type identifier: ";
 pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segment footer";
 pub(crate) const ERROR_UNDECODABLE_MAIN_FOOTER: &str = "Could not decode main footer";
@@ -122,15 +123,15 @@ pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable pos
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
 
-#[cfg(feature = "los_tar")]
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
 pub(crate) const ERROR_TAR_ENCODING_ERROR_NO_FILENAME: &str = "Missing filename for tar entry ";
 #[cfg(feature = "los_tar")]
 pub(crate) const ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF: &str = "unexpected EOF in tar entry";
 #[cfg(feature = "los_tar")]
 pub(crate) const ERROR_ENCODING_TAR_NO_BACKWARD: &str = "cannot seek backwards in forward tar stream";
-#[cfg(feature = "los_tar")]
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
 pub(crate) const ERROR_TAR_PREPROCESSED_ENTRY: &str ="cannot process the entry type. This tar entry type should already be preprocessed. This is an application bug. The appropriate entry type is: ";
-#[cfg(feature = "los_tar")]
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
 pub(crate) const ERROR_TAR_MISSING_HARDLINK_TARGET: &str = "Missing hardlink target for tar entry"; 
 
 // Default values

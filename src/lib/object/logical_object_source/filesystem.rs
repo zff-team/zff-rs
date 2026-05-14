@@ -141,6 +141,17 @@ impl LogicalObjectSourceFilesystem {
 				if metadata.file_type().is_dir() {
 					directories_to_traversal.push_back((inner_element.path(), parent_file_number, current_file_number));
 				} else {
+					let path = inner_element.path().clone();
+					let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
+						Ok(file_header) => file_header,
+						Err(e) => {
+							#[cfg(feature = "log")]
+							warn!("Unable to add file {}: {e}", path.to_string_lossy());
+							current_file_number -= 1;
+							continue
+						},
+					};
+
 					if let Some(files_vec) = directory_children.get_mut(&parent_file_number) {
 						files_vec.push(current_file_number);
 					} else {
@@ -152,18 +163,12 @@ impl LogicalObjectSourceFilesystem {
 						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),
 						Err(_) => symlink_real_paths.insert(current_file_number, PathBuf::from("")),
 					};
-					let path = inner_element.path().clone();
-					let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
-						Ok(file_header) => file_header,
-						Err(_) => continue,
-					};
 
 					//test if file is readable and exists.
 					check_file_accessibility(inner_element.path(), &mut file_header);
 					
 					#[cfg(target_family = "unix")]
 					add_to_hardlink_map(&mut hardlink_map, &metadata, current_file_number);
-
 					files.push((inner_element.path().clone(), file_header));
 				}
 			}

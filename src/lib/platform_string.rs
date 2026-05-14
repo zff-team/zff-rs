@@ -1,6 +1,6 @@
 // - Parent
 use super::*;
-
+use std::cmp::Ordering;
 
 /// Represents a platform-native string in an interoperable on-disk form.
 ///
@@ -219,6 +219,27 @@ impl ValueDecoder for PlatformString {
                 ZffErrorKind::EncodingError,
                 format!("Unknown PlatformString encoding flag: {value}"),
             )),
+        }
+    }
+}
+
+
+impl PartialOrd for PlatformString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PlatformString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Compare variants first
+        match (self, other) {
+            (Self::Unix(_), Self::WindowsUtf16Le(_)) => Ordering::Less,
+            (Self::WindowsUtf16Le(_), Self::Unix(_)) => Ordering::Greater,
+            // Same variant: compare bytes
+            (Self::Unix(a), Self::Unix(b)) | (Self::WindowsUtf16Le(a), Self::WindowsUtf16Le(b)) => {
+                a.cmp(b)
+            }
         }
     }
 }
