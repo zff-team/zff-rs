@@ -1175,7 +1175,7 @@ fn get_chunks_of_unencrypted_object<R: Read + Seek>(
 			}
 			chunk_numbers
 		},
-		ZffObjectReader::Virtual(reader) => {
+		ZffObjectReader::Virtual(_) => {
 			//TODO: not sure if I should return chunk numbers...I'll skip this and check this later
 			Vec::new()
 		},

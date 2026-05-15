@@ -52,6 +52,10 @@ impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 		let current_chunk_number = (first_chunk_number * chunk_size + self.position) / chunk_size;
 		let inner_position = (self.position % chunk_size) as usize; // the inner chunk position
 
+		if self.position >= self.object_footer.length_of_data {
+			return Ok(false);
+		}
+
 		if current_chunk_number > last_chunk_number {
 			return Ok(false)
 		}
@@ -62,6 +66,7 @@ impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 			get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
 		};
 		{
+			self.reader_cache.set_position(0);
 			let inner = self.reader_cache.get_mut();
 			inner.clear();
 			inner.extend_from_slice(&chunk_data[inner_position..]);

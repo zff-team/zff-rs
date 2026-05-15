@@ -16,6 +16,8 @@ pub struct ObjectFlags {
 	pub encryption: bool,
 	/// this flag is set, if signatures are available for this object.
 	pub sign_hash: bool,
+	/// this object is a "passive only" object and should be interpreted by a higher leveled virtual object
+	pub passive_object: bool,
 }
 
 impl From<u8> for ObjectFlags {
@@ -23,6 +25,7 @@ impl From<u8> for ObjectFlags {
 		Self {
 			encryption: flag_values & ENCRYPT_OBJECT_FLAG_VALUE != 0,
 			sign_hash: flag_values & SIGN_HASH_FLAG_VALUE != 0,
+			passive_object: flag_values & PASSIVE_OBJECT_FLAG != 0,
 		}
 	}
 }

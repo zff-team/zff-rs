@@ -36,6 +36,7 @@ pub struct ObjectFooterVirtual {
 }
 
 impl ObjectFooterVirtual {
+	/// Creates a new empty [ObjectFooterVirtual] with the given object number.
 	pub fn new_empty(object_number: u64) -> Self {
 		Self {
 			object_number,

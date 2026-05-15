@@ -241,7 +241,9 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
     }
 
     /// Generates the files for the current state of the ZFF container.
-    pub fn generate_files(&mut self) -> Result<()> {
+    /// Returns a Vec of generated file paths.
+    pub fn generate_files(&mut self) -> Result<Vec<PathBuf>> {
+        let mut generated_files = Vec::new();
         let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
         let mut initial_extend =  match &self.output {
             ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::Invalid, "")), //TODO: Define other kind of error here?
@@ -256,6 +258,8 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
                 ZffFilesOutput::NewContainer(ref path) => path.clone(),
                 ZffFilesOutput::ExtendContainer(ref path_vec) => path_vec[0].clone(), // should never get out of bound when fn setup_container was used before.
             };
+
+            generated_files.push(segment_filename.clone());
 
 	    	let mut output_file = match initial_extend {
                 false => {
@@ -287,7 +291,7 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
             }
 
             match self.next_segment() {
-                SegmentationState::LastSegmentFinished => return Ok(()),
+                SegmentationState::LastSegmentFinished => return Ok(generated_files),
                 SegmentationState::SegmentNotFinished => unreachable!(),
                 SegmentationState::SegmentFinished => ()
             };
@@ -917,6 +921,7 @@ fn setup_container<R: Read, C: Read + Seek>(
 
     setup_virtual_object_encoder(
         virtual_objects,
+        signature_key_bytes,
         &mut object_encoder)?;
 
     object_encoder.reverse();

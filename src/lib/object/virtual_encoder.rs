@@ -1,6 +1,7 @@
 // - Parent
 use super::{*, footer::*};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ReadState {
     /// The next call emits the current virtual file header.
     FileHeader,
@@ -32,6 +33,8 @@ pub struct VirtualObjectEncoder {
 	pub(crate) current_file_encoder: Option<VirtualFileEncoder>,
     /// Encryption information derived from the object header, if the object is encrypted.
     enc_info: Option<EncryptionInformation>,
+    /// Optional signing key used to sign virtual file hash values.
+    signing_key: Option<SigningKey>,
     /// Current position in the per-file emission state machine.
     read_state: ReadState,
 }
@@ -55,16 +58,23 @@ impl VirtualObjectEncoder {
     pub fn new(
         obj_header: ObjectHeader,
         mut virtual_object_source: Box<dyn VirtualObjectSource>,
+        signing_key_bytes: Option<Vec<u8>>,
     ) -> Result<Self> {
         let obj_footer = ObjectFooterVirtual::new_empty(obj_header.object_number);
         let enc_info = EncryptionInformation::try_from(&obj_header).ok();
-        let current_file_encoder = next_virtual_file_encoder(&mut virtual_object_source, &enc_info)?;
+        let signing_key = match &signing_key_bytes {
+            Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
+            None => None,
+        };
+        let current_file_encoder =
+            next_virtual_file_encoder(&mut virtual_object_source, &enc_info, &signing_key)?;
         Ok(Self {
             obj_header,
             obj_footer,
             virtual_object_source,
             current_file_encoder,
             enc_info,
+            signing_key,
             read_state: ReadState::FileHeader,
         })
     }
@@ -131,6 +141,7 @@ impl VirtualObjectEncoder {
                         Ok(EncodingState::PreparedData(PreparedData::PreparedFileHeader(file_encoder.encoded_header())))
                     },
                     ReadState::Vfm => {
+                        self.read_state = ReadState::FileFooter;
                         file_encoder.file_footer.vffc = VirtualFileFooterContent::FileMap(current_segment_no, current_offset);
                         // unwrap should be safe at this point: We will only reach the ReadState::VFM through ReadState::FileHeader
                         // which always ensures hat the VFM exists.
@@ -144,8 +155,14 @@ impl VirtualObjectEncoder {
                         match self.virtual_object_source.next() {
                             None => self.current_file_encoder = None,
                             Some(virtual_source) => {
-                                let (file_header, vffm) = virtual_source?;
-                                let vff = VirtualFileFooter::new(file_header.file_number, vffm.hash_header, vffm.length_of_data, vffm.vfc.clone().into());
+                                let (file_header, mut vffm) = virtual_source?;
+                                sign_hash_header(&mut vffm.hash_header, &self.signing_key);
+                                let vff = VirtualFileFooter::new(
+                                    file_header.file_number,
+                                    vffm.hash_header,
+                                    vffm.length_of_data,
+                                    vffm.vfc.clone().into(),
+                                );
                                 let vfm = match vffm.vfc {
                                     VirtualFileContent::FileMap(vfm) => Some(vfm),
                                     _ => None
@@ -188,17 +205,41 @@ impl VirtualObjectEncoder {
 /// [VirtualFileEncoder].
 ///
 /// Returns `Ok(None)` when the source has no further files.
-fn next_virtual_file_encoder(virtual_object_source: &mut Box<dyn VirtualObjectSource>, enc_info: &Option<EncryptionInformation>) -> Result<Option<VirtualFileEncoder>> {
+fn next_virtual_file_encoder(
+    virtual_object_source: &mut Box<dyn VirtualObjectSource>,
+    enc_info: &Option<EncryptionInformation>,
+    signing_key: &Option<SigningKey>,
+) -> Result<Option<VirtualFileEncoder>> {
     match virtual_object_source.next() {
         None => Ok(None),
         Some(virtual_source) => {
-            let (file_header, vffm) = virtual_source?;
-            let vff = VirtualFileFooter::new(file_header.file_number, vffm.hash_header, vffm.length_of_data, vffm.vfc.clone().into());
+            let (file_header, mut vffm) = virtual_source?;
+            sign_hash_header(&mut vffm.hash_header, signing_key);
+            let vff = VirtualFileFooter::new(
+                file_header.file_number,
+                vffm.hash_header,
+                vffm.length_of_data,
+                vffm.vfc.clone().into(),
+            );
             let vfm = match vffm.vfc {
                 VirtualFileContent::FileMap(vfm) => Some(vfm),
                 _ => None
             };
-            Ok(Some(VirtualFileEncoder::new(file_header, vff, vfm, enc_info.clone())))
+            Ok(Some(VirtualFileEncoder::new(
+                file_header,
+                vff,
+                vfm,
+                enc_info.clone(),
+            )))
+        }
+    }
+}
+
+fn sign_hash_header(hash_header: &mut HashHeader, signing_key: &Option<SigningKey>) {
+    if let Some(signing_key) = signing_key {
+        for hash_value in &mut hash_header.hashes {
+            let signature = Signature::sign(signing_key, &hash_value.hash);
+            hash_value.set_ed25519_signature(signature);
         }
     }
 }

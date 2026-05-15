@@ -125,6 +125,8 @@ impl FileMetadata {
 		}
 	}
 
+	/// Returns the first chunk number used for the appropriate file.
+	/// Returns Some(chunk_number) in case of a logical file and None in case of a virtual file.
 	pub fn first_chunk_number(&self) -> Option<u64> {
 		match &self.footer {
 			FileFooterMetadata::VirtualFileFooterMetadata(_) => None,
@@ -132,6 +134,8 @@ impl FileMetadata {
 		}
 	}
 
+	/// Returns the total number of chunks used for the appropriate file.
+	/// Returns Some(number_of_chunks) in case of a logical file and None in case of a virtual file.
 	pub fn number_of_chunks(&self) -> Option<u64> {
 		match &self.footer {
 			FileFooterMetadata::VirtualFileFooterMetadata(_) => None,
@@ -168,8 +172,11 @@ impl FileMetadata {
 	}
 }
 
+/// A Wrapper for logical objects [FileFooter] and virtual objects [VirtualFileFooterMetadata].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum FileFooterMetadata {
+	/// Contains a [FileFooter] used in logical objects.
 	FileFooter(FileFooter),
+	/// Contains a [VirtualFileFooterMetadata] used in virtual objects.
 	VirtualFileFooterMetadata(VirtualFileFooterMetadata),
 }

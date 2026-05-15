@@ -502,7 +502,9 @@ fn setup_logical_object_encoder<R: Read>(
 /// This function sets up the [ObjectEncoder] for the virtual objects.
 fn setup_virtual_object_encoder<R: Read>(
     virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
-    object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
+    signature_key_bytes: &Option<Vec<u8>>,
+    object_encoder: &mut Vec<ObjectEncoder<R>>,
+) -> Result<()> {
     for (virtual_object_header, virtual_object_source) in virtual_objects {
         #[cfg(feature = "log")]
         info!("Setting up virtual object encoder for object {}",
@@ -510,7 +512,9 @@ fn setup_virtual_object_encoder<R: Read>(
 
         let vobj = setup_virtual_object(
             virtual_object_header,
-            virtual_object_source)?;
+            virtual_object_source,
+            signature_key_bytes,
+        )?;
         object_encoder.push(ObjectEncoder::Virtual(Box::new(vobj)));
     }
     Ok(())
@@ -519,10 +523,13 @@ fn setup_virtual_object_encoder<R: Read>(
 fn setup_virtual_object(
     virtual_object_header: ObjectHeader,
     virtual_object_source: Box<dyn VirtualObjectSource>,
-    ) -> Result<VirtualObjectEncoder> {
+    signature_key_bytes: &Option<Vec<u8>>,
+) -> Result<VirtualObjectEncoder> {
     let virt_obj = VirtualObjectEncoder::new(
         virtual_object_header,
-        virtual_object_source)?;
+        virtual_object_source,
+        signature_key_bytes.clone(),
+    )?;
     Ok(virt_obj)
 }
 

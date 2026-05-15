@@ -5,7 +5,9 @@ use crate::io::zffreader::ZffReader;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct VosEntry {
+    /// File header reconstructed from the tar entry metadata.
     file_header: FileHeader,
+    /// Virtual payload description used to build the virtual file footer.
     payload: VosEntryPayload,
 }
 
@@ -24,16 +26,23 @@ impl VosEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum VosEntryPayload {
+    /// Regular file data stored as a byte range inside the source tar file.
     File(VosFileEntry),
-    Directory(Vec<u64>), // contains the appropriate children
-    Symlink(PathBuf), //contains the target path of the symlink
-    HardLink(u64), //contains the filenumber to the linked file,
-    SpecialFile(SpecialFileEncodingInformation), //contains the (merged) rdev and type
+    /// Directory payload containing the file numbers of the directory children.
+    Directory(Vec<u64>),
+    /// Symbolic link payload containing the target path.
+    Symlink(PathBuf),
+    /// Hard link payload containing the file number of the link target.
+    HardLink(u64),
+    /// Special file payload containing the merged `rdev` and special file type.
+    SpecialFile(SpecialFileEncodingInformation),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 struct VosFileEntry {
-    pub entry_start: u64, //start offset
+    /// Start offset of the regular file payload in the source object file.
+    pub entry_start: u64,
+    /// Length of the regular file payload in bytes.
     pub entry_len: u64,
 }
 
@@ -47,27 +56,68 @@ impl VosFileEntry {
 }
 
 #[derive(Debug)]
-
+/// Virtual object source for a logical tar file stored inside an existing ZFF
+/// object.
+///
+/// `VirtualObjectSourceLogicalTar` reads a tar archive through a [ZffReader],
+/// builds an in-memory index of its entries, and then exposes those entries as
+/// virtual ZFF files. Regular file payloads are not copied into new chunks.
+/// Instead, they are represented by [VirtualFileMap] extents that point back
+/// to the byte range of the original tar payload in `source_object_number` /
+/// `source_filenumber`.
+///
+/// Directories, symbolic links, hard links, and special files are represented as
+/// virtual footer content. Hashes are calculated over the encoded virtual
+/// content, or over the referenced byte range for regular files.
 pub struct VirtualObjectSourceLogicalTar<R: Read + Seek> {
-    entries: BTreeMap<u64, VosEntry>, //filenumber, entry data
+    /// Indexed tar entries keyed by their generated file number.
+    entries: BTreeMap<u64, VosEntry>,
+    /// One-based file number of the next entry returned by the iterator.
     index_pointer: u64,
+    /// Object number that contains the source tar file.
     source_object_number: u64,
+    /// File number of the source tar file inside `source_object_number`.
     source_filenumber: u64,
+    /// File numbers of entries that have no parent directory inside the archive.
     root_dir_filenumbers: Vec<u64>,
+    /// Reader positioned on the source object and source file.
     zffreader: ZffReader<R>,
+    /// Hash algorithms used for generated virtual file footer metadata.
     hash_types: Vec<HashType>,
-    signing_key_bytes: Option<Vec<u8>>,
 }
 
 impl<R: Read + Seek> VirtualObjectSourceLogicalTar<R> {
+    /// Creates a virtual object source from a logical tar file in a ZFF reader.
+    ///
+    /// `object_number` and `file_number` select the existing logical tar file
+    /// that should become the backing store for the virtual object. The tar
+    /// archive is scanned once during construction. Each tar entry receives a
+    /// generated ZFF file number, metadata is converted into a [`FileHeader`],
+    /// and relationship maps for directories, symbolic links, hard links, and
+    /// special files are folded into the internal entry list.
+    ///
+    /// The returned source implements [`Iterator`]. Calling [`Iterator::next`]
+    /// yields a [`FileHeader`] together with [`VirtualFileFooterMetadata`] for
+    /// one virtual file.
+    ///
+    /// The [ZffReader] has to be prepared before (objects **must** be 
+    /// initialized).
+    /// 
+    /// # Errors
+    ///
+    /// Returns an error if the reader cannot select the requested object/file,
+    /// the tar archive cannot be read, the archive contains preprocessed tar
+    /// records that should have been handled by the `tar` crate, or an entry
+    /// cannot be represented as a virtual ZFF file.
     pub fn new(
         mut zffreader: ZffReader<R>, 
         object_number: u64, 
-        file_number: u64, 
-        hash_types: Vec<HashType>, 
-        signing_key_bytes: Option<Vec<u8>>) -> Result<Self> {
+        file_number: Option<u64>, 
+        hash_types: Vec<HashType>) -> Result<Self> {
         zffreader.set_active_object(object_number)?;
-        zffreader.set_active_file(file_number)?;
+        if let Some(file_number) = file_number {
+            zffreader.set_active_file(file_number)?;
+        };
         let mut archive = Archive::new(zffreader);
 
         // to preserve all metadata stuff
@@ -235,10 +285,9 @@ impl<R: Read + Seek> VirtualObjectSourceLogicalTar<R> {
             zffreader,
             index_pointer: 1,
             source_object_number: object_number,
-            source_filenumber: file_number,
+            source_filenumber: file_number.unwrap_or(0),
             root_dir_filenumbers,
             hash_types,
-            signing_key_bytes,
         })
     }
 
@@ -275,18 +324,14 @@ impl<R: Read + Seek> VirtualObjectSourceLogicalTar<R> {
             .collect()
     }
 
-    fn finalize_hashers(&self, hashers: Vec<(HashType, Box<dyn DynDigest>)>) -> Result<HashHeader> {
-        let signing_key = match &self.signing_key_bytes {
-            Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
-            None => None,
-        };
+    fn finalize_hashers(
+        &self,
+        hashers: Vec<(HashType, Box<dyn DynDigest>)>,
+    ) -> Result<HashHeader> {
         let mut hash_values = Vec::new();
         for (hash_type, hasher) in hashers {
             let hash = hasher.finalize().to_vec();
-            let signature = signing_key
-                .as_ref()
-                .map(|signing_key| Signature::sign(signing_key, &hash));
-            hash_values.push(HashValue::new(hash_type, hash, signature));
+            hash_values.push(HashValue::new(hash_type, hash, None));
         }
 
         Ok(HashHeader::new(hash_values))

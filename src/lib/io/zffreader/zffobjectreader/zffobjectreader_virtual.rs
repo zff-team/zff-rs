@@ -297,6 +297,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 			_ => unimplemented!() //TODO
 		};
 		{
+			self.reader_cache.set_position(0);
 			let inner = self.reader_cache.get_mut();
 			inner.clear();
 			let slice_end = (vfe.length.min(source_chunk_size) as usize) - 1; //TODO: check if -1 is necessary here or not.

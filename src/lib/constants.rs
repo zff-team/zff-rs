@@ -76,6 +76,7 @@ pub(crate) const VIRTUAL_FLAG_VALUE: u8 = 1<<6;
 // object header flags
 pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1<<0;
 pub(crate) const SIGN_HASH_FLAG_VALUE: u8 = 1<<1;
+pub(crate) const PASSIVE_OBJECT_FLAG: u8 = 1<<2;
 
 // - Error messages
 pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE: &str = "Unknown hash type value.";
