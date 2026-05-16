@@ -20,6 +20,26 @@ pub struct ObjectFlags {
 	pub passive_object: bool,
 }
 
+impl ObjectFlags {
+    fn to_u8(&self) -> u8 {
+        let mut flags = 0u8;
+
+        if self.encryption {
+            flags |= ENCRYPT_OBJECT_FLAG_VALUE;
+        }
+
+        if self.sign_hash {
+            flags |= SIGN_HASH_FLAG_VALUE;
+        }
+
+        if self.passive_object {
+            flags |= PASSIVE_OBJECT_FLAG;
+        }
+
+        flags
+    }
+}
+
 impl From<u8> for ObjectFlags {
 	fn from(flag_values: u8) -> Self {
 		Self {
@@ -28,6 +48,18 @@ impl From<u8> for ObjectFlags {
 			passive_object: flag_values & PASSIVE_OBJECT_FLAG != 0,
 		}
 	}
+}
+
+impl From<ObjectFlags> for u8 {
+    fn from(flags: ObjectFlags) -> Self {
+        flags.to_u8()
+    }
+}
+
+impl From<&ObjectFlags> for u8 {
+    fn from(flags: &ObjectFlags) -> Self {
+        flags.to_u8()
+    }
 }
 
 /// Each object starts with a [ObjectHeader]. The [ObjectHeader] contains several metadata of the appropriate underlying object.
@@ -119,12 +151,7 @@ impl ObjectHeader {
 		let mut vec = Vec::new();
 		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.extend_from_slice(&self.object_number.encode_directly());
-		let mut flags: u8 = 0;
-		flags += ENCRYPT_OBJECT_FLAG_VALUE;
-		if self.flags.sign_hash {
-			flags += SIGN_HASH_FLAG_VALUE;
-		};
-		vec.extend_from_slice(&flags.encode_directly());
+		vec.extend_from_slice(&u8::from(&self.flags).encode_directly());
 		vec.extend_from_slice(&encryption_header.encode_directly());
 
 		let mut data_to_encrypt = Vec::new();
@@ -204,6 +231,7 @@ impl ObjectHeader {
 		let object_type = match u8::decode_directly(inner_content)? {
 			0 => ObjectType::Physical,
 			1 => ObjectType::Logical,
+			2 => ObjectType::Virtual,
 			value => return Err(ZffError::new(
 				ZffErrorKind::Invalid, 
 				format!("{ERROR_INVALID_TYPE_FLAG_VALUE}{value}"))),
@@ -264,6 +292,9 @@ impl HeaderCoding for ObjectHeader {
 		if self.flags.sign_hash {
 			flags += SIGN_HASH_FLAG_VALUE;
 		};
+		if self.flags.passive_object {
+			flags += PASSIVE_OBJECT_FLAG;
+		}
 		vec.extend_from_slice(&flags.encode_directly());
 		if let Some(encryption_header) = &self.encryption_header {
 			vec.extend_from_slice(&encryption_header.encode_directly())
@@ -434,12 +465,7 @@ impl HeaderCoding for EncryptedObjectHeader {
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = vec![Self::version()];
 		vec.extend_from_slice(&self.object_number.encode_directly());
-		let mut flags: u8 = 0;
-		flags += ENCRYPT_OBJECT_FLAG_VALUE;
-		if self.flags.sign_hash {
-			flags += SIGN_HASH_FLAG_VALUE;
-		};
-		vec.extend_from_slice(&flags.encode_directly());
+		vec.extend_from_slice(&u8::from(&self.flags).encode_directly());
 		vec.extend_from_slice(&self.encryption_header.encode_directly());
 		vec.extend_from_slice(&self.encrypted_content.encode_directly());
 		vec

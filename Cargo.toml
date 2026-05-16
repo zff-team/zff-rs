@@ -24,6 +24,7 @@ crate-type = ["lib"]
 aes = "0.9.0"
 aes-gcm = { version = "0.10", features = [ "std" ] }
 base64 = "0.22"
+bitflags = "2.11.1"
 blake2 = "0.11.0-rc.6" #TODO: must be stable before stable release of zff-rs
 blake3 = { version = "1.8.3", features = [ "traits-preview" ] }
 byteorder = "1.4.3"

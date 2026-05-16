@@ -242,6 +242,8 @@ impl<R: Read + Seek> ZffReader<R> {
 					HeaderObjectType::Logical => ObjectType::Logical,
 					HeaderObjectType::Virtual => ObjectType::Virtual,
 				};
+				#[cfg(feature = "log")]
+				trace!("list_objects(): {obj_type} added to list.");
 				map.insert(*object_number, obj_type);
 			} else {
 				match segment.read_encrypted_object_header(*object_number) {
