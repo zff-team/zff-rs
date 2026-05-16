@@ -519,7 +519,6 @@ impl<R: Read + Seek> ZffReader<R> {
 		if let Some((segment_no, offset)) = chunkmap_offset_info(ChunkMapType::HeaderMap, chunk_number, &self.metadata) {
 			if let Some(segment) = self.metadata.segments.write().unwrap().get_mut(&segment_no) {
 				segment.seek(SeekFrom::Start(offset))?;
-				warn!("c: {chunk_number}");
 				let mut map = if let Some(ref enc_info) = encryption_information {
 					ChunkHeaderMap::decrypt_and_decode(
 						&enc_info.encryption_key, &enc_info.algorithm, segment, chunk_number)?

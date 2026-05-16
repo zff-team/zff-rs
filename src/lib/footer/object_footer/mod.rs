@@ -125,6 +125,12 @@ impl From<ObjectFooterLogical> for ObjectFooter {
 	}
 }
 
+impl From<ObjectFooterVirtual> for ObjectFooter {
+	fn from(footer: ObjectFooterVirtual) -> Self {
+		ObjectFooter::Virtual(footer)
+	}
+}
+
 // - implement fmt::Display
 impl fmt::Display for ObjectFooter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -155,7 +161,8 @@ pub enum EncryptedObjectFooter {
 	Physical(EncryptedObjectFooterPhysical),
 	/// A logical object contains a [EncryptedObjectFooterLogical].
 	Logical(EncryptedObjectFooterLogical),
-	//TODO: Virtual object footer!
+	/// A virtual object contains a [EncryptedObjectFooterVirtual].
+	Virtual(EncryptedObjectFooterVirtual),
 }
 
 impl EncryptedObjectFooter {
@@ -164,6 +171,7 @@ impl EncryptedObjectFooter {
 		match self {
 			EncryptedObjectFooter::Physical(_) => ObjectFooterPhysical::version(),
 			EncryptedObjectFooter::Logical(_) => ObjectFooterLogical::version(),
+			EncryptedObjectFooter::Virtual(_) => ObjectFooterVirtual::version(),
 		}
 	}
 
@@ -177,6 +185,8 @@ impl EncryptedObjectFooter {
 			1
 		} else if identifier == EncryptedObjectFooterLogical::identifier() {
 			2
+		} else if identifier == EncryptedObjectFooterVirtual::identifier() {
+			3
 		} else {
 			0
 		}
@@ -206,6 +216,12 @@ impl EncryptedObjectFooter {
 				data.read_exact(&mut content_buffer)?;
 				Ok(EncryptedObjectFooter::Logical(EncryptedObjectFooterLogical::decode_content(&content_buffer)?))
 			},
+			3 => {
+				let length = Self::decode_header_length(data)? as usize;
+				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+				data.read_exact(&mut content_buffer)?;
+				Ok(EncryptedObjectFooter::Virtual(EncryptedObjectFooterVirtual::decode_content(&content_buffer)?))
+			},
 			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
 	}
@@ -222,6 +238,10 @@ impl EncryptedObjectFooter {
 				Ok(ObjectFooter::from(decrypted_footer))
 			},
 			EncryptedObjectFooter::Logical(encrypted_inner_footer) => {
+				let decrypted_footer = encrypted_inner_footer.decrypt(key, algorithm)?;
+				Ok(ObjectFooter::from(decrypted_footer))
+			}
+			EncryptedObjectFooter::Virtual(encrypted_inner_footer) => {
 				let decrypted_footer = encrypted_inner_footer.decrypt(key, algorithm)?;
 				Ok(ObjectFooter::from(decrypted_footer))
 			}

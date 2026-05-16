@@ -258,7 +258,7 @@ impl HeaderCoding for VirtualFileFooter {
 		DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_FOOTER
 	}
 	fn identifier() -> u32 {
-		FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_FOOTER
+		FOOTER_IDENTIFIER_VIRTUAL_FILE_FOOTER
 	}
 
 	fn encode_header(&self) -> Vec<u8> {
@@ -367,10 +367,10 @@ impl VirtualFileMap {
 impl HeaderCoding for VirtualFileMap {
 	type Item = Self;
 	fn version() -> u8 { 
-		DEFAULT_FOOTER_VERSION_VIRTUAL_LOGICAL_FILE_MAP
+		DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_MAP
 	}
 	fn identifier() -> u32 {
-		FOOTER_IDENTIFIER_VIRTUAL_LOGICAL_FILE_MAP
+		FOOTER_IDENTIFIER_VIRTUAL_FILE_MAP
 	}
 
 	fn encode_header(&self) -> Vec<u8> {

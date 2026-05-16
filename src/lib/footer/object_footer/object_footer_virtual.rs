@@ -43,7 +43,6 @@ impl ObjectFooterVirtual {
 			..Default::default()
 		}
 	}
-
 	/// Creates a new [ObjectFooterVirtual] from the object metadata and the
 	/// location maps for the contained virtual files.
 	#[allow(clippy::too_many_arguments)]
@@ -151,7 +150,7 @@ impl fmt::Display for ObjectFooterVirtual {
 impl HeaderCoding for ObjectFooterVirtual {
 	type Item = Self;
 	fn version() -> u8 { 
-		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL_LOGICAL
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
@@ -191,5 +190,105 @@ impl HeaderCoding for ObjectFooterVirtual {
 
 	fn struct_name() -> &'static str {
 		"ObjectFooterVirtual"
+	}
+}
+
+/// An object footer for a virtual object in encrypted form.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize))]
+pub struct EncryptedObjectFooterVirtual {
+	/// The appropriate object number.
+	pub object_number: u64,
+	#[cfg_attr(feature = "serde", serde(serialize_with = "crate::helper::buffer_to_hex", deserialize_with = "crate::helper::hex_to_buffer"))]
+	/// the encrypted data of this footer
+	pub encrypted_data: Vec<u8>,
+}
+
+impl EncryptedObjectFooterVirtual {
+	/// Creates a new [EncryptedObjectFooterVirtual] by the given values.
+	pub fn new(object_number: u64, encrypted_data: Vec<u8>) -> Self {
+		Self {
+			object_number,
+			encrypted_data,
+		}
+	}
+
+	/// Tries to decrypt the ObjectFooter. If an error occures, the EncryptedObjectFooterPhysical is still available.
+	pub fn decrypt<A, K>(&self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
+	where
+		A: Borrow<EncryptionAlgorithm>,
+		K: AsRef<[u8]>,
+	{
+		let content = ObjectFooter::decrypt(key, &self.encrypted_data, self.object_number, algorithm.borrow())?;
+		let mut cursor = Cursor::new(content);
+		let (creation_timestamp,
+			passive_objects,
+			root_dir_filenumbers,
+			file_header_segment_numbers,
+			file_header_offsets,
+			file_footer_segment_numbers,
+			file_footer_offsets) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
+		Ok(ObjectFooterVirtual::with_data(
+			self.object_number,
+			creation_timestamp, 
+			passive_objects, 
+			root_dir_filenumbers, 
+			file_header_segment_numbers, 
+			file_header_offsets, 
+			file_footer_segment_numbers, 
+			file_footer_offsets))
+	}
+
+	/// Tries to decrypt the ObjectFooter. Consumes the EncryptedObjectFooterPhysical, regardless of whether an error occurs or not.
+	pub fn decrypt_and_consume<A, K>(self, key: K, algorithm: A) -> Result<ObjectFooterVirtual>
+	where
+		A: Borrow<EncryptionAlgorithm>,
+		K: AsRef<[u8]>,
+	{
+		self.decrypt(key, algorithm)
+	}
+}
+
+// - implement fmt::Display
+impl fmt::Display for EncryptedObjectFooterVirtual {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", Self::struct_name())
+	}
+}
+
+impl HeaderCoding for EncryptedObjectFooterVirtual {
+	type Item = Self;
+	fn version() -> u8 { 
+		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
+	}
+	fn identifier() -> u32 {
+		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
+	}
+	fn encode_header(&self) -> Vec<u8> {
+		let mut vec = vec![Self::version()];
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&true.encode_directly()); // encryption flag
+		vec.extend_from_slice(&self.encrypted_data.encode_directly());
+		vec
+	}
+	fn decode_content(data: &[u8]) -> Result<Self> {
+		let mut cursor = Cursor::new(data);
+		Self::check_version(&mut cursor)?; // check version (and skip it)
+		let object_number = u64::decode_directly(&mut cursor)?;
+		let encryption_flag = bool::decode_directly(&mut cursor)?;
+		if !encryption_flag {
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN));
+		}
+		let encrypted_data = Vec::<u8>::decode_directly(&mut cursor)?;
+		Ok(Self::new(
+			object_number,
+			encrypted_data))
+	}
+
+	fn struct_name() -> &'static str {
+		"EncryptedObjectFooterVirtual"
 	}
 }
