@@ -28,7 +28,7 @@ pub enum ObjectType {
 	Logical,
 	/// Virtual object,
 	Virtual,
-	/// Encrypted object (physical or logical)
+	/// Encrypted object
 	Encrypted,
 }
 

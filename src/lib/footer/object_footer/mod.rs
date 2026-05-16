@@ -33,8 +33,8 @@ impl ObjectFooter {
 		}
 	}
 
-	/// checks if the identifier matches to an physical or logical object footer. 
-	/// Returns 1 for a physical object footer, 2 for a logical object footer and 0 if neither applies.
+	/// checks if the identifier matches to a physical, logical or virtual object footer. 
+	/// Returns 1 for a physical object footer, 2 for a logical object footer, 3 for a virtual object footer and 0 if neither applies.
 	fn check_identifier<R: Read>(data: &mut R) -> u8 {
 		let identifier = match data.read_u32::<BigEndian>() {
 			Ok(val) => val,
@@ -44,6 +44,8 @@ impl ObjectFooter {
 			1
 		} else if identifier == ObjectFooterLogical::identifier() {
 			2
+		} else if identifier == ObjectFooterVirtual::identifier() {
+			3
 		} else {
 			0
 		}
@@ -72,6 +74,12 @@ impl ObjectFooter {
 				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
 				data.read_exact(&mut content_buffer)?;
 				Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(&content_buffer)?))
+			},
+			3 => {
+				let length = Self::decode_header_length(data)? as usize;
+				let mut content_buffer = vec![0u8; length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH];
+				data.read_exact(&mut content_buffer)?;
+				Ok(ObjectFooter::Virtual(ObjectFooterVirtual::decode_content(&content_buffer)?))
 			},
 			_ => Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER)),
 		}
@@ -147,6 +155,7 @@ pub enum EncryptedObjectFooter {
 	Physical(EncryptedObjectFooterPhysical),
 	/// A logical object contains a [EncryptedObjectFooterLogical].
 	Logical(EncryptedObjectFooterLogical),
+	//TODO: Virtual object footer!
 }
 
 impl EncryptedObjectFooter {

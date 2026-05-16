@@ -27,13 +27,13 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 
 	/// Returns the appropriate [FileHeader](crate::header::FileHeader) of the current active file.
 	pub fn current_fileheader(&self) -> Result<FileHeader> {
-		let header_segment_number = match self.object_footer.file_header_segment_numbers().get(&self.active_file) {
+		let header_segment_number = match self.object_footer.file_header_segment_numbers.get(&self.active_file) {
 			Some(no) => no,
 			None => return Err(ZffError::new(
 				ZffErrorKind::Missing,
 				format!("(current_fileheader) {ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
 		};
-		let header_offset = match self.object_footer.file_header_offsets().get(&self.active_file) {
+		let header_offset = match self.object_footer.file_header_offsets.get(&self.active_file) {
 			Some(offset) => offset,
 			None => return Err(ZffError::new(
 				ZffErrorKind::EncodingError, 
@@ -90,16 +90,16 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		// reads all file header and appropriate footer and fill the files-map/file_positions-map. Sets the File number 1 active.
 		let mut files = HashMap::new();
 		let mut file_positions = HashMap::new();
-		for (filenumber, header_segment_number) in object_footer.file_header_segment_numbers() {
+		for (filenumber, header_segment_number) in &object_footer.file_header_segment_numbers {
 			#[cfg(feature = "log")]
 			debug!("Initialize file {filenumber}");
-			let header_offset = match object_footer.file_header_offsets().get(filenumber) {
+			let header_offset = match object_footer.file_header_offsets.get(filenumber) {
 				Some(offset) => offset,
 				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 			};
-			let (footer_segment_number, footer_offset) = match object_footer.file_footer_segment_numbers().get(filenumber) {
+			let (footer_segment_number, footer_offset) = match object_footer.file_footer_segment_numbers.get(filenumber) {
 				None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
-				Some(segment_no) => match object_footer.file_footer_offsets().get(filenumber) {
+				Some(segment_no) => match object_footer.file_footer_offsets.get(filenumber) {
 					None => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_MALFORMED_SEGMENT)),
 					Some(offset) => (segment_no, offset),
 				}

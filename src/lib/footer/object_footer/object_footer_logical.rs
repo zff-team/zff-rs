@@ -81,11 +81,6 @@ impl ObjectFooterLogical {
 		self.root_dir_filenumbers.extend_from_slice(filenumbers);
 	}
 
-	/// returns the underlying [Vec] of the filenumbers of the appropriate files in the root directory as a reference.
-	pub fn root_dir_filenumbers(&self) -> &Vec<u64> {
-		&self.root_dir_filenumbers
-	}
-
 	/// adds a file number / segment number combination to the appropriate underlying [HashMap],
 	/// which contains the appropriate segment numbers of the corresponding file headers.
 	pub fn add_file_header_segment_number(&mut self, filenumber: u64, file_segment_number: u64) {
@@ -98,16 +93,6 @@ impl ObjectFooterLogical {
 		self.file_header_offsets.insert(filenumber, fileoffset);
 	}
 
-	/// returns the underlying [HashMap], which contains the segment numbers and the corresponding file headers.
-	pub fn file_header_segment_numbers(&self) -> &HashMap<u64, u64> {
-		&self.file_header_segment_numbers
-	}
-
-	/// returns the underlying [HashMap], which contains the offsets and the corresponding file headers.
-	pub fn file_header_offsets(&self) -> &HashMap<u64, u64> {
-		&self.file_header_offsets
-	}
-
 	/// adds a file number / segment number combination to the appropriate underlying [HashMap],
 	/// which contains the appropriate segment numbers of the corresponding file footers.
 	pub fn add_file_footer_segment_number(&mut self, filenumber: u64, file_segment_number: u64) {
@@ -118,16 +103,6 @@ impl ObjectFooterLogical {
 	/// which contains the appropriate offsets of the corresponding file footers.
 	pub fn add_file_footer_offset(&mut self, filenumber: u64, fileoffset: u64) {
 		self.file_footer_offsets.insert(filenumber, fileoffset);
-	}
-
-	/// returns the underlying [HashMap], which contains the segment numbers and the corresponding file footers.
-	pub fn file_footer_segment_numbers(&self) -> &HashMap<u64, u64> {
-		&self.file_footer_segment_numbers
-	}
-
-	/// returns the underlying [HashMap], which contains the offsets and the corresponding file footers.
-	pub fn file_footer_offsets(&self) -> &HashMap<u64, u64> {
-		&self.file_footer_offsets
 	}
 
 	/// returns the acquisition start time.

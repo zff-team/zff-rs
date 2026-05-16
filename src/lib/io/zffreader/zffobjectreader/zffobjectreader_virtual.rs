@@ -224,12 +224,10 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 
 	// Returns true if cache would filled, false if cache is empty (end of reader is reached).
 	fn refill_reader_cache(&mut self) -> std::io::Result<bool> {
-		self.reader_cache.seek(SeekFrom::Start(0))?;
 		let filemetadata = self.files.get(&self.active_file)
 										  .ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
 		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
 		let absoulute_position_virtual_file = *self.file_positions.get(&self.active_file).unwrap();
-
 		let vffm = match &filemetadata.footer {
 			FileFooterMetadata::FileFooter(_) => return Err(IoError::other(ERROR_ZFFREADER_OPERATION)),
 			FileFooterMetadata::VirtualFileFooterMetadata(metadata) => metadata,
@@ -248,10 +246,11 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 													               .ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_VALUE_VFM}{}", 
 																   absoulute_position_virtual_file)))?;
 		
-		if absoulute_position_virtual_file >= offset_virtual_file + vfe.length {
+		if absoulute_position_virtual_file >= offset_virtual_file + (vfe.length-1) {
 			return Ok(false)
 		}
-		
+		warn!("vfm: {vfm:?}");
+
 		let relative_position_virtual_file = (absoulute_position_virtual_file - offset_virtual_file) as usize;
 		
 		let source_chunk_size = {
@@ -300,8 +299,11 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 			self.reader_cache.set_position(0);
 			let inner = self.reader_cache.get_mut();
 			inner.clear();
-			let slice_end = (vfe.length.min(source_chunk_size) as usize) - 1; //TODO: check if -1 is necessary here or not.
-			inner.extend_from_slice(&chunk_data[relative_position_virtual_file..slice_end]);
+			let source_inner_position = vfe.source_offset % source_chunk_size;
+			let relative_end = vfe.length + source_inner_position;
+			let slice_end = (relative_end.min(source_chunk_size) as usize);
+			let chunk_position = source_inner_position as usize + relative_position_virtual_file;
+			inner.extend_from_slice(&chunk_data[chunk_position..slice_end]);
 		}
 		Ok(true)
 	}

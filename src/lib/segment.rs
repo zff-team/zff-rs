@@ -263,7 +263,7 @@ impl<R: Read + Seek> Segment<R> {
 		self.data.seek(SeekFrom::Start(*offset))?;
 		
 		#[cfg(feature = "log")]
-		trace!("Initialize object footer for object {object_number} at offset {offset} in segment {}", self.header().segment_number);
+		trace!("Initialize object footer for object {object_number} at offset {offset:#x} in segment {}", self.header().segment_number);
 		
 		ObjectFooter::decode_directly(&mut self.data)
 	}
