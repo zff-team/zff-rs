@@ -155,7 +155,14 @@ pub trait ChunkMap {
 			return Err(ZffError::new(ZffErrorKind::Unsupported, format!("{ERROR_UNSUPPORTED_VERSION}{version}")));
 		}
 		let object_number = u64::decode_directly(data)?;
-		let mut structure_content = vec![0u8; header_length-DEFAULT_LENGTH_HEADER_IDENTIFIER-DEFAULT_LENGTH_VALUE_HEADER_LENGTH-1];
+		let structure_content_length = header_length
+			.checked_sub(
+				DEFAULT_LENGTH_HEADER_IDENTIFIER +
+				DEFAULT_LENGTH_VALUE_HEADER_LENGTH +
+				1 +
+				object_number.encoded_size())
+			.ok_or_else(|| ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_HEADER_LENGTH))?;
+		let mut structure_content = vec![0u8; structure_content_length];
 		data.read_exact(&mut structure_content)?;
 		Ok(ChunkMapInnerStructureData::new(object_number, structure_content))
     }

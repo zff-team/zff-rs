@@ -113,7 +113,6 @@ pub trait Encryption {
 		A: Borrow<EncryptionAlgorithm>,
 	{
 		let nonce = Self::gen_crypto_nonce(nonce_value)?;
-
 		match algorithm.borrow() {
 			EncryptionAlgorithm::AES256GCM => {
 				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;

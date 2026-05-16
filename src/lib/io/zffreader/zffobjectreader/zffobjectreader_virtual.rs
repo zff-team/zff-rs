@@ -249,7 +249,6 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 		if absoulute_position_virtual_file >= offset_virtual_file + (vfe.length-1) {
 			return Ok(false)
 		}
-		warn!("vfm: {vfm:?}");
 
 		let relative_position_virtual_file = (absoulute_position_virtual_file - offset_virtual_file) as usize;
 		
@@ -301,7 +300,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 			inner.clear();
 			let source_inner_position = vfe.source_offset % source_chunk_size;
 			let relative_end = vfe.length + source_inner_position;
-			let slice_end = (relative_end.min(source_chunk_size) as usize);
+			let slice_end = relative_end.min(source_chunk_size) as usize;
 			let chunk_position = source_inner_position as usize + relative_position_virtual_file;
 			inner.extend_from_slice(&chunk_data[chunk_position..slice_end]);
 		}
