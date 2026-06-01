@@ -187,7 +187,7 @@ impl Serialize for ChunkDeduplicationMap {
 
 /// A structure to handle chunk deduplication.
 #[derive(Debug, Default)]
-pub struct DeduplicationMetadata<R: Read + Seek> {
+pub struct DeduplicationMetadata<R: ReadAt> {
 	/// A map which can be used to handle the chunk deduplication.
 	pub deduplication_map: DeduplicationChunkMap,
 	/// Optional original zffreader - in case of an extension of an existing zff container, this is necessary.

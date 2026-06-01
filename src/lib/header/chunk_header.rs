@@ -102,7 +102,7 @@ impl ValueDecoder for ChunkHeader {
 }
 
 /// The appropriate flags for each chunk.
-#[derive(Debug,Clone,Default, PartialEq, Eq, Hash)]
+#[derive(Debug,Clone,Default, PartialEq, Eq, Hash, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkFlags {

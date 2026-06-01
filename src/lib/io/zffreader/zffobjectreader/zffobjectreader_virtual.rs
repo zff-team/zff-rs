@@ -1,25 +1,28 @@
 // - STD
-use std::io::Error as IoError;
+use std::io::{Error as IoError, ErrorKind as IoEKind};
 
 // - Parent
 use super::*;
 
+// - external
+use moka::sync::Cache as MokaCache;
+
 /// A reader which contains the appropriate metadata of a logical object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub(crate) struct ZffObjectReaderVirtual<R: Read + Seek> {
+pub(crate) struct ZffObjectReaderVirtual<R: ReadAt> {
 	metadata: ArcZffReaderMetadata<R>,
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterVirtual,
     active_file: u64, // filenumber of active file
     files: HashMap<u64, FileMetadata>, //<filenumber, metadata>,
 	file_positions: HashMap<u64, u64>,
-	reader_cache: Cursor<Vec<u8>>, //cache which holds the current chunk content (for performance purposes)
+	reader_cache: MokaCache<u64, Arc<ChunkContent>>, //cache which holds the current chunk content (for performance purposes)
 	// this is also available via the ArcZffReaderMetadata, but this one is much more convenient to access. :)
 	passive_object_filemetadata: HashMap<u64, Arc<HashMap<u64, FileMetadata>>>, //<object_number, <filenumber, Metadata>>,
 }
 
-impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
+impl<R: ReadAt> ZffObjectReaderVirtual<R> {
     /// Initialize the [ZffObjectReaderLogical] with the recommended set of metadata which will be stored in memory.
 	pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 			Self::with_obj_metadata(object_no, metadata)
@@ -79,14 +82,16 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 		};
 		let mut passive_object_filemetadata = HashMap::new();
 		for passive_object_number in &object_footer.passive_objects {
-			let metadata_guard = metadata.object_metadata.read()?;
-			let obj_metadata = match metadata_guard.get(passive_object_number) {
-				Some(obj_metadata) => obj_metadata,
+			let obj_metadata = match metadata.object_metadata.get(passive_object_number) {
+				Some(obj_metadata) => obj_metadata.get(),
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{passive_object_number}"))),
 			};
-			let files = match &obj_metadata.files {
+			let obj_metadata = obj_metadata
+			.ok_or(ZffError::new(ZffErrorKind::Missing, format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{passive_object_number}")))?;
+		
+			let files = match obj_metadata.files.get() {
 				Some(files) => files,
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
@@ -124,32 +129,29 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 					Some(offset) => (segment_no, offset),
 				}
 			};
-			let mut segments = metadata.segments.write().unwrap();
-			let fileheader = match segments.get_mut(header_segment_number) {
+			let fileheader = match metadata.segments.get(header_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 				Some(segment) => {
-					segment.seek(SeekFrom::Start(*header_offset))?;
 					//check encryption
 					if let Some(enc_info) = &enc_info {
-						FileHeader::decode_encrypted_header_with_key(segment, enc_info)?
+						FileHeader::decode_at_encrypted_header_with_key(segment, *header_offset, enc_info)?
 					} else {
-						FileHeader::decode_directly(segment)?
+						FileHeader::decode_at(segment, *header_offset)?
 					}
 				}
 			};
-			let filefooter = match segments.get_mut(footer_segment_number) {
+			let filefooter = match metadata.segments.get(footer_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{footer_segment_number}"))),
 				Some(segment) => {
-					segment.seek(SeekFrom::Start(*footer_offset))?;
 					//check encryption
 					if let Some(enc_info) = &enc_info {
-						VirtualFileFooter::decode_encrypted_footer_with_key(segment, enc_info)?
+						VirtualFileFooter::decode_at_encrypted_footer_with_key(segment, *footer_offset, enc_info)?
 					} else {
-						VirtualFileFooter::decode_directly(segment)?
+						VirtualFileFooter::decode_at(segment, *footer_offset)?
 					}
 				}
 			};
@@ -169,7 +171,7 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
             files,
 			file_positions,
 			passive_object_filemetadata,
-			reader_cache: Cursor::new(Vec::new()),
+			reader_cache: MokaCache::builder().max_capacity(DEFAULT_CHUNK_CACHE_CAPACITY).build(),
         })
     }
 
@@ -183,23 +185,25 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_FILE_NUMBER}{filenumber}")))
 		}
-		self.reader_cache.get_mut().clear();
 		Ok(())
 	}
 
 	/// Returns the [FileMetadata] of the active file.
 	/// # Error
 	/// Fails if no valid file is set as the active one.
-	pub(crate) fn filemetadata(&self) -> Result<&FileMetadata> {
+	pub(crate) fn current_filemetadata(&self) -> Result<&FileMetadata> {
 		self.filemetadata_by_filenumber(self.active_file)
 	}
 
-	pub(crate) fn filemetadata_by_filenumber(&self, filenumber: u64) -> Result<&FileMetadata> {
-		match self.files.get(&filenumber) {
+	/// Returns the [FileMetadata] for the given filenumber.
+	/// # Error
+	/// Fails if file not exists in object.
+	pub(crate) fn filemetadata_by_filenumber(&self, file_number: u64) -> Result<&FileMetadata> {
+		match self.files.get(&file_number) {
 			Some(metadata) => Ok(metadata),
 			None => Err(ZffError::new(
 				ZffErrorKind::Missing, 
-				format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
+				format!("(filemetadata) {ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))
 		}
 	}
 
@@ -222,157 +226,208 @@ impl<R: Read + Seek> ZffObjectReaderVirtual<R> {
 		ObjectFooter::Virtual(self.object_footer.clone())
 	}
 
-	// Returns true if cache would filled, false if cache is empty (end of reader is reached).
-	fn refill_reader_cache(&mut self) -> std::io::Result<bool> {
-		let filemetadata = self.files.get(&self.active_file)
-										  .ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
-		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
-		let absoulute_position_virtual_file = *self.file_positions.get(&self.active_file).unwrap();
-		let vffm = match &filemetadata.footer {
-			FileFooterMetadata::FileFooter(_) => return Err(IoError::other(ERROR_ZFFREADER_OPERATION)),
-			FileFooterMetadata::VirtualFileFooterMetadata(metadata) => metadata,
+	fn cached_chunk(&self, object_number: &u64, chunk_number: u64) -> std::io::Result<Arc<ChunkContent>> {
+		if let Some(chunk_content) = self.reader_cache.get(&chunk_number) {
+			return Ok(chunk_content);
+		}
+
+		let chunk_content = if let Some(samebyte) =
+			self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(chunk_number)
+		{
+			Arc::new(ChunkContent::SameBytes(samebyte))
+		} else {
+			Arc::new(get_chunk_data(object_number, Arc::clone(&self.metadata), chunk_number)?)
 		};
+
+		self.reader_cache.insert(chunk_number, Arc::clone(&chunk_content));
+		Ok(chunk_content)
+	}
+
+	pub fn read_at_file(&self, buf: &mut [u8], offset: u64, file_no: u64) -> std::io::Result<usize> {
+		let filemetadata = self.files
+			.get(&file_no)
+			.ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{file_no}")))?;
+
+		if buf.is_empty() || offset >= filemetadata.length_of_data() {
+			return Ok(0);
+		}
+
+		let vffm = match &filemetadata.footer {
+			FileFooterMetadata::VirtualFileFooterMetadata(metadata) => metadata,
+			FileFooterMetadata::FileFooter(_) => return Err(IoError::other(ERROR_ZFFREADER_OPERATION)),
+		};
+
+		// used an explicit buffer to avoid Rust lifetime issues.
+		let vfm_buffer;
 		let vfm = match vffm.vfc {
 			VirtualFileContent::FileMap(ref vfm) => vfm,
 			VirtualFileContent::FileMapPosition(segment_no, offset) => {
-				&read_virtual_filemap_by_filemap_position(
-					Arc::clone(&self.metadata), 
-					segment_no, offset, 
-					EncryptionInformation::try_from(&self.object_header).ok())?
+				vfm_buffer = read_virtual_filemap_by_filemap_position(
+					Arc::clone(&self.metadata),
+					segment_no,
+					offset,
+					EncryptionInformation::try_from(&self.object_header).ok(),
+				)?;
+				&vfm_buffer
 			},
 			_ => return Err(IoError::other(ERROR_ZFFREADER_OPERATION)),
 		};
-		let (offset_virtual_file, vfe) = floor_btree_entry(&vfm.extents,absoulute_position_virtual_file)
-													               .ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_VALUE_VFM}{}", 
-																   absoulute_position_virtual_file)))?;
-		
-		if absoulute_position_virtual_file >= offset_virtual_file + (vfe.length-1) {
-			return Ok(false)
-		}
 
-		let relative_position_virtual_file = (absoulute_position_virtual_file - offset_virtual_file) as usize;
-		
-		let source_chunk_size = {
-				let metadata_guard = self.metadata.object_metadata.read().unwrap();
-				metadata_guard
+		let bytes_to_read = (buf.len() as u64).min(filemetadata.length_of_data() - offset) as usize;
+		let mut read_bytes = 0;
+
+		while read_bytes < bytes_to_read {
+			let virtual_pos = offset + read_bytes as u64;
+			let (extent_offset, vfe) = floor_btree_entry(&vfm.extents, virtual_pos)
+				.ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_VALUE_VFM}{virtual_pos}")))?;
+
+			if virtual_pos >= extent_offset + vfe.length {
+				return Err(IoError::other(format!("{ERROR_ZFFREADER_MISSING_VALUE_VFM}{virtual_pos}")));
+			}
+
+			let relative_in_extent = virtual_pos - extent_offset;
+			let source_pos = vfe.source_offset + relative_in_extent;
+
+			let obj_metadata = self.metadata.object_metadata
 				.get(&vfe.source_object_number)
 				.ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{}", vfe.source_object_number)))?
-				.header
-				.chunk_size
-		};
-		let metadata_guard = self.metadata.object_metadata.read().unwrap();
-		let obj_metadata = metadata_guard
-														   .get(&vfe.source_object_number)
-														   .ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{}", 
-														   vfe.source_object_number)))?;
-		let chunk_data = match &obj_metadata.footer {
-			ObjectFooter::Physical(footer) => {
-				let absolute_position_source_file = vfe.source_offset + relative_position_virtual_file as u64;
-				let current_chunk_number = (footer.first_chunk_number * source_chunk_size + absolute_position_source_file) / source_chunk_size;
-				if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
-					vec![samebyte; source_chunk_size as usize]
-				} else {
-					let object_no = &vfe.source_object_number;
-					get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
-				}
-			},
-			ObjectFooter::Logical(_) => {
-				let source_filemetadata = self.passive_object_filemetadata
-													.get(&vfe.source_object_number)
-													.and_then(|files| files.get(&vfe.source_filenumber))
-													.ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{}", vfe.source_object_number)))?;
-				let first_chunk_number = source_filemetadata.first_chunk_number().ok_or(IoError::other(ERROR_MALFORMED_SEGMENT))?;
+				.get()
+				.ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{}", vfe.source_object_number)))?;
 
-				let source_position_absolute = vfe.source_offset + relative_position_virtual_file as u64;
-				let current_chunk_number = (first_chunk_number * source_chunk_size + source_position_absolute) / source_chunk_size;
-				if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
-					vec![samebyte; source_chunk_size as usize]
-				} else {
-					let object_no = &vfe.source_object_number;
-					get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
-				}
-			},
-			_ => unimplemented!() //TODO
-		};
-		{
-			self.reader_cache.set_position(0);
-			let inner = self.reader_cache.get_mut();
-			inner.clear();
-			let source_inner_position = vfe.source_offset % source_chunk_size;
-			let relative_end = vfe.length + source_inner_position;
-			let slice_end = relative_end.min(source_chunk_size) as usize;
-			let chunk_position = source_inner_position as usize + relative_position_virtual_file;
-			inner.extend_from_slice(&chunk_data[chunk_position..slice_end]);
+			let source_chunk_size = obj_metadata.header.chunk_size;
+			if source_chunk_size == 0 {
+				return Err(IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT));
+			}
+
+			let current_chunk_number = match &obj_metadata.footer {
+				ObjectFooter::Physical(footer) => {
+					footer.first_chunk_number + source_pos / source_chunk_size
+				},
+				ObjectFooter::Logical(_) => {
+					let source_filemetadata = self.passive_object_filemetadata
+						.get(&vfe.source_object_number)
+						.and_then(|files| files.get(&vfe.source_filenumber))
+						.ok_or(IoError::other(format!("{ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT}{}", vfe.source_object_number)))?;
+
+					source_filemetadata
+						.first_chunk_number()
+						.ok_or(IoError::other(ERROR_MALFORMED_SEGMENT))?
+						+ source_pos / source_chunk_size
+				},
+				_ => unimplemented!(),
+			};
+
+			let source_inner_pos = (source_pos % source_chunk_size) as usize;
+			let current_read_len = (source_chunk_size as usize - source_inner_pos)
+				.min((vfe.length - relative_in_extent) as usize)
+				.min(bytes_to_read - read_bytes);
+
+			let chunk_content = self.cached_chunk(&vfe.source_object_number, current_chunk_number)?;
+
+			match chunk_content.as_ref() {
+				ChunkContent::Raw(data) => {
+					let end = source_inner_pos + current_read_len;
+					let chunk_slice = data.get(source_inner_pos..end)
+						.ok_or(IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT))?;
+					buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
+				},
+				ChunkContent::SameBytes(byte) => {
+					buf[read_bytes..read_bytes + current_read_len].fill(*byte);
+				},
+				ChunkContent::Duplicate(_) => unreachable!(),
+			}
+
+			read_bytes += current_read_len;
 		}
-		Ok(true)
+
+		Ok(read_bytes)
+	}
+
+	pub fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
+		let start_offset = offset;
+        let mut chunk = [0u8; 8192]; //TODO: move "hardcoded" size to constants.rs
+        loop {
+            match self.read_at_file(&mut chunk, offset, file_no) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&chunk[..n]);
+                    offset += n as u64;
+                }
+                Err(e) if e.kind() == IoEKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok((offset-start_offset) as usize)
 	}
 }
 
-/// Reads from current active file.
-impl<R: Read + Seek> Read for ZffObjectReaderVirtual<R> {
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-		let mut read_bytes = 0;
-		while read_bytes < buffer.len() {
-            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() &&
-			!self.refill_reader_cache()? {
-					break;
-            }
-            let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
-            read_bytes += written;
-			// unwrap is safe here: we have called refill_reader_cache() before which calls self.file.get(&self.acitve_file).
-			*self.file_positions.get_mut(&self.active_file).unwrap() += written as u64;
-        }
+impl<R: ReadAt> ReadAt for ZffObjectReaderVirtual<R> {
+	fn read_at(&self, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+		self.read_at_file(buf, offset, self.active_file)
+	}
+
+	fn size(&mut self) -> std::io::Result<u64> {
+		let filemetadata = self.files
+			.get(&self.active_file)
+			.ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
+		Ok(filemetadata.length_of_data())
+	}
+}
+
+impl<R: ReadAt> Read for ZffObjectReaderVirtual<R> {
+	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+		let afp = match self.file_positions.get(&self.active_file) {
+			Some(afp) => afp,
+			None => return Err(IoError::new(IoEKind::NotFound, format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file))),
+		};
+		let read_bytes = self.read_at(buffer, *afp)?;
+		let afp = match self.file_positions.get_mut(&self.active_file) {
+			Some(afp) => afp,
+			None => return Err(IoError::new(IoEKind::NotFound, format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file))),
+		};
+		*afp += read_bytes as u64;
 		Ok(read_bytes)
-    }
+	}
 }
 
-/// Seeks in current active file.
-impl<R: Read + Seek> Seek for ZffObjectReaderVirtual<R> {
-    fn seek(&mut self, seek_from: SeekFrom) -> std::io::Result<u64> {
-        let position = self.file_positions.get_mut(&self.active_file).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
+impl<R: ReadAt> Seek for ZffObjectReaderVirtual<R> {
+	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
+		let afp = match self.file_positions.get_mut(&self.active_file) {
+			Some(afp) => afp,
+			None => return Err(IoError::new(IoEKind::NotFound, format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file))),
+		};
 		let filemetadata = self.files.get(&self.active_file).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
-		match seek_from {
-			SeekFrom::Start(value) => {
-				*position = value;
-			},
-			SeekFrom::Current(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
-			} else if value >= 0 {
-					*position += value as u64;
-			} else {
-				*position -= value as u64;
-			},
-			SeekFrom::End(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
-			} else if value >= 0 {
-					*position = filemetadata.length_of_data() + value as u64;
-			} else {
-				*position = filemetadata.length_of_data() - value as u64;
-			},
-		}
-		self.reader_cache.get_mut().clear();
-		Ok(*position)
-    }
+		let length_of_data = filemetadata.length_of_data();
+		*afp = match seek_from {
+			SeekFrom::Start(value) => value,
+			SeekFrom::Current(value) => afp.checked_add_signed(value).ok_or_else(|| {
+				std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION)
+			})?,
+			SeekFrom::End(value) => length_of_data.checked_add_signed(value).ok_or_else(|| {
+				std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION)
+			})?,
+		};
+		Ok(*afp)
+	}
 }
 
-fn read_virtual_filemap_by_filemap_position<R: Read+Seek>(
+fn read_virtual_filemap_by_filemap_position<R: ReadAt>(
 	metadata: ArcZffReaderMetadata<R>,
 		segment_no: u64, 
 		offset: u64,
 		enc_info: Option<EncryptionInformation>) -> Result<VirtualFileMap> {
 	let vlfm = {
-	let mut segments = metadata.segments.write().unwrap();
-	match segments.get_mut(&segment_no) {
+	match metadata.segments.get(&segment_no) {
 			None => return Err(ZffError::new(
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_SEGMENT}{}", segment_no))),
 			Some(segment) => {
-				segment.seek(SeekFrom::Start(offset))?;
 				//check encryption
 				if let Some(enc_info) = &enc_info {
-					VirtualFileMap::decode_encrypted_footer_with_key(segment, enc_info)?
+					VirtualFileMap::decode_at_encrypted_footer_with_key(segment, offset, enc_info)?
 				} else {
-					VirtualFileMap::decode_directly(segment)?
+					VirtualFileMap::decode_at(segment, offset)?
 				}
 			}
 		}

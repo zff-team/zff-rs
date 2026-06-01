@@ -146,7 +146,7 @@ impl LogicalObjectEncoder {
 
 	/// Returns the next encoded data - an encoded [FileHeader], an encoded file chunk or an encoded [FileFooter](crate::footer::FileFooter).
 	/// This method will increment the self.current_chunk_number automatically.
-	pub(crate) fn get_next_data<D: Read + Seek>(
+	pub(crate) fn get_next_data<D: ReadAt>(
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64,

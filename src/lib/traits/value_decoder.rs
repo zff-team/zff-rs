@@ -34,4 +34,11 @@ pub trait ValueDecoder {
 		}
 		Self::decode_directly(data)
 	}
+
+
+	/// Decodes the value at given offset from ReadAt.
+	fn decode_at<R: ReadAt + ?Sized>(data: &R, offset: u64) -> Result<Self::Item> {
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decode_directly(&mut cursor)
+	}
 }

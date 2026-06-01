@@ -98,7 +98,7 @@ impl FileEncoder {
 	}
 
 	/// returns the encoded chunk - this method will increment the self.current_chunk_number automatically.
-	pub(crate) fn get_next_chunk<D: Read + Seek>(
+	pub(crate) fn get_next_chunk<D: ReadAt>(
 		&mut self, 
 		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
 		) -> Result<EncodingState> {

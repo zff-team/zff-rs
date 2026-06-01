@@ -142,6 +142,7 @@ impl LogicalObjectSourceFilesystem {
 					directories_to_traversal.push_back((inner_element.path(), parent_file_number, current_file_number));
 				} else {
 					let path = inner_element.path().clone();
+					#[allow(unused_variables)] // to allow Err(e) if not using the log-feature.
 					let mut file_header = match get_file_header(&path, current_file_number, parent_file_number) {
 						Ok(file_header) => file_header,
 						Err(e) => {

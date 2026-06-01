@@ -1,13 +1,16 @@
 // - STD
-use std::io::Error as IoError;
+use std::io::{Error as IoError, ErrorKind as IoEKind};
 
 // - Parent
 use super::*;
 
+// - external
+use moka::sync::Cache as MokaCache;
+
 /// A reader which contains the appropriate metadata of a logical object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
+pub(crate) struct ZffObjectReaderLogical<R: ReadAt> {
 	metadata: ArcZffReaderMetadata<R>,
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterLogical,
@@ -16,10 +19,10 @@ pub(crate) struct ZffObjectReaderLogical<R: Read + Seek> {
 	// this one is "redundant", the data is already available via the ArcZffReaderMetadata - but you can much more easier
 	// access them with that additional hashmap.
 	files: Arc<HashMap<u64, FileMetadata>>, //<filenumber, FileMetadata>
-	reader_cache: Cursor<Vec<u8>>, //cache which holds the current chunk content (for performance purposes)
+	reader_cache: MokaCache<u64, Arc<ChunkContent>>, //cache which holds the current chunk content (for performance purposes)
 }
 
-impl<R: Read + Seek> ZffObjectReaderLogical<R> {
+impl<R: ReadAt> ZffObjectReaderLogical<R> {
 	/// Initialize the [ZffObjectReaderLogical].
 	pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 			Self::with_obj_metadata(object_no, metadata)
@@ -50,17 +53,16 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		} else {
 			None
 		};
-		match self.metadata.segments.write().unwrap().get_mut(header_segment_number) {
+		match self.metadata.segments.get(header_segment_number) {
 			None => Err(ZffError::new(
 				ZffErrorKind::Missing, 
 				format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 			Some(segment) => {
-				segment.seek(SeekFrom::Start(*header_offset))?;
 				//check encryption
 				if let Some(enc_info) = &enc_info {
-					Ok(FileHeader::decode_encrypted_header_with_key(segment, enc_info)?)
+					Ok(FileHeader::decode_at_encrypted_header_with_key(segment, *header_offset, enc_info)?)
 				} else {
-					Ok(FileHeader::decode_directly(segment)?)
+					Ok(FileHeader::decode_at(segment, *header_offset)?)
 				}
 			}
 		}
@@ -104,32 +106,29 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 					Some(offset) => (segment_no, offset),
 				}
 			};
-			let mut segments = metadata.segments.write().unwrap();
-			let fileheader = match segments.get_mut(header_segment_number) {
+			let fileheader = match metadata.segments.get(header_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{header_segment_number}"))),
 				Some(segment) => {
-					segment.seek(SeekFrom::Start(*header_offset))?;
 					//check encryption
 					if let Some(enc_info) = &enc_info {
-						FileHeader::decode_encrypted_header_with_key(segment, enc_info)?
+						FileHeader::decode_at_encrypted_header_with_key(segment, *header_offset, enc_info)?
 					} else {
-						FileHeader::decode_directly(segment)?
+						FileHeader::decode_at(segment, *header_offset)?
 					}
 				}
 			};
-			let filefooter = match segments.get_mut(footer_segment_number) {
+			let filefooter = match metadata.segments.get(footer_segment_number) {
 				None => return Err(ZffError::new(
 					ZffErrorKind::Missing, 
 					format!("{ERROR_MISSING_SEGMENT}{footer_segment_number}"))),
 				Some(segment) => {
-					segment.seek(SeekFrom::Start(*footer_offset))?;
 					//check encryption
 					if let Some(enc_info) = &enc_info {
-						FileFooter::decode_encrypted_footer_with_key(segment, enc_info)?
+						FileFooter::decode_at_encrypted_footer_with_key(segment, *footer_offset, enc_info)?
 					} else {
-						FileFooter::decode_directly(segment)?
+						FileFooter::decode_at(segment, *footer_offset)?
 					}
 				}
 			};
@@ -141,11 +140,13 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		let files = Arc::new(files);
 		#[cfg(feature = "log")]
 		debug!("{} files were successfully initialized for logical object {}.", files.len(), object_header.object_number);
-		{
-			let mut metadata_guard = metadata.object_metadata.write().unwrap();
-			// unwrap is safe here, we've already used this before to obtain the appropriate object header and footer ;)
-			metadata_guard.get_mut(&object_no).unwrap().files = Some(Arc::clone(&files));
-		}
+		// unwrap is safe here, we've already used this before to obtain the appropriate object header and footer ;)
+		metadata.object_metadata
+		.get(&object_no).unwrap()
+		.get().unwrap()
+		.files
+		.set(Arc::clone(&files))
+		.map_err(|_| ZffError::new(ZffErrorKind::Other, ""))?; //TODO: Write a sufficient error msg.
 
 		Ok(Self {
 			metadata,
@@ -154,7 +155,7 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 			active_file: 1,
 			file_positions,
 			files,
-			reader_cache: Cursor::new(Vec::new()),
+			reader_cache: MokaCache::builder().max_capacity(DEFAULT_CHUNK_CACHE_CAPACITY).build(),
 		})
 	}
 
@@ -178,15 +179,21 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 				ZffErrorKind::Missing, 
 				format!("(set_active_file) {ERROR_MISSING_FILE_NUMBER}{filenumber}")))
 		}
-		self.reader_cache.get_mut().clear();
 		Ok(())
 	}
 
 	/// Returns the [FileMetadata] of the active file.
 	/// # Error
 	/// Fails if no valid file is set as the active one.
-	pub(crate) fn filemetadata(&self) -> Result<&FileMetadata> {
-		match self.files.get(&self.active_file) {
+	pub(crate) fn current_filemetadata(&self) -> Result<&FileMetadata> {
+		self.filemetadata_by_filenumber(self.active_file)
+	}
+
+	/// Returns the [FileMetadata] for the given filenumber.
+	/// # Error
+	/// Fails if file not exists in object.
+	pub(crate) fn filemetadata_by_filenumber(&self, file_number: u64) -> Result<&FileMetadata> {
+		match self.files.get(&file_number) {
 			Some(metadata) => Ok(metadata),
 			None => Err(ZffError::new(
 				ZffErrorKind::Missing, 
@@ -199,89 +206,130 @@ impl<R: Read + Seek> ZffObjectReaderLogical<R> {
 		&self.files
 	}
 
-	// Returns true if cache would filled, false if cache is empty (end of reader is reached).
-	fn refill_reader_cache(&mut self) -> std::io::Result<bool> {
-		let filemetadata = self.files.get(&self.active_file).ok_or(IoError::other(format!("(refill_reader_cache) {ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
-		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
-		let position = self.file_positions.get_mut(&self.active_file).unwrap();
-
-		if *position >= filemetadata.length_of_data() {
-			return Ok(false);
+	fn cached_chunk(&self, chunk_number: u64) -> std::io::Result<Arc<ChunkContent>> {
+		if let Some(chunk_content) = self.reader_cache.get(&chunk_number) {
+			return Ok(chunk_content)
 		}
 
-		let chunk_size = self.object_header.chunk_size;
-		//unwrap is safe here: we've never initialized FileMetadata for ZffObjectReaderLogical with ::with_virtual_file_footer().
-		let first_chunk_number = filemetadata.first_chunk_number().unwrap();
-		let last_chunk_number = first_chunk_number + filemetadata.number_of_chunks().unwrap() - 1;
-		let current_chunk_number = (first_chunk_number * chunk_size + *position) / chunk_size;
-		let inner_position = (*position % chunk_size) as usize; // the inner chunk position
-
-		if current_chunk_number > last_chunk_number {
-			return Ok(false)
-		}
-		let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
-			vec![samebyte; chunk_size as usize]
+		let chunk_content = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(chunk_number) {
+			Arc::new(ChunkContent::SameBytes(samebyte))
 		} else {
 			let object_no = &self.object_header.object_number;
-			get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
+			Arc::new(get_chunk_data(object_no, Arc::clone(&self.metadata), chunk_number)?)
 		};
-		{
-			self.reader_cache.set_position(0);
-			let inner = self.reader_cache.get_mut();
-			inner.clear();
-			inner.extend_from_slice(&chunk_data[inner_position..]);
+		self.reader_cache.insert(chunk_number, Arc::clone(&chunk_content));
+		Ok(chunk_content)
+	}
+
+	pub fn read_at_file(&self, buf: &mut[u8], offset: u64, file_no: u64) -> std::io::Result<usize> {
+		let filemetadata = self.files.get(&file_no).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", file_no)))?;
+		if buf.is_empty() || offset >= filemetadata.length_of_data() {
+			return Ok(0)
+		};
+
+		let chunk_size = self.object_header.chunk_size;
+		if chunk_size == 0 {
+			return Err(IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT))
 		}
-		Ok(true)
+
+		let bytes_to_read = (buf.len() as u64).min(filemetadata.length_of_data() - offset) as usize;
+		let mut read_bytes = 0;
+		//unwrap is safe here: we've never initialized FileMetadata for ZffObjectReaderLogical with ::with_virtual_file_footer().
+		let first_chunk_number = filemetadata.first_chunk_number().unwrap();
+
+		while read_bytes < bytes_to_read {
+			let current_offset = offset + read_bytes as u64;
+			let current_chunk_number = first_chunk_number + current_offset / chunk_size;
+			let inner_position = (current_offset % chunk_size) as usize;
+			let remaining_in_chunk = chunk_size as usize - inner_position;
+			let current_read_len = remaining_in_chunk.min(bytes_to_read - read_bytes);
+			let chunk_content = self.cached_chunk(current_chunk_number)?;
+
+			match chunk_content.as_ref() {
+				ChunkContent::Raw(data) => {
+					let end = inner_position.checked_add(current_read_len).ok_or_else(|| {
+						IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT)
+					})?;
+					let chunk_slice = data.get(inner_position..end).ok_or_else(|| {
+						IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT)
+					})?;
+					buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
+				},
+				ChunkContent::SameBytes(byte) => {
+					buf[read_bytes..read_bytes + current_read_len].fill(*byte);
+				},
+				ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
+			}
+			read_bytes += current_read_len;
+		}
+		Ok(read_bytes)
+	}
+
+	pub fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
+		let start_offset = offset;
+        let mut chunk = [0u8; 8192]; //TODO: move "hardcoded" size to constants.rs
+        loop {
+            match self.read_at_file(&mut chunk, offset, file_no) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&chunk[..n]);
+                    offset += n as u64;
+                }
+                Err(e) if e.kind() == IoEKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok((offset-start_offset) as usize)
 	}
 }
 
-impl<R: Read + Seek> Read for ZffObjectReaderLogical<R> {
+impl<R: ReadAt> ReadAt for ZffObjectReaderLogical<R> {
+	fn read_at(&self, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+		self.read_at_file(buf, offset, self.active_file)
+	}
+
+	fn size(&mut self) -> std::io::Result<u64> {
+		let filemetadata = self.files
+			.get(&self.active_file)
+			.ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
+		Ok(filemetadata.length_of_data())
+	}
+}
+
+impl<R: ReadAt> Read for ZffObjectReaderLogical<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-		let mut read_bytes = 0;
-		while read_bytes < buffer.len() {
-            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() &&
-			!self.refill_reader_cache()? {
-					break;
-			}
-			let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
-            read_bytes += written;
-			// unwrap is safe here: we have called refill_reader_cache() before which calls self.file.get(&self.acitve_file).
-			*self.file_positions.get_mut(&self.active_file).unwrap() += written as u64;
-        }
+		let afp = match self.file_positions.get(&self.active_file) {
+			Some(afp) => afp,
+			None => return Err(IoError::new(IoEKind::NotFound, format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file))),
+		};
+		let read_bytes = self.read_at(buffer, *afp)?;
+		let afp = match self.file_positions.get_mut(&self.active_file) {
+			Some(afp) => afp,
+			None => return Err(IoError::new(IoEKind::NotFound, format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file))),
+		};
+		*afp += read_bytes as u64;
 		Ok(read_bytes)
 	}
 }
 
-impl<R: Read + Seek> Seek for ZffObjectReaderLogical<R> {
+impl<R: ReadAt> Seek for ZffObjectReaderLogical<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
-		let filemetadata = match self.files.get(&self.active_file) {
-			Some(metadata) => metadata,
-			None => return Err(
-				std::io::Error::other(
-					format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file))),
+		let afp = match self.file_positions.get_mut(&self.active_file) {
+			Some(afp) => afp,
+			None => return Err(IoError::new(IoEKind::NotFound, format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file))),
 		};
-		//unwrap is safe here: self.files and self.file_positions are both filled by new()-function.
-		let position = self.file_positions.get_mut(&self.active_file).unwrap();
-
-		match seek_from {
-			SeekFrom::Start(value) => {
-				*position = value;
-			},
-			SeekFrom::Current(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
-			} else if value >= 0 {
-					*position += value as u64;
-			} else {
-				*position -= value as u64;
-			},
-			SeekFrom::End(value) => if *position as i64 + value < 0 {
-				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
-			} else if value >= 0 {
-					*position = filemetadata.length_of_data() + value as u64;
-			} else {
-				*position = filemetadata.length_of_data() - value as u64;
-			},
-		}
-		Ok(*position)
+		let filemetadata = self.files.get(&self.active_file).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file)))?;
+		let length_of_data = filemetadata.length_of_data();
+		*afp = match seek_from {
+			SeekFrom::Start(value) => value,
+			SeekFrom::Current(value) => afp.checked_add_signed(value).ok_or_else(|| {
+				std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION)
+			})?,
+			SeekFrom::End(value) => length_of_data.checked_add_signed(value).ok_or_else(|| {
+				std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION)
+			})?,
+		};
+		Ok(*afp)
 	}
 }

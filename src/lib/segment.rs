@@ -1,3 +1,6 @@
+// - STD
+use std::sync::Mutex;
+
 // - Parent
 use super::{*, header::*, footer::*};
 
@@ -11,26 +14,15 @@ use log::trace;
 /// a [crate::footer::SegmentFooter], a [Read](std::io::Read)er to the appropriate
 /// segmented data and a position marker for this [Read](std::io::Read)er.
 #[derive(Debug)]
-pub struct Segment<R: Read + Seek> {
+pub struct Segment<R: ReadAt> {
 	header: SegmentHeader,
 	data: R,
 	footer: SegmentFooter,
-	raw_reader_position: u64,
 }
 
-impl<R: Read + Seek> Segment<R> {
-	/// creates a new [Segment] by the given values.
-	pub fn with_header_and_data(header: SegmentHeader, data: R, footer: SegmentFooter) -> Segment<R> {
-		Self {
-			header,
-			data,
-			footer,
-			raw_reader_position: 0,
-		}
-	}
-
+impl<R: Read+Seek> Segment<Mutex<R>> {
 	/// Creates a new [Segment] from the given [Read](std::io::Read)er.
-	pub fn new_from_reader(mut data: R) -> Result<Segment<R>> {
+	pub fn new_from_reader(mut data: R) -> Result<Self> {
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
 
 		data.seek(SeekFrom::End(-8))?;
@@ -46,8 +38,32 @@ impl<R: Read + Seek> Segment<R> {
 				SegmentFooter::decode_directly(&mut data)?
 			},
 		};
+		let mutex = Mutex::new(data);
 
-		Ok(Self::with_header_and_data(segment_header, data, segment_footer))
+		Ok(Self::with_header_and_data(segment_header, mutex, segment_footer))
+	}
+}
+
+// specialized implementations
+impl Segment<std::fs::File> {
+	/// creates a new [Segment] by the given values.
+	pub fn with_header_and_file(header: SegmentHeader, data: std::fs::File, footer: SegmentFooter) -> Segment<std::fs::File> {
+		Self {
+			header,
+			data,
+			footer,
+		}
+	}
+}
+
+impl<R: ReadAt> Segment<R> {
+	/// creates a new [Segment] by the given values.
+	pub fn with_header_and_data(header: SegmentHeader, data: R, footer: SegmentFooter) -> Segment<R> {
+		Self {
+			header,
+			data,
+			footer,
+		}
 	}
 
 	/// Returns a reference to the underlying [crate::header::SegmentHeader].
@@ -80,7 +96,7 @@ impl<R: Read + Seek> Segment<R> {
 	}
 
 	// returns the object number of the appropriate chunk
-	pub(crate) fn get_object_number(&mut self, chunk_number: u64) -> Result<u64> {
+	pub(crate) fn get_object_number(&self, chunk_number: u64) -> Result<u64> {
 		let chunkmap_offset = get_chunkmap_offset(&self.footer.chunk_header_map_table, chunk_number)?;
 
 		// skips the chunk map header and the other chunk entries.
@@ -88,38 +104,32 @@ impl<R: Read + Seek> Segment<R> {
 					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier 
 						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
 						  1; // skip the ChunkMap header version
-		self.data.seek(SeekFrom::Start(seek_offset))?;
-		u64::decode_directly(&mut self.data)
+		u64::decode_at(&self.data, seek_offset)
 	}
 
 	/// Returns the ChunkHeader of the appropriate chunk (number).
-	pub fn get_chunk_header(&mut self, chunk_number: &u64) -> Result<ChunkHeader> {
+	pub fn get_chunk_header(&self, chunk_number: &u64) -> Result<ChunkHeader> {
 		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
 
-		//go to the appropriate chunk map.
-		self.data.seek(SeekFrom::Start(chunk_header_offset))?;
 		// read the appropriate offset
-		let header = <ChunkHeader as ValueDecoder>::decode_directly(&mut self.data)?;
+		let header = <ChunkHeader as ValueDecoder>::decode_at(&self.data, chunk_header_offset)?;
 		Ok(header)
 	}
 
 	/// Returns the offset of the appropriate chunk (number).
-	pub fn get_chunk_offset(&mut self, chunk_number: &u64) -> Result<u64> {
+	pub fn get_chunk_offset(&self, chunk_number: &u64) -> Result<u64> {
 		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
 		let seek_offset = chunk_header_offset + // go to the appropriate chunk header
 						  4 + // skip the magic bytes
 						  8 + // skip the header length
 						  1;
-
-		//go to the appropriate chunk map.
-		self.data.seek(SeekFrom::Start(seek_offset))?;
 		// read the appropriate offset
-		let offset = u64::decode_directly(&mut self.data)?;
+		let offset = u64::decode_at(&self.data, seek_offset)?;
 		Ok(offset)
 	}
 
 	/// Returns the size of the appropriate (encrypted, compressed, ...) chunk (number)
-	pub fn get_chunk_size(&mut self, chunk_number: &u64) -> Result<u64> {
+	pub fn get_chunk_size(& self, chunk_number: &u64) -> Result<u64> {
 		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
 		let seek_offset = chunk_header_offset + // go to the appropriate chunk header
 						  4 + // skip the magic bytes
@@ -127,15 +137,13 @@ impl<R: Read + Seek> Segment<R> {
 						  1 + // skip the chunk type
 						  8; // skip the chunk offset
 
-		//go to the appropriate chunk map.
-		self.data.seek(SeekFrom::Start(seek_offset))?;
 		// read the appropriate offset
-		let size = u64::decode_directly(&mut self.data)?;
+		let size = u64::decode_at(&self.data, seek_offset)?;
 		Ok(size)
 	}
 
 	/// Returns the flags of the appropriate (encrypted, compressed, ...) chunk (number)
-	pub fn get_chunk_flags(&mut self, chunk_number: &u64) -> Result<ChunkFlags> {
+	pub fn get_chunk_flags(&self, chunk_number: &u64) -> Result<ChunkFlags> {
 		let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
 		let seek_offset = chunk_header_offset + // go to the appropriate chunk header
 						  4 + // skip the magic bytes
@@ -144,16 +152,14 @@ impl<R: Read + Seek> Segment<R> {
 						  8 + // skip the chunk offset
 						  8; // skip the chunk size
 
-		//go to the appropriate chunk map.
-		self.data.seek(SeekFrom::Start(seek_offset))?;
 		// read the appropriate offset
-		let flags = ChunkFlags::decode_directly(&mut self.data)?;
+		let flags = ChunkFlags::decode_at(&self.data, seek_offset)?;
 		Ok(flags)
 	}
 	
 	/// Returns the chunked data, uncompressed and unencrypted.
 	/// Chunk metadata could be optionally attached, e.g. from a precached chunk map.
-	pub(crate) fn chunk_data<E, C>(&mut self, 
+	pub(crate) fn chunk_data<E, C>(&self, 
 		chunk_number: u64, 
 		encryption_information: &Option<E>, 
 		compression_algorithm: C,
@@ -177,11 +183,8 @@ impl<R: Read + Seek> Segment<R> {
 			Some(flags) => flags
 		};
 
-
-		self.data.seek(SeekFrom::Start(chunk_offset))?;
-
 		let mut raw_data_buffer = vec![0u8; chunk_size as usize];
-		self.data.read_exact(&mut raw_data_buffer)?;
+		self.data.read_exact_at(&mut raw_data_buffer, chunk_offset)?;
 
 		if let Some(enc_info) = encryption_information {
 			let enc_info = enc_info.borrow();
@@ -213,35 +216,32 @@ impl<R: Read + Seek> Segment<R> {
 	}
 
 	/// Returns the [crate::header::ObjectHeader] of the given object number, if available in this [Segment]. Otherwise, returns an error.
-	pub fn read_object_header(&mut self, object_number: u64) -> Result<ObjectHeader> {
+	pub fn read_object_header(&self, object_number: u64) -> Result<ObjectHeader> {
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
-		self.data.seek(SeekFrom::Start(*offset))?;
-
 		#[cfg(feature = "log")]
 		trace!("Initialize object header for object {object_number} at offset {offset} in segment {}", self.header().segment_number);
 
-		let object_header = ObjectHeader::decode_directly(&mut self.data)?;
+		let object_header = ObjectHeader::decode_at(&self.data, *offset)?;
 		Ok(object_header)
 	}
 
 	/// Returns the [EncryptedObjectHeader] of the given object number (if available in this [Segment]). Otherwise, returns an error.
-	pub fn read_encrypted_object_header(&mut self, object_number: u64) -> Result<EncryptedObjectHeader> {
+	pub fn read_encrypted_object_header(&self, object_number: u64) -> Result<EncryptedObjectHeader> {
 		let offset = match self.footer.object_header_offsets().get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
-		self.data.seek(SeekFrom::Start(*offset))?;
-		let object_header = EncryptedObjectHeader::decode_directly(&mut self.data)?;
+		let object_header = EncryptedObjectHeader::decode_at(&self.data, *offset)?;
 		Ok(object_header)
 	}
 
 	/// Returns the [crate::header::ObjectHeader] of the given object number (decrypts the encrypted object header on-the-fly with the given decryption password).
 	/// # Error
 	/// Fails if the [crate::header::ObjectHeader] could not be found in this [Segment] or/and if the decryption password is wrong.
-	pub fn read_and_decrypt_object_header<P>(&mut self, object_number: u64, decryption_password: P) -> Result<ObjectHeader>
+	pub fn read_and_decrypt_object_header<P>(&self, object_number: u64, decryption_password: P) -> Result<ObjectHeader>
 	where
 		P: AsRef<[u8]>,
 	{
@@ -249,33 +249,29 @@ impl<R: Read + Seek> Segment<R> {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
-		self.data.seek(SeekFrom::Start(*offset))?;
-		let object_header = ObjectHeader::decode_encrypted_header_with_password(&mut self.data, decryption_password)?;
+		let object_header = ObjectHeader::decode_at_encrypted_header_with_password(&self.data, *offset, decryption_password)?;
 		Ok(object_header)
 	}
 
 	/// Returns the [crate::footer::ObjectFooter] of the given object number, if available in this [Segment]. Otherwise, returns an error.
-	pub fn read_object_footer(&mut self, object_number: u64) -> Result<ObjectFooter> {
+	pub fn read_object_footer(&self, object_number: u64) -> Result<ObjectFooter> {
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 			Some(value) => value,
 			None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
-		self.data.seek(SeekFrom::Start(*offset))?;
-		
 		#[cfg(feature = "log")]
 		trace!("Initialize object footer for object {object_number} at offset {offset:#x} in segment {}", self.header().segment_number);
 		
-		ObjectFooter::decode_directly(&mut self.data)
+		ObjectFooter::decode_at(&self.data, *offset)
 	}
 
 	/// Returns the [crate::footer::EncryptedObjectFooter] of the given object number, if available in this [Segment]. Otherwise, returns an error.
-	pub fn read_encrypted_object_footer(&mut self, object_number: u64) -> Result<EncryptedObjectFooter> {
+	pub fn read_encrypted_object_footer(&self, object_number: u64) -> Result<EncryptedObjectFooter> {
 		let offset = match self.footer.object_footer_offsets().get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
-		self.data.seek(SeekFrom::Start(*offset))?;
-		let encrypted_object_footer = EncryptedObjectFooter::decode_directly(&mut self.data)?;
+		let encrypted_object_footer = EncryptedObjectFooter::decode_at(&self.data, *offset)?;
 		Ok(encrypted_object_footer)
 	}
 
@@ -290,14 +286,23 @@ impl<R: Read + Seek> Segment<R> {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
-		self.data.seek(SeekFrom::Start(*offset))?;
-		let encrypted_object_footer = EncryptedObjectFooter::decode_directly(&mut self.data)?;
+		let encrypted_object_footer = EncryptedObjectFooter::decode_at(&self.data, *offset)?;
 		let enc_info = encryption_information.borrow();
 		encrypted_object_footer.decrypt_and_consume(&enc_info.encryption_key, &enc_info.algorithm)
 	}
 }
 
-impl<R: Read+Seek> Read for Segment<R> {
+impl<R: ReadAt> ReadAt for Segment<R> {
+	fn read_at(&self, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+		self.data.read_at(buf, offset)
+	}
+
+	fn size(&mut self) -> std::io::Result<u64> {
+		self.data.size()
+	}
+}
+
+/*impl<R: Read+Seek> Read for Segment<R> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::result::Result<usize, std::io::Error> {
 		self.data.seek(SeekFrom::Start(self.raw_reader_position))?;
 		let read_bytes = self.data.read(buffer)?;
@@ -312,7 +317,7 @@ impl<R: Read + Seek> Seek for Segment<R> {
 		self.raw_reader_position = self.data.stream_position()?;
 		Ok(position)
 	}
-}
+}*/
 
 fn get_chunkmap_offset(map: &BTreeMap<u64, u64>, chunk_number: u64) -> Result<u64> {
     match map.range(chunk_number..).next() {

@@ -17,6 +17,7 @@ pub use logical_encoder::*;
 pub use logical_object_source::*;
 pub use physical_encoder::*;
 pub use virtual_encoder::*;
+#[cfg(feature = "vos_tar")]
 pub use virtual_object_source::*;
 
 /// Indicates if the data are compressed or not.
@@ -462,7 +463,7 @@ impl SameBytesThread {
 }
 
 /// creates a chunk by using the given data and the given chunk size.
-pub(crate) fn chunking<R: Read + Seek>(
+pub(crate) fn chunking<R: ReadAt>(
 	encoding_thread_pool_manager: &mut EncodingThreadPoolManager,
 	current_chunk_number: u64,
 	samebyte_checklen_value: u64,

@@ -45,7 +45,7 @@ impl ZffExtenderParameter {
 /// This struct contains optional, additional parameter for the [ZffWriter](zffwriter::ZffWriter).
 /// The [ZffWriter](zffwriter::ZffWriter) will use this parameter to create a new zff container.
 #[derive(Default, Debug)]
-pub struct ZffCreationParameters<R: Read + Seek> {
+pub struct ZffCreationParameters<R: ReadAt> {
     /// If given, the appropriate data will be signed by the given [SigningKey].
 	pub signature_key: Option<SigningKey>,
 	/// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.

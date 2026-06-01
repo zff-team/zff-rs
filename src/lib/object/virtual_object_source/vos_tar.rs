@@ -70,7 +70,7 @@ impl VosFileEntry {
 /// Directories, symbolic links, hard links, and special files are represented as
 /// virtual footer content. Hashes are calculated over the encoded virtual
 /// content, or over the referenced byte range for regular files.
-pub struct VirtualObjectSourceLogicalTar<R: Read + Seek> {
+pub struct VirtualObjectSourceLogicalTar<R: ReadAt> {
     /// Indexed tar entries keyed by their generated file number.
     entries: BTreeMap<u64, VosEntry>,
     /// One-based file number of the next entry returned by the iterator.
@@ -87,7 +87,7 @@ pub struct VirtualObjectSourceLogicalTar<R: Read + Seek> {
     hash_types: Vec<HashType>,
 }
 
-impl<R: Read + Seek> VirtualObjectSourceLogicalTar<R> {
+impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
     /// Creates a virtual object source from a logical tar file in a ZFF reader.
     ///
     /// `object_number` and `file_number` select the existing logical tar file
@@ -339,7 +339,7 @@ impl<R: Read + Seek> VirtualObjectSourceLogicalTar<R> {
     }
 }
 
-impl<R: Read + Seek> VirtualObjectSource for VirtualObjectSourceLogicalTar<R> {
+impl<R: ReadAt> VirtualObjectSource for VirtualObjectSourceLogicalTar<R> {
     fn remaining_elements(&self) -> u64 {
         let number_of_entries = self.entries.len() as u64;
         if self.index_pointer > number_of_entries {
@@ -354,7 +354,7 @@ impl<R: Read + Seek> VirtualObjectSource for VirtualObjectSourceLogicalTar<R> {
     }
 }
 
-impl<R: Read + Seek> Iterator for VirtualObjectSourceLogicalTar<R> {
+impl<R: ReadAt> Iterator for VirtualObjectSourceLogicalTar<R> {
     type Item = Result<(FileHeader, VirtualFileFooterMetadata)>;
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {

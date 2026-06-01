@@ -1,9 +1,9 @@
 [package]
 name = "zff"
-version = "3.0.0-rc.6"
+version = "3.0.0-rc.7"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2021"
-rust-version = "1.74.0"
+rust-version = "1.89.0"
 license = "MIT OR Apache-2.0"
 description = "This crate is a library to interact with zff, a file format for forensic images."
 readme = "./README.md"
@@ -31,12 +31,13 @@ byteorder = "1.4.3"
 chacha20poly1305 = "0.10"
 cbc = { version = "0.2.0", features = [ "alloc" ] }
 crossbeam = "0.8.2"
-digest = { version = "0.11.2", features = [ "alloc" ] }
+digest = { version = "0.11.3", features = [ "alloc" ] }
 ed25519-dalek = { version = "2.2.0", features = [ "digest" ] }
 hex = { version = "0.4", optional = true }
 itertools = "0.14"
 log = { version = "0.4.29", optional = true }
-lz4_flex = "0.13.0"
+lz4_flex = "0.13.1"
+moka = { version = "0.12.15", features = ["sync"] }
 ordered-float = "5.2.0"
 phollpers = { version = "0.1.0", features = ["compression"]}
 pkcs5 = { version = "0.8.0", features = [ "pbes2", "alloc" ] }
@@ -45,7 +46,7 @@ redb = "4.1.0"
 rust-argon2 = "3.0.0"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 sha2 = "0.11.0"
-sha3 = "0.11.0"
+sha3 = "0.12.0"
 tar = { version = "0.4.45", optional = true }
 time = { version = "0.3.47" }
 typenum = "1.19.0"

@@ -95,7 +95,7 @@ impl<R: Read> ObjectEncoder<R> {
 	}
 
 	/// returns the next data.
-	pub(crate) fn get_next_data<D: Read + Seek>(
+	pub(crate) fn get_next_data<D: ReadAt>(
 		&mut self, 
 		current_offset: u64, 
 		current_segment_no: u64, 

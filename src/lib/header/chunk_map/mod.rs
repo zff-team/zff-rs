@@ -167,6 +167,18 @@ pub trait ChunkMap {
 		Ok(ChunkMapInnerStructureData::new(object_number, structure_content))
     }
 
+    /// Decrypts and decodes the chunk map by using the given key from given offset.
+	fn decrypt_and_decode_at<K, A, D>(key: K, encryption_algorithm: A, data: &D, chunk_no: u64, offset: u64) -> Result<Self> 
+	where
+		K: AsRef<[u8]>, 
+		A: Borrow<EncryptionAlgorithm>, 
+		D: ReadAt + ?Sized,
+		Self: Sized + HeaderCoding,
+	{
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decrypt_and_decode(key, encryption_algorithm, &mut cursor, chunk_no)
+	}
+
     /// Decrypts and decodes the chunk map by using the given key.
     fn decrypt_and_decode<K, A, D>(key: K, encryption_algorithm: A, data: &mut D, chunk_no: u64) -> Result<Self> 
     where

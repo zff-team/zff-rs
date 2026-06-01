@@ -185,9 +185,18 @@ impl FileHeader {
 		vec
 	}
 
+	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader] from given position offset.
+	pub fn decode_at_encrypted_header_with_key<R, E>(data: &R, offset: u64, encryption_information: E) -> Result<Self>
+	where
+		R: ReadAt + ?Sized,
+		E: Borrow<EncryptionInformation>,
+	{
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decode_encrypted_header_with_key(&mut cursor, encryption_information)
+	}
+
 	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader].
-	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader].
-	pub fn decode_encrypted_header_with_key<R, E>(data: &mut R, encryption_information: E) -> Result<FileHeader>
+	pub fn decode_encrypted_header_with_key<R, E>(data: &mut R, encryption_information: E) -> Result<Self>
 	where
 		R: Read,
 		E: Borrow<EncryptionInformation>

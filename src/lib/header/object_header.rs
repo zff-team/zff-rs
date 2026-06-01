@@ -175,6 +175,20 @@ impl ObjectHeader {
 		vec
 	}
 
+	/// decodes the encrypted header with the given password at given offset.
+	pub fn decode_at_encrypted_header_with_password<R, P>(
+    data: &R,
+    offset: u64,
+    password: P,
+	) -> Result<ObjectHeader>
+	where
+		R: ReadAt + ?Sized,
+		P: AsRef<[u8]>,
+	{
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decode_encrypted_header_with_password(&mut cursor, password)
+	}
+
 	/// decodes the encrypted header with the given password.
 	pub fn decode_encrypted_header_with_password<R, P>(data: &mut R, password: P) -> Result<ObjectHeader>
 	where

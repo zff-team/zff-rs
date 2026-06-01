@@ -1,18 +1,24 @@
+// - STD
+use std::io::{Error as IoError, ErrorKind as IoEKind};
+
 // - Parent
 use super::*;
+
+// - external
+use moka::sync::Cache as MokaCache;
 
 /// A reader which contains the appropriate metadata of a physical object 
 /// (e.g. the appropriate [ObjectHeader](crate::header::ObjectHeader) and [ObjectFooter](crate::footer::ObjectFooter)).
 #[derive(Debug)]
-pub(crate) struct ZffObjectReaderPhysical<R: Read + Seek> {
+pub(crate) struct ZffObjectReaderPhysical<R: ReadAt> {
 	metadata: ArcZffReaderMetadata<R>,
 	object_header: ObjectHeader,
 	object_footer: ObjectFooterPhysical,
-	reader_cache: Cursor<Vec<u8>>, //cache which holds the current chunk content (for performance purposes)
+	reader_cache: MokaCache<u64, Arc<ChunkContent>>, //cache which holds the current chunk content (for performance purposes)
 	position: u64,
 }
 
-impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
+impl<R: ReadAt> ZffObjectReaderPhysical<R> {
 	/// creates a new [ZffObjectReaderPhysical] with the given metadata.
 	pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
 		let object_header = metadata.object_header(&object_no).unwrap().clone();
@@ -24,7 +30,7 @@ impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 			metadata,
 			object_header,
   			object_footer,
-			reader_cache: Cursor::new(Vec::new()),
+			reader_cache: MokaCache::builder().max_capacity(DEFAULT_CHUNK_CACHE_CAPACITY).build(),
 			position: 0
 		}
 	}
@@ -44,75 +50,89 @@ impl<R: Read + Seek> ZffObjectReaderPhysical<R> {
 		&self.object_footer
 	}
 
-	// Returns true if cache would filled, false if cache is empty (end of reader is reached).
-	fn refill_reader_cache(&mut self) -> Result<bool> {
-		let chunk_size = self.object_header.chunk_size;
-		let first_chunk_number = self.object_footer.first_chunk_number;
-		let last_chunk_number = first_chunk_number + self.object_footer.number_of_chunks - 1;
-		let current_chunk_number = (first_chunk_number * chunk_size + self.position) / chunk_size;
-		let inner_position = (self.position % chunk_size) as usize; // the inner chunk position
-
-		if self.position >= self.object_footer.length_of_data {
-			return Ok(false);
+	fn cached_chunk(&self, chunk_number: u64) -> std::io::Result<Arc<ChunkContent>> {
+		if let Some(chunk_content) = self.reader_cache.get(&chunk_number) {
+			return Ok(chunk_content)
 		}
 
-		if current_chunk_number > last_chunk_number {
-			return Ok(false)
-		}
-		let chunk_data = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(current_chunk_number) {
-			vec![samebyte; chunk_size as usize]
+		let chunk_content = if let Some(samebyte) = self.metadata.preloaded_chunkmaps.read().unwrap().get_samebyte(chunk_number) {
+			Arc::new(ChunkContent::SameBytes(samebyte))
 		} else {
 			let object_no = &self.object_header.object_number;
-			get_chunk_data(object_no, Arc::clone(&self.metadata), current_chunk_number)?
+			Arc::new(get_chunk_data(object_no, Arc::clone(&self.metadata), chunk_number)?)
 		};
-		{
-			self.reader_cache.set_position(0);
-			let inner = self.reader_cache.get_mut();
-			inner.clear();
-			inner.extend_from_slice(&chunk_data[inner_position..]);
-		}
-		Ok(true)
+		self.reader_cache.insert(chunk_number, Arc::clone(&chunk_content));
+		Ok(chunk_content)
 	}
 }
 
-impl<R: Read + Seek> Read for ZffObjectReaderPhysical<R> {
-	fn read(&mut self, buffer: &mut [u8], ) -> std::io::Result<usize> {
+impl<R: ReadAt> ReadAt for ZffObjectReaderPhysical<R> {
+	fn read_at(&self, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+		if buf.is_empty() || offset >= self.object_footer.length_of_data {
+			return Ok(0)
+		};
+
+		let chunk_size = self.object_header.chunk_size;
+		if chunk_size == 0 {
+			return Err(IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT))
+		}
+
+		let bytes_to_read = (buf.len() as u64).min(self.object_footer.length_of_data - offset) as usize;
 		let mut read_bytes = 0;
-		while read_bytes < buffer.len() {
-            if self.reader_cache.position() as usize >= self.reader_cache.get_ref().len() && 
-			!self.refill_reader_cache()? {
-				break;
+		let first_chunk_number = self.object_footer.first_chunk_number;
+
+		while read_bytes < bytes_to_read {
+			let current_offset = offset + read_bytes as u64;
+			let current_chunk_number = first_chunk_number + current_offset / chunk_size;
+			let inner_position = (current_offset % chunk_size) as usize;
+			let remaining_in_chunk = chunk_size as usize - inner_position;
+			let current_read_len = remaining_in_chunk.min(bytes_to_read - read_bytes);
+			let chunk_content = self.cached_chunk(current_chunk_number)?;
+
+			match chunk_content.as_ref() {
+				ChunkContent::Raw(data) => {
+					let end = inner_position.checked_add(current_read_len).ok_or_else(|| {
+						IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT)
+					})?;
+					let chunk_slice = data.get(inner_position..end).ok_or_else(|| {
+						IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT)
+					})?;
+					buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
+				},
+				ChunkContent::SameBytes(byte) => {
+					buf[read_bytes..read_bytes + current_read_len].fill(*byte);
+				},
+				ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
 			}
-            let written = self.reader_cache.read(&mut buffer[read_bytes..])?;
-            read_bytes += written;
-			self.position += written as u64;
-        }
+			read_bytes += current_read_len;
+		}
+		Ok(read_bytes)
+	}
+
+	fn size(&mut self) -> std::io::Result<u64> {
+		Ok(self.object_footer.length_of_data)
+	}
+}
+
+impl<R: ReadAt> Read for ZffObjectReaderPhysical<R> {
+	fn read(&mut self, buffer: &mut [u8], ) -> std::io::Result<usize> {
+		let read_bytes = self.read_at(buffer, self.position)?;
+		self.position += read_bytes as u64;
 		Ok(read_bytes)
 	}
 }
 
-impl<R: Read + Seek> Seek for ZffObjectReaderPhysical<R> {
+impl<R: ReadAt> Seek for ZffObjectReaderPhysical<R> {
 	fn seek(&mut self, seek_from: SeekFrom) -> std::result::Result<u64, std::io::Error> {
-		match seek_from {
-			SeekFrom::Start(value) => {
-				self.position = value;
-			},
-			SeekFrom::Current(value) => if self.position as i64 + value < 0 {
-				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
-			} else if value >= 0 {
-					self.position += value as u64;
-			} else {
-				self.position -= value as u64;
-			},
-			SeekFrom::End(value) => if self.position as i64 + value < 0 {
-				return Err(std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION))
-			} else if value >= 0 {
-					self.position = self.object_footer.length_of_data + value as u64;
-			} else {
-				self.position = self.object_footer.length_of_data - value as u64;
-			},
-		}
-		self.reader_cache.get_mut().clear();
+		self.position = match seek_from {
+			SeekFrom::Start(value) => value,
+			SeekFrom::Current(value) => self.position.checked_add_signed(value).ok_or_else(|| {
+				std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION)
+			})?,
+			SeekFrom::End(value) => self.object_footer.length_of_data.checked_add_signed(value).ok_or_else(|| {
+				std::io::Error::other(ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION)
+			})?,
+		};
 		Ok(self.position)
 	}
 }

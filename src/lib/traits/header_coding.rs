@@ -90,6 +90,12 @@ pub trait HeaderCoding {
 		Self::decode_content(&header_content)
 	}
 
+	/// decodes the header at given offset.
+	fn decode_at<R: ReadAt + ?Sized>(data: &R, offset: u64) -> Result<Self::Item> {
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decode_directly(&mut cursor)
+	}
+
 	/// Method to show the "name" of the appropriate struct (e.g. to use this with fmt::Display).
 	/// This method is a necassary helper method for fmt::Display and serde::ser::SerializeStruct (and for some debugging purposes).
 	fn struct_name() -> &'static str;

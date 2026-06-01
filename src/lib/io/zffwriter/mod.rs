@@ -150,7 +150,7 @@ pub enum ZffFilesOutput {
 /// 
 /// ZffWriter only supports to create a new zff container in a single segment.
 /// For creating a multi-segment zff container, or extending an existing one, use the ZffWriter struct.
-pub struct ZffWriter<R: Read, C: Read + Seek> {
+pub struct ZffWriter<R: Read, C: ReadAt> {
     object_encoder: Vec<ObjectEncoder<R>>,
 	current_object_encoder: ObjectEncoder<R>, //the current object encoder
     /// The field target_segment_size will be ignored.
@@ -161,7 +161,7 @@ pub struct ZffWriter<R: Read, C: Read + Seek> {
     output: ZffFilesOutput,
 }
 
-impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
+impl<R: Read, C: ReadAt> ZffWriter<R, C> {
     /// Returns a new ZffWriter with the given values.
     pub fn with_data(
         physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
@@ -397,7 +397,7 @@ impl<R: Read, C: Read + Seek> ZffWriter<R, C> {
 
 }
 
-impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
+impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut bytes_written_to_buffer = 0; // the number of bytes which are written to the current buffer,
 
@@ -838,7 +838,7 @@ impl<R: Read, C: Read + Seek> Read for ZffWriter<R, C> {
     }
 }
 
-fn setup_container<R: Read, C: Read + Seek>(
+fn setup_container<R: Read, C: ReadAt>(
     physical_objects: HashMap<ObjectHeader, R>,
     logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
     virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
@@ -971,7 +971,7 @@ fn setup_container<R: Read, C: Read + Seek>(
     })
 }
 
-fn build_in_progress_data<C: Read + Seek>(params: &ZffCreationParameters<C>) -> ZffWriterInProgressData {
+fn build_in_progress_data<C: ReadAt>(params: &ZffCreationParameters<C>) -> ZffWriterInProgressData {
     let mut in_progress_data = ZffWriterInProgressData::new();
     in_progress_data.main_footer.description_notes = params.description_notes.clone();
 

@@ -51,12 +51,19 @@ impl ObjectFooter {
 		}
 	}
 
-	/// decodes the length of the header.
+	/// Decodes the length of the header.
 	fn decode_header_length<R: Read>(data: &mut R) -> Result<u64> {
 		match data.read_u64::<LittleEndian>() {
 			Ok(value) => Ok(value),
 			Err(_) => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
+	}
+
+	/// Reads the data from the given [Reader](std::io::Read) at given offset and returns a decoded object footer.
+	/// Returns an error, if the decoding process fails.
+	pub fn decode_at<R: ReadAt + ?Sized>(data: &R, offset: u64) -> Result<Self> {
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decode_directly(&mut cursor)
 	}
 
 	/// Reads the data from the given [Reader](std::io::Read) and returns a decoded object footer.
@@ -198,6 +205,13 @@ impl EncryptedObjectFooter {
 			Ok(value) => Ok(value),
 			Err(_) => Err(ZffError::new(ZffErrorKind::EncodingError, ERROR_HEADER_DECODER_HEADER_LENGTH)),
 		}
+	}
+
+	/// Reads the data from the given [Reader](std::io::Read) at given offset and returns a decoded object footer.
+	/// Returns an error, if the decoding process fails.
+	pub fn decode_at<R: ReadAt + ?Sized>(data: &R, offset: u64) -> Result<Self> {
+		let mut cursor = ReadAtCursor::new(data, offset);
+		Self::decode_directly(&mut cursor)
 	}
 
 	/// Reads the data from the given [Reader](std::io::Read) and returns a decoded object footer.
