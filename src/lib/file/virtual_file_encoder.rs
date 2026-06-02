@@ -1,5 +1,8 @@
-// - Parent
-use super::*;
+// - internal
+use crate::prelude::*;
+
+// - external
+use zeroize::Zeroize;
 
 /// Encodes the a virtual file.
 pub struct VirtualFileEncoder {
@@ -12,6 +15,12 @@ pub struct VirtualFileEncoder {
     /// optional encryption information, to encrypt the data with the given key and algorithm (if the appropriate
 	/// object is encrypted).
 	encryption_information: Option<EncryptionInformation>,
+}
+
+impl Drop for VirtualFileEncoder {
+	fn drop(&mut self) {
+		self.encryption_information.zeroize();
+	}
 }
 
 impl VirtualFileEncoder {

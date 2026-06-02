@@ -13,6 +13,7 @@ use pkcs5::{
 	scrypt::Params as ScryptParams
 };
 use rand::Rng;
+use zeroize::Zeroize;
 
 // - types
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
@@ -23,7 +24,7 @@ type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 /// Defines all encryption algorithms (for use in data and header encryption), which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum EncryptionAlgorithm {
@@ -51,7 +52,7 @@ impl fmt::Display for EncryptionAlgorithm {
 /// Defines all KDF schemes, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum KDFScheme {
@@ -77,7 +78,7 @@ impl fmt::Display for KDFScheme {
 /// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum PBEScheme {
@@ -149,7 +150,8 @@ pub fn encrypt_pbkdf2sha256_aes128cbc(
 	plaintext: &[u8]) -> Result<Vec<u8>> {
 	let params = PBES2Parameters::generate_pbkdf2_sha256_aes128cbc(iterations, salt, aes_iv)?;
 	let encryption_scheme = EncryptionScheme::Pbes2(params);
-	Ok(encryption_scheme.encrypt(password, plaintext)?)
+	let crypt = encryption_scheme.encrypt(password, plaintext)?;
+	Ok(crypt)
 }
 
 /// Encrypts the given plaintext with the given values with PBKDF2-SHA256-AES256CBC, defined in PKCS#5.

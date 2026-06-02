@@ -28,10 +28,11 @@ use redb::{
 	StorageError as RedbStorageError,
 	CommitError as RedbCommitError
 };
+use thiserror::Error as ThisError;
 use time::error::ComponentRange as ComponentRangeError;
 
 /// The main error-type of this crate.
-#[derive(Debug)]
+#[derive(Debug, ThisError)]
 pub struct ZffError {
 	/// A detailed error message.
 	details: String,
@@ -179,13 +180,6 @@ impl ZffError {
 	}
 }
 
-impl std::error::Error for ZffError {
-	/// Returns the source of this error, if any.
-	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-		self.source.as_deref().map(|e| e as &(dyn std::error::Error + 'static))
-	}
-}
-
 impl fmt::Display for ZffError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let err_msg = format!("{}: {}", self.kind, self.details);
@@ -201,9 +195,9 @@ impl From<ZffError> for std::io::Error {
 }
 
 impl<T> From<std::sync::PoisonError<T>> for ZffError {
-	fn from(_value: std::sync::PoisonError<T>) -> Self {
-		let err_msg = "PoisonError"; //TODO!
-		ZffError::new(ZffErrorKind::PoisonError, err_msg)
+	fn from(e: std::sync::PoisonError<T>) -> Self {
+		let err_msg = e.to_string();
+		ZffError::new_with_source(ZffErrorKind::PoisonError, None, err_msg)
 	}
 }
 
@@ -279,17 +273,14 @@ impl From<PKCS5CryptoError> for ZffError {
 		//TODO: time of writing, pkcs5 does not implement std::error::Error (stable is version 0.7.1, 0.8.0
 		// is just a release canidate which implements std::error::Error using the feature-flag std).
 		// As soon as version 0.8.0 is released, we can use the source of the error.
-		ZffError::new_with_source(ZffErrorKind::EncryptionError, None, err_msg)
+		ZffError::new_with_source(ZffErrorKind::EncryptionError, Some(Box::new(e)), err_msg)
 	}
 }
 
 impl From<ScryptErrorInvalidParams> for ZffError {
 	fn from(e: ScryptErrorInvalidParams) -> ZffError {
 		let err_msg = e.to_string();
-		//TODO: time of writing, pkcs5 does not implement std::error::Error (stable is version 0.7.1, 0.8.0
-		// is just a release canidate which implements std::error::Error using the feature-flag std).
-		// As soon as version 0.8.0 is released, we can use the source of the error.
-		ZffError::new_with_source(ZffErrorKind::Invalid, None, err_msg)
+		ZffError::new_with_source(ZffErrorKind::Invalid, Some(Box::new(e)), err_msg)
 	}
 }
 
@@ -373,6 +364,7 @@ impl From<Box<dyn std::error::Error>> for ZffError {
 
 /// Contains the variants/kinds of errors, which could be find in this crate.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum ZffErrorKind {
 	/// An IO Error.
 	IO,

@@ -18,6 +18,8 @@ use crate::{
 // - external
 use time::{OffsetDateTime};
 use ed25519_dalek::{SigningKey};
+use zeroize::Zeroize;
+
 
 
 /// The [PhysicalObjectEncoder] can be used to encode a physical object.
@@ -33,6 +35,12 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	pub(crate) encryption_key: Option<Vec<u8>>,
 	pub(crate) acquisition_start: u64,
 	pub(crate) acquisition_end: u64,
+}
+
+impl<R: Read> Drop for PhysicalObjectEncoder<R> {
+	fn drop(&mut self) {
+		self.encryption_key.zeroize();
+	}
 }
 
 impl<R: Read> PhysicalObjectEncoder<R> {

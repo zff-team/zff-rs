@@ -5,6 +5,9 @@ use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
 
+// - internal
+use crate::constants::SMALL_BUFFER_SIZE;
+
 pub(crate) struct ReadAtCursor<'a, R: ReadAt + ?Sized> {
     data: &'a R,
     position: u64,
@@ -51,7 +54,7 @@ pub trait ReadAt {
     /// Same as read_to_end, but starts at given offset.
     fn read_at_to_end(&self, buf: &mut Vec<u8>, mut offset: u64) -> Result<usize> {
         let start_offset = offset;
-        let mut chunk = [0u8; 8192]; //TODO: move "hardcoded" size to constants.rs
+        let mut chunk = [0u8; SMALL_BUFFER_SIZE];
         loop {
             match self.read_at(&mut chunk, offset) {
                 Ok(0) => break,

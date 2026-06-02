@@ -9,6 +9,7 @@ use crate::prelude::*;
 
 // - external
 use byteorder::{LittleEndian, ReadBytesExt};
+use zeroize::Zeroize;
 
 /// Holds the appropriate object flags:
 /// - the encryption flag, if the appropriate object is encrypted.
@@ -94,6 +95,14 @@ pub struct ObjectHeader {
 	pub description_header: DescriptionHeader,
 	/// the appropriate [ObjectType].
 	pub object_type: ObjectType,
+}
+
+/// For security purposes, the Drop implementation zeroize the underlying [EncryptionHeader] (which potentially contains
+/// the decrypted encryption key).
+impl Drop for ObjectHeader {
+	fn drop(&mut self) {
+		self.encryption_header.zeroize();
+	}
 }
 
 impl ObjectHeader {

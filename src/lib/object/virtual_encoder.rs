@@ -14,6 +14,7 @@ use crate::{
 // - external
 use time::{OffsetDateTime};
 use ed25519_dalek::{SigningKey};
+use zeroize::Zeroize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ReadState {
@@ -51,6 +52,12 @@ pub struct VirtualObjectEncoder {
     signing_key: Option<SigningKey>,
     /// Current position in the per-file emission state machine.
     read_state: ReadState,
+}
+
+impl Drop for VirtualObjectEncoder {
+    fn drop(&mut self) {
+        self.enc_info.zeroize();
+    }
 }
 
 impl VirtualObjectEncoder {

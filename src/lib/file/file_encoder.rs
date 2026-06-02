@@ -22,6 +22,7 @@ use crate::{
 // - external
 use ed25519_dalek::{SigningKey};
 use time::OffsetDateTime;
+use zeroize::Zeroize;
 
 /// This enum contains the information, which are needed to encode the different file types.
 pub enum FileTypeEncodingInformation {
@@ -73,6 +74,12 @@ pub struct FileEncoder {
 	read_bytes_underlying_data: u64,
 	acquisition_start: u64,
 	acquisition_end: u64,
+}
+
+impl Drop for FileEncoder {
+	fn drop(&mut self) {
+		self.encryption_information.zeroize();
+	}
 }
 
 impl FileEncoder {

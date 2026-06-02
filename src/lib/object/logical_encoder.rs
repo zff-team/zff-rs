@@ -16,6 +16,7 @@ use crate::{
 // - external
 use ed25519_dalek::{SigningKey};
 use time::OffsetDateTime;
+use zeroize::Zeroize;
 
 
 /// The [LogicalObjectEncoder] can be used to encode a logical object.
@@ -33,6 +34,12 @@ pub struct LogicalObjectEncoder {
 	pub(crate) current_chunk_number: u64,
 	pub(crate) object_footer: ObjectFooterLogical,
 	pub(crate) empty_file_eof: bool,
+}
+
+impl Drop for LogicalObjectEncoder {
+	fn drop(&mut self) {
+		self.encryption_key.zeroize();
+	}
 }
 
 impl LogicalObjectEncoder {

@@ -13,8 +13,11 @@ use crate::{
 	decrypt_argon2_aes256cbc,
 };
 
+// - external
+use zeroize::Zeroize;
+
 /// This struct could be used to manage the encryption information while creating a zff container
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionInformation {
@@ -37,15 +40,16 @@ impl EncryptionInformation {
 
 impl TryFrom<ObjectHeader> for EncryptionInformation {
 	type Error = ZffError;
+
 	fn try_from(obj_header: ObjectHeader) -> Result<Self> {
 		match obj_header.encryption_header {
 			None => Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
-			Some(enc_header) => {
+			Some(ref enc_header) => {
 				match enc_header.get_encryption_key() {
 					None => Err(ZffError::new(ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
 					Some(key) => Ok(EncryptionInformation {
 						encryption_key: key,
-						algorithm: enc_header.algorithm
+						algorithm: enc_header.algorithm.clone()
 					}),
 				}
 			}
@@ -92,7 +96,7 @@ impl EncryptionInformation {
 /// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password based encryption method,
 /// described by the containing [PBEHeader].
 /// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct EncryptionHeader {

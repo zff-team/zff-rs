@@ -7,6 +7,7 @@ use crate::prelude::*;
 
 // - external
 use byteorder::{BigEndian, ReadBytesExt};
+use zeroize::Zeroize;
 
 /// The pbe header contains all informations for the encryption of the encryption key.
 /// 
@@ -14,7 +15,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 /// encrypted with an user password.\
 /// This encryption of the encryption key is done via a password-based encryption (PBE).\
 /// All metadata about this PBE can be found in this PBEHeader.\
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug,Clone,PartialEq,Eq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBEHeader {
@@ -99,7 +100,7 @@ impl fmt::Display for PBEHeader {
 /// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub enum KDFParameters {
@@ -175,7 +176,7 @@ impl ValueDecoder for KDFParameters {
 }
 
 /// struct to store the parameters for the KDF PBKDF2-SHA256.
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct PBKDF2SHA256Parameters {
@@ -231,7 +232,7 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 }
 
 /// struct to store the parameters for the KDF Scrypt.
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ScryptParameters {
@@ -299,7 +300,7 @@ impl HeaderCoding for ScryptParameters {
 
 
 /// struct to store the parameters for the KDF Scrypt.
-#[derive(Debug,Clone,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Argon2idParameters {

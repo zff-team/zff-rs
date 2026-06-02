@@ -357,7 +357,7 @@ impl<R: ReadAt> ZffObjectReaderVirtual<R> {
 
 	pub fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
 		let start_offset = offset;
-        let mut chunk = [0u8; 8192]; //TODO: move "hardcoded" size to constants.rs
+        let mut chunk = [0u8; DEFAULT_READ_BUFFER_SIZE];
         loop {
             match self.read_at_file(&mut chunk, offset, file_no) {
                 Ok(0) => break,

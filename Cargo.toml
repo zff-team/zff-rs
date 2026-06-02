@@ -24,7 +24,7 @@ crate-type = ["lib"]
 aes = "0.9.1"
 aes-gcm = { version = "0.10", features = [ "std" ] }
 base64 = "0.22"
-bitflags = "2.11.1"
+bitflags = "2.12.1"
 blake2 = "0.11.0-rc.6" #TODO: must be stable before stable release of zff-rs
 blake3 = { version = "1.8.3", features = [ "traits-preview" ] }
 byteorder = "1.4.3"
@@ -35,7 +35,7 @@ digest = { version = "0.11.3", features = [ "alloc" ] }
 ed25519-dalek = { version = "2.2.0", features = [ "digest" ] }
 hex = { version = "0.4", optional = true }
 itertools = "0.14"
-log = { version = "0.4.30", optional = true }
+log = { version = "0.4.31", optional = true }
 lz4_flex = "0.13.1"
 moka = { version = "0.12.15", features = ["sync"] }
 ordered-float = "5.2.0"
@@ -48,9 +48,11 @@ serde = { version = "1.0.228", features = ["derive"], optional = true }
 sha2 = "0.11.0"
 sha3 = "0.12.0"
 tar = { version = "0.4.46", optional = true }
+thiserror = { version = "2.0.18" }
 time = { version = "0.3.47" }
 typenum = "1.20.1"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
+zeroize = {version = "1.8.2", features = ["derive"] }
 zstd = "0.13.3"
 
 # platform specific dependencies

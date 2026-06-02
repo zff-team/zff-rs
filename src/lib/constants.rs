@@ -237,6 +237,10 @@ pub const HEADER_LENGTH_LENGTH: usize = 8;
 pub const HEADER_VERSION_LENGTH: usize = 1;
 /// The default chunkmap size
 pub const DEFAULT_CHUNKMAP_SIZE: u64 = 32768;
+/// Default buffer size for read operations (64KB)
+pub const DEFAULT_READ_BUFFER_SIZE: usize = 65536;
+/// Small buffer size for metadata operations
+pub const SMALL_BUFFER_SIZE: usize = 8192;
 
 
 // file metadata extended values
