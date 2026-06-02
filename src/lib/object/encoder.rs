@@ -1,5 +1,14 @@
-// - Parent
-use super::*;
+// - STD
+use std::io::Read;
+
+// - internal
+use crate::prelude::*;
+use crate::{
+	LogicalObjectEncoder,
+	PhysicalObjectEncoder,
+	PreparedChunk,
+	VirtualObjectEncoder,
+};
 
 /// Returns the current state of encoding.
 #[derive(Debug, Clone, Default)]

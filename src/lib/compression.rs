@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::fmt;
+use std::io::Read;
+
+// - internal
+use crate::Result;
 
 /// Defines all compression algorithms, which are implemented in zff.
 #[repr(u8)]

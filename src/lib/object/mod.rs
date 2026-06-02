@@ -1,5 +1,20 @@
-// - Parent
-use super::{*, header::*, io::*};
+// - STD
+use std::collections::HashMap;
+use std::io::copy as io_copy;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::thread;
+
+// - internal
+use crate::prelude::*;
+use crate::{
+	EncryptionAlgorithm,
+	PreparedChunk,
+	io::{
+		calculate_xxhash,
+		check_same_byte,
+		buffer_chunk,
+	},
+};
 #[cfg(any(feature = "los_tar", feature = "vos_tar"))]
 use helper::parse_unix_timestamp_nanos;
 

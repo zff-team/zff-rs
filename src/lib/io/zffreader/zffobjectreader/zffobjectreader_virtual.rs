@@ -1,8 +1,20 @@
 // - STD
-use std::io::{Error as IoError, ErrorKind as IoEKind};
+use std::collections::{HashMap};
+use std::io::{Error as IoError, ErrorKind as IoEKind, Read, Seek, SeekFrom};
+use std::sync::{Arc};
 
-// - Parent
-use super::*;
+// - internal
+use crate::prelude::*;
+use crate::{
+	FileFooterMetadata,
+	FileMetadata,
+	helper::floor_btree_entry,
+	io::zffreader::{
+		ArcZffReaderMetadata,
+		get_chunk_data,
+	},
+	VirtualFileContent,
+};
 
 // - external
 use moka::sync::Cache as MokaCache;

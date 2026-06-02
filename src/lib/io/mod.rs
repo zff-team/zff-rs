@@ -1,10 +1,32 @@
-// - Parent
-use super::{*, header::*, footer::*, helper::*};
-
 // - STD
-use std::fs::File;
+use std::collections::{HashMap};
+use std::fs::{File, Metadata, read_dir, metadata};
+use std::io::{Read, copy as io_copy};
+use std::path::{Path, PathBuf};
+use std::thread::sleep;
+use std::time::Duration;
 #[cfg(target_family = "unix")]
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::{
+    FileTypeExt,
+    MetadataExt,
+};
+
+
+// - internal
+use crate::prelude::*;
+use crate::{
+    LogicalObjectEncoder,
+    ObjectEncoder,
+    PhysicalObjectEncoder,
+    VirtualObjectEncoder,
+};
+
+// - external
+use ed25519_dalek::{SigningKey};
+use posix_acl::{ACLEntry, Qualifier, PosixACL};
+use time::OffsetDateTime;
+use xattr::XAttrs;
+use xxhash_rust::xxh3::xxh3_64;
 
 // - modules
 /// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.

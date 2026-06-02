@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// An [ObjectFooterPhysical] is written at the end of each physical object.
 /// This footer contains various information about the acquisition process:

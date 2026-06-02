@@ -1,5 +1,24 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use aes::cipher::{block_padding::Pkcs7, BlockModeEncrypt, BlockModeDecrypt, KeyIvInit};
+use argon2::{Config, Variant, Version, ThreadMode};
+use pkcs5::{
+	EncryptionScheme,
+	pbes2::Parameters as PBES2Parameters,
+	scrypt::Params as ScryptParams
+};
+use rand::Rng;
+
+// - types
+type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 /// Defines all encryption algorithms (for use in data and header encryption), which are implemented in zff.
 #[repr(u8)]
@@ -76,79 +95,6 @@ impl fmt::Display for PBEScheme {
     	};
         write!(f, "{value}")
     }
-}
-
-/// trait to implement the zff encryption for the appropriate type.
-pub trait Encryption {
-	/// Encrypts the message, using the type specific nonce padding.
-	fn encrypt<K, M, A>(key: K, message: M, nonce_value: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let nonce = Self::gen_crypto_nonce(nonce_value)?;
-
-		match algorithm.borrow() {
-			EncryptionAlgorithm::AES256GCM => {
-				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.encrypt(&nonce, message.as_ref())?)
-			},
-			EncryptionAlgorithm::AES128GCM => {
-				let cipher = Aes128Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.encrypt(&nonce, message.as_ref())?)
-			},
-			EncryptionAlgorithm::CHACHA20POLY1305 => {
-				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
-				Ok(cipher.encrypt(&nonce, message.as_ref())?)
-			}
-		}
-	}
-
-	/// Decrypts the message, using the type specific nonce padding.
-	fn decrypt<K, M, A>(key: K, message: M, nonce_value: u64, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		M: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let nonce = Self::gen_crypto_nonce(nonce_value)?;
-		match algorithm.borrow() {
-			EncryptionAlgorithm::AES256GCM => {
-				let cipher = Aes256Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.decrypt(&nonce, message.as_ref())?)
-			},
-			EncryptionAlgorithm::AES128GCM => {
-				let cipher = Aes128Gcm::new_from_slice(key.as_ref())?;
-				Ok(cipher.decrypt(&nonce, message.as_ref())?)
-			},
-			EncryptionAlgorithm::CHACHA20POLY1305 => {
-				let cipher = ChaCha20Poly1305::new_from_slice(key.as_ref())?;
-				Ok(cipher.decrypt(&nonce, message.as_ref())?)
-			}
-		}
-	}
-
-	/// Method to generate a 96-bit nonce for the appropriate message type (using the given value).
-	fn gen_crypto_nonce(nonce_value: u64) -> Result<Nonce> {
-		let mut buffer = vec![];
-		buffer.write_u64::<LittleEndian>(nonce_value)?;
-		buffer.append(&mut vec!(0u8; 4));
-		let buffer_len = buffer.len();
-		buffer[buffer_len - 1] |= Self::crypto_nonce_padding();
-		Ok(*Nonce::from_slice(&buffer))
-	}
-
-	/// The appropriate, type specific padding value for the nonce (see official zff documentation).
-	fn crypto_nonce_padding() -> u8;
-
-}
-
-/// implements Encryption for Vec<u8> to use this for chunk content data
-impl Encryption for Vec<u8> {
-	fn crypto_nonce_padding() -> u8 {
-		0b00000000
-	}
 }
 
 /// Generates a new random key, with the given key size.
@@ -417,9 +363,6 @@ fn encrypt_argon2_aes<P>(
 where
 	P: AsRef<[u8]>,
 {
-	type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
-	type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
-
 	let hash = match scheme {
 		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 16)?,
 		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 32)?,
@@ -450,9 +393,6 @@ fn decrypt_argon2_aes<C>(
 where
 	C: AsRef<[u8]>,
 {
-	type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
-	type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
-
 	let hash = match scheme {
 		PBEScheme::AES128CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 16)?,
 		PBEScheme::AES256CBC => hash_password_argon2(password, salt, mem_cost, lanes, iterations, 32)?,

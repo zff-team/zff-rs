@@ -1,5 +1,11 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::collections::{HashMap};
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// An [ObjectFooterLogical] is written at the end of each logical object container.
 /// This footer contains various information about the acquisition process:

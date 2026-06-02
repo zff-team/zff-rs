@@ -1,5 +1,13 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::collections::BTreeMap;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
+use crate::{
+	VirtualFileContent,
+};
 
 /// Encodes the type-specific content stored in a [VirtualFileFooter].
 ///

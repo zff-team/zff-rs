@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::collections::{BTreeMap};
+use std::fmt;
+use std::io::{Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// The main footer is the last thing, which is written at the end of the last segment.\
 /// This footer contains a lot of variable information about the zff container (e.g. number of segments, ...).

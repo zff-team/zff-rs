@@ -1,5 +1,21 @@
-// - Parent
-use super::{*, footer::*};
+// - STD
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::SystemTime;
+
+// - internal
+use crate::prelude::*;
+use crate::{
+	EncodingState,
+	EncodingThreadPoolManager,
+	FileEncoder,
+	PreparedData,
+	Signature,
+};
+
+// - external
+use ed25519_dalek::{SigningKey};
+use time::OffsetDateTime;
 
 
 /// The [LogicalObjectEncoder] can be used to encode a logical object.

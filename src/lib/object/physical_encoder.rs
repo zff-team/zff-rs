@@ -1,5 +1,23 @@
-// - Parent
-use super::{*, footer::*};
+// - STD
+use std::io::Read;
+use std::time::SystemTime;
+
+// - internal
+use crate::{
+	EncodingState,
+	EncodingThreadPoolManager,
+};
+use crate::prelude::*;
+use crate::{
+	io::buffer_chunk,
+	chunking,
+	PreparedData,
+	Signature,
+};
+
+// - external
+use time::{OffsetDateTime};
+use ed25519_dalek::{SigningKey};
 
 
 /// The [PhysicalObjectEncoder] can be used to encode a physical object.

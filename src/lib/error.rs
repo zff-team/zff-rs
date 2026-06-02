@@ -1,11 +1,34 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+use std::{
+	collections::TryReserveError,
+	num::ParseIntError,
+	string::FromUtf8Error,	
+};
 
 // - external
-use aes_gcm::aes::cipher::InvalidLength as AesInvalidLengthError;
 use aes::cipher::{
 	block_padding::Error as AesBlockpaddingError,
 };
+use aes_gcm::{
+	aead::Error as AesError,
+	aes::cipher::InvalidLength as AesInvalidLengthError,
+};
+use argon2::Error as Argon2Error;
+use base64::DecodeError as Base64DecodingError;
+use digest::InvalidLength;
+use ed25519_dalek::ed25519::Error as Ed25519Error;
+use lz4_flex::frame::Error as Lz4Error;
+use pkcs5::Error as PKCS5CryptoError;
+use pkcs5::scrypt::errors::InvalidParams as ScryptErrorInvalidParams;
+use redb::{
+	DatabaseError as RedbError, 
+	TransactionError as RedbTransactionError, 
+	TableError as RedbTableError, 
+	StorageError as RedbStorageError,
+	CommitError as RedbCommitError
+};
+use time::error::ComponentRange as ComponentRangeError;
 
 /// The main error-type of this crate.
 #[derive(Debug)]

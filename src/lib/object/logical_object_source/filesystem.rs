@@ -1,11 +1,31 @@
-// - Parent
-use super::*;
-
 // - STD
-use std::fs::File;
+use std::collections::{HashMap, VecDeque};
+use std::io::{Read, Cursor};
+use std::fs::{File, read_link};
+use std::path::{Path, PathBuf};
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::{
+	FileTypeExt,
+	MetadataExt,
+};
 
 // internal
-use helper::result_combine;
+use crate::prelude::*;
+use crate::{
+	FileTypeEncodingInformation,
+	helper::{
+		result_combine,
+	},
+	io::{
+		add_to_hardlink_map,
+		check_and_get_metadata,
+		check_file_accessibility,
+		create_iterator,
+		get_file_header,
+		transform_hardlink_map,
+	},
+	SpecialFileEncodingInformation,
+};
 
 // - external
 #[cfg(feature = "log")]

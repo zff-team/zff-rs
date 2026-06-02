@@ -1,5 +1,12 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use byteorder::{BigEndian, ReadBytesExt};
 
 /// The pbe header contains all informations for the encryption of the encryption key.
 /// 

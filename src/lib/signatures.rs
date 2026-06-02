@@ -1,5 +1,22 @@
-// - Parent
-use super::*;
+// - STD
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
+use ed25519_dalek::{
+	Signature as Ed25519Signature,
+	Signer,
+	SigningKey,
+	Verifier,
+	VerifyingKey,
+	KEYPAIR_LENGTH,
+	PUBLIC_KEY_LENGTH,
+	SECRET_KEY_LENGTH,
+};
+use rand::Rng;
+
 
 /// structure contains serveral methods to handle signing of chunked data.
 pub struct Signature;

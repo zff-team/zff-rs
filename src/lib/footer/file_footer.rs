@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// The file footer is written at the end of each acquired file.
 /// 

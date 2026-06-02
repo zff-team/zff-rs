@@ -1,12 +1,9 @@
 // - STD
-use std::io::{Error, ErrorKind, Result};
+use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::fs::FileExt;
 #[cfg(windows)]
 use std::os::windows::fs::FileExt;
-
-// - Parent
-use super::*;
 
 pub(crate) struct ReadAtCursor<'a, R: ReadAt + ?Sized> {
     data: &'a R,

@@ -1,8 +1,14 @@
-// - Parent
-use super::*;
-
 // - STD
+use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::io::{Read, Cursor};
+
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use byteorder::{LittleEndian, ReadBytesExt};
 
 /// Holds the appropriate object flags:
 /// - the encryption flag, if the appropriate object is encrypted.

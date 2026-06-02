@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+use std::io::{Cursor};
+
+// - internal
+use crate::prelude::*;
+
 
 /// The [SegmentHeader] contains a lot of initial metadata of the appropriate segment. Each segment has its own segment header.\
 /// The following metadata are included in the [SegmentHeader]:

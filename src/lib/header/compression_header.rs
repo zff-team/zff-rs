@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+use std::io::{Cursor};
+
+// - internal
+use crate::prelude::*;
+
 
 /// Header for the data compression parameters.\
 /// This header is part of the main header.

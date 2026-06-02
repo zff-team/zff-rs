@@ -1,6 +1,15 @@
-// - Parent
-use super::*;
+// - STD
 use std::cmp::Ordering;
+use std::fmt;
+use std::ffi::{OsStr, OsString};
+use std::io::{Read};
+#[cfg(target_family = "unix")]
+use std::os::unix::ffi::OsStringExt;
+#[cfg(target_family = "windows")]
+use std::os::windows::ffi::OsStringExt;
+
+// - internal
+use crate::prelude::*;
 
 /// Represents a platform-native string in an interoperable on-disk form.
 ///

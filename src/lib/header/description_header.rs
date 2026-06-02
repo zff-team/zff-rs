@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::collections::{HashMap};
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// The description header contains all data, which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).
 /// 

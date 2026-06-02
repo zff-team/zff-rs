@@ -1,5 +1,12 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use ed25519_dalek::{SIGNATURE_LENGTH};
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of various footers and contains 0 or more hash values of the dumped data.\

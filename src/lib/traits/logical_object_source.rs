@@ -1,5 +1,10 @@
-// - Parent
-use super::{*, header::*};
+// - STD
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+// - internal
+use crate::prelude::*;
+use crate::FileTypeEncodingInformation;
 
 /// Trait for abstracting different file input sources for [LogicalObjectEncoder].
 pub trait LogicalObjectSource: Iterator<Item = Result<(FileTypeEncodingInformation, FileHeader)>> {

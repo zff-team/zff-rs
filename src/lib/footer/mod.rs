@@ -1,6 +1,3 @@
-// - Parent
-use super::{*, header::*};
-
 // - modules
 mod main_footer;
 mod segment_footer;

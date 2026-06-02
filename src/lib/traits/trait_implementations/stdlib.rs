@@ -1,7 +1,15 @@
 // ! Contains all implementations of zff defined traits for types of stdlib (e.g. primitives, Vec, HashMap, etc.).
 
-// - Parent
-use super::*;
+// - STD
+use std::collections::{BTreeMap, HashMap};
+use std::io::{Read};
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use byteorder::{LittleEndian, ReadBytesExt};
+use itertools::Itertools;
 
 impl ValueEncoder for bool {
 	fn encode_directly(&self) -> Vec<u8> {
@@ -407,6 +415,8 @@ where
 	}
 }
 
+// TOOD: Check if this can be removed:
+/*
 impl <K, A, B> ValueEncoder for BTreeSet<BTreeMap<K, (A, B)>> 
 where
 	K: ValueEncoder,
@@ -429,7 +439,7 @@ where
 	fn encoded_size(&self) -> usize {
 		8 + self.iter().map(ValueEncoder::encoded_size).sum::<usize>()
 	}
-}
+}*/
 
 impl<H> ValueEncoder for Vec<H>
 where
@@ -645,6 +655,8 @@ where
 	}
 }
 
+//TODO: check if this can be removed.
+/*
 impl<K, A, B> ValueDecoder for BTreeSet<BTreeMap<K, (A, B)>>
 where
 	K: ValueDecoder<Item = K> + std::cmp::Ord,
@@ -663,7 +675,7 @@ where
 		}
 		Ok(btree_set)
 	}
-}
+}*/
 
 impl<H> ValueDecoder for Vec<H>
 where
@@ -679,5 +691,12 @@ where
 			vec.push(content);
 		}
 		Ok(vec)
+	}
+}
+
+/// implements Encryption for Vec<u8> to use this for chunk content data
+impl Encryption for Vec<u8> {
+	fn crypto_nonce_padding() -> u8 {
+		0b00000000
 	}
 }

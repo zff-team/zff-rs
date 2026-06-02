@@ -1,5 +1,5 @@
 // - Parent
-use super::{*, header::*};
+use crate::prelude::*;
 
 /// Trait for abstracting different file input sources for [VirtualObjectSource].
 pub trait VirtualObjectSource: Iterator<Item = Result<(FileHeader, VirtualFileFooterMetadata)>> {

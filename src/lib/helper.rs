@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::collections::BTreeMap;
+
+// - internal
+use crate::{
+    Result,
+};
 
 #[cfg(feature = "serde")]
 pub(crate) fn string_to_str(s: String) -> &'static str {
@@ -14,36 +19,11 @@ where
     s.serialize_str(&format!("0x{:X}", x))
 }
 
-/// Returns the greatest key-value pair in the sorted slice whose key is less
-/// than or equal to `key`.
-#[inline]
-pub fn floor_vec_entry<T>(items: &[(u64, T)], key: u64) -> Option<&(u64, T)> {
-    match items.binary_search_by_key(&key, |(k, _)| *k) {
-        Ok(i) => items.get(i),
-        Err(0) => None,
-        Err(i) => items.get(i - 1),
-    }
-}
-
-/// Returns the value belonging to the greatest key in the sorted slice that is
-/// less than or equal to `key`.
-#[inline]
-pub fn floor_vec_value<T>(items: &[(u64, T)], key: u64) -> Option<&T> {
-    floor_vec_entry(items, key).map(|(_, v)| v)
-}
-
 /// Returns the greatest key-value pair whose key is less than or equal to
 /// `key`.
 #[inline]
-pub fn floor_btree_entry<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<(&u64, &T)> {
+pub(crate) fn floor_btree_entry<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<(&u64, &T)> {
     map.range(..=key).next_back()
-}
-
-/// Returns the value belonging to the greatest key that is less than or equal
-/// to `key`.
-#[inline]
-pub fn floor_btree_value<T>(map: &BTreeMap<u64, T>, key: u64) -> Option<&T> {
-    floor_btree_entry(map, key).map(|(_, v)| v)
 }
 
 #[cfg(feature = "serde")]

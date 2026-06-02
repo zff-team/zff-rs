@@ -1,5 +1,13 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::fmt;
+use std::io::{Read};
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 // - modules
 mod object_footer_physical;

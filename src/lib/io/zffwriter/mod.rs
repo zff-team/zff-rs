@@ -1,5 +1,26 @@
-// Parent
-use super::*;
+// - STD
+use std::collections::{HashMap};
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::ops::{Add, AddAssign};
+use std::path::{PathBuf};
+
+// - internal
+use super::{ZffCreationParameters, ZffExtenderParameter};
+use crate::prelude::*;
+use crate::{
+    file_extension_next_value,
+    EncodingState,
+    ObjectEncoder,
+    PreparedData,
+    Segment,
+    io::{
+        prepare_object_header,
+        setup_physical_object_encoder,
+        setup_logical_object_encoder,
+        setup_virtual_object_encoder,
+    },
+};
 
 #[derive(Debug, Clone, Default)]
 enum ReadBytes {

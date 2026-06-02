@@ -1,5 +1,19 @@
-// - Parent
-use super::{*, footer::*};
+// - STD
+use std::time::SystemTime;
+
+// - internal
+use crate::prelude::*;
+use crate::{
+    EncodingState,
+    PreparedData,
+    VirtualFileContent,
+    VirtualFileEncoder,
+    Signature,
+};
+
+// - external
+use time::{OffsetDateTime};
+use ed25519_dalek::{SigningKey};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ReadState {

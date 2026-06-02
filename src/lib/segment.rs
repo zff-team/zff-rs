@@ -1,8 +1,12 @@
 // - STD
+use std::borrow::Borrow;
+use std::collections::BTreeMap;
+use std::io::{Read, Seek, SeekFrom};
 use std::sync::Mutex;
 
-// - Parent
-use super::{*, header::*, footer::*};
+// - internal
+use crate::prelude::*;
+use crate::decompress_buffer;
 
 // - external
 #[cfg(feature = "log")]

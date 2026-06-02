@@ -1,5 +1,12 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+
+// - external
+use blake2::Blake2b512;
+use blake3::{Hasher as Blake3};
+use digest::{DynDigest, Digest};
+use sha2::{Sha256, Sha512};
+use sha3::{Sha3_256};
 
 /// Defines all hashing algorithms, which are implemented in zff.
 #[repr(u8)]

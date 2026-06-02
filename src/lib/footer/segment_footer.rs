@@ -1,5 +1,10 @@
-// - Parent
-use super::*;
+// - STD
+use std::collections::{HashMap, BTreeMap};
+use std::fmt;
+use std::io::{Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// The SegmentFooter is a footer which is be written at the end of each segment.
 /// 

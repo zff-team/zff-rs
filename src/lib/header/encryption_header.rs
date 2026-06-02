@@ -1,5 +1,17 @@
-// - Parent
-use super::*;
+// - STD
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
+use crate::{
+	decrypt_pbkdf2sha256_aes128cbc,
+	decrypt_pbkdf2sha256_aes256cbc,
+	decrypt_scrypt_aes128cbc,
+	decrypt_scrypt_aes256cbc,
+	decrypt_argon2_aes128cbc,
+	decrypt_argon2_aes256cbc,
+};
 
 /// This struct could be used to manage the encryption information while creating a zff container
 #[derive(Debug, Clone, Eq, PartialEq)]

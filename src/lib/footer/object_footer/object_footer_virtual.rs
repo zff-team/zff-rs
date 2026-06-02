@@ -1,5 +1,11 @@
-// - Parent
-use super::*;
+// - STD
+use std::borrow::Borrow;
+use std::collections::{HashMap};
+use std::fmt;
+use std::io::{Read, Cursor};
+
+// - internal
+use crate::prelude::*;
 
 /// An [ObjectFooterVirtual] is written at the end of an virtual logical object.
 /// This footer contains various information about the underlying virtual files:

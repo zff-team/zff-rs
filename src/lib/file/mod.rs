@@ -1,5 +1,5 @@
-// - Parent
-use super::{*, header::*, footer::*, io::{buffer_chunk, BufferedChunk}};
+// - internal
+use crate::prelude::*;
 
 // - modules
 mod file_encoder;

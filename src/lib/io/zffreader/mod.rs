@@ -1,9 +1,17 @@
 // - STD
-use std::sync::OnceLock;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Seek, SeekFrom};
+use std::sync::{Arc, OnceLock, RwLock};
 
-// - Parent
-use super::{*, header::ObjectType as HeaderObjectType};
+// - internal
+use crate::prelude::*;
+use crate::{
+	FileMetadata,
+	header::ObjectType as HeaderObjectType,
+	helper::get_segment_of_chunk_no,
+	Segment,
+};
 
 // - modules
 mod zffobjectreader;
@@ -441,7 +449,7 @@ impl<R: ReadAt> ZffReader<R> {
 			None => return Err(ZffError::new(ZffErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 		};
 		// search for the appropriate object number
-		let preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.read().unwrap();
+		let preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.read()?;
 		let chunk_header = match extract_chunk_header_from_preloaded_chunkmap(&preloaded_chunkmaps, chunk_no) {
 			Some(header) => header,
 			None => segment.get_chunk_header(&chunk_no)?, 

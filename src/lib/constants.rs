@@ -1,5 +1,6 @@
-// - Parent
-use super::*;
+// - external
+use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
+use redb::TableDefinition;
 
 // identifier: magic bytes
 /// The identifier of the [DescriptionHeader](crate::header::DescriptionHeader).

@@ -1,5 +1,11 @@
-// - Parent
-use super::*;
+// - STD
+use std::io::Read;
+
+// - internal
+use crate::prelude::*;
+
+// - external
+use byteorder::{ReadBytesExt};
 
 /// decoder methods for values (and primitive types). This is an extension trait.
 pub trait ValueDecoder {
