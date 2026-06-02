@@ -5,7 +5,13 @@ use std::fmt;
 use std::io::{Read, Cursor};
 
 // - internal
+#[cfg(feature = "serde")]
+use crate::helper::string_to_str;
 use crate::prelude::*;
+
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
 
 
 /// The Chunkmap stores the information where the each appropriate chunk could be found.

@@ -6,6 +6,10 @@ use std::io::Read;
 // - internal
 use crate::Result;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// Defines all compression algorithms, which are implemented in zff.
 #[repr(u8)]
 #[non_exhaustive]

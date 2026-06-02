@@ -6,6 +6,10 @@ use std::io::{Cursor};
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// The SegmentFooter is a footer which is be written at the end of each segment.
 /// 
 /// The footer contains a table on the chunks, present in the appropriate segment.

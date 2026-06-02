@@ -5,6 +5,9 @@ use std::io::{Read, Cursor};
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 
 /// Header for the chunked data (typically stored in a chunk header map).
 /// The Header doesn't contain a chunk number, because it is stored in a map with the chunk number as key.

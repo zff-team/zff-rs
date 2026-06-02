@@ -6,12 +6,16 @@ use std::io::{Read, Cursor};
 use std::path::Path;
 
 // - internal
+#[cfg(feature = "serde")]
+use crate::helper::string_to_str;
 use crate::prelude::*;
 use crate::io::zffreader::ZffReader;
 
 // - external
 use blake3::Hash as Blake3Hash;
 use redb::{Database, ReadableDatabase};
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
 
 /// The [ChunkDeduplicationMap] stores the chunk size of the appropriate chunk.
 #[derive(Debug,Clone,PartialEq,Eq, Default)]

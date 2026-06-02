@@ -5,8 +5,13 @@ use std::fmt;
 use std::io::{Read, Cursor};
 
 // - internal
+#[cfg(feature = "serde")]
+use crate::helper::string_to_str;
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
 
 /// The [ChunkSamebytesMap] stores the chunk size of the appropriate chunk.
 #[derive(Debug,Clone,PartialEq,Eq, Default)]

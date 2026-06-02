@@ -29,7 +29,7 @@ use crate::{
 
 // - external
 #[cfg(feature = "log")]
-use log::debug;
+use log::{debug, warn};
 
 /// A [LogicalObjectSource] implementation to handle files from the filesystem.
 /// TODO: Example

@@ -8,6 +8,8 @@ use crate::prelude::*;
 
 // - external
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 
 // - modules
 mod object_footer_physical;

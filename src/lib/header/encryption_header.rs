@@ -14,6 +14,8 @@ use crate::{
 };
 
 // - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 use zeroize::Zeroize;
 
 /// This struct could be used to manage the encryption information while creating a zff container

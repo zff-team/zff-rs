@@ -7,6 +7,8 @@ use crate::prelude::*;
 
 // - external
 use byteorder::{BigEndian, ReadBytesExt};
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 use zeroize::Zeroize;
 
 /// The pbe header contains all informations for the encryption of the encryption key.

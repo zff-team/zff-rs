@@ -18,6 +18,8 @@ use crate::{
 	PreparedChunk,
 	Signature,
 };
+#[cfg(feature = "log")]
+use crate::hashes_to_log;
 
 // - external
 use ed25519_dalek::{SigningKey};

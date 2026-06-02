@@ -1,6 +1,3 @@
-#[cfg(feature = "serde")]
-use crate::helper::*;
-
 // - modules
 mod segment_header;
 mod object_header;

@@ -17,6 +17,8 @@ use crate::{
 };
 
 // - external
+#[cfg(feature = "log")]
+use log::{debug};
 use moka::sync::Cache as MokaCache;
 
 /// A reader which contains the appropriate metadata of a logical object 

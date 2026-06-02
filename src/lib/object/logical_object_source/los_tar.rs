@@ -1,8 +1,21 @@
-// - Parent
-use super::*;
+// - STD
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
+use std::io::{Read};
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 // - internal
-use helper::{result_combine, makedev};
+use crate::prelude::*;
+use crate::{
+    FileTypeEncodingInformation,
+    helper::{result_combine, makedev},
+    object::{check_root_path, get_file_header_tar},
+    SpecialFileEncodingInformation,
+};
+
+// - external
+use tar::{Archive, EntryType};
 
 /// A [LogicalObjectSource] implementation for reading entries from a TAR archive.
 pub struct LogicalObjectSourceTar {
@@ -297,7 +310,7 @@ impl TarStreamState {
             ));
         }
         let mut remaining = target - self.absolute_pos;
-        let mut scratch = [0u8; 8192];
+        let mut scratch = [0u8; SMALL_BUFFER_SIZE];
         while remaining > 0 {
             let want = remaining.min(scratch.len() as u64) as usize;
             let n = self.reader.read(&mut scratch[..want])?;

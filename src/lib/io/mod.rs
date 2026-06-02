@@ -23,6 +23,8 @@ use crate::{
 
 // - external
 use ed25519_dalek::{SigningKey};
+#[cfg(feature = "log")]
+use log::{debug, info, warn};
 use posix_acl::{ACLEntry, Qualifier, PosixACL};
 use time::OffsetDateTime;
 use xattr::XAttrs;

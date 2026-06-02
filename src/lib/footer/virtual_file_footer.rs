@@ -9,6 +9,10 @@ use crate::{
 	VirtualFileContent,
 };
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize};
+
 /// Encodes the type-specific content stored in a [VirtualFileFooter].
 ///
 /// For regular virtual files this stores the location of the serialized

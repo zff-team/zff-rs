@@ -9,6 +9,8 @@ use crate::prelude::*;
 
 // - external
 use byteorder::{LittleEndian, ReadBytesExt};
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 use zeroize::Zeroize;
 
 /// Holds the appropriate object flags:

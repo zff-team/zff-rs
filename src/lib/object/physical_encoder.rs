@@ -14,6 +14,8 @@ use crate::{
 	PreparedData,
 	Signature,
 };
+#[cfg(feature = "log")]
+use crate::hashes_to_log;
 
 // - external
 use time::{OffsetDateTime};

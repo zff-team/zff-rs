@@ -6,6 +6,10 @@ use std::io::{Read, Cursor};
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// An [ObjectFooterPhysical] is written at the end of each physical object.
 /// This footer contains various information about the acquisition process:
 /// - the acquisition start time

@@ -1,8 +1,21 @@
-// - Parent
-use super::*;
+// - STD
+use std::collections::{BTreeMap, HashMap};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
 
-use crate::footer::{VirtualFileExtent, VirtualFileMap};
-use crate::io::zffreader::ZffReader;
+// - internal
+use crate::prelude::*;
+use crate::{
+    helper::makedev,
+    io::zffreader::ZffReader,
+    object::{check_root_path, get_file_header_tar},
+    SpecialFileEncodingInformation,
+    VirtualFileContent,
+};
+
+// - external
+use digest::DynDigest;
+use tar::{Archive, EntryType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct VosEntry {
@@ -177,7 +190,7 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
             if filetype == FileType::SpecialFile {
                 let major = entry.header().device_major().ok().flatten().unwrap_or(0);
                 let minor = entry.header().device_minor().ok().flatten().unwrap_or(0);
-                let rdev = helper::makedev(major, minor);
+                let rdev = makedev(major, minor);
                 let special_file = match entry.header().entry_type() {
                     EntryType::Char => SpecialFileEncodingInformation::Char(rdev),
                     EntryType::Block => SpecialFileEncodingInformation::Block(rdev),
@@ -297,7 +310,7 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
 
         let mut hashers = self.new_hashers();
         let mut remaining = len;
-        let mut buffer = [0u8; 64 * 1024];
+        let mut buffer = [0u8; DEFAULT_READ_BUFFER_SIZE];
         while remaining > 0 {
             let bytes_to_read = remaining.min(buffer.len() as u64) as usize;
             self.zffreader.read_exact(&mut buffer[..bytes_to_read])?;

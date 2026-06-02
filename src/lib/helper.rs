@@ -5,6 +5,16 @@ use std::collections::BTreeMap;
 use crate::{
     Result,
 };
+// - external
+#[cfg(feature = "serde")]
+use base64::{
+    Engine,
+    engine::general_purpose::STANDARD as base64engine
+};
+#[cfg(feature = "serde")]
+use hex::FromHex;
+#[cfg(feature = "serde")]
+use serde::{Deserialize};
 
 #[cfg(feature = "serde")]
 pub(crate) fn string_to_str(s: String) -> &'static str {

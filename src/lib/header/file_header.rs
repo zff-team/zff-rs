@@ -10,6 +10,8 @@ use crate::prelude::*;
 
 // - external
 use ordered_float::OrderedFloat;
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer, ser::{SerializeMap, SerializeSeq}};
 
 /// Defines all file types, which are implemented for zff files.
 #[repr(u8)]

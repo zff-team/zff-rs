@@ -7,6 +7,10 @@ use std::io::{Read, Cursor};
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// An [ObjectFooterVirtual] is written at the end of an virtual logical object.
 /// This footer contains various information about the underlying virtual files:
 /// - information about the underlying folder structure

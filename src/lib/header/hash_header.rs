@@ -1,12 +1,21 @@
 // - STD
 use std::fmt;
+#[cfg(feature = "serde")]
+use std::collections::{HashMap};
 use std::io::{Read, Cursor};
 
 // - internal
 use crate::prelude::*;
 
 // - external
+#[cfg(feature = "serde")]
+use base64::{
+    Engine,
+    engine::general_purpose::STANDARD as base64engine
+};
 use ed25519_dalek::{SIGNATURE_LENGTH};
+#[cfg(feature = "serde")]
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 /// Header for the hash values of the dumped data stream.
 /// This header is part of various footers and contains 0 or more hash values of the dumped data.\

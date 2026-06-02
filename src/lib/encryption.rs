@@ -13,6 +13,8 @@ use pkcs5::{
 	scrypt::Params as ScryptParams
 };
 use rand::Rng;
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 use zeroize::Zeroize;
 
 // - types

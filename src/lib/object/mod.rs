@@ -1,6 +1,11 @@
 // - STD
 use std::collections::HashMap;
 use std::io::copy as io_copy;
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
+use {
+	std::io::Read,
+	std::path::Path,
+};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::thread;
 
@@ -16,7 +21,15 @@ use crate::{
 	},
 };
 #[cfg(any(feature = "los_tar", feature = "vos_tar"))]
-use helper::parse_unix_timestamp_nanos;
+use crate::helper::parse_unix_timestamp_nanos;
+
+// - external
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
+use {
+	base64::Engine,
+	base64::engine::general_purpose::STANDARD as base64engine,
+	tar::Entry,
+};
 
 // - modules
 mod encoder;

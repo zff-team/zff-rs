@@ -5,6 +5,10 @@ use std::fmt;
 use blake2::Blake2b512;
 use blake3::{Hasher as Blake3};
 use digest::{DynDigest, Digest};
+#[cfg(feature = "log")]
+use log::{debug};
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Sha512};
 use sha3::{Sha3_256};
 

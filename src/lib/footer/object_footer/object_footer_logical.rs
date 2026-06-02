@@ -7,6 +7,10 @@ use std::io::{Read, Cursor};
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// An [ObjectFooterLogical] is written at the end of each logical object container.
 /// This footer contains various information about the acquisition process:
 /// - the acquisition start time

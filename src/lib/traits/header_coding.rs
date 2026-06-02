@@ -6,6 +6,8 @@ use crate::prelude::*;
 
 // - external
 use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
+#[cfg(feature = "log")]
+use log::{trace};
 
 /// The ```HeaderCoding``` trait specifies an interface for the common header methods and the encoding and decoding methods.
 pub trait HeaderCoding {

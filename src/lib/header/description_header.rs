@@ -4,7 +4,13 @@ use std::fmt;
 use std::io::{Read, Cursor};
 
 // - internal
+#[cfg(feature = "serde")]
+use crate::helper::string_to_str;
 use crate::prelude::*;
+
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
 
 /// The description header contains all data, which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).
 /// 

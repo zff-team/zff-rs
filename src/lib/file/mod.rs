@@ -1,6 +1,10 @@
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize};
+
 // - modules
 mod file_encoder;
 mod virtual_file_encoder;

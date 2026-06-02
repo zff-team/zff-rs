@@ -11,6 +11,10 @@ use std::os::windows::ffi::OsStringExt;
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize, Serializer};
+
 /// Represents a platform-native string in an interoperable on-disk form.
 ///
 /// This type is intended for forensic preservation of path-bearing values such

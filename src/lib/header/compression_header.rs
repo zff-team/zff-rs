@@ -5,6 +5,10 @@ use std::io::{Cursor};
 // - internal
 use crate::prelude::*;
 
+// - external
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 
 /// Header for the data compression parameters.\
 /// This header is part of the main header.
