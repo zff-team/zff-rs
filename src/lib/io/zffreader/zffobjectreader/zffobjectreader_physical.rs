@@ -1,8 +1,16 @@
 // - STD
-use std::io::{Error as IoError, ErrorKind as IoEKind};
+use std::io::{Error as IoError, ErrorKind as IoEKind, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
-// - Parent
-use super::*;
+// - internal
+use crate::prelude::*;
+use crate::{
+	helper::copy_chunk_content_to_buf,
+	io::zffreader::{
+		ArcZffReaderMetadata,
+		get_chunk_data,
+	},
+};
 
 // - external
 use moka::sync::Cache as MokaCache;
@@ -89,21 +97,13 @@ impl<R: ReadAt> ReadAt for ZffObjectReaderPhysical<R> {
 			let current_read_len = remaining_in_chunk.min(bytes_to_read - read_bytes);
 			let chunk_content = self.cached_chunk(current_chunk_number)?;
 
-			match chunk_content.as_ref() {
-				ChunkContent::Raw(data) => {
-					let end = inner_position.checked_add(current_read_len).ok_or_else(|| {
-						IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT)
-					})?;
-					let chunk_slice = data.get(inner_position..end).ok_or_else(|| {
-						IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT)
-					})?;
-					buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
-				},
-				ChunkContent::SameBytes(byte) => {
-					buf[read_bytes..read_bytes + current_read_len].fill(*byte);
-				},
-				ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
-			}
+			copy_chunk_content_to_buf(
+				&chunk_content, 
+				buf, 
+				read_bytes, 
+				current_read_len, 
+				inner_position)?;
+			
 			read_bytes += current_read_len;
 		}
 		Ok(read_bytes)

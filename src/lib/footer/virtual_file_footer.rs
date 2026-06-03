@@ -170,54 +170,6 @@ impl VirtualFileFooter {
 		}
 	}
 
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.hash_header.encode_directly());
-		vec.extend_from_slice(&self.length_of_data.encode_directly());
-		vec.extend_from_slice(&self.vffc.encode_directly());
-		vec
-	}
-
-	/// encrypts the virtual logical file footer by the given encryption information and returns the encrypted file footer.
-	/// # Error
-	/// The method returns an error, if the encryption fails.
-	pub fn encode_encrypted_header_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
-	where
-		E: Borrow<EncryptionInformation>
-	{
-		let mut vec = Vec::new();
-		let encryption_information = encryption_information.borrow();
-		let encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
-		let identifier = Self::identifier();
-		let encoded_header_length = 4 + 8 + (encoded_footer.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
-		vec.extend_from_slice(&encoded_footer);
-
-		Ok(vec)
-	}
-
-	fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.filenumber.encode_directly());
-
-		let mut data_to_encrypt = Vec::new();
-		data_to_encrypt.append(&mut self.encode_content());
-
-		let encrypted_data = VirtualFileFooter::encrypt(
-			key, data_to_encrypt,
-			self.filenumber,
-			algorithm
-			)?;
-		vec.extend_from_slice(&encrypted_data.encode_directly());
-		Ok(vec)
-	}
-
 	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader] at given offset.
 	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader].
 	pub fn decode_at_encrypted_footer_with_key<R, E>(data: &R, offset: u64, encryption_information: E) -> Result<Self>
@@ -275,6 +227,12 @@ impl VirtualFileFooter {
 	}
 }
 
+impl HeaderEncryption for VirtualFileFooter {
+	fn nonce_value(&self) -> u64 {
+		self.filenumber
+	}
+}
+
 impl HeaderCoding for VirtualFileFooter {
 	type Item = Self;
 	fn version() -> u8 { 
@@ -284,10 +242,17 @@ impl HeaderCoding for VirtualFileFooter {
 		FOOTER_IDENTIFIER_VIRTUAL_FILE_FOOTER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.hash_header.encode_directly());
+		vec.extend_from_slice(&self.length_of_data.encode_directly());
+		vec.extend_from_slice(&self.vffc.encode_directly());
+		vec
+	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.filenumber.encode_directly());
-		vec.extend_from_slice(&self.encode_content());
 		vec
 	}
 
@@ -297,10 +262,6 @@ impl HeaderCoding for VirtualFileFooter {
 		let filenumber = u64::decode_directly(&mut cursor)?;
 		let (hash_header, length_of_data, vffc) = Self::decode_inner_content(&mut cursor)?;
 		Ok(Self::new(filenumber, hash_header, length_of_data, vffc))
-	}
-
-	fn struct_name() -> &'static str {
-		"VirtualFileFooter"
 	}
 }
 
@@ -330,32 +291,6 @@ impl VirtualFileMap {
 			filenumber,
 			extents
 		}
-	}
-
-	/// Encrypts and encodes this virtual file map using the given key and
-	/// algorithm.
-	///
-	/// # Error
-	/// Returns an error if encryption fails.
-	pub fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.filenumber.encode_directly());
-
-		let mut data_to_encrypt = Vec::new();
-		data_to_encrypt.append(&mut self.extents.encode_directly());
-
-		let encrypted_data = Self::encrypt(
-			key, data_to_encrypt,
-			self.filenumber,
-			algorithm
-			)?;
-		vec.extend_from_slice(&encrypted_data.encode_directly());
-		Ok(vec)
 	}
 
 	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader] at given offset.
@@ -402,8 +337,15 @@ impl VirtualFileMap {
 	}
 }
 
+impl HeaderEncryption for VirtualFileMap {
+	fn nonce_value(&self) -> u64 {
+		self.filenumber
+	}
+}
+
 impl HeaderCoding for VirtualFileMap {
 	type Item = Self;
+
 	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_MAP
 	}
@@ -411,10 +353,15 @@ impl HeaderCoding for VirtualFileMap {
 		FOOTER_IDENTIFIER_VIRTUAL_FILE_MAP
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
-		vec.extend_from_slice(&self.filenumber.encode_directly());
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.extents.encode_directly());
+		vec
+	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.filenumber.encode_directly());
 		vec
 	}
 
@@ -424,10 +371,6 @@ impl HeaderCoding for VirtualFileMap {
 		let filenumber = u64::decode_directly(&mut cursor)?;
 		let extents = BTreeMap::<u64, VirtualFileExtent>::decode_directly(&mut cursor)?;
 		Ok(Self::new(filenumber, extents))
-	}
-
-	fn struct_name() -> &'static str {
-		"VirtualFileMap"
 	}
 }
 

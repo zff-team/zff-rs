@@ -58,46 +58,6 @@ impl ObjectFooterPhysical {
 		}
 	}
 
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.acquisition_start.encode_directly());
-		vec.extend_from_slice(&self.acquisition_end.encode_directly());
-		vec.extend_from_slice(&self.length_of_data.encode_directly());
-		vec.extend_from_slice(&self.first_chunk_number.encode_directly());
-		vec.extend_from_slice(&self.number_of_chunks.encode_directly());
-		vec.extend_from_slice(&self.hash_header.encode_directly());
-		vec
-	}
-
-	/// encrypts the object footer by the given encryption information and returns the encrypted object footer.
-	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
-	where
-		E: Borrow<EncryptionInformation>
-	{
-		let mut vec = Vec::new();
-		let encrypted_content = ObjectFooter::encrypt(
-			&encryption_information.borrow().encryption_key, 
-			self.encode_content(), 
-			self.object_number, 
-			&encryption_information.borrow().algorithm)?;
-		let identifier = Self::identifier();
-		let encoded_header_length = (
-			DEFAULT_LENGTH_HEADER_IDENTIFIER +
-			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			Self::version().encode_directly().len() +
-			self.object_number.encode_directly().len() +
-			true.encode_directly().len() +
-			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.encode_directly());
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&true.encode_directly()); // encryption flag
-		vec.extend_from_slice(&encrypted_content.encode_directly());
-
-		Ok(vec)
-	}
-
 	pub(crate) fn decode_inner_content<R: Read>(data: &mut R) -> Result<(
 		u64, //acquisition_start
 		u64, //acquisition_end
@@ -130,22 +90,54 @@ impl fmt::Display for ObjectFooterPhysical {
 	}
 }
 
+impl HeaderEncryption for ObjectFooterPhysical {
+	fn nonce_value(&self) -> u64 {
+		self.object_number
+	}
+
+	fn encoded_fixed_fields_for_encryption(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&true.encode_directly()); // encryption flag
+		vec
+	}
+}
+
+impl Encryption for ObjectFooterPhysical {
+	fn crypto_nonce_padding() -> u8 {
+		ObjectFooter::crypto_nonce_padding()
+	}
+}
+
 impl HeaderCoding for ObjectFooterPhysical {
-	type Item = ObjectFooterPhysical;
+	type Item = Self;
+
 	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL
 	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
-		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&false.encode_directly()); // encryption flag
-		vec.extend_from_slice(&self.encode_content());
+
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.acquisition_start.encode_directly());
+		vec.extend_from_slice(&self.acquisition_end.encode_directly());
+		vec.extend_from_slice(&self.length_of_data.encode_directly());
+		vec.extend_from_slice(&self.first_chunk_number.encode_directly());
+		vec.extend_from_slice(&self.number_of_chunks.encode_directly());
+		vec.extend_from_slice(&self.hash_header.encode_directly());
 		vec
 	}
-	fn decode_content(data: &[u8]) -> Result<ObjectFooterPhysical> {
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&false.encode_directly()); // encryption flag
+		vec
+	}
+
+	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let object_number = u64::decode_directly(&mut cursor)?;
@@ -167,10 +159,6 @@ impl HeaderCoding for ObjectFooterPhysical {
 			first_chunk_number, 
 			number_of_chunks, 
 			hash_header))
-	}
-
-	fn struct_name() -> &'static str {
-		"ObjectFooterPhysical"
 	}
 }
 
@@ -236,15 +224,16 @@ impl fmt::Display for EncryptedObjectFooterPhysical {
 }
 
 impl HeaderCoding for EncryptedObjectFooterPhysical {
-	type Item = EncryptedObjectFooterPhysical;
+	type Item = Self;
+
 	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_PHYSICAL
 	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.object_number.encode_directly());
 		vec.extend_from_slice(&true.encode_directly()); // encryption flag
 		vec.extend_from_slice(&self.encrypted_data.encode_directly());
@@ -264,9 +253,5 @@ impl HeaderCoding for EncryptedObjectFooterPhysical {
 		Ok(Self::new(
 			object_number,
 			encrypted_data))
-	}
-
-	fn struct_name() -> &'static str {
-		"EncryptedObjectFooterPhysical"
 	}
 }

@@ -148,55 +148,6 @@ impl FileHeader {
 		}
 	}
 
-	/// encodes the file header to a ```Vec<u8>```. The encryption flag of the appropriate object header has to be set to 2.
-	/// # Error
-	/// The method returns an error, if the encryption fails.
-	pub fn encode_encrypted_header_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
-	where
-		E: Borrow<EncryptionInformation>
-	{
-		let mut vec = Vec::new();
-		let encryption_information = encryption_information.borrow();
-		let encoded_header = self.encode_encrypted_header(&encryption_information.encryption_key, &encryption_information.algorithm)?;
-		let identifier = HEADER_IDENTIFIER_FILE_HEADER;
-		let encoded_header_length = 4 + 8 + (encoded_header.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
-		vec.extend_from_slice(&encoded_header);
-
-		Ok(vec)
-	}
-
-	fn encode_encrypted_header<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.file_number.encode_directly());
-
-		let mut data_to_encrypt = Vec::new();
-		data_to_encrypt.append(&mut self.encode_content());
-
-		let encrypted_data = FileHeader::encrypt(
-			key, data_to_encrypt,
-			self.file_number,
-			algorithm
-			)?;
-		vec.extend_from_slice(&encrypted_data.encode_directly());
-		Ok(vec)
-	}
-
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&(self.file_type.clone() as u8).encode_directly());
-		vec.extend_from_slice(&self.filename.encode_directly());
-		vec.extend_from_slice(&self.parent_file_number.encode_directly());
-		vec.extend_from_slice(&self.metadata_ext.encode_directly());
-		vec
-	}
-
 	/// decodes the encrypted header with the given key and [crate::header::EncryptionHeader] from given position offset.
 	pub fn decode_at_encrypted_header_with_key<R, E>(data: &R, offset: u64, encryption_information: E) -> Result<Self>
 	where
@@ -271,8 +222,14 @@ impl FileHeader {
 	}
 }
 
+impl HeaderEncryption for FileHeader {
+	fn nonce_value(&self) -> u64 {
+		self.file_number
+	}
+}
+
 impl HeaderCoding for FileHeader {
-	type Item = FileHeader;
+	type Item = Self;
 	
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_FILE_HEADER
@@ -281,14 +238,20 @@ impl HeaderCoding for FileHeader {
 	fn version() -> u8 {
 		DEFAULT_HEADER_VERSION_FILE_HEADER
 	}
-	
-	fn encode_header(&self) -> Vec<u8> {
+
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.file_number.encode_directly());
-		vec.extend_from_slice(&self.encode_content());
+		vec.extend_from_slice(&(self.file_type.clone() as u8).encode_directly());
+		vec.extend_from_slice(&self.filename.encode_directly());
+		vec.extend_from_slice(&self.parent_file_number.encode_directly());
+		vec.extend_from_slice(&self.metadata_ext.encode_directly());
 		vec
-		
+	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.file_number.encode_directly());
+		vec
 	}
 
 	fn decode_content(data: &[u8]) -> Result<FileHeader> {
@@ -297,10 +260,6 @@ impl HeaderCoding for FileHeader {
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (file_type, filename, parent_file_number, metadata_ext) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileHeader::new(file_number, file_type, filename, parent_file_number, metadata_ext))
-	}
-
-	fn struct_name() -> &'static str {
-		"FileHeader"
 	}
 }
 

@@ -135,7 +135,7 @@ impl ChunkMap for ChunkSamebytesMap {
 }
 
 impl HeaderCoding for ChunkSamebytesMap {
-	type Item = ChunkSamebytesMap;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP
@@ -145,11 +145,15 @@ impl HeaderCoding for ChunkSamebytesMap {
 		DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP
 	}
 	
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.encode_map());
+		vec
+	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&self.chunkmap.encode_directly());
 		vec
 	}
 
@@ -159,10 +163,6 @@ impl HeaderCoding for ChunkSamebytesMap {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap = BTreeMap::<u64, u8>::decode_directly(&mut cursor)?;
 		Ok(Self::new(object_number, chunkmap))
-	}
-
-	fn struct_name() -> &'static str {
-		"ChunkSamebytesMap"
 	}
 }
 

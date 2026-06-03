@@ -221,7 +221,7 @@ impl<R: ReadAt> Segment<R> {
 
 	/// Returns the [crate::header::ObjectHeader] of the given object number, if available in this [Segment]. Otherwise, returns an error.
 	pub fn read_object_header(&self, object_number: u64) -> Result<ObjectHeader> {
-		let offset = match self.footer.object_header_offsets().get(&object_number) {
+		let offset = match self.footer.object_header_offsets.get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
@@ -234,7 +234,7 @@ impl<R: ReadAt> Segment<R> {
 
 	/// Returns the [EncryptedObjectHeader] of the given object number (if available in this [Segment]). Otherwise, returns an error.
 	pub fn read_encrypted_object_header(&self, object_number: u64) -> Result<EncryptedObjectHeader> {
-		let offset = match self.footer.object_header_offsets().get(&object_number) {
+		let offset = match self.footer.object_header_offsets.get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
@@ -249,7 +249,7 @@ impl<R: ReadAt> Segment<R> {
 	where
 		P: AsRef<[u8]>,
 	{
-		let offset = match self.footer.object_header_offsets().get(&object_number) {
+		let offset = match self.footer.object_header_offsets.get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
 		};
@@ -259,7 +259,7 @@ impl<R: ReadAt> Segment<R> {
 
 	/// Returns the [crate::footer::ObjectFooter] of the given object number, if available in this [Segment]. Otherwise, returns an error.
 	pub fn read_object_footer(&self, object_number: u64) -> Result<ObjectFooter> {
-		let offset = match self.footer.object_footer_offsets().get(&object_number) {
+		let offset = match self.footer.object_footer_offsets.get(&object_number) {
 			Some(value) => value,
 			None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
@@ -271,7 +271,7 @@ impl<R: ReadAt> Segment<R> {
 
 	/// Returns the [crate::footer::EncryptedObjectFooter] of the given object number, if available in this [Segment]. Otherwise, returns an error.
 	pub fn read_encrypted_object_footer(&self, object_number: u64) -> Result<EncryptedObjectFooter> {
-		let offset = match self.footer.object_footer_offsets().get(&object_number) {
+		let offset = match self.footer.object_footer_offsets.get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};
@@ -286,7 +286,7 @@ impl<R: ReadAt> Segment<R> {
 	where
 		E: Borrow<EncryptionInformation>,
 	{
-		let offset = match self.footer.object_footer_offsets().get(&object_number) {
+		let offset = match self.footer.object_footer_offsets.get(&object_number) {
 				Some(value) => value,
 				None => return Err(ZffError::new(ZffErrorKind::NotFound, format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		};

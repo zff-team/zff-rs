@@ -97,6 +97,7 @@ pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object 
 pub(crate) const ERROR_MALFORMED_SEGMENT: &str = "A Segment is malformed.";
 pub(crate) const ERROR_MISSING_OBJECT_NO: &str = "Missing object number: ";
 pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
+pub(crate) const ERROR_ENCRYPTION_PRECONDITION_FAILED: &str = "Encryption and encoding precondition failed.";
 pub(crate) const ERROR_MISSING_ENCRYPTION_HEADER_KEY: &str = "Trying to decode encrypted content, but encryption header or key is missing.";
 pub(crate) const NO_ENCRYPTION_DETECTED: &str = "No encryption detected.";
 pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str = "Trying to decrypt unencryted object.";

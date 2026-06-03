@@ -1,10 +1,22 @@
 // - STD
-use std::io::{Error as IoError, ErrorKind as IoEKind};
+use std::collections::{HashMap};
+use std::io::{Error as IoError, ErrorKind as IoEKind, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
-// - Parent
-use super::*;
+// - internal
+use crate::prelude::*;
+use crate::{
+	FileMetadata,
+	helper::copy_chunk_content_to_buf,
+	io::zffreader::{
+		ArcZffReaderMetadata,
+		get_chunk_data,
+	},
+};
 
 // - external
+#[cfg(feature = "log")]
+use log::{debug};
 use moka::sync::Cache as MokaCache;
 
 /// A reader which contains the appropriate metadata of a logical object 
@@ -220,8 +232,10 @@ impl<R: ReadAt> ZffObjectReaderLogical<R> {
 		self.reader_cache.insert(chunk_number, Arc::clone(&chunk_content));
 		Ok(chunk_content)
 	}
+}
 
-	pub fn read_at_file(&self, buf: &mut[u8], offset: u64, file_no: u64) -> std::io::Result<usize> {
+impl<R: ReadAt> ReadAtFile for ZffObjectReaderLogical<R> {
+	fn read_at_file(&self, buf: &mut[u8], offset: u64, file_no: u64) -> std::io::Result<usize> {
 		let filemetadata = self.files.get(&file_no).ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{}", file_no)))?;
 		if buf.is_empty() || offset >= filemetadata.length_of_data() {
 			return Ok(0)
@@ -245,42 +259,16 @@ impl<R: ReadAt> ZffObjectReaderLogical<R> {
 			let current_read_len = remaining_in_chunk.min(bytes_to_read - read_bytes);
 			let chunk_content = self.cached_chunk(current_chunk_number)?;
 
-			match chunk_content.as_ref() {
-				ChunkContent::Raw(data) => {
-					let end = inner_position.checked_add(current_read_len).ok_or_else(|| {
-						IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT)
-					})?;
-					let chunk_slice = data.get(inner_position..end).ok_or_else(|| {
-						IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT)
-					})?;
-					buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
-				},
-				ChunkContent::SameBytes(byte) => {
-					buf[read_bytes..read_bytes + current_read_len].fill(*byte);
-				},
-				ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
-			}
+			copy_chunk_content_to_buf(
+				&chunk_content, 
+				buf, 
+				read_bytes, 
+				current_read_len, 
+				inner_position)?;
+			
 			read_bytes += current_read_len;
 		}
 		Ok(read_bytes)
-	}
-
-	pub fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
-		let start_offset = offset;
-        let mut chunk = [0u8; DEFAULT_READ_BUFFER_SIZE];
-        loop {
-            match self.read_at_file(&mut chunk, offset, file_no) {
-                Ok(0) => break,
-                Ok(n) => {
-                    buf.extend_from_slice(&chunk[..n]);
-                    offset += n as u64;
-                }
-                Err(e) if e.kind() == IoEKind::Interrupted => continue,
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok((offset-start_offset) as usize)
 	}
 }
 

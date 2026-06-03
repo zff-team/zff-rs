@@ -1,4 +1,6 @@
 // - STD
+use std::any::type_name;
+use std::borrow::Borrow;
 use std::io::{Read};
 
 // - internal
@@ -16,12 +18,29 @@ pub trait HeaderCoding {
 
 	/// returns the identifier (=Magic bytes) of the header.
 	fn identifier() -> u32;
+
+	/// encodes the (potentially encryptable) content of the struct.
+    fn encode_content(&self) -> Vec<u8>;
+
+    /// encodes the (non-encryptable) content of the struct.
+    fn encode_fixed_fields(&self) -> Vec<u8> {
+        Vec::new()
+    }
+	
 	/// encodes the header.
-	fn encode_header(&self) -> Vec<u8>;
+	fn encode_header(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(&Self::version().encode_directly());
+        vec.extend_from_slice(&self.encode_fixed_fields());
+        vec.extend_from_slice(&self.encode_content());
+        vec
+    }
 
 	/// returns the size of the encoded header (in bytes)
 	fn header_size(&self) -> usize {
-		self.encode_directly().len()
+		DEFAULT_LENGTH_HEADER_IDENTIFIER // Self::identifier() -> u32 -> 4 bytes
+		+ DEFAULT_LENGTH_VALUE_HEADER_LENGTH // header size value itself -> u64 -> 8 bytes
+		+ self.encode_header().len()
 	}
 
 	/// returns the version of the header.
@@ -40,12 +59,9 @@ pub trait HeaderCoding {
 	/// encodes the (header) value/object directly (= without key).
 	fn encode_directly(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let mut encoded_header = self.encode_header();
-		let identifier = Self::identifier();
-		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
-		vec.append(&mut identifier.to_be_bytes().to_vec());
-		vec.append(&mut encoded_header_length.to_le_bytes().to_vec());
-		vec.append(&mut encoded_header);
+		vec.extend_from_slice(&Self::identifier().to_be_bytes());
+		vec.extend_from_slice(&self.header_size().to_le_bytes());
+		vec.extend_from_slice(&self.encode_header());
 
 		vec
 	}
@@ -88,7 +104,6 @@ pub trait HeaderCoding {
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
 		#[cfg(feature = "log")]
     	trace!("Trying to decode a {}", Self::struct_name());
-
 		if !Self::check_identifier(data) {
 			return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER));
 		}
@@ -105,6 +120,67 @@ pub trait HeaderCoding {
 	}
 
 	/// Method to show the "name" of the appropriate struct (e.g. to use this with fmt::Display).
-	/// This method is a necassary helper method for fmt::Display and serde::ser::SerializeStruct (and for some debugging purposes).
-	fn struct_name() -> &'static str;
+	/// This method is a helper method for fmt::Display and serde::ser::SerializeStruct (and for some debugging purposes).
+	fn struct_name() -> &'static str {
+		let full_name = type_name::<Self>();
+        // Split by "::" and take the last part
+        full_name.split("::").last().unwrap_or(full_name)
+	}
+}
+
+/// Trait which provides methods to encrypt a header.
+pub trait HeaderEncryption: HeaderCoding + Encryption {
+
+	/// Optional precondition to check if encryption is possible.
+	/// true if encryption is possible, false if precondition fails.
+	fn encryption_precondition(&self) -> bool {
+		true
+	}
+
+	/// encodes the header to a ```Vec<u8>```.
+	/// # Error
+	/// The method returns an error, if the encryption header is missing (=None).
+	/// The method returns an error, if the encryption fails.
+	fn encrypt_directly<E: Borrow<EncryptionInformation>>(&self, encryption_information: E) -> Result<Vec<u8>> {
+		let mut vec = Vec::new(); 
+
+		let encoded_header = self.encode_encrypted_header(encryption_information)?;
+		let identifier = Self::identifier();
+		let length = 4 + 8 + (encoded_header.len() as u64);
+		
+		vec.extend_from_slice(&identifier.to_be_bytes());
+		vec.extend_from_slice(&length.to_le_bytes());
+		vec.extend_from_slice(&encoded_header);
+		Ok(vec)
+	}
+
+	/// encrypts and encodes the header.
+	fn encode_encrypted_header<E: Borrow<EncryptionInformation>>(&self, encryption_information: E) -> Result<Vec<u8>> {
+		if !self.encryption_precondition() {
+			return Err(ZffError::new(
+				ZffErrorKind::EncryptionError, 
+				ERROR_ENCRYPTION_PRECONDITION_FAILED))
+		};
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.encoded_fixed_fields_for_encryption());
+		let mut data_to_encrypt = Vec::new();
+		data_to_encrypt.extend_from_slice(&self.encode_content());
+
+		let encrypted_data = Self::encrypt(
+			&encryption_information.borrow().encryption_key,
+			data_to_encrypt,
+			self.nonce_value(),
+			&encryption_information.borrow().algorithm)?;
+		vec.extend_from_slice(&encrypted_data.encode_directly());
+		Ok(vec)
+	}
+
+	/// Sometimes, we have to set flag values...than, we have to modify the fixed fields.
+	fn encoded_fixed_fields_for_encryption(&self) -> Vec<u8> {
+		self.encode_fixed_fields()
+	}
+
+	/// The value which should be used to calculate the nonce (e.g. the filenumber for a FileHeader).
+	fn nonce_value(&self) -> u64;
 }

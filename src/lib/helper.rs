@@ -1,9 +1,12 @@
 // - STD
+use std::io::{Error as IoError, ErrorKind as IoEKind};
 use std::collections::BTreeMap;
 
 // - internal
 use crate::{
+    ChunkContent,
     Result,
+    ERROR_MALFORMED_SEGMENT,
 };
 // - external
 #[cfg(feature = "serde")]
@@ -168,4 +171,29 @@ pub(crate) fn parse_unix_timestamp_nanos(s: &str) -> Option<u64> {
     }
 
     secs.checked_mul(1_000_000_000)?.checked_add(nanos)
+}
+
+pub(crate) fn copy_chunk_content_to_buf(
+	chunk_content: &ChunkContent,
+	buf: &mut [u8],
+	read_bytes: usize,
+	current_read_len: usize,
+	inner_position: usize,
+) -> Result<()> {
+	match chunk_content {
+		ChunkContent::Raw(data) => {
+			let end = inner_position.checked_add(current_read_len).ok_or_else(|| {
+				IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT)
+			})?;
+			let chunk_slice = data.get(inner_position..end).ok_or_else(|| {
+				IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT)
+			})?;
+			buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
+		},
+		ChunkContent::SameBytes(byte) => {
+			buf[read_bytes..read_bytes + current_read_len].fill(*byte);
+		},
+		ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
+	};
+	Ok(())
 }

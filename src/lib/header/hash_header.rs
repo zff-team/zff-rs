@@ -52,7 +52,7 @@ impl HashHeader {
 }
 
 impl HeaderCoding for HashHeader {
-	type Item = HashHeader;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_HASH_HEADER
@@ -62,9 +62,8 @@ impl HeaderCoding for HashHeader {
 		DEFAULT_HEADER_VERSION_HASH_HEADER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.extend_from_slice(&self.hashes.encode_directly());
 
 		vec
@@ -75,10 +74,6 @@ impl HeaderCoding for HashHeader {
 		Self::check_version(&mut cursor)?;
 		let hashes = Vec::<HashValue>::decode_directly(&mut cursor)?;
 		Ok(HashHeader::new(hashes))
-	}
-
-	fn struct_name() -> &'static str {
-		"HashHeader"
 	}
 }
 
@@ -148,7 +143,7 @@ impl HashValue {
 
 
 impl HeaderCoding for HashValue {
-	type Item = HashValue;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_HASH_VALUE
@@ -158,9 +153,8 @@ impl HeaderCoding for HashValue {
 		DEFAULT_HEADER_VERSION_HASH_VALUE_HEADER
 	}
 	
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.push(self.hash_type.clone() as u8);
 		vec.extend_from_slice(&self.hash.encode_directly());
 		match self.ed25519_signature {
@@ -191,10 +185,6 @@ impl HeaderCoding for HashValue {
 		}
 
 		Ok(HashValue::new(hash_type, hash, ed25519_signature))
-	}
-
-	fn struct_name() -> &'static str {
-		"HashValue"
 	}
 }
 

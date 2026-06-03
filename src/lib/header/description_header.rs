@@ -147,9 +147,8 @@ impl HeaderCoding for DescriptionHeader {
 		DEFAULT_HEADER_VERSION_DESCRIPTION_HEADER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.extend_from_slice(&self.identifier_map.encode_directly());
 		vec
 	}
@@ -172,10 +171,6 @@ impl HeaderCoding for DescriptionHeader {
 		let description_header = DescriptionHeader::new(identifier_map);
 
 		Ok(description_header)
-	}
-
-	fn struct_name() -> &'static str {
-		"DescriptionHeader"
 	}
 }
 

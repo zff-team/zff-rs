@@ -66,7 +66,7 @@ pub(crate) struct PreloadedChunkMapsInMemory {
 }
 
 impl PreloadedChunkMapsInMemory {
-	pub fn with_data(
+	pub fn new(
 		chunk_header: HashMap<u64, ChunkHeader>, 
 		same_bytes: HashMap<u64, u8>, 
 		duplicate_chunks: HashMap<u64, u64>
@@ -138,7 +138,7 @@ pub(crate) struct ZffReaderGeneralMetadata<R: ReadAt> {
 impl<R: ReadAt> ZffReaderGeneralMetadata<R> {
 	fn new(segments: HashMap<u64, Segment<R>>, main_footer: MainFooter) -> Self {
 		let object_metadata = main_footer
-		.object_header()
+		.object_header
 		.keys()
 		.map(|object_no| (*object_no, OnceLock::new()))
 		.collect();
@@ -250,7 +250,7 @@ impl<R: ReadAt> ZffReader<R> {
 		trace!("list objects of ZffReader.");
 		
 		let mut map = BTreeMap::new();
-		for (object_number, segment_number) in self.metadata.main_footer.object_header() {
+		for (object_number, segment_number) in &self.metadata.main_footer.object_header {
 			let segment = match self.metadata.segments.get(segment_number) {
 				Some(segment) => segment,
 				None => return Err(ZffError::new(ZffErrorKind::Missing, segment_number.to_string())),
@@ -911,7 +911,7 @@ fn initialize_object_reader_all<R: ReadAt>(
 	metadata: ArcZffReaderMetadata<R>) -> Result<HashMap<u64, ZffObjectReader<R>>> {
 
 	let mut obj_reader_map = HashMap::new();
-	for obj_no in metadata.main_footer.object_footer().keys() {
+	for obj_no in metadata.main_footer.object_footer.keys() {
 		let obj_reader = initialize_object_reader(
 			*obj_no,
 			Arc::clone(&metadata))?;
@@ -922,13 +922,13 @@ fn initialize_object_reader_all<R: ReadAt>(
 
 fn initialize_object_reader<R: ReadAt>(
 	object_number: u64, metadata: ArcZffReaderMetadata<R>) -> Result<ZffObjectReader<R>> {
-	let segment_no_footer = match metadata.main_footer.object_footer().get(&object_number) {
+	let segment_no_footer = match metadata.main_footer.object_footer.get(&object_number) {
 		None => return Err(ZffError::new(
 			ZffErrorKind::EncodingError,
 			format!("{ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT}{object_number}"))),
 		Some(segment_no) => segment_no
 	};
-	let segment_no_header = match metadata.main_footer.object_header().get(&object_number) {
+	let segment_no_header = match metadata.main_footer.object_header.get(&object_number) {
 		None => return Err(ZffError::new(
 			ZffErrorKind::EncodingError, 
 			format!("{ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT}{object_number}"))),
@@ -1018,7 +1018,7 @@ fn initialize_encrypted_object_reader<R: ReadAt>(
 		Some(segment) => segment.read_encrypted_object_footer(obj_number)?,
 	};
 	let obj_reader = ZffObjectReader::Encrypted(
-		Box::new(ZffObjectReaderEncrypted::with_data(header, footer, Arc::clone(&metadata))));
+		Box::new(ZffObjectReaderEncrypted::new(header, footer, Arc::clone(&metadata))));
 	Ok(obj_reader)
 }
 

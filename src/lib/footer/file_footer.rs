@@ -60,57 +60,6 @@ impl FileFooter {
 		}
 	}
 
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.acquisition_start.encode_directly());
-		vec.extend_from_slice(&self.acquisition_end.encode_directly());
-		vec.extend_from_slice(&self.hash_header.encode_directly());
-		vec.extend_from_slice(&self.first_chunk_number.encode_directly());
-		vec.extend_from_slice(&self.number_of_chunks.encode_directly());
-		vec.extend_from_slice(&self.length_of_data.encode_directly());
-		vec
-	}
-
-	/// encrypts the file footer by the given encryption information and returns the encrypted file footer.
-	/// # Error
-	/// The method returns an error, if the encryption fails.
-	pub fn encode_encrypted_header_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
-	where
-		E: Borrow<EncryptionInformation>
-	{
-		let mut vec = Vec::new();
-		let encryption_information = encryption_information.borrow();
-		let encoded_footer = self.encode_encrypted_footer(&encryption_information.encryption_key, &encryption_information.algorithm)?;
-		let identifier = Self::identifier();
-		let encoded_header_length = 4 + 8 + (encoded_footer.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
-		vec.extend_from_slice(&encoded_footer);
-
-		Ok(vec)
-	}
-
-	fn encode_encrypted_footer<K, A>(&self, key: K, algorithm: A) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-	{
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.file_number.encode_directly());
-
-		let mut data_to_encrypt = Vec::new();
-		data_to_encrypt.append(&mut self.encode_content());
-
-		let encrypted_data = FileFooter::encrypt(
-			key, data_to_encrypt,
-			self.file_number,
-			algorithm
-			)?;
-		vec.extend_from_slice(&encrypted_data.encode_directly());
-		Ok(vec)
-	}
-
 	/// Decodes the encrypted header with the given key and [crate::header::EncryptionHeader] at the given offset.
 	/// The appropriate [crate::header::EncryptionHeader] has to be stored in the appropriate [crate::header::ObjectHeader]. 
 	pub fn decode_at_encrypted_footer_with_key<R, E>(data: &R, offset: u64, encryption_information: E) -> Result<Self>
@@ -178,6 +127,12 @@ impl FileFooter {
 	}
 }
 
+impl HeaderEncryption for FileFooter {
+	fn nonce_value(&self) -> u64 {
+		self.file_number
+	}
+}
+
 impl HeaderCoding for FileFooter {
 	type Item = FileFooter;
 	fn version() -> u8 { 
@@ -186,22 +141,30 @@ impl HeaderCoding for FileFooter {
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_FILE_FOOTER
 	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
-		vec.extend_from_slice(&self.file_number.encode_directly());
-		vec.extend_from_slice(&self.encode_content());
+
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.acquisition_start.encode_directly());
+		vec.extend_from_slice(&self.acquisition_end.encode_directly());
+		vec.extend_from_slice(&self.hash_header.encode_directly());
+		vec.extend_from_slice(&self.first_chunk_number.encode_directly());
+		vec.extend_from_slice(&self.number_of_chunks.encode_directly());
+		vec.extend_from_slice(&self.length_of_data.encode_directly());
 		vec
 	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.file_number.encode_directly());
+		vec
+	}
+
 	fn decode_content(data: &[u8]) -> Result<FileFooter> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
 		let file_number = u64::decode_directly(&mut cursor)?;
 		let (acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data) = Self::decode_inner_content(&mut cursor)?;
 		Ok(FileFooter::new(file_number, acquisition_start, acquisition_end, hash_header, first_chunk_number, number_of_chunks, length_of_data))
-	}
-
-	fn struct_name() -> &'static str {
-		"FileFooter"
 	}
 }
 

@@ -124,8 +124,7 @@ pub(crate) fn convert_redb_into_in_memory_preloaded_chunkmaps(db: &mut Database)
 	let chunk_header_map = extract_redb_chunk_header_map(db)?;
 	let samebytes_map = extract_redb_samebytes_map(db)?;
 	let dedup_map = extract_redb_dedup_map(db)?;
-	Ok(PreloadedChunkMapsInMemory::with_data(
-		chunk_header_map, samebytes_map, dedup_map))
+	Ok(PreloadedChunkMapsInMemory::new(chunk_header_map, samebytes_map, dedup_map))
 }
 
 pub(crate) fn extract_redb_chunk_header_map(db: &mut Database) -> Result<HashMap<u64, ChunkHeader>> {

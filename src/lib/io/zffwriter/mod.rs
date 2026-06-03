@@ -184,7 +184,7 @@ pub struct ZffWriter<R: Read, C: ReadAt> {
 
 impl<R: Read, C: ReadAt> ZffWriter<R, C> {
     /// Returns a new ZffWriter with the given values.
-    pub fn with_data(
+    pub fn new(
         physical_objects: HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
 		logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>, //<ObjectHeader, input_files>
         virtual_obects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
@@ -463,7 +463,7 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                 self.current_object_encoder.obj_number(), self.current_segment_no());
                             // prepare the current object header
                             self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
-                            self.in_progress_data.segment_footer.add_object_header_offset(
+                            self.in_progress_data.segment_footer.object_header_offsets.insert(
                                 self.current_object_encoder.obj_number(),
                                 self.in_progress_data.bytes_read.current_segment);
                         },
@@ -563,10 +563,12 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                     };
 
                     if let ReadState::SegmentFooter = self.read_state {
-                    self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
-                    self.in_progress_data.segment_footer.set_length_of_segment(
+                    self.in_progress_data.segment_footer.footer_offset = self.in_progress_data.bytes_read.current_segment;
+                   
+                    self.in_progress_data.segment_footer.length_of_segment =
                     self.in_progress_data.bytes_read.current_segment +
-                    self.in_progress_data.segment_footer.encode_directly().len() as u64);
+                    self.in_progress_data.segment_footer.header_size() as u64;
+
                     self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
                     self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
                     }
@@ -634,7 +636,7 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                         Ok(obj_footer) => obj_footer,
                         Err(e) => return Err(std::io::Error::other(e)),
                     };
-                    self.in_progress_data.segment_footer.add_object_footer_offset(
+                    self.in_progress_data.segment_footer.object_footer_offsets.insert(
                         self.current_object_encoder.obj_number(), 
                         self.in_progress_data.bytes_read.current_segment);
                     self.in_progress_data.current_encoded_object_footer = object_footer;
@@ -791,11 +793,13 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                     self.current_object_encoder = match self.object_encoder.pop() {
                         Some(creator_obj_encoder) => creator_obj_encoder,
                         None => {
-                            self.in_progress_data.segment_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
-                            self.in_progress_data.segment_footer.set_length_of_segment(
+                            self.in_progress_data.segment_footer.footer_offset = self.in_progress_data.bytes_read.current_segment;
+                            
+                            self.in_progress_data.segment_footer.length_of_segment =
                                 self.in_progress_data.bytes_read.current_segment + 
-                                self.in_progress_data.segment_footer.encode_directly().len() as u64 + 
-                                self.in_progress_data.main_footer.encode_directly().len() as u64);
+                                self.in_progress_data.segment_footer.header_size() as u64 + 
+                                self.in_progress_data.main_footer.header_size() as u64;
+
                             self.in_progress_data.current_encoded_segment_footer = self.in_progress_data.segment_footer.encode_directly();
                             self.in_progress_data.current_encoded_segment_footer_read_bytes = ReadBytes::NotRead;
                             self.segmentation_state = SegmentationInnerState::FullLastSegment(self.current_segment_no());
@@ -807,7 +811,7 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                     self.in_progress_data.chunkmaps.set_object_number(self.current_object_encoder.obj_number());
                     self.read_state = ReadState::ObjectHeader;
                     self.in_progress_data.current_encoded_object_header = self.current_object_encoder.get_encoded_header();
-                    self.in_progress_data.segment_footer.add_object_header_offset(
+                    self.in_progress_data.segment_footer.object_header_offsets.insert(
                         self.current_object_encoder.obj_number(),
                         self.in_progress_data.bytes_read.current_segment);
                 },
@@ -826,8 +830,8 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                     };
 
                     // switch to the next state
-                    self.in_progress_data.main_footer.set_footer_offset(self.in_progress_data.bytes_read.current_segment);
-                    self.in_progress_data.main_footer.set_number_of_segments(self.current_segment_no());
+                    self.in_progress_data.main_footer.footer_offset = self.in_progress_data.bytes_read.current_segment;
+                    self.in_progress_data.main_footer.number_of_segments = self.current_segment_no();
                     self.in_progress_data.encoded_main_footer = self.in_progress_data.main_footer.encode_directly();
                     self.in_progress_data.encoded_main_footer_read_bytes = ReadBytes::NotRead;
                     
@@ -888,13 +892,13 @@ fn setup_container<R: Read, C: ReadAt>(
                         Some(x) => *x + 1,
                         None => return Err(ZffError::new(ZffErrorKind::NoDataLeft, "")) // no chunks left
                     };
-                    let next_object_no = match mf.object_footer().keys().max() {
+                    let next_object_no = match mf.object_footer.keys().max() {
                         Some(x) => *x + 1,
                         None => return Err(ZffError::new(ZffErrorKind::NoDataLeft, "")), // no objects left
                     };
                     let segment_footer = segment.footer().clone();
     
-                    extension_parameter = Some(ZffExtenderParameter::with_data(
+                    extension_parameter = Some(ZffExtenderParameter::new(
                         current_segment,
                         next_object_no,
                         initial_chunk_number,
@@ -968,7 +972,7 @@ fn setup_container<R: Read, C: ReadAt>(
         in_progress_data.bytes_read.current_segment = offset;
         in_progress_data.current_encoded_object_header = current_object_encoder.get_encoded_header();
         in_progress_data.segment_footer = extender_parameter.segment_footer;
-        in_progress_data.segment_footer.add_object_header_offset(
+        in_progress_data.segment_footer.object_header_offsets.insert(
             current_object_encoder.obj_number(),
             in_progress_data.bytes_read.current_segment);
         segmentation_state = SegmentationInnerState::Partial(extender_parameter.segment_number);

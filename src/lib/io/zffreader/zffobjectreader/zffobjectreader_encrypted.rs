@@ -12,7 +12,7 @@ pub(crate) struct ZffObjectReaderEncrypted<R: ReadAt> {
 
 impl<R: ReadAt> ZffObjectReaderEncrypted<R> {
 	/// creates a new [ZffObjectReaderEncrypted] with the given metadata.
-	pub fn with_data(
+	pub fn new(
 		encrypted_header: EncryptedObjectHeader, 
 		encrypted_footer: EncryptedObjectFooter, 
 		metadata: ArcZffReaderMetadata<R>) -> Self {

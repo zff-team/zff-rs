@@ -8,7 +8,10 @@ use crate::prelude::*;
 use crate::{
 	FileFooterMetadata,
 	FileMetadata,
-	helper::floor_btree_entry,
+	helper::{
+		copy_chunk_content_to_buf,
+		floor_btree_entry
+	},
 	io::zffreader::{
 		ArcZffReaderMetadata,
 		get_chunk_data,
@@ -256,8 +259,10 @@ impl<R: ReadAt> ZffObjectReaderVirtual<R> {
 		self.reader_cache.insert(chunk_number, Arc::clone(&chunk_content));
 		Ok(chunk_content)
 	}
+}
 
-	pub fn read_at_file(&self, buf: &mut [u8], offset: u64, file_no: u64) -> std::io::Result<usize> {
+impl<R: ReadAt> ReadAtFile for ZffObjectReaderVirtual<R> {
+	fn read_at_file(&self, buf: &mut [u8], offset: u64, file_no: u64) -> std::io::Result<usize> {
 		let filemetadata = self.files
 			.get(&file_no)
 			.ok_or(IoError::other(format!("{ERROR_MISSING_FILE_NUMBER}{file_no}")))?;
@@ -338,41 +343,17 @@ impl<R: ReadAt> ZffObjectReaderVirtual<R> {
 
 			let chunk_content = self.cached_chunk(&vfe.source_object_number, current_chunk_number)?;
 
-			match chunk_content.as_ref() {
-				ChunkContent::Raw(data) => {
-					let end = source_inner_pos + current_read_len;
-					let chunk_slice = data.get(source_inner_pos..end)
-						.ok_or(IoError::new(IoEKind::UnexpectedEof, ERROR_MALFORMED_SEGMENT))?;
-					buf[read_bytes..read_bytes + current_read_len].copy_from_slice(chunk_slice);
-				},
-				ChunkContent::SameBytes(byte) => {
-					buf[read_bytes..read_bytes + current_read_len].fill(*byte);
-				},
-				ChunkContent::Duplicate(_) => unreachable!(),
-			}
+			copy_chunk_content_to_buf(
+				&chunk_content, 
+				buf, 
+				read_bytes, 
+				current_read_len, 
+				source_inner_pos)?;
 
 			read_bytes += current_read_len;
 		}
 
 		Ok(read_bytes)
-	}
-
-	pub fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
-		let start_offset = offset;
-        let mut chunk = [0u8; DEFAULT_READ_BUFFER_SIZE];
-        loop {
-            match self.read_at_file(&mut chunk, offset, file_no) {
-                Ok(0) => break,
-                Ok(n) => {
-                    buf.extend_from_slice(&chunk[..n]);
-                    offset += n as u64;
-                }
-                Err(e) if e.kind() == IoEKind::Interrupted => continue,
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok((offset-start_offset) as usize)
 	}
 }
 

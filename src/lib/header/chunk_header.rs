@@ -49,6 +49,21 @@ impl HeaderCoding for ChunkHeader {
 		DEFAULT_HEADER_VERSION_CHUNK_HEADER
 	}
 
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::with_capacity(
+			self.offset.encoded_size() +
+			self.size.encoded_size() +
+			self.flags.encoded_size() +
+			self.integrity_hash.encoded_size()
+		);
+		vec.extend_from_slice(&self.offset.encode_directly());
+        vec.extend_from_slice(&self.size.encode_directly());
+        vec.extend_from_slice(&self.flags.encode_directly());
+        vec.extend_from_slice(&self.integrity_hash.encode_directly());
+		vec
+	}
+
+	// self implementation for performance reasons.
 	fn encode_header(&self) -> Vec<u8> {
 		let mut vec = Vec::with_capacity(
 			Self::version().encoded_size() +
@@ -73,10 +88,6 @@ impl HeaderCoding for ChunkHeader {
 		let flags = ChunkFlags::decode_directly(&mut cursor)?;
 		let integrity_hash = u64::decode_directly(&mut cursor)?;
 		Ok(ChunkHeader::new(offset, size, flags, integrity_hash))
-	}
-
-	fn struct_name() -> &'static str {
-		"ChunkHeader"
 	}
 }
 

@@ -29,7 +29,7 @@ pub struct LogicalObjectEncoder {
 	pub(crate) current_file_header_read: bool,
 	pub(crate) current_file_number: u64,
 	pub(crate) encoding_thread_pool_manager: Rc<RefCell<EncodingThreadPoolManager>>,
-	pub(crate) encryption_key: Option<Vec<u8>>,
+	pub(crate) encryption_information: Option<EncryptionInformation>,
 	pub(crate) signing_key: Option<SigningKey>,
 	pub(crate) current_chunk_number: u64,
 	pub(crate) object_footer: ObjectFooterLogical,
@@ -38,7 +38,7 @@ pub struct LogicalObjectEncoder {
 
 impl Drop for LogicalObjectEncoder {
 	fn drop(&mut self) {
-		self.encryption_key.zeroize();
+		self.encryption_information.zeroize();
 	}
 }
 
@@ -48,13 +48,8 @@ impl LogicalObjectEncoder {
 	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
 		self.object_footer.replace_root_dir_filenumbers(self.logical_object_source.root_dir_filenumbers());
 		let systemtime = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
-		self.object_footer.set_acquisition_end(systemtime);
-		if let Some(encryption_key) = &self.encryption_key {
-			let encryption_information = EncryptionInformation {
-				encryption_key: encryption_key.to_vec(),
-				// unwrap should be safe here: there should not an encryption key exists without an encryption header.
-				algorithm: self.obj_header.encryption_header.clone().unwrap().algorithm.clone()
-			};
+		self.object_footer.acquisition_end = systemtime;
+		if let Some(encryption_information) = &self.encryption_information {
 	    	self.object_footer.encrypt_directly(encryption_information)
 	    } else {
 	    	Ok(self.object_footer.encode_directly())
@@ -75,16 +70,11 @@ impl LogicalObjectEncoder {
 		current_chunk_number: u64) -> Result<LogicalObjectEncoder> {		
 
 		// ensures that the encryption key is available in decrypted form.
-		let (_encoded_header, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
-			match encryption_header.get_encryption_key() {
-				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
-				None => return Err(ZffError::new(
-					ZffErrorKind::EncryptionError, 
-					ERROR_MISSING_ENCRYPTION_HEADER_KEY))
-			}
-	    } else {
-	    	(obj_header.encode_directly(), None)
-	    };
+		let encryption_information = if obj_header.encryption_header.is_some() {
+			Some(EncryptionInformation::try_from(&obj_header)?)
+		} else {
+			None
+		};
 
 		let signing_key = match &signing_key_bytes {
 	    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
@@ -99,12 +89,6 @@ impl LogicalObjectEncoder {
 	    };
 
 		let encoding_thread_pool_manager = Rc::new(RefCell::new(encoding_thread_pool_manager));
-
-		let encryption_information = if let Some(encryption_key) = &encryption_key {
-			obj_header.encryption_header.clone().map(|enc_header| EncryptionInformation::new(encryption_key.to_vec(), enc_header.algorithm.clone()))
-		} else {
-			None
-		};
 
 		let (filetype_encoding_information, file_header) = match logical_object_source.next() {
 			Some(res) => res?,
@@ -122,7 +106,7 @@ impl LogicalObjectEncoder {
 			filetype_encoding_information, 
 			Rc::clone(&encoding_thread_pool_manager),
 			signing_key.clone(),
-			encryption_information, 
+			encryption_information.clone(), 
 			current_chunk_number)?);
 		
 		let object_footer = ObjectFooterLogical::new_empty(obj_header.object_number);
@@ -134,7 +118,7 @@ impl LogicalObjectEncoder {
 			current_file_header_read: false,
 			current_file_number,
 			encoding_thread_pool_manager,
-			encryption_key,
+			encryption_information,
 			signing_key,
 			current_chunk_number,
 			object_footer,
@@ -159,9 +143,9 @@ impl LogicalObjectEncoder {
 
 	/// Returns the encoded object header.
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
-		if let Some(encryption_key) = &self.encryption_key {
+		if let Some(encryption_information) = &self.encryption_information {
 			//unwrap should be safe here, because we have already testet this before.
-	    	self.obj_header.encode_encrypted_header_directly(encryption_key).unwrap()
+	    	self.obj_header.encrypt_directly(encryption_information).unwrap()
 	    } else {
 	    	self.obj_header.encode_directly()
 	    }
@@ -180,10 +164,10 @@ impl LogicalObjectEncoder {
 				if !self.current_file_header_read {
 					self.current_file_header_read = true;
 					if self.object_footer.acquisition_start == 0 {
-						self.object_footer.set_acquisition_start(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+						self.object_footer.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 					}
-					self.object_footer.add_file_header_segment_number(self.current_file_number, current_segment_no);
-					self.object_footer.add_file_header_offset(self.current_file_number, current_offset);
+					self.object_footer.file_header_segment_numbers.insert(self.current_file_number, current_segment_no);
+					self.object_footer.file_header_offsets.insert(self.current_file_number, current_offset);
 					let prepared_data = PreparedData::PreparedFileHeader(file_encoder.get_encoded_header());
 					return Ok(EncodingState::PreparedData(prepared_data));
 				}
@@ -210,24 +194,18 @@ impl LogicalObjectEncoder {
 				//return file footer, set next file_encoder
 				let prepared_file_footer = PreparedData::PreparedFileFooter(file_encoder.get_encoded_footer()?);
 
-				self.object_footer.add_file_footer_segment_number(self.current_file_number, current_segment_no);
-				self.object_footer.add_file_footer_offset(self.current_file_number, current_offset);
+				self.object_footer.file_footer_segment_numbers.insert(self.current_file_number, current_segment_no);
+				self.object_footer.file_footer_offsets.insert(self.current_file_number, current_offset);
 
 				let (filetype_encoding_information, current_file_header) = match self.logical_object_source.next() {
 					Some(res) => res?,
 					None => {
 						// if no files left, the acquisition ends and the date will be written to the object footer.
 						// The appropriate file footer will be returned.
-						self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+						self.object_footer.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 						self.current_file_encoder = None;
 						return Ok(EncodingState::PreparedData(prepared_file_footer));
 					}
-				};
-				let encryption_information = if let Some(encryption_key) = &self.encryption_key {
-					self.obj_header.encryption_header.as_ref().map(|enc_header| EncryptionInformation::new(
-						encryption_key.to_vec(), enc_header.algorithm.clone()))
-				} else {
-					None
 				};
 				self.current_file_number = current_file_header.file_number;
        			
@@ -238,20 +216,14 @@ impl LogicalObjectEncoder {
 					filetype_encoding_information, 
 					Rc::clone(&self.encoding_thread_pool_manager),
 					self.signing_key.clone(),
-					encryption_information, 
+					self.encryption_information.clone(), 
 					self.current_chunk_number)?);
 				Ok(EncodingState::PreparedData(prepared_file_footer))
 			},
 			None => {
-				self.object_footer.set_acquisition_end(OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64);
+				self.object_footer.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 				Ok(EncodingState::ReadEOF)
 			},
 		}	
 	}
-
-	/// Returns the underlying encryption key (if available).
-	pub fn encryption_key(&self) -> Option<Vec<u8>> {
-		self.encryption_key.clone()
-	}
-
 }

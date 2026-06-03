@@ -116,9 +116,9 @@ impl VirtualObjectEncoder {
     /// header representation is returned. Otherwise the plain encoded header is
     /// returned.
 	pub fn get_encoded_header(&mut self) -> Vec<u8> {
-		if let Some(encryption_key) = &self.enc_info.as_ref().map(|enc_info| &enc_info.encryption_key) {
+		if let Some(encryption_information) = &self.enc_info {
 			//unwrap should be safe here, because we have already testet this before.
-	    	self.obj_header.encode_encrypted_header_directly(encryption_key).unwrap()
+	    	self.obj_header.encrypt_directly(encryption_information).unwrap()
 	    } else {
 	    	self.obj_header.encode_directly()
 	    }

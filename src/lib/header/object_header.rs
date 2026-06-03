@@ -133,65 +133,6 @@ impl ObjectHeader {
 		self.flags.sign_hash
 	}
 
-	/// encodes the object header to a ```Vec<u8>```. The encryption flag will be set.
-	/// # Error
-	/// The method returns an error, if the encryption header is missing (=None).
-	/// The method returns an error, if the encryption fails.
-	pub fn encode_encrypted_header_directly<K>(&self, key: K) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>,
-	{
-		let mut vec = Vec::new();
-		let encoded_header = self.encode_encrypted_header(key)?;
-		let identifier = HEADER_IDENTIFIER_OBJECT_HEADER;
-		let encoded_header_length = 4 + 8 + (encoded_header.len() as u64); //4 bytes identifier + 8 bytes for length + length itself
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
-		vec.extend_from_slice(&encoded_header);
-
-		Ok(vec)
-	}
-
-	fn encode_encrypted_header<K>(&self, key: K) -> Result<Vec<u8>>
-	where
-		K: AsRef<[u8]>
-	{
-		let encryption_header = match &self.encryption_header {
-			None => return Err(ZffError::new(
-				ZffErrorKind::EncryptionError, 
-				ERROR_MISSING_ENCRYPTION_HEADER_KEY)),
-			Some(header) => {
-				header
-			}
-		};
-
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&u8::from(&self.flags).encode_directly());
-		vec.extend_from_slice(&encryption_header.encode_directly());
-
-		let mut data_to_encrypt = Vec::new();
-		data_to_encrypt.append(&mut self.encode_content());
-
-		let encrypted_data = ObjectHeader::encrypt(
-			key, data_to_encrypt,
-			self.object_number,
-			&encryption_header.algorithm)?;
-		vec.extend_from_slice(&encrypted_data.encode_directly());
-		Ok(vec)
-	}
-
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		
-		vec.extend_from_slice(&self.chunk_size.encode_directly());
-		vec.extend_from_slice(&self.compression_header.encode_directly());
-		vec.extend_from_slice(&self.description_header.encode_directly());
-		vec.push(self.object_type.clone() as u8);
-		vec
-	}
-
 	/// decodes the encrypted header with the given password at given offset.
 	pub fn decode_at_encrypted_header_with_password<R, P>(
     data: &R,
@@ -276,6 +217,16 @@ impl ObjectHeader {
 	}
 }
 
+impl HeaderEncryption for ObjectHeader {
+	fn encryption_precondition(&self) -> bool {
+		self.encryption_header.is_some()
+	}
+
+	fn nonce_value(&self) -> u64 {
+		self.object_number
+	}
+}
+
 impl Encryption for ObjectHeader {
 	fn crypto_nonce_padding() -> u8 {
 		0b00010000
@@ -291,6 +242,7 @@ impl fmt::Display for ObjectHeader {
 
 impl HeaderCoding for ObjectHeader {
 	type Item = ObjectHeader;
+
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_OBJECT_HEADER
 	}
@@ -299,39 +251,22 @@ impl HeaderCoding for ObjectHeader {
 		DEFAULT_HEADER_VERSION_OBJECT_HEADER
 	}
 
-	/// encodes the (header) value/object directly (= without key).
-	fn encode_directly(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let encoded_object_number = self.object_number.encode_directly();
-		let encoded_header = self.encode_header();
-		let identifier = Self::identifier();
-		let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH + encoded_header.len() + encoded_object_number.len() + 1) as u64; //4 bytes identifier + 8 bytes for length + length of encoded content + len of object number + length of version
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
-		vec.push(Self::version());
-		vec.extend_from_slice(&encoded_object_number);
-		vec.extend_from_slice(&encoded_header);
-		vec
+		vec.extend_from_slice(&self.chunk_size.encode_directly());
+		vec.extend_from_slice(&self.compression_header.encode_directly());
+		vec.extend_from_slice(&self.description_header.encode_directly());
+		vec.extend_from_slice(&(self.object_type.clone() as u8).encode_directly());
+		vec 
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_fixed_fields(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		let mut flags: u8 = 0;
-		if self.flags.encryption {
-			flags += ENCRYPT_OBJECT_FLAG_VALUE;
-		};
-		if self.flags.sign_hash {
-			flags += SIGN_HASH_FLAG_VALUE;
-		};
-		if self.flags.passive_object {
-			flags += PASSIVE_OBJECT_FLAG;
-		}
-		vec.extend_from_slice(&flags.encode_directly());
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&u8::from(&self.flags).encode_directly());
 		if let Some(encryption_header) = &self.encryption_header {
 			vec.extend_from_slice(&encryption_header.encode_directly())
 		};
-		vec.extend_from_slice(&self.encode_content());
-
 		vec
 	}
 
@@ -359,10 +294,6 @@ impl HeaderCoding for ObjectHeader {
 			object_type,
 			flags);
 		Ok(object_header)
-	}
-
-	fn struct_name() -> &'static str {
-		"ObjectHeader"
 	}
 }
 
@@ -483,7 +414,7 @@ impl EncryptedObjectHeader {
 }
 
 impl HeaderCoding for EncryptedObjectHeader {
-	type Item = EncryptedObjectHeader;
+	type Item = Self;
 	
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_OBJECT_HEADER
@@ -493,8 +424,8 @@ impl HeaderCoding for EncryptedObjectHeader {
 		DEFAULT_HEADER_VERSION_OBJECT_HEADER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.object_number.encode_directly());
 		vec.extend_from_slice(&u8::from(&self.flags).encode_directly());
 		vec.extend_from_slice(&self.encryption_header.encode_directly());
@@ -522,10 +453,6 @@ impl HeaderCoding for EncryptedObjectHeader {
 			flags,
 			encryption_header,
 			encrypted_data))
-	}
-
-	fn struct_name() -> &'static str {
-		"EncryptedObjectHeader"
 	}
 }
 

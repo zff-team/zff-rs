@@ -56,7 +56,7 @@ impl ObjectFooterVirtual {
 	/// Creates a new [ObjectFooterVirtual] from the object metadata and the
 	/// location maps for the contained virtual files.
 	#[allow(clippy::too_many_arguments)]
-	pub fn with_data(object_number: u64, 
+	pub fn new(object_number: u64, 
 		creation_timestamp: u64, 
 		passive_objects: Vec<u64>,
 		root_dir_filenumbers: Vec<u64>,
@@ -74,51 +74,6 @@ impl ObjectFooterVirtual {
             file_footer_segment_numbers,
             file_footer_offsets,
 		}
-	}
-
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.creation_timestamp.encode_directly());
-		vec.extend_from_slice(&self.passive_objects.encode_directly());
-		vec.extend_from_slice(&self.root_dir_filenumbers.encode_directly());
-		vec.extend_from_slice(&self.file_header_segment_numbers.encode_directly());
-		vec.extend_from_slice(&self.file_header_offsets.encode_directly());
-        vec.extend_from_slice(&self.file_footer_segment_numbers.encode_directly());
-		vec.extend_from_slice(&self.file_footer_offsets.encode_directly());
-		vec
-	}
-
-	/// Encrypts and encodes this object footer using the given encryption
-	/// information.
-	///
-	/// # Error
-	/// Returns an error if encryption fails.
-	pub fn encrypt_directly<E>(&self, encryption_information: E) -> Result<Vec<u8>>
-	where
-		E: Borrow<EncryptionInformation>
-	{
-		let mut vec = Vec::new();
-		let encrypted_content = ObjectFooter::encrypt(
-			&encryption_information.borrow().encryption_key, 
-			self.encode_content(), 
-			self.object_number, 
-			&encryption_information.borrow().algorithm)?;
-		let identifier = Self::identifier();
-		let encoded_header_length = (
-			DEFAULT_LENGTH_HEADER_IDENTIFIER +
-			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			Self::version().encode_directly().len() +
-			self.object_number.encode_directly().len() +
-			true.encode_directly().len() +
-			encrypted_content.encode_directly().len()) as u64; //4 bytes identifier + 8 bytes for length + length itself
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.encode_directly());
-		vec.extend_from_slice(&Self::version().encode_directly());
-		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&true.encode_directly()); // encryption flag
-		vec.extend_from_slice(&encrypted_content.encode_directly());
-
-		Ok(vec)
 	}
 
 	#[allow(clippy::type_complexity)]
@@ -157,21 +112,55 @@ impl fmt::Display for ObjectFooterVirtual {
 	}
 }
 
+impl HeaderEncryption for ObjectFooterVirtual {
+	fn nonce_value(&self) -> u64 {
+		self.object_number
+	}
+
+	fn encoded_fixed_fields_for_encryption(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&true.encode_directly()); // encryption flag
+		vec
+	}
+}
+
+impl Encryption for ObjectFooterVirtual {
+	fn crypto_nonce_padding() -> u8 {
+		ObjectFooter::crypto_nonce_padding()
+	}
+}
+
 impl HeaderCoding for ObjectFooterVirtual {
 	type Item = Self;
+
 	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
 	}
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
 	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
-		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&false.encode_directly()); // encryption flag
-		vec.extend_from_slice(&self.encode_content());
+
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.creation_timestamp.encode_directly());
+		vec.extend_from_slice(&self.passive_objects.encode_directly());
+		vec.extend_from_slice(&self.root_dir_filenumbers.encode_directly());
+		vec.extend_from_slice(&self.file_header_segment_numbers.encode_directly());
+		vec.extend_from_slice(&self.file_header_offsets.encode_directly());
+        vec.extend_from_slice(&self.file_footer_segment_numbers.encode_directly());
+		vec.extend_from_slice(&self.file_footer_offsets.encode_directly());
 		vec
 	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
+		vec.extend_from_slice(&self.object_number.encode_directly());
+		vec.extend_from_slice(&false.encode_directly()); // encryption flag
+		vec
+	}
+
+	
 	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?;
@@ -187,7 +176,7 @@ impl HeaderCoding for ObjectFooterVirtual {
             file_header_offsets,
             file_footer_segment_numbers,
             file_footer_offsets,) = Self::decode_inner_content(&mut cursor)?;
-		Ok(Self::with_data(
+		Ok(Self::new(
 			object_number,
 			creation_timestamp, 
 			passive_objects,
@@ -196,10 +185,6 @@ impl HeaderCoding for ObjectFooterVirtual {
 			file_header_offsets,
             file_footer_segment_numbers,
             file_footer_offsets))
-	}
-
-	fn struct_name() -> &'static str {
-		"ObjectFooterVirtual"
 	}
 }
 
@@ -239,7 +224,7 @@ impl EncryptedObjectFooterVirtual {
 			file_header_offsets,
 			file_footer_segment_numbers,
 			file_footer_offsets) = ObjectFooterVirtual::decode_inner_content(&mut cursor)?;
-		Ok(ObjectFooterVirtual::with_data(
+		Ok(ObjectFooterVirtual::new(
 			self.object_number,
 			creation_timestamp, 
 			passive_objects, 
@@ -269,19 +254,23 @@ impl fmt::Display for EncryptedObjectFooterVirtual {
 
 impl HeaderCoding for EncryptedObjectFooterVirtual {
 	type Item = Self;
+	
 	fn version() -> u8 { 
 		DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL
 	}
+
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_OBJECT_FOOTER_VIRTUAL
 	}
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
+
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.object_number.encode_directly());
 		vec.extend_from_slice(&true.encode_directly()); // encryption flag
 		vec.extend_from_slice(&self.encrypted_data.encode_directly());
 		vec
 	}
+
 	fn decode_content(data: &[u8]) -> Result<Self> {
 		let mut cursor = Cursor::new(data);
 		Self::check_version(&mut cursor)?; // check version (and skip it)
@@ -296,9 +285,5 @@ impl HeaderCoding for EncryptedObjectFooterVirtual {
 		Ok(Self::new(
 			object_number,
 			encrypted_data))
-	}
-
-	fn struct_name() -> &'static str {
-		"EncryptedObjectFooterVirtual"
 	}
 }

@@ -80,41 +80,10 @@ impl SegmentFooter {
 			footer_offset,
 		}
 	}
-
-	/// overwrites the length value in the footer with the given value. This can be useful, if you create an 'empty'
-	/// footer (with length=0) and want to set the length value after reading the data from source to buffer.
-	pub fn set_length_of_segment(&mut self, value: u64) {
-		self.length_of_segment = value
-	}
-
-	/// adds an offset to the object header offset table of the SegmentFooter.
-	pub fn add_object_header_offset(&mut self, object_number: u64, offset: u64) {
-		self.object_header_offsets.insert(object_number, offset);
-	}
-
-	/// returns a reference of the object header offset table
-	pub fn object_header_offsets(&self) -> &HashMap<u64, u64> {
-		&self.object_header_offsets
-	}
-
-	/// adds an offset to the object footer offset table of the SegmentFooter.
-	pub fn add_object_footer_offset(&mut self, object_number: u64, offset: u64) {
-		self.object_footer_offsets.insert(object_number, offset);
-	}
-
-	/// returns a reference of the object footer offset table
-	pub fn object_footer_offsets(&self) -> &HashMap<u64, u64> {
-		&self.object_footer_offsets
-	}
-
-	/// sets the offset of this footer
-	pub fn set_footer_offset(&mut self, offset: u64) {
-		self.footer_offset = offset;
-	}
 }
 
 impl HeaderCoding for SegmentFooter {
-	type Item = SegmentFooter;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_SEGMENT_FOOTER
@@ -124,9 +93,8 @@ impl HeaderCoding for SegmentFooter {
 		DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.extend_from_slice(&self.length_of_segment.encode_directly());
 		vec.extend_from_slice(&self.object_header_offsets.encode_directly());
 		vec.extend_from_slice(&self.object_footer_offsets.encode_directly());
@@ -158,10 +126,6 @@ impl HeaderCoding for SegmentFooter {
 			chunk_dedup_map_table,
 			first_chunk_number, 
 			footer_offset))
-	}
-
-	fn struct_name() -> &'static str {
-		"SegmentFooter"
 	}
 }
 

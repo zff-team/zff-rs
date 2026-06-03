@@ -122,7 +122,7 @@ impl FileEncoder {
 		}
 		if let Some(enc_info) = &self.encryption_information {
 			//unwrap should be safe here, because we have already testet this before.
-	    	self.file_header.encode_encrypted_header_directly(enc_info).unwrap()
+	    	self.file_header.encrypt_directly(enc_info).unwrap()
 	    } else {
 	    	self.file_header.encode_directly()
 	    }
@@ -273,7 +273,7 @@ impl FileEncoder {
 			self.read_bytes_underlying_data,
 			);
 		if let Some(enc_info) = &self.encryption_information {
-	    	footer.encode_encrypted_header_directly(enc_info)
+	    	footer.encrypt_directly(enc_info)
 	    } else {
 	    	Ok(footer.encode_directly())
 	    }

@@ -140,7 +140,7 @@ impl ChunkMap for ChunkHeaderMap {
 }
 
 impl HeaderCoding for ChunkHeaderMap {
-	type Item = ChunkHeaderMap;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_CHUNK_OFFSET_MAP
@@ -150,11 +150,15 @@ impl HeaderCoding for ChunkHeaderMap {
 		DEFAULT_HEADER_VERSION_CHUNK_OFFSET_MAP
 	}
 	
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
+		vec.extend_from_slice(&self.encode_map());
+		vec
+	}
+
+	fn encode_fixed_fields(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec.extend_from_slice(&self.chunkmap.encode_directly());
 		vec
 	}
 
@@ -164,10 +168,6 @@ impl HeaderCoding for ChunkHeaderMap {
 		let object_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap = BTreeMap::<u64, ChunkHeader>::decode_directly(&mut cursor)?;
 		Ok(Self::new(object_number, chunkmap))
-	}
-
-	fn struct_name() -> &'static str {
-		"ChunkHeaderMap"
 	}
 }
 

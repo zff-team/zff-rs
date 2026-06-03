@@ -243,8 +243,8 @@ impl HeaderCoding for EncryptionHeader {
 		DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version()];
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.pbe_header.encode_directly());
 		vec.push(self.algorithm.clone() as u8);
 		vec.extend_from_slice(&self.encrypted_encryption_key.encode_directly());
@@ -265,10 +265,6 @@ impl HeaderCoding for EncryptionHeader {
 		let mut encryption_key = vec![0u8; key_length];
 		cursor.read_exact(&mut encryption_key)?;
 		Ok(EncryptionHeader::new(pbe_header, encryption_algorithm, encryption_key))
-	}
-
-	fn struct_name() -> &'static str {
-		"EncryptionHeader"
 	}
 }
 

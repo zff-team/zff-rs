@@ -6,7 +6,7 @@ use std::os::unix::fs::FileExt;
 use std::os::windows::fs::FileExt;
 
 // - internal
-use crate::constants::SMALL_BUFFER_SIZE;
+use crate::constants::{SMALL_BUFFER_SIZE, DEFAULT_READ_BUFFER_SIZE};
 
 pub(crate) struct ReadAtCursor<'a, R: ReadAt + ?Sized> {
     data: &'a R,
@@ -122,4 +122,31 @@ impl<R: Read + Seek> ReadAt for std::sync::Mutex<R> {
         inner.seek(SeekFrom::Start(position))?;
         Ok(end_pos)
     }
+}
+
+
+/// Similar to trait [ReadAt] but for underlying files
+/// (used e.g. in [ZffObjectReaderLogical] and [ZffObjectReaderVirtual]).
+pub trait ReadAtFile {
+    /// Fills the buffer at the appropriate offset.
+    fn read_at_file(&self, buf: &mut [u8], offset: u64, file_no: u64) -> std::io::Result<usize>;
+
+    /// Same as read_to_end, but starts at given offset.
+    fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
+		let start_offset = offset;
+        let mut chunk = [0u8; DEFAULT_READ_BUFFER_SIZE];
+        loop {
+            match self.read_at_file(&mut chunk, offset, file_no) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&chunk[..n]);
+                    offset += n as u64;
+                }
+                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok((offset-start_offset) as usize)
+	}
 }

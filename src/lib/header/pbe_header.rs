@@ -50,7 +50,7 @@ impl PBEHeader {
 }
 
 impl HeaderCoding for PBEHeader {
-	type Item = PBEHeader;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_PBE_HEADER
@@ -60,8 +60,8 @@ impl HeaderCoding for PBEHeader {
 		DEFAULT_HEADER_VERSION_PBE_HEADER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version(), self.kdf_scheme.clone() as u8, self.encryption_scheme.clone() as u8];
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = vec![self.kdf_scheme.clone() as u8, self.encryption_scheme.clone() as u8];
 		vec.extend_from_slice(&self.kdf_parameters.encode_directly());
 		vec.extend_from_slice(&self.pbencryption_nonce.encode_directly());
 		vec
@@ -85,10 +85,6 @@ impl HeaderCoding for PBEHeader {
 		let mut encryption_nonce = [0; 16];
 		cursor.read_exact(&mut encryption_nonce)?;
 		Ok(PBEHeader::new(kdf_scheme, encryption_scheme, kdf_params, encryption_nonce))
-	}
-
-	fn struct_name() -> &'static str {
-		"PBEHeader"
 	}
 }
 
@@ -200,7 +196,7 @@ impl PBKDF2SHA256Parameters {
 }
 
 impl HeaderCoding for PBKDF2SHA256Parameters {
-	type Item = PBKDF2SHA256Parameters;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		PBE_KDF_PARAMETERS_PBKDF2
@@ -211,7 +207,12 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 		0
 	}
 
+	// self implementation is necessary, this structure doesn't hold a version tag.
 	fn encode_header(&self) -> Vec<u8> {
+		self.encode_content()
+	}
+
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.iterations.encode_directly());
 		vec.extend_from_slice(&self.salt.encode_directly());
@@ -226,10 +227,6 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 		cursor.read_exact(&mut salt)?;
 		let parameters = PBKDF2SHA256Parameters::new(iterations, salt);
 		Ok(parameters)
-	}
-
-	fn struct_name() -> &'static str {
-		"PBKDF2SHA256Parameters"
 	}
 }
 
@@ -262,7 +259,7 @@ impl ScryptParameters {
 }
 
 impl HeaderCoding for ScryptParameters {
-	type Item = ScryptParameters;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		PBE_KDF_PARAMETERS_SCRYPT
@@ -273,13 +270,18 @@ impl HeaderCoding for ScryptParameters {
 		0
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
+	// self implementation is necessary, this structure doesn't hold a version tag.
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.logn.encode_directly());
 		vec.extend_from_slice(&self.r.encode_directly());
 		vec.extend_from_slice(&self.p.encode_directly());
 		vec.extend_from_slice(&self.salt.encode_directly());
 		vec
+	}
+
+	fn encode_header(&self) -> Vec<u8> {
+		self.encode_content()
 	}
 
 	fn decode_content(data: &[u8]) -> Result<ScryptParameters> {
@@ -293,11 +295,6 @@ impl HeaderCoding for ScryptParameters {
 		let parameters = ScryptParameters::new(logn, r, p, salt);
 		Ok(parameters)
 	}
-
-	fn struct_name() -> &'static str {
-		"ScryptParameters"
-	}
-
 }
 
 
@@ -329,7 +326,7 @@ impl Argon2idParameters {
 }
 
 impl HeaderCoding for Argon2idParameters {
-	type Item = Argon2idParameters;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		PBE_KDF_PARAMETERS_ARGON2ID
@@ -340,7 +337,12 @@ impl HeaderCoding for Argon2idParameters {
 		0
 	}
 
+	// self implementation is necessary, this structure doesn't hold a version tag.
 	fn encode_header(&self) -> Vec<u8> {
+		self.encode_content()
+	}
+	
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
 		vec.extend_from_slice(&self.mem_cost.encode_directly());
 		vec.extend_from_slice(&self.lanes.encode_directly());
@@ -359,9 +361,4 @@ impl HeaderCoding for Argon2idParameters {
 		let parameters = Argon2idParameters::new(mem_cost, lanes, iterations, salt);
 		Ok(parameters)
 	}
-
-	fn struct_name() -> &'static str {
-		"Argon2idParameters"
-	}
-
 }

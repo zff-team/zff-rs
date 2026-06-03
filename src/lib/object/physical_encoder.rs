@@ -34,14 +34,14 @@ pub struct PhysicalObjectEncoder<R: Read> {
 	pub(crate) initial_chunk_number: u64,
 	pub(crate) encoding_thread_pool_manager: EncodingThreadPoolManager,
 	pub(crate) signing_key: Option<SigningKey>,
-	pub(crate) encryption_key: Option<Vec<u8>>,
+	pub(crate) encryption_information: Option<EncryptionInformation>,
 	pub(crate) acquisition_start: u64,
 	pub(crate) acquisition_end: u64,
 }
 
 impl<R: Read> Drop for PhysicalObjectEncoder<R> {
 	fn drop(&mut self) {
-		self.encryption_key.zeroize();
+		self.encryption_information.zeroize();
 	}
 }
 
@@ -59,7 +59,8 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	    	None => None
 	    };
 
-		let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
+		// I've commented out this code...not sure if the "test" is necessary. TODO: check.
+		/*let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
 			match encryption_header.get_encryption_key() {
 				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
 				None => return Err(ZffError::new(
@@ -67,7 +68,12 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			}
 	    } else {
 	    	(obj_header.encode_directly(), None)
-	    };
+	    };*/
+		let encryption_information = if obj_header.encryption_header.is_some() {
+			Some(EncryptionInformation::try_from(&obj_header)?)
+		} else {
+			None
+		};
 
 		let mut encoding_thread_pool_manager = EncodingThreadPoolManager::new(
 			obj_header.compression_header.clone(), obj_header.chunk_size as usize);
@@ -83,7 +89,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			current_chunk_number,
 			initial_chunk_number: current_chunk_number,
 			encoding_thread_pool_manager,
-			encryption_key,
+			encryption_information,
 			signing_key,
 			acquisition_start: 0,
 			acquisition_end: 0,
@@ -106,9 +112,9 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		if self.acquisition_start == 0 {
 			self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
 		}
-		if let Some(encryption_key) = &self.encryption_key {
+		if let Some(encryption_information) = &self.encryption_information {
 			//unwrap should be safe here, because we have already testet this before.
-	    	self.obj_header.encode_encrypted_header_directly(encryption_key).unwrap()
+	    	self.obj_header.encrypt_directly(encryption_information).unwrap()
 	    } else {
 	    	self.obj_header.encode_directly()
 	    }
@@ -190,12 +196,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 			self.current_chunk_number - self.initial_chunk_number,
 			hash_header);
 
-		if let Some(encryption_key) = &self.encryption_key {
-			let encryption_information = EncryptionInformation {
-				encryption_key: encryption_key.to_vec(),
-				// unwrap should be safe here: there should not an encryption key exists without an encryption header.
-				algorithm: self.obj_header.encryption_header.clone().unwrap().algorithm.clone()
-			};
+		if let Some(encryption_information) = &self.encryption_information {
 	    	footer.encrypt_directly(encryption_information)
 	    } else {
 	    	Ok(footer.encode_directly())
@@ -205,10 +206,5 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 	/// Returns the appropriate object number.
 	pub fn obj_number(&self) -> u64 {
 		self.obj_header.object_number
-	}
-
-	/// Returns the underlying encryption key (if available).
-	pub fn encryption_key(&self) -> Option<Vec<u8>> {
-		self.encryption_key.clone()
 	}
 }

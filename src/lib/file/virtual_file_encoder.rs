@@ -48,7 +48,7 @@ impl VirtualFileEncoder {
 	pub fn encoded_header(&self) -> Vec<u8> {
 		if let Some(enc_info) = &self.encryption_information {
 			//unwrap should be safe here, because we have already testet this before.
-	    	self.file_header.encode_encrypted_header_directly(enc_info).unwrap()
+	    	self.file_header.encrypt_directly(enc_info).unwrap()
 	    } else {
 	    	self.file_header.encode_directly()
 	    }
@@ -62,7 +62,7 @@ impl VirtualFileEncoder {
 	pub fn encoded_vfm(&self) -> Result<Option<Vec<u8>>> {
 		if let Some(vfm) = &self.vfm {
 			if let Some(enc_info) = &self.encryption_information {
-				Ok(Some(vfm.encode_encrypted_footer(&enc_info.encryption_key, &enc_info.algorithm)?))
+				Ok(Some(vfm.encrypt_directly(enc_info)?))
 			} else {
 				Ok(Some(vfm.encode_directly()))
 			}
@@ -75,7 +75,7 @@ impl VirtualFileEncoder {
 	pub fn encoded_footer(&self) -> Vec<u8> {
 		if let Some(enc_info) = &self.encryption_information {
             //unwrap should be safe here, because we have already testet this before.
-	    	self.file_footer.encode_encrypted_header_directly(enc_info).unwrap()
+	    	self.file_footer.encrypt_directly(enc_info).unwrap()
 	    } else {
 	    	self.file_footer.encode_directly()
 	    }

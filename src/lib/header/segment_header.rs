@@ -49,7 +49,7 @@ impl SegmentHeader {
 }
 
 impl HeaderCoding for SegmentHeader {
-	type Item = SegmentHeader;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		HEADER_IDENTIFIER_SEGMENT_HEADER
@@ -59,9 +59,8 @@ impl HeaderCoding for SegmentHeader {
 		DEFAULT_HEADER_VERSION_SEGMENT_HEADER
 	}
 	
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.extend_from_slice(&self.unique_identifier.encode_directly());
 		vec.extend_from_slice(&self.segment_number.encode_directly());
 		vec.extend_from_slice(&self.chunkmap_size.encode_directly());
@@ -75,10 +74,6 @@ impl HeaderCoding for SegmentHeader {
 		let segment_number = u64::decode_directly(&mut cursor)?;
 		let chunkmap_size = u64::decode_directly(&mut cursor)?;
 		Ok(SegmentHeader::new(unique_identifier, segment_number, chunkmap_size))
-	}
-
-	fn struct_name() -> &'static str {
-		"SegmentHeader"
 	}
 }
 

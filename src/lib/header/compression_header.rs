@@ -47,10 +47,9 @@ impl HeaderCoding for CompressionHeader {
 		DEFAULT_HEADER_VERSION_COMPRESSION_HEADER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
-		let mut vec = vec![Self::version(), self.algorithm.clone() as u8, self.level];
+	fn encode_content(&self) -> Vec<u8> {
+		let mut vec = vec![self.algorithm.clone() as u8, self.level];
 		vec.extend_from_slice(&self.threshold.encode_directly());
-		
 		vec
 	}
 
@@ -66,10 +65,6 @@ impl HeaderCoding for CompressionHeader {
 		let level = u8::decode_directly(&mut cursor)?;
 		let threshold = f32::decode_directly(&mut cursor)?;
 		Ok(CompressionHeader::new(algorithm, level, threshold))
-	}
-
-	fn struct_name() -> &'static str {
-		"CompressionHeader"
 	}
 }
 

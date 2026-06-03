@@ -36,7 +36,7 @@ pub mod zffreader;
 /// provides [ZffWriter] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
 pub mod zffwriter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct ZffExtenderParameter {
 	pub current_segment: PathBuf,
 	pub next_object_no: u64,
@@ -47,7 +47,7 @@ struct ZffExtenderParameter {
 }
 
 impl ZffExtenderParameter {
-	fn with_data(
+	fn new(
 		current_segment: PathBuf,
 		next_object_no: u64,
 		initial_chunk_number: u64,

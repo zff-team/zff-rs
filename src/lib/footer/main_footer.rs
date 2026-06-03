@@ -58,46 +58,6 @@ impl MainFooter {
 		}
 	}
 
-	/// sets the number of segments of the appropriate zff container.
-	pub fn set_number_of_segments(&mut self, number: u64) {
-		self.number_of_segments = number
-	}
-
-	/// returns the number of segments of the appropriate zff container.
-	pub fn number_of_segments(&self) -> u64 {
-		self.number_of_segments
-	}
-
-	/// adds a new <object header, segment number> combination to the inner object-header hashmap.
-	pub fn add_object_header(&mut self, object_number: u64, segment_no: u64) {
-		self.object_header.insert(object_number, segment_no);
-	}
-
-	/// returns the inner hashmap of object-header.
-	pub fn object_header(&self) -> &BTreeMap<u64, u64> {
-		&self.object_header
-	}
-
-	/// adds a new <object footer, segment number> combination to the inner object-footer hashmap.
-	pub fn add_object_footer(&mut self, object_number: u64, segment_no: u64) {
-		self.object_footer.insert(object_number, segment_no);
-	}
-
-	/// returns the inner hashmap of object-footer.
-	pub fn object_footer(&self) -> &BTreeMap<u64, u64> {
-		&self.object_footer
-	}
-
-	/// sets the start offset of this main footer.
-	pub fn set_footer_offset(&mut self, offset: u64) {
-		self.footer_offset = offset
-	}
-
-	/// returns the start offset of this main footer.
-	pub fn footer_offset(&self) -> u64 {
-		self.footer_offset
-	}
-
 	/// returns the description notes of the zff container (Not to be mixed up with the "notes" which can be created in the description header of each object!)).
 	pub fn description_notes(&self) -> Option<&str> {
 		Some(self.description_notes.as_ref()?)
@@ -115,7 +75,7 @@ impl MainFooter {
 }
 
 impl HeaderCoding for MainFooter {
-	type Item = MainFooter;
+	type Item = Self;
 
 	fn identifier() -> u32 {
 		FOOTER_IDENTIFIER_MAIN_FOOTER
@@ -125,9 +85,8 @@ impl HeaderCoding for MainFooter {
 		DEFAULT_FOOTER_VERSION_MAIN_FOOTER
 	}
 
-	fn encode_header(&self) -> Vec<u8> {
+	fn encode_content(&self) -> Vec<u8> {
 		let mut vec = Vec::new();
-		vec.extend_from_slice(&Self::version().encode_directly());
 		vec.extend_from_slice(&self.number_of_segments.encode_directly());
 		vec.extend_from_slice(&self.object_header.encode_directly());
 		vec.extend_from_slice(&self.object_footer.encode_directly());
@@ -171,10 +130,6 @@ impl HeaderCoding for MainFooter {
 			chunk_dedup_maps,
 			description_notes, 
 			footer_offset))
-	}
-
-	fn struct_name() -> &'static str {
-		"MainFooter"
 	}
 }
 
