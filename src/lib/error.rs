@@ -1,3 +1,12 @@
+//! Module for error handling in the zff crate.
+//!
+//! This module provides the main error types used throughout the library:
+//!
+//! - [`ZffError`]: The primary error type that wraps all errors with details and source information
+//! - [`ZffErrorKind`]: An enum categorizing different types of errors that can occur
+//!
+//! The module implements `From` conversions for many standard and external error types,
+//! allowing for seamless error handling and propagation throughout the codebase.
 // - STD
 use std::fmt;
 use std::{

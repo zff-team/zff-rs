@@ -1,3 +1,19 @@
+//! Module for digital signature operations in zff.
+//!
+//! This module provides functionality for creating and verifying digital signatures
+//! using the Ed25519 algorithm. Signatures are used to authenticate data integrity
+//! and ensure non-repudiation in zff containers.
+//!
+//! # Types
+//!
+//! - [`Signature`]: Structure containing methods for signature operations
+//!
+//! # Features
+//!
+//! - Ed25519 signature generation and verification
+//! - Key generation and parsing (including base64-encoded keys)
+//! - Support for both secret keys and keypairs
+
 // - STD
 
 // - internal
@@ -19,10 +35,29 @@ use rand::Rng;
 
 
 /// structure contains serveral methods to handle signing of chunked data.
+///
+/// # Example
+/// ```no_run
+/// use zff::Signature;
+///
+/// // Generate a new signing key
+/// let signing_key = Signature::new_signing_key();
+/// // Use this key to sign data
+/// // let signature = Signature::sign(&signing_key, &data);
+/// ```
 pub struct Signature;
 
 impl Signature {
 	/// generates a new, random keypair.
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Signature;
+	///
+	/// // Generate a new Ed25519 signing key
+	/// let signing_key = Signature::new_signing_key();
+	/// // This key can be used to sign data
+	/// ```
 	pub fn new_signing_key() -> SigningKey {
 		let mut csprng = rand::rng();
 		let mut secret_key = [0u8; SECRET_KEY_LENGTH];
@@ -67,18 +102,55 @@ impl Signature {
 	}
 
 	/// sign the data with the given signing key.
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Signature;
+	///
+	/// // Generate a signing key
+	/// let signing_key = Signature::new_signing_key();
+	/// // Sign some data
+	/// let message = b"Important forensic data";
+	/// let signature = Signature::sign(&signing_key, message);
+	/// // signature is a [u8; 64] array (Ed25519 signature)
+	/// ```
 	pub fn sign(signing_key: &SigningKey, message: &[u8]) -> [u8; ED25519_DALEK_SIGNATURE_LEN] {
 		let signature = signing_key.sign(message);
 		signature.to_bytes()
 	}
 
 	/// verify the data with the given base64 encoded key (signing key or verifying keys are possible to use here).
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Signature;
+	///
+	/// // Base64 encoded key (could be a signing key or verifying key)
+	/// let base64_key = "base64_encoded_key_here";
+	/// let message = b"Signed data";
+	/// let signature: [u8; 64] = [0; 64]; // actual signature bytes
+	/// let is_valid = Signature::verify_with_base64_key(base64_key, message, signature).unwrap();
+	/// ```
 	pub fn verify_with_base64_key<K: Into<String>>(key: K, message: &[u8], signature: [u8; ED25519_DALEK_SIGNATURE_LEN]) -> Result<bool> {
 		let key = base64engine.decode(key.into())?;
 		Signature::verify(key, message, signature)
 	}
 
 	/// verify the data with the given key bytes (signing key or verifying keys are possible to use here).
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Signature;
+	///
+	/// // Key bytes (could be a signing key keypair (64 bytes) or verifying key (32 bytes))
+	/// let key_bytes: Vec<u8> = vec![0; 32]; // actual key bytes
+	/// let message = b"Signed data";
+	/// let signature: [u8; 64] = [0; 64]; // actual signature bytes
+	/// let is_valid = Signature::verify(&key_bytes, message, signature).unwrap();
+	/// assert!(is_valid); // or false if signature is invalid
+	/// ```
+	/// # Error
+	/// if the verification fails, or the given parameters are false.
 	pub fn verify<K>(key: K, message: &[u8], signature: [u8; ED25519_DALEK_SIGNATURE_LEN]) -> Result<bool> 
 	where
 		K: AsRef<[u8]>

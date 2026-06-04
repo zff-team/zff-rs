@@ -1,3 +1,12 @@
+//! Module for platform-native string handling.
+//!
+//! This module provides the [`PlatformString`] type for forensic preservation of
+//! path-bearing values such as file names or symlink targets. Unlike Rust's `String`,
+//! this type preserves the original encoded bytes exactly, without requiring UTF-8 validity.
+//!
+//! This is crucial for forensic applications where the original byte representation
+//! must be preserved for evidence integrity.
+
 // - STD
 use std::cmp::Ordering;
 use std::fmt;
@@ -41,7 +50,7 @@ use serde::{Serialize, Deserialize, Serializer};
 ///
 /// In other words:
 /// - [`ValueEncoder`] / [`ValueDecoder`]: exact byte-preserving representation
-/// - [`serde::Serialize`]: human-readable representation, potentially lossy
+/// - `serde::Serialize`: human-readable representation, potentially lossy
 ///
 /// # Display behavior
 ///

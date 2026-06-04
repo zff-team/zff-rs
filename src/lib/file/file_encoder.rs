@@ -55,7 +55,10 @@ pub enum SpecialFileEncodingInformation {
 	Socket(u64), // socket(rdev),
 }
 
-/// The [FileEncoder] can be used to encode a [crate::file::File].
+/// Encodes a file in a zff container.
+///
+/// The FileEncoder handles encoding of file data including compression, encryption,
+/// and hash calculation.
 pub struct FileEncoder {
 	/// The appropriate [FileHeader].
 	file_header: FileHeader,

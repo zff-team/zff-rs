@@ -13,19 +13,22 @@ use crate::prelude::*;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
 
-/// The [ChunkSamebytesMap] stores the chunk size of the appropriate chunk.
+/// The `ChunkSamebytesMap` stores the same-byte value for each chunk.
 #[derive(Debug,Clone,PartialEq,Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkSamebytesMap {
-	chunkmap: BTreeMap<u64, u8>, //<chunk no, chunk size in segment>
+	/// Map of chunk numbers to their same-byte value.
+	chunkmap: BTreeMap<u64, u8>,
+	/// The object number this map belongs to.
 	object_number: u64,
+	/// Target size for the chunkmap.
 	target_size: usize,
 }
 
 impl ChunkMap for ChunkSamebytesMap {
 	type Value = u8;
 
-	/// returns a new [ChunkOffsetMap] with the given values.
+	/// Returns a new `ChunkSamebytesMap` with the given values.
 	fn new(object_number: u64, chunkmap: BTreeMap<u64, Self::Value>) -> Self {
 		Self {
 			chunkmap,
@@ -34,7 +37,7 @@ impl ChunkMap for ChunkSamebytesMap {
 		}
 	}
 
-	/// returns a new, empty [ChunkOffsetMap] with the given values.
+	/// Returns a new, empty `ChunkSamebytesMap` with the given object number.
 	fn new_empty(object_number: u64) -> Self {
 		Self {
 			chunkmap: BTreeMap::new(),

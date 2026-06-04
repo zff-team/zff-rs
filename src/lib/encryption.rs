@@ -1,3 +1,19 @@
+//! Module for encryption operations in zff.
+//!
+//! This module provides encryption and decryption functionality for zff containers,
+//! supporting multiple encryption algorithms to ensure data confidentiality.
+//!
+//! # Types
+//!
+//! - [`EncryptionAlgorithm`]: Enum defining all supported encryption algorithms (AES128GCM, AES256GCM, CHACHA20POLY1305)
+//!
+//! # Features
+//!
+//! - AES-GCM encryption in 128-bit and 256-bit variants
+//! - ChaCha20-Poly1305 stream cipher encryption
+//! - Support for encrypting both data chunks and headers
+//! - Integration with PBKDF2, Scrypt, and Argon2id key derivation functions
+
 // - STD
 use std::fmt;
 
@@ -24,6 +40,19 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
 /// Defines all encryption algorithms (for use in data and header encryption), which are implemented in zff.
+///
+/// # Example
+/// ```
+/// use zff::EncryptionAlgorithm;
+///
+/// // All available encryption algorithms
+/// let aes128gcm = EncryptionAlgorithm::AES128GCM;
+/// let aes256gcm = EncryptionAlgorithm::AES256GCM;
+/// let chacha20poly1305 = EncryptionAlgorithm::CHACHA20POLY1305;
+///
+/// // Display formatting
+/// assert_eq!(format!("{}", EncryptionAlgorithm::AES128GCM), "AES128GCM");
+/// ```
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
@@ -52,6 +81,19 @@ impl fmt::Display for EncryptionAlgorithm {
 }
 
 /// Defines all KDF schemes, which are implemented in zff.
+///
+/// # Example
+/// ```
+/// use zff::KDFScheme;
+///
+/// // All available KDF schemes
+/// let pbkdf2_sha256 = KDFScheme::PBKDF2SHA256;
+/// let scrypt = KDFScheme::Scrypt;
+/// let argon2id = KDFScheme::Argon2id;
+///
+/// // Display formatting
+/// assert_eq!(format!("{}", KDFScheme::Argon2id), "Argon2id");
+/// ```
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
@@ -78,6 +120,18 @@ impl fmt::Display for KDFScheme {
 }
 
 /// Defines all encryption algorithms (for use in PBE only!), which are implemented in zff.
+///
+/// # Example
+/// ```
+/// use zff::PBEScheme;
+///
+/// // All available PBE encryption schemes
+/// let aes128cbc = PBEScheme::AES128CBC;
+/// let aes256cbc = PBEScheme::AES256CBC;
+///
+/// // Display formatting
+/// assert_eq!(format!("{}", PBEScheme::AES256CBC), "AES256CBC");
+/// ```
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]

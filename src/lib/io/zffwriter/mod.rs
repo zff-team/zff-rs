@@ -1,3 +1,12 @@
+//! Module for writing zff containers.
+//!
+//! This module provides the `ZffWriter` type for creating and extending zff containers.
+//! It supports writing physical, logical, and virtual objects with various options
+//! including compression, encryption, and deduplication.
+//!
+//! Features include streaming write operations, automatic segmentation for large containers,
+//! support for multiple objects per container, and configurable compression and encryption.
+
 // - STD
 use std::collections::{HashMap};
 use std::fs::{File, OpenOptions};
@@ -65,7 +74,9 @@ enum SegmentationInnerState {
     FinishedLastSegment(u64), // the last segment is finished
 }
 
-/// The current segmentation state, returned by next_segment()
+/// The current segmentation state, returned by the `next_segment` method.
+///
+/// This enum indicates the progress of segmentation when writing data to a zff container.
 pub enum SegmentationState {
     /// The segmentation is currently unfinished and the read progress can be proceeded.
     SegmentNotFinished,
@@ -152,17 +163,19 @@ impl ZffWriterInProgressData {
     }
 }
 
-/// Defines the output for a [ZffWriter].
-/// This enum determine, that the [ZffWriter] will extend or build a new Zff container.
+/// Defines the output mode for a [ZffWriter].
+///
+/// This enum determines whether the [ZffWriter] will create a new container,
+/// extend an existing one, or stream the data.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ZffFilesOutput {
     #[default]
-    /// To stream the data via implemented Read.
+    /// Stream the data via the implemented Read trait.
     Stream,
-	/// Build a new container by using the appropriate Path-prefix
-	/// (e.g. if "/home/user/zff_container" is given, "/home/user/zff_container.z??" will be used).
+	/// Build a new container by using the appropriate path prefix.
+	/// For example, if "/home/user/zff_container" is given, "/home/user/zff_container.z01", ".z02", etc. will be used.
 	NewContainer(PathBuf),
-	/// Determine an extension of the given zff container (path).
+	/// Extend an existing zff container by adding to the given segment files.
 	ExtendContainer(Vec<PathBuf>),
 }
 
@@ -170,7 +183,37 @@ pub enum ZffFilesOutput {
 /// ZffWriter is a struct that is used to create a new zff container while using the appropriate Read implementation of this struct.
 /// 
 /// ZffWriter only supports to create a new zff container in a single segment.
-/// For creating a multi-segment zff container, or extending an existing one, use the ZffWriter struct.
+/// Main writer type for zff containers.
+///
+/// The `ZffWriter` provides functionality to create and write data to zff containers.
+/// It supports writing physical, logical, and virtual objects with various options
+/// including compression, encryption, and deduplication.
+///
+/// # Type Parameters
+///
+/// - `R`: The type of reader for source data (must implement [`Read`])
+/// - `C`: The type of reader for chunk data (must implement [`ReadAt`] for random access)
+///
+/// # Examples
+///
+/// ```ignore
+/// use zff::io::zffwriter::{ZffWriter, ZffFilesOutput};
+/// use zff::io::ZffCreationParameters;
+/// use std::io::Read;
+/// use std::fs::File;
+/// use std::collections::HashMap;
+/// use std::path::PathBuf;
+///
+/// // Create a writer for a new container
+/// let write = ZffWriter::new(
+///     HashMap::new(),
+///     HashMap::new(),
+///     HashMap::new(),
+///     vec![],
+///     ZffCreationParameters::default(),
+///     ZffFilesOutput::NewContainer(PathBuf::from("output.zff"))
+/// ).unwrap();
+/// ```
 pub struct ZffWriter<R: Read, C: ReadAt> {
     object_encoder: Vec<ObjectEncoder<R>>,
 	current_object_encoder: ObjectEncoder<R>, //the current object encoder

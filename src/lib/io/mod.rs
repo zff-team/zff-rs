@@ -1,3 +1,13 @@
+//! Module for I/O operations with zff containers.
+//!
+//! This module provides the core functionality for creating, reading, extending,
+//! and managing zff containers. It includes both high-level and low-level I/O operations.
+//!
+//! The module contains submodules zffreader and zffwriter for reader and writer functionality.
+//!
+//! Public types include `ZffCreationParameters` for creating containers.
+//! Public functions include `calculate_xxhash` and `compress_buffer`.
+
 // - STD
 use std::collections::{HashMap};
 use std::fs::{File, Metadata, read_dir, metadata};
@@ -31,9 +41,9 @@ use xattr::XAttrs;
 use xxhash_rust::xxh3::xxh3_64;
 
 // - modules
-/// provides [ZffReader](crate::io::zffreader::ZffReader) and some helper functions to read zff containers.
+/// Module for reading zff containers. Provides ZffReader and helper functions.
 pub mod zffreader;
-/// provides [ZffWriter] which implements the [Read](std::io::Read) trait to obtain a Read-Stream for a zff container.
+/// Module for writing zff containers. Provides ZffWriter.
 pub mod zffwriter;
 
 #[derive(Debug, Clone, Default)]
@@ -75,7 +85,7 @@ pub struct ZffCreationParameters<R: ReadAt> {
 	/// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.
 	pub target_segment_size: Option<u64>,
 	/// An optional description for the container
-	/// (note: you can describe every object with custom descriptions by using the [DescriptionHeader](crate::header::DescriptionHeader)).
+	/// (note: you can describe every object with custom descriptions by using the [DescriptionHeader]).
 	pub description_notes: Option<String>,
 	/// If set, the chunkmaps will not grow larger than the given size. Otherwise, the default size 32k will be used.
 	pub chunkmap_size: Option<u64>, //default is 32k

@@ -1,3 +1,8 @@
+//! Module for virtual object source functionality.
+//!
+//! This module provides the [`VirtualObjectSource`] trait which defines the interface
+//! for sources of virtual object data.
+
 // - Parent
 use crate::prelude::*;
 

@@ -47,13 +47,15 @@ impl PreparedData {
 	}
 }
 
-/// An encoder for each object. This is a wrapper Enum for [PhysicalObjectEncoder] and [LogicalObjectEncoder].
+/// An encoder for each object.
+///
+/// This is a wrapper enum that can contain any of the object encoder types.
 pub enum ObjectEncoder<R: Read> {
-	/// Wrapper for [PhysicalObjectEncoder].
+	/// Physical object encoder.
 	Physical(Box<PhysicalObjectEncoder<R>>),
-	/// Wrapper for [LogicalObjectEncoder].
+	/// Logical object encoder.
 	Logical(Box<LogicalObjectEncoder>),
-	/// Wrapper for [VirtualObjectEncoder]
+	/// Virtual object encoder.
 	Virtual(Box<VirtualObjectEncoder>),
 }
 

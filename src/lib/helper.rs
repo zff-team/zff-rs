@@ -1,3 +1,8 @@
+//! Module containing helper functions and utilities.
+//!
+//! This module provides various utility functions used throughout the zff crate,
+//! including data structure helpers and encoding/decoding utilities.
+
 // - STD
 use std::io::{Error as IoError, ErrorKind as IoEKind};
 use std::collections::BTreeMap;

@@ -1,3 +1,11 @@
+//! Module for reading zff containers.
+//!
+//! This module provides the `ZffReader` type and supporting functionality for
+//! reading zff containers. It supports reading physical, logical, virtual, and
+//! encrypted objects from zff containers.
+//!
+//! The module also contains submodules zffobjectreader and redb_handling.
+
 // - STD
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -32,16 +40,16 @@ use redb::{Database, ReadableTable, ReadableDatabase};
 #[cfg(feature = "log")]
 use log::{debug, trace};
 
-/// Defines the recognized object type (used by the [ZffReader]). 
+/// Defines the recognized object type (used by the [ZffReader]).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ObjectType {
-	/// Physical object
+	/// A physical object (e.g., disk image acquisition).
 	Physical,
-	/// Logical object
+	/// A logical object (e.g., file system acquisition).
 	Logical,
-	/// Virtual object,
+	/// A virtual object (e.g., RAID reconstruction).
 	Virtual,
-	/// Encrypted object
+	/// An encrypted object that needs decryption before access.
 	Encrypted,
 }
 
@@ -57,7 +65,7 @@ impl fmt::Display for ObjectType {
     }
 }
 
-/// The preloaded chunkmaps which can be used by the [ZffReader] to speed up the reading process.
+/// The preloaded chunkmaps which can be used to speed up the reading process.
 #[derive(Debug, Default)]
 pub(crate) struct PreloadedChunkMapsInMemory {
 	chunk_header: HashMap<u64, ChunkHeader>,
@@ -79,7 +87,7 @@ impl PreloadedChunkMapsInMemory {
 	}
 }
 
-/// The preloaded chunkmaps which can be used by the [ZffReader] to speed up the reading process.
+/// The preloaded chunkmaps which can be used to speed up the reading process.
 #[derive(Debug, Default)]
 pub(crate) enum PreloadedChunkMaps {
 	#[default]
@@ -186,6 +194,24 @@ impl<R: ReadAt> ZffReaderGeneralMetadata<R> {
 /// let mut buffer = vec![0u8; 32000];
 /// let _  = zffreader.read_exact(&mut buffer).unwrap();
 /// ```
+/// Main reader type for zff containers.
+///
+/// The `ZffReader` provides functionality to read and access data from zff containers.
+/// It supports reading physical, logical, virtual, and encrypted objects.
+///
+/// # Type Parameters
+///
+/// - `R`: The type of reader that implements [`ReadAt`] for random access reading.
+///
+/// # Examples
+///
+/// ```no_run
+/// use zff::io::zffreader::ZffReader;
+/// use std::fs::File;
+///
+/// // Create a reader from a vector of segment files
+/// let reader = ZffReader::with_reader(vec![File::open("segment.z01").unwrap()]).unwrap();
+/// ```
 #[derive(Debug)]
 pub struct ZffReader<R: ReadAt> {
 	metadata: ArcZffReaderMetadata<R>,
@@ -194,7 +220,7 @@ pub struct ZffReader<R: ReadAt> {
 }
 
 impl<R: ReadAt> ZffReader<R> {
-	/// This method will initialize the [ZffReader] in general.  
+	/// This method will initialize the [ZffReader] in general.
 	/// This method will identify the appropriate [SegmentHeader], 
 	/// [SegmentFooter] and [MainFooter].  
 	/// This method will **not** initizalize the objects itself! This has to be done by using the

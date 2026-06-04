@@ -1,3 +1,21 @@
+//! Module for chunk map functionality in zff.
+//!
+//! Chunk maps store metadata about chunks in a zff container, enabling efficient
+//! random access and deduplication. This module provides different types of chunk maps
+//! for various metadata aspects.
+//!
+//! # Submodules
+//!
+//! - [`chunk_header`]: Chunk header map (stores chunk headers by chunk number)
+//! - [`chunk_same_bytes`]: Same bytes map (tracks chunks filled with a single repeated byte)
+//! - [`chunk_deduplication`]: Deduplication map (tracks duplicate chunks to save space)
+//!
+//! # Types
+//!
+//! - [`ChunkMaps`]: Container for all chunk map types
+//! - [`ChunkMapType`]: Enum identifying the type of chunk map
+//! - [`ChunkMap`]: Trait defining common chunk map operations
+
 // - STD
 use std::borrow::Borrow;
 use std::collections::{BTreeMap};

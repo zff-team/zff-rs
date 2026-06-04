@@ -1,3 +1,8 @@
+//! Module for logical object source functionality.
+//!
+//! This module provides the [`LogicalObjectSource`] trait which defines the interface
+//! for sources of logical object data (e.g., file systems).
+
 // - STD
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -6,7 +11,9 @@ use std::path::PathBuf;
 use crate::prelude::*;
 use crate::FileTypeEncodingInformation;
 
-/// Trait for abstracting different file input sources for [LogicalObjectEncoder].
+/// Trait for abstracting different file input sources.
+///
+/// Implementors of this trait provide logical object data (e.g., from file systems).
 pub trait LogicalObjectSource: Iterator<Item = Result<(FileTypeEncodingInformation, FileHeader)>> {
 	/// Returns the remaining elements of the inner iterator
 	fn remaining_elements(&self) -> u64;

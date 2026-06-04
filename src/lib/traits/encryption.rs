@@ -1,3 +1,8 @@
+//! Trait for encryption operations in zff.
+//!
+//! This module provides the [`Encryption`] trait which defines the interface for
+//! encrypting and decrypting data using various encryption algorithms.
+
 // - STD
 use std::borrow::Borrow;
 

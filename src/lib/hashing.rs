@@ -1,3 +1,19 @@
+//! Module for cryptographic hashing operations in zff.
+//!
+//! This module provides hashing functionality using various cryptographic algorithms
+//! for data integrity verification in zff containers.
+//!
+//! # Types
+//!
+//! - [`HashType`]: Enum defining all supported hashing algorithms (Blake2b512, SHA256, SHA512, SHA3_256, Blake3)
+//! - [`Hash`]: Structure containing methods to create hashers for different algorithms
+//!
+//! # Features
+//!
+//! - Support for multiple hash algorithms with configurable default
+//! - Integration with the `digest` trait for consistent hashing operations
+//! - Optional serialization support with the `serde` feature
+
 // - STD
 use std::fmt;
 
@@ -13,6 +29,26 @@ use sha2::{Sha256, Sha512};
 use sha3::{Sha3_256};
 
 /// Defines all hashing algorithms, which are implemented in zff.
+///
+/// # Example
+/// ```
+/// use zff::HashType;
+///
+/// // All available hash types
+/// let blake2b512 = HashType::Blake2b512;
+/// let sha256 = HashType::SHA256;
+/// let sha512 = HashType::SHA512;
+/// let sha3_256 = HashType::SHA3_256;
+/// let blake3 = HashType::Blake3;
+///
+/// // Get the default length for each algorithm
+/// assert_eq!(HashType::SHA256.default_len(), 256);
+/// assert_eq!(HashType::SHA512.default_len(), 512);
+/// assert_eq!(HashType::Blake3.default_len(), 256);
+///
+/// // Display formatting
+/// assert_eq!(format!("{}", HashType::Blake3), "Blake3");
+/// ```
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq,Hash)]
@@ -63,6 +99,18 @@ pub struct Hash;
 
 impl Hash {
 	/// returns a new Hasher which implements [DynDigest](https://docs.rs/digest/0.9.0/digest/trait.DynDigest.html).
+	///
+	/// # Example
+	/// ```
+	/// use zff::{Hash, HashType};
+	/// use digest::DynDigest;
+	///
+	/// // Create a new SHA256 hasher
+	/// let mut hasher = Hash::new_hasher(&HashType::SHA256);
+	/// hasher.update(b"Hello, World!");
+	/// let hash_result = hasher.finalize();
+	/// // The hash is now a byte vector containing the SHA256 hash
+	/// ```
 	pub fn new_hasher(hash_type: &HashType) -> Box<dyn DynDigest> {
 		match hash_type {
 			HashType::Blake2b512 => Box::new(Blake2b512::new()),
@@ -74,6 +122,15 @@ impl Hash {
 	}
 
 	/// returns the default hashtype of zff.
+	///
+	/// # Example
+	/// ```
+	/// use zff::{Hash, HashType};
+	///
+	/// // Get the default hash type
+	/// let default_hash = Hash::default_hashtype();
+	/// assert!(matches!(default_hash, HashType::Blake3));
+	/// ```
 	pub fn default_hashtype() -> HashType {
 		HashType::Blake3
 	}

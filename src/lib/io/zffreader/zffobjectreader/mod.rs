@@ -1,3 +1,19 @@
+//! Module for object readers in zff containers.
+//!
+//! This module provides specialized reader implementations for different types of
+//! objects in zff containers (physical, logical, virtual, encrypted).
+//!
+//! # Modules
+//!
+//! - [`zffobjectreader_encrypted`]: Reader for encrypted objects
+//! - [`zffobjectreader_logical`]: Reader for logical objects
+//! - [`zffobjectreader_physical`]: Reader for physical objects
+//! - [`zffobjectreader_virtual`]: Reader for virtual objects
+//!
+//! # Types
+//!
+//! - [`ObjectMetadata`]: Metadata container for an object (header, footer, files)
+
 // - STD
 use std::sync::OnceLock;
 
@@ -34,13 +50,13 @@ impl ObjectMetadata {
 /// An enum, which provides an appropriate object reader.
 #[derive(Debug)]
 pub(crate) enum ZffObjectReader<R: ReadAt> {
-	/// Contains a [ZffObjectReaderPhysical].
+	/// Physical object reader.
 	Physical(Box<ZffObjectReaderPhysical<R>>),
-	/// Contains a [ZffObjectReaderLogical].
+	/// Logical object reader.
 	Logical(Box<ZffObjectReaderLogical<R>>),
-	// Contains a [ZffObjectReaderVirtual].
+	/// Virtual object reader.
 	Virtual(Box<ZffObjectReaderVirtual<R>>),
-	/// Contains a [ZffObjectReaderEncrypted].
+	/// Encrypted object reader.
 	Encrypted(Box<ZffObjectReaderEncrypted<R>>),
 }
 

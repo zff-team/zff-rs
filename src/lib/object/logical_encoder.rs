@@ -61,7 +61,7 @@ impl LogicalObjectEncoder {
 		&self.obj_header
 	}
 
-	/// Returns a new [LogicalObjectEncoder] by the given values.
+	/// Returns a new LogicalObjectEncoder with the given values.
 	pub fn new(
 		obj_header: ObjectHeader,
 		mut logical_object_source: Box<dyn LogicalObjectSource>,

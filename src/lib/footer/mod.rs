@@ -1,3 +1,14 @@
+//! Module containing all footer types for the zff format.
+//!
+//! Footers in zff containers provide metadata and integrity information at the end
+//! of various structural elements. This module organizes all footer-related types
+//! and functionality.
+//!
+//! This module contains submodules for different footer types:
+//! main_footer, segment_footer, file_footer, object_footer, virtual_file_footer.
+//!
+//! All footer types from the submodules are re-exported here for convenient access.
+
 // - modules
 mod main_footer;
 mod segment_footer;

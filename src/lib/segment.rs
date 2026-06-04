@@ -1,3 +1,19 @@
+//! Module for handling zff segments.
+//!
+//! Zff containers can be divided into multiple segments for manageability and
+//! to support very large acquisitions. This module provides the structures and
+//! functionality for working with segmented zff containers.
+//!
+//! # Types
+//!
+//! - [`Segment`]: Represents a full segment with header, data, and footer
+//!
+//! # Features
+//!
+//! - Segment creation and reading from various sources
+//! - Support for both seekable and non-seekable readers
+//! - Automatic footer offset detection
+
 // - STD
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
@@ -17,6 +33,19 @@ use log::trace;
 /// The [Segment] struct contains a [crate::header::SegmentHeader],
 /// a [crate::footer::SegmentFooter], a [Read](std::io::Read)er to the appropriate
 /// segmented data and a position marker for this [Read](std::io::Read)er.
+///
+/// # Example
+/// ```no_run
+/// use zff::Segment;
+/// use std::fs::File;
+/// use std::sync::Mutex;
+///
+/// // Open a segment file
+/// let file = File::open("test.z01").unwrap();
+/// let mutex = Mutex::new(file);
+/// // Note: In practice, you would use Segment::new_from_reader for seekable readers
+/// // or get a Segment from a ZffReader
+/// ```
 #[derive(Debug)]
 pub struct Segment<R: ReadAt> {
 	header: SegmentHeader,
@@ -26,6 +55,18 @@ pub struct Segment<R: ReadAt> {
 
 impl<R: Read+Seek> Segment<Mutex<R>> {
 	/// Creates a new [Segment] from the given [Read](std::io::Read)er.
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Segment;
+	/// use std::fs::File;
+	/// use std::io::{Seek, SeekFrom};
+	///
+	/// // Open a seekable reader (e.g., a file)
+	/// let file = File::open("test.z01").unwrap();
+	/// let segment = Segment::new_from_reader(file).unwrap();
+	/// // segment is now ready to use
+	/// ```
 	pub fn new_from_reader(mut data: R) -> Result<Self> {
 		let segment_header = SegmentHeader::decode_directly(&mut data)?;
 
@@ -62,6 +103,18 @@ impl Segment<std::fs::File> {
 
 impl<R: ReadAt> Segment<R> {
 	/// creates a new [Segment] by the given values.
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::{Segment, header::SegmentHeader, footer::SegmentFooter};
+	/// use std::fs::File;
+	///
+	/// // Create a segment with pre-existing header and footer
+	/// let header = SegmentHeader::new(12345, 1, 32768);
+	/// let file = File::open("data.bin").unwrap();
+	/// let footer = SegmentFooter::new_empty();
+	/// let segment = Segment::with_header_and_data(header, file, footer);
+	/// ```
 	pub fn with_header_and_data(header: SegmentHeader, data: R, footer: SegmentFooter) -> Segment<R> {
 		Self {
 			header,
@@ -71,11 +124,37 @@ impl<R: ReadAt> Segment<R> {
 	}
 
 	/// Returns a reference to the underlying [crate::header::SegmentHeader].
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Segment;
+	/// use std::fs::File;
+	/// use std::sync::Mutex;
+	///
+	/// // Assuming you have a segment
+	/// // let file = File::open("test.z01").unwrap();
+	/// // let segment: Segment<Mutex<File>> = Segment::new_from_reader(file).unwrap();
+	/// // let header = segment.header();
+	/// // header contains the segment header information
+	/// ```
 	pub fn header(&self) -> &SegmentHeader {
 		&self.header
 	}
 
 	/// Returns a reference to the underlying [crate::footer::SegmentFooter].
+	///
+	/// # Example
+	/// ```no_run
+	/// use zff::Segment;
+	/// use std::fs::File;
+	/// use std::sync::Mutex;
+	///
+	/// // Assuming you have a segment
+	/// // let file = File::open("test.z01").unwrap();
+	/// // let segment: Segment<Mutex<File>> = Segment::new_from_reader(file).unwrap();
+	/// // let footer = segment.footer();
+	/// // footer contains the segment footer information
+	/// ```
 	pub fn footer(&self) -> &SegmentFooter {
 		&self.footer
 	}

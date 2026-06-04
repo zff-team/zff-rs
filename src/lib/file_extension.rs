@@ -1,3 +1,9 @@
+//! Module for handling zff file extensions.
+//!
+//! Zff containers can be split across multiple files with sequential extensions
+//! (e.g., z01, z02, z03, etc.). This module provides utilities for working with these
+//! file extensions, including generating the next or previous extension in the sequence.
+
 // - Parent
 use super::*;
 

@@ -1,3 +1,13 @@
+//! Module for file-related functionality in zff containers.
+//!
+//! This module provides types and functionality for handling files within zff objects,
+//! including both regular files and virtual files.
+//!
+//! This module contains submodules: file_encoder, virtual_file_encoder.
+//!
+//! Public types include VirtualFileFooterMetadata, VirtualFileContent,
+//! FileMapPosition, and FileMetadata.
+
 // - internal
 use crate::prelude::*;
 
@@ -113,7 +123,7 @@ pub struct FileMetadata {
 }
 
 impl FileMetadata {
-	/// creates a new [File] instance for the given [FileHeader] and [FileFooter].
+	/// Creates a new FileMetadata instance for the given FileHeader and FileFooter.
 	pub fn with_file_footer(header: FileHeader, footer: FileFooter) -> Self {
 		Self {
 			header,
@@ -121,7 +131,7 @@ impl FileMetadata {
 		}
 	}
 
-	/// creates a new [File] instance for the given [FileHeader] and [VirtualFileFooter].
+	/// Creates a new FileMetadata instance for the given FileHeader and VirtualFileFooter.
 	pub fn with_virtual_file_footer(header: FileHeader, footer: VirtualFileFooter) -> Self {
 		Self {
 			header,

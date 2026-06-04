@@ -1,3 +1,15 @@
+//! Module for object-related functionality in zff containers.
+//!
+//! Objects are the primary logical units in zff containers, representing either
+//! physical acquisitions (disk images) or logical acquisitions (file systems).
+//! This module provides the core types and functionality for encoding and decoding objects.
+//!
+//! This module contains submodules: encoder, logical_encoder, physical_encoder,
+//! virtual_encoder, logical_object_source, virtual_object_source.
+//!
+//! Public types include ObjectEncoder, PhysicalObjectEncoder, LogicalObjectEncoder,
+//! VirtualObjectEncoder, and EncodingThreadPoolManager.
+
 // - STD
 use std::collections::HashMap;
 use std::io::copy as io_copy;

@@ -95,7 +95,9 @@ impl fmt::Display for PBEHeader {
 	}
 }
 
-/// enum to handle the stored parameters for the appropriate key deriavation function (KDF).
+/// Enum containing the parameters for the appropriate key derivation function (KDF).
+///
+/// This enum wraps the specific parameter types for different KDF schemes used in zff.
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
@@ -173,7 +175,11 @@ impl ValueDecoder for KDFParameters {
 	}
 }
 
-/// struct to store the parameters for the KDF PBKDF2-SHA256.
+/// Parameters for the PBKDF2-SHA256 key derivation function.
+///
+/// PBKDF2 (Password-Based Key Derivation Function 2) applies a pseudorandom function,
+/// such as a cryptographic hash, cipher, or HMAC to the input password along with a salt
+/// and repeats the process many times to produce a derived key.
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -230,7 +236,10 @@ impl HeaderCoding for PBKDF2SHA256Parameters {
 	}
 }
 
-/// struct to store the parameters for the KDF Scrypt.
+/// Parameters for the Scrypt key derivation function.
+///
+/// Scrypt is a password-based key derivation function designed to be computationally
+/// intensive to resist brute-force attacks.
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -298,23 +307,26 @@ impl HeaderCoding for ScryptParameters {
 }
 
 
-/// struct to store the parameters for the KDF Scrypt.
+/// Parameters for the Argon2id key derivation function.
+///
+/// Argon2id is a memory-hard password hashing function that won the Password Hashing
+/// Competition. It provides configurable memory, CPU, and parallelism parameters.
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Argon2idParameters {
-	/// The memory cost parameter for Argon2id.
+	/// The memory cost parameter for Argon2id (in KiB).
 	pub mem_cost: u32,
-	/// The used number of lanes for Argon2id.
+	/// The number of lanes (threads) for Argon2id.
 	pub lanes: u32,
-	/// The iterations value for Argon2id.
+	/// The number of iterations for Argon2id.
 	pub iterations: u32,
-	/// The used salt.
+	/// The salt used for key derivation.
 	pub salt: [u8; 32],
 }
 
 impl Argon2idParameters {
-	/// returns a new [ScryptParameters] with the given values.
+	/// Returns a new [Argon2idParameters] with the given values.
 	pub fn new(mem_cost: u32, lanes: u32, iterations: u32, salt: [u8; 32]) -> Argon2idParameters {
 		Self {
 			mem_cost,

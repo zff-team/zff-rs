@@ -12,6 +12,25 @@ use serde::{Serialize, Deserialize};
 
 /// Header for the data compression parameters.\
 /// This header is part of the main header.
+///
+/// # Example
+/// ```
+/// use zff::{header::CompressionHeader, CompressionAlgorithm};
+///
+/// // Create a compression header with Zstd compression, level 3, and default threshold
+/// let compression_header = CompressionHeader::new(
+///     CompressionAlgorithm::Zstd,
+///     3,
+///     1.05
+/// );
+///
+/// // Create a compression header with no compression
+/// let no_compression_header = CompressionHeader::new(
+///     CompressionAlgorithm::None,
+///     0,
+///     1.0
+/// );
+/// ```
 #[derive(Debug,Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -27,6 +46,16 @@ pub struct CompressionHeader {
 
 impl CompressionHeader {
 	/// returns a new compression header with the given values.
+	///
+	/// # Example
+	/// ```
+	/// use zff::{header::CompressionHeader, CompressionAlgorithm};
+	///
+	/// // Create a header for Zstd compression at level 6
+	/// let header = CompressionHeader::new(CompressionAlgorithm::Zstd, 6, 1.05);
+	/// assert!(matches!(header.algorithm, CompressionAlgorithm::Zstd));
+	/// assert_eq!(header.level, 6);
+	/// ```
 	pub fn new(compression_algo: CompressionAlgorithm, level: u8, threshold: f32) -> CompressionHeader {
 		Self {
 			algorithm: compression_algo,

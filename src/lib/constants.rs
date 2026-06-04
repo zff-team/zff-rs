@@ -1,3 +1,8 @@
+//! Module containing all constants used in the zff crate.
+//!
+//! This module defines magic bytes, identifiers, version numbers, default values,
+//! error messages, and other constants that are used throughout the zff format implementation.
+
 // - external
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use redb::TableDefinition;
@@ -23,21 +28,21 @@ pub const HEADER_IDENTIFIER_HASH_VALUE: u32 = 0x7A666648;
 pub const HEADER_IDENTIFIER_OBJECT_HEADER: u32 = 0x7A66664F;
 /// The identifier of the [FileHeader](crate::header::FileHeader).
 pub const HEADER_IDENTIFIER_FILE_HEADER: u32 = 0x7A666666;
-/// The identifier of the [ChunkOffsetMap](crate::header::ChunkOffsetMap).
+/// The identifier of the chunk offset map header.
 pub const HEADER_IDENTIFIER_CHUNK_OFFSET_MAP: u32 = 0x7A666678;
-/// The identifier of the [ChunkSizeMap](crate::header::ChunkSizeMap).
+/// The identifier of the chunk size map header.
 pub const HEADER_IDENTIFIER_CHUNK_SIZE_MAP: u32 = 0x7A666679;
-/// The identifier of the [ChunkFlagMap](crate::header::ChunkFlagMap).
+/// The identifier of the chunk flag map header.
 pub const HEADER_IDENTIFIER_CHUNK_FLAG_MAP: u32 = 0x7A66667A;
-/// The identifier of the [ChunkXxHashMap](crate::header::ChunkFlagMap).
+/// The identifier of the chunk xxhash map header.
 pub const HEADER_IDENTIFIER_CHUNK_XXHASH_MAP: u32 = 0x7a666669;
-/// The identifier of the [ChunkSamebytesMap](crate::header::ChunkFlagMap).
+/// The identifier of the chunk samebytes map header.
 pub const HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP: u32 = 0x7a666653;
-/// The identifier of the [ChunkDeduplicationMap](crate::header::ChunkFlagMap).
+/// The identifier of the chunk deduplication map header.
 pub const HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP: u32 = 0x7a666644;
-/// The identifier of the [VirtualMappingInformation](crate::header::VirtualMappingInformation).
+/// The identifier of the virtual mapping information header.
 pub const HEADER_IDENTIFIER_VIRTUAL_MAPPING_INFORMATION: u32 = 0x7a666676;
-/// The identifier of the [VirtualLayer](crate::header::VirtualObjectMap).
+/// The identifier of the virtual object map header.
 pub const HEADER_IDENTIFIER_VIRTUAL_OBJECT_MAP: u32 = 0x7a666631;
 
 pub(crate) const FOOTER_IDENTIFIER_SEGMENT_FOOTER: u32 = 0x7A666646;
@@ -197,31 +202,31 @@ pub const DEFAULT_HEADER_VERSION_ENCRYPTION_HEADER: u8 = 3;
 pub const DEFAULT_HEADER_VERSION_FILE_HEADER: u8 = 2;
 /// current header version for the [ObjectHeader](crate::header::ObjectHeader).
 pub const DEFAULT_HEADER_VERSION_OBJECT_HEADER: u8 = 2;
-/// current header version for the [ChunkOffsetMap](crate::header::ChunkOffsetMap) structure.
+/// current header version for the chunk offset map structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_OFFSET_MAP: u8 = 1;
-/// current header version for the [ChunkSizeMap](crate::header::ChunkSizeMap) structure.
+/// current header version for the chunk size map structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_SIZE_MAP: u8 = 1;
-/// current header version for the [ChunkFlagMap](crate::header::ChunkFlagMap) structure.
+/// current header version for the chunk flag map structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_FLAG_MAP: u8 = 1;
-/// current header version for the [ChunkXxHashMap](crate::header::ChunkXxHashMap) structure.
+/// current header version for the chunk xxhash map structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_XXHASH_MAP: u8 = 1;
-/// current header version for the [ChunkSamebytesMap](crate::header::ChunkSamebytesMap) structure.
+/// current header version for the ChunkSamebytesMap structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP: u8 = 1;
-/// current header version for the [ChunkDedeuplicationMap](crate::header::ChunkDedeuplicationMap) structure.
+/// current header version for the ChunkDeduplicationMap structure.
 pub const DEFAULT_HEADER_VERSION_CHUNK_DEDUPLICATION_MAP: u8 = 1;
-/// current header version for the [VirtualMappingInformation](crate::header::VirtualMappingInformation) structure.
+/// current header version for the virtual mapping information structure.
 pub const DEFAULT_HEADER_VERSION_VIRTUAL_MAPPING_INFORMATION: u8 = 1;
-/// current header version for the [VirtualLayer](crate::header::VirtualObjectMap) structure.
+/// current header version for the virtual object map structure.
 pub const DEFAULT_HEADER_VERSION_VIRTUAL_OBJECT_MAP: u8 = 1;
-/// current footer version for the [ObjectFooterPhysical](crate::footer::ObjectFooterPhysical).
+/// current footer version for the ObjectFooterPhysical.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_PHYSICAL: u8 = 2;
-/// current footer version for the [ObjectFooterLogical](crate::footer::ObjectFooterLogical).
+/// current footer version for the ObjectFooterLogical.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_LOGICAL: u8 = 2;
-/// current footer version for the [ObjectFooterVirtual](crate::footer::ObjectFooterVirtual) structure.
+/// current footer version for the ObjectFooterVirtual.
 pub const DEFAULT_FOOTER_VERSION_OBJECT_FOOTER_VIRTUAL: u8 = 1;
-/// current footer version of the [VirtualFileFooter](crate::footer::VirtualFileFooter) structure.
+/// current footer version of the VirtualFileFooter.
 pub const DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_FOOTER: u8 = 1;
-/// current footer version of the [VirtualFileMap](crate::footer::VirtualFileMap) structure.
+/// current footer version of the VirtualFileMap.
 pub const DEFAULT_FOOTER_VERSION_VIRTUAL_FILE_MAP: u8 = 1;
 /// current footer version for the [SegmentFooter](crate::footer::SegmentFooter).
 pub const DEFAULT_FOOTER_VERSION_SEGMENT_FOOTER: u8 = 3;

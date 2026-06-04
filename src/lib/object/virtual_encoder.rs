@@ -61,12 +61,12 @@ impl Drop for VirtualObjectEncoder {
 }
 
 impl VirtualObjectEncoder {
-    /// Creates a new [VirtualObjectEncoder].
+    /// Creates a new VirtualObjectEncoder.
     ///
     /// The encoder immediately reads the first virtual file from
-    /// virtual_object_source and prepares a [VirtualFileEncoder] for it. If
+    /// virtual_object_source and prepares a VirtualFileEncoder for it. If
     /// the source is empty, the encoder is created without a current file and
-    /// [Self::get_next_data] will return [EncodingState::ReadEOF].
+    /// the get_next_data method will return an EOF state.
     ///
     /// Encryption settings are derived from `obj_header` and reused for all
     /// encoded virtual file headers, virtual file maps, virtual file footers, and

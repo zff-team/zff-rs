@@ -1,3 +1,12 @@
+//! Module for object footer types in zff containers.
+//!
+//! Object footers store metadata and integrity information at the end of objects
+//! in zff containers. This module provides footer types for different object types.
+//!
+//! This module contains submodules: object_footer_physical, object_footer_logical, object_footer_virtual.
+//!
+//! Public types include ObjectFooter and EncryptedObjectFooter.
+
 // - STD
 use std::borrow::Borrow;
 use std::fmt;

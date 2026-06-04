@@ -1,3 +1,8 @@
+//! Module for header encoding and decoding functionality.
+//!
+//! This module provides the [`HeaderCoding`] trait which defines the interface for
+//! encoding and decoding header structures to and from byte streams.
+
 // - STD
 use std::any::type_name;
 use std::borrow::Borrow;
@@ -11,7 +16,7 @@ use byteorder::{LittleEndian, BigEndian, ReadBytesExt};
 #[cfg(feature = "log")]
 use log::{trace};
 
-/// The ```HeaderCoding``` trait specifies an interface for the common header methods and the encoding and decoding methods.
+/// The `HeaderCoding` trait specifies an interface for the common header methods and the encoding and decoding methods.
 pub trait HeaderCoding {
 	/// the return value for decode_content(), decode_directly(), decode_for_key();
 	type Item;
