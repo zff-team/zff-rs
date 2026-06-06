@@ -11,7 +11,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use serde::{Serialize, Deserialize};
 use zeroize::Zeroize;
 
-/// The pbe header contains all informations for the encryption of the encryption key.
+/// The PBE header contains all information for encrypting the encryption key.
 /// 
 /// The encryption key, used for the chunk encryption, can be found at the [EncryptionHeader](struct.EncryptionHeader.html) -
 /// encrypted with an user password.\

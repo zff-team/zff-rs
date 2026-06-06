@@ -15,7 +15,7 @@ pub mod constants;
 pub mod header;
 /// This module contains all footer, could be found in the zff specification (footer version 1 and footer version 2).
 pub mod footer;
-/// Contains several stuff to handle zff container (e.g. create, extend or read zff container).
+/// Contains various functionality to handle zff containers (e.g., create, extend, or read zff containers).
 pub mod io;
 /// Contains some little helper functions
 pub mod helper;

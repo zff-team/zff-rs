@@ -93,7 +93,7 @@ impl fmt::Display for HashType {
 	}
 }
 
-/// structure contains serveral methods to handle hashing
+/// structure contains several methods to handle hashing
 #[derive(Debug,Clone)]
 pub struct Hash;
 

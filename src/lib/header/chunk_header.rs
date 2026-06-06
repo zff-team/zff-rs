@@ -10,12 +10,12 @@ use crate::prelude::*;
 use serde::{Serialize, Deserialize};
 
 /// Header for the chunked data (typically stored in a chunk header map).
-/// The Header doesn't contain a chunk number, because it is stored in a map with the chunk number as key.
+/// A header doesn't contain a chunk number, because it is stored in a map with the chunk number as key.
 #[derive(Debug,Clone, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeader {
-	/// The offset, where the chunked data can be found (inside the appriopriate segment file).
+	/// The offset where the chunked data can be found (inside the appropriate segment file).
     pub offset: u64,
 	/// The length of the chunked data.
     pub size: u64,

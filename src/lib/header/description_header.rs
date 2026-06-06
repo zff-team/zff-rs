@@ -12,15 +12,15 @@ use crate::prelude::*;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
 
-/// The description header contains all data, which describes the dumped data in den appropriate object (e.g. case number, examiner name or acquisition date).
+/// The description header contains all data that describes the dumped data in the appropriate object (e.g., case number, examiner name, or acquisition date).
 /// 
-/// The description information are stored in a HashMap (e.g. like ["acquisition tool", "zffacquire"]).
-/// Some fields are predefined, to be able to ensure a certain degree of compatibility between different tools.
+/// The description information is stored in a HashMap (e.g., like ["acquisition tool", "zffacquire"]).
+/// Some fields are predefined to ensure a certain degree of compatibility between different tools.
 /// The following fields are predefined:
 /// - case number (for the appropriate HashMap key, see [ENCODING_KEY_CASE_NUMBER](crate::constants::ENCODING_KEY_CASE_NUMBER))
 /// - evidence number (for the appropriate HashMap key, see [ENCODING_KEY_EVIDENCE_NUMBER](crate::constants::ENCODING_KEY_EVIDENCE_NUMBER))
 /// - examiner name (for the appropriate HashMap key, see [ENCODING_KEY_EXAMINER_NAME](crate::constants::ENCODING_KEY_EXAMINER_NAME))
-/// - notes ((for the appropriate HashMap key, see [ENCODING_KEY_NOTES](crate::constants::ENCODING_KEY_NOTES))
+/// - notes (for the appropriate HashMap key, see [ENCODING_KEY_NOTES](crate::constants::ENCODING_KEY_NOTES))
 /// 
 /// But you are free to define custom additional key-value pairs.
 /// 

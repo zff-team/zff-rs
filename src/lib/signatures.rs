@@ -34,7 +34,7 @@ use ed25519_dalek::{
 use rand::Rng;
 
 
-/// structure contains serveral methods to handle signing of chunked data.
+/// structure contains several methods to handle signing of chunked data.
 ///
 /// # Example
 /// ```no_run

@@ -18,7 +18,7 @@ use crate::{
 use serde::{Serialize, Deserialize};
 use zeroize::Zeroize;
 
-/// This struct could be used to manage the encryption information while creating a zff container
+/// This struct can be used to manage encryption information while creating a zff container.
 #[derive(Debug, Clone, Eq, PartialEq, Zeroize)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -91,11 +91,11 @@ impl EncryptionInformation {
 	}
 }
 
-/// The encryption header contains all informations (and the **encrypted** key) for the data and header encryption.
+/// The encryption header contains all information (including the **encrypted** key) for data and header encryption.
 /// 
 /// The encryption header is the only optional header part of the main header
-/// (With the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
-/// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password based encryption method,
+/// (with the exception of the [PBEHeader], which is, however, part of the [EncryptionHeader]).
+/// The encryption header contains an encrypted key (encrypted encryption key). This key is encrypted with a password-based encryption method,
 /// described by the containing [PBEHeader].
 /// This key (decrypted with the appropriate password) is used to decrypt the encrypted data or the optionally encrypted header.
 #[derive(Debug,Clone,Eq,PartialEq, Zeroize)]

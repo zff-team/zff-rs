@@ -68,7 +68,7 @@ pub trait ValueEncoder {
 		vec
 	}
 
-	/// returns the identifier of the appropiate type.
+	/// returns the identifier of the appropriate type.
 	///
 	/// # Example
 	/// ```no_run

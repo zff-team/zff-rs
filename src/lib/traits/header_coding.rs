@@ -49,7 +49,7 @@ pub trait HeaderCoding {
 	}
 
 	/// returns the version of the header.
-	/// This reflects the default version of the appropiate header used in zff v3.
+	/// This reflects the default version of the appropriate header used in zff v3.
 	fn version() -> u8;
 
 	/// encodes a given key.
