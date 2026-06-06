@@ -40,7 +40,7 @@ pub(crate) struct ZffObjectReaderVirtual<R: ReadAt> {
 }
 
 impl<R: ReadAt> ZffObjectReaderVirtual<R> {
-    /// Initialize the [ZffObjectReaderLogical] with the recommended set of metadata which will be stored in memory.
+    /// Initialize the [ZffObjectReaderVirtual] with the recommended set of metadata which will be stored in memory.
 	pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
 			Self::with_obj_metadata(object_no, metadata)
 	}

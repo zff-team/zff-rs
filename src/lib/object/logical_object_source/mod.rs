@@ -6,7 +6,7 @@
 //! # Modules
 //!
 //! - [`filesystem`]: Filesystem-based logical object source
-//! - [`los_tar`]: TAR archive-based logical object source (available with `los_tar` feature)
+//! - `los_tar`: TAR archive-based logical object source (available with `los_tar` feature)
 //!
 //! # Re-exports
 //!

@@ -147,7 +147,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                 // as we have already checked that the current file is 
                 // not in root path.
                 let path = entry.path()?;
-                let parent_path = path.parent().unwrap();
+                let parent_path = path.parent()?;
                 let parent_filenumber = match parent_dir_filenumber_map.get(&parent_path.to_path_buf()) { // check if the trailing separator is a problem.
                     Some(parent_filenumber) => *parent_filenumber,
                     None => return Err(ZffError::new(ZffErrorKind::EncodingError, 

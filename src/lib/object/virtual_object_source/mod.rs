@@ -6,7 +6,7 @@
 //!
 //! # Modules
 //!
-//! - [`vos_tar`]: TAR archive-based virtual object source (available with `vos_tar` feature)
+//! - `vos_tar`: TAR archive-based virtual object source (available with `vos_tar` feature)
 //!
 //! # Re-exports
 //!

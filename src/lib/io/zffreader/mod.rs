@@ -164,7 +164,7 @@ impl<R: ReadAt> ZffReaderGeneralMetadata<R> {
 		Some(self.object_metadata.get(object_no)?.get()?.header.clone())
 	}
 
-	/// Returns a Clone of the appropriate [ObjectFooter](crate::header::ObjectFooter) to the given Object number.
+	/// Returns a Clone of the appropriate [ObjectFooter] to the given Object number.
 	pub fn object_footer(&self, object_no: &u64) -> Option<ObjectFooter> {
 		Some(self.object_metadata.get(object_no)?.get()?.footer.clone())
 	}
@@ -550,7 +550,7 @@ impl<R: ReadAt> ZffReader<R> {
 	///   - do nothing, if the existing preloaded chunkmap is an in-memory map.
 	///   - convert the existing preloaded chunkmap to an in-memory chunkmap, if the existing preloaded chunkmap is a redb-based preloaded chunkmap.
 	pub fn set_preload_chunkmaps_mode_in_memory(&mut self) -> Result<()> {
-		self.metadata.preloaded_chunkmaps.write().unwrap().set_mode_in_memory()?;
+		self.metadata.preloaded_chunkmaps.write()?.set_mode_in_memory()?;
 		Ok(())
 	}
 
@@ -562,7 +562,7 @@ impl<R: ReadAt> ZffReader<R> {
 	///   - Initialize a empty Redb and use this.
 	///   - convert the existing preloaded (in-memory) chunkmap to the Redb (copy the content) and use the Redb as the appropriate preloaded chunkmap.
 	pub fn set_preload_chunkmap_mode_redb(&mut self, db: Database) -> Result<()> {
-		self.metadata.preloaded_chunkmaps.write().unwrap().set_mode_redb(db)
+		self.metadata.preloaded_chunkmaps.write()?.set_mode_redb(db)
 	}
 
 	/// Automatically preloads all maps of the specific object (will be used in case of encrypted maps for performance reasons).
@@ -586,7 +586,7 @@ impl<R: ReadAt> ZffReader<R> {
 				};
 				let inner_map = map.flush();
 				
-				let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write().unwrap();
+				let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
 				match *preloaded_chunkmaps {
 					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
 					PreloadedChunkMaps::InMemory(ref mut maps) => maps.chunk_header.extend(inner_map),
@@ -644,7 +644,7 @@ impl<R: ReadAt> ZffReader<R> {
 				};
 				let inner_map = map.flush();
 				
-				let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write().unwrap();
+				let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
 				match *preloaded_chunkmaps {
 					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
 					PreloadedChunkMaps::InMemory(ref mut maps) => maps.same_bytes.extend(inner_map),
@@ -705,7 +705,7 @@ impl<R: ReadAt> ZffReader<R> {
 				};
 				let inner_map = map.flush();
 				
-				let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write().unwrap();
+				let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
 				match *preloaded_chunkmaps {
 					PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
 					PreloadedChunkMaps::InMemory(ref mut maps) => maps.duplicate_chunks.extend(inner_map),
@@ -893,8 +893,6 @@ where
 			None => return Err(std::io::Error::new(std::io::ErrorKind::NotFound, ERROR_ZFFREADER_SEGMENT_NOT_FOUND)),
 		};
 	
-		// unwrap should be safe here, while we already checked that this method only will be called from [ZffObjectReader]-methods.
-		//let object_header_ref = metadata.object_header_ref(&current_object_no).unwrap();
 		let object_header_ref = &metadata.object_metadata
 		.get(current_object_no)
 		.ok_or(ZffError::new(ZffErrorKind::Missing, format!("{ERROR_MISSING_OBJECT_NO}{current_object_no}")))?

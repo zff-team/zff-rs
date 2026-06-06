@@ -113,7 +113,7 @@ impl EncodingThreadPoolManager {
         self.hashing_threads.add_thread(hash_type);
     }
 
-    /// updates the data of the hashing threads.
+    /// updates the data of the encoding threads.
     pub fn update(&mut self, data: Vec<u8>) {
         {
 			let mut w = self.data.write().unwrap();
@@ -525,7 +525,7 @@ pub(crate) fn chunking<R: ReadAt>(
 	// the condition failed and same byte flag can not be set.
 	let chunk_content = if samebyte_checklen_value == chunk_size && *encoding_thread_pool_manager.same_bytes_thread.get_result() {
 		flags.same_bytes = true;
-		let first_byte = encoding_thread_pool_manager.data.read().unwrap()[0];
+		let first_byte = encoding_thread_pool_manager.data.read()?[0];
 		ChunkContent::SameBytes(first_byte)
 	} else if let Some(deduplication_metadata) = deduplication_metadata {
 		// unwrap should be safe here, because we have already testet this before.
@@ -576,7 +576,7 @@ pub(crate) fn chunking<R: ReadAt>(
 		ChunkContent::Raw(_) => {
 			match &*encoding_thread_pool_manager.compression_thread.get_result() {
 				CompressedData::Compressed(compressed_data) => (compressed_data.clone(), true),
-				CompressedData::Raw => (encoding_thread_pool_manager.data.read().unwrap().clone(), false),
+				CompressedData::Raw => (encoding_thread_pool_manager.data.read()?.clone(), false),
 				CompressedData::Err(e) => return Err(ZffError::from(e)),
 			}
 		},

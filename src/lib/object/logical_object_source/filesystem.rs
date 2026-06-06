@@ -173,12 +173,10 @@ impl LogicalObjectSourceFilesystem {
 						},
 					};
 
-					if let Some(files_vec) = directory_children.get_mut(&parent_file_number) {
-						files_vec.push(current_file_number);
-					} else {
-						directory_children.insert(parent_file_number, Vec::new());
-						directory_children.get_mut(&parent_file_number).unwrap().push(current_file_number);
-					};
+					directory_children
+					.entry(parent_file_number)
+					.or_insert(Vec::new())
+					.push(current_file_number);
 
 					match read_link(inner_element.path()) {
 						Ok(symlink_real) => symlink_real_paths.insert(current_file_number, symlink_real),

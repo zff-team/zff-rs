@@ -22,7 +22,7 @@ pub(crate) enum EncodingState {
 	ReadEOF,
 }
 
-/// Contains a prepared data object. This can be a [PreparedChunk], a [PreparedFileHeader] or a [PreparedFileFooter].
+/// Contains a prepared data object. This can be a `PreparedChunk`, a `PreparedFileHeader` or a `PreparedFileFooter`.
 #[derive(Debug, Clone)]
 pub(crate) enum PreparedData {
 	/// A prepared chunk.
