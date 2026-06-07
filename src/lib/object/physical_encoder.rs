@@ -76,7 +76,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 		};
 
 		let mut encoding_thread_pool_manager = EncodingThreadPoolManager::new(
-			obj_header.compression_header.clone(), obj_header.chunk_size as usize);
+			obj_header.compression_header.clone());
 
 	    for h_type in hash_types {
 			encoding_thread_pool_manager.add_hashing_thread(h_type.clone());

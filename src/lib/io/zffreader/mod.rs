@@ -843,8 +843,11 @@ enum Footer {
 
 
 fn try_find_footer<R: ReadAt>(reader: &mut R) -> Result<Footer> {
-	let reader_size = reader.size()?;
-	let mut footer_offset = u64::decode_at(reader, reader_size-8)?; //uses the end to reads the last 8 bytes (footer offset)
+	let footer_offset_offset = reader
+	.size()?
+	.checked_sub(8) //uses the end to reads the last 8 bytes (footer offset)
+	.ok_or(ZffError::new(ZffErrorKind::EncodingError, ERROR_MALFORMED_SEGMENT))?;
+	let mut footer_offset = u64::decode_at(reader, footer_offset_offset)?;
 
 	if let Ok(segment_footer) = SegmentFooter::decode_at(reader, footer_offset) {
 		return Ok(Footer::Segment(segment_footer));

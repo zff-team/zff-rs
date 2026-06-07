@@ -6,6 +6,7 @@ use std::io::{Read};
 
 // - internal
 use crate::prelude::*;
+use crate::helper::decode_len;
 
 // - external
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -415,32 +416,6 @@ where
 	}
 }
 
-// TOOD: Check if this can be removed:
-/*
-impl <K, A, B> ValueEncoder for BTreeSet<BTreeMap<K, (A, B)>> 
-where
-	K: ValueEncoder,
-	A: ValueEncoder,
-	B: ValueEncoder
-{
-	fn encode_directly(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.append(&mut (self.len() as u64).encode_directly());
-		for map in self.iter() {
-			vec.append(&mut map.encode_directly());
-		}
-		vec
-	}
-
-	fn identifier(&self) -> u8 {
-		METADATA_EXT_TYPE_IDENTIFIER_VEC
-	}
-
-	fn encoded_size(&self) -> usize {
-		8 + self.iter().map(ValueEncoder::encoded_size).sum::<usize>()
-	}
-}*/
-
 impl<H> ValueEncoder for Vec<H>
 where
 	H: HeaderCoding
@@ -556,8 +531,10 @@ impl ValueDecoder for String {
 	type Item = String;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<String> {
-		let length = data.read_u64::<LittleEndian>()?;
-		let mut buffer = vec![0u8; length as usize];
+		let length = decode_len(data)?;
+		let mut buffer = Vec::new();
+		buffer.try_reserve_exact(length)?;
+		buffer.resize(length, 0);
 		data.read_exact(&mut buffer)?;
 		Ok(String::from_utf8(buffer)?)
 	}
@@ -567,8 +544,10 @@ impl ValueDecoder for str {
 	type Item = String;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<String> {
-		let length = u64::decode_directly(data)? as usize;
-		let mut buffer = vec![0u8; length];
+		let length = decode_len(data)?;
+		let mut buffer = Vec::new();
+		buffer.try_reserve_exact(length)?;
+		buffer.resize(length, 0);
 		data.read_exact(&mut buffer)?;
 		Ok(String::from_utf8(buffer)?)
 	}
@@ -578,8 +557,10 @@ impl ValueDecoder for Vec<u8> {
 	type Item = Vec<u8>;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u8>> {
-		let length = u64::decode_directly(data)? as usize;
-		let mut buffer = vec![0u8; length];
+		let length = decode_len(data)?;
+		let mut buffer = Vec::new();
+		buffer.try_reserve_exact(length)?;
+		buffer.resize(length, 0);
 		data.read_exact(&mut buffer)?;
 		Ok(buffer)
 	}
@@ -589,11 +570,11 @@ impl ValueDecoder for Vec<u64> {
 	type Item = Vec<u64>;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u64>> {
-		let length = u64::decode_directly(data)? as usize;
-		let mut vec = Vec::with_capacity(length);
+		let length = decode_len(data)?;
+		let mut vec = Vec::new();
+		vec.try_reserve_exact(length)?;
 		for _ in 0..length {
-			let content = u64::decode_directly(data)?;
-			vec.push(content);
+			vec.push(u64::decode_directly(data)?);
 		}
 		Ok(vec)
 	}
@@ -655,28 +636,6 @@ where
 	}
 }
 
-//TODO: check if this can be removed.
-/*
-impl<K, A, B> ValueDecoder for BTreeSet<BTreeMap<K, (A, B)>>
-where
-	K: ValueDecoder<Item = K> + std::cmp::Ord,
-	A: ValueDecoder<Item = A> + std::cmp::Ord,
-	B: ValueDecoder<Item = B> + std::cmp::Ord,
-{
-	type Item = BTreeSet<BTreeMap<K, (A, B)>>;
-
-	fn decode_directly<R: Read>(data: &mut R) -> Result<BTreeSet<BTreeMap<K, (A, B)>>>
-	{
-		let length = u64::decode_directly(data)? as usize;
-		let mut btree_set = BTreeSet::new();
-		for _ in 0..length {
-			let map = BTreeMap::decode_directly(data)?;
-			btree_set.insert(map);
-		}
-		Ok(btree_set)
-	}
-}*/
-
 impl<H> ValueDecoder for Vec<H>
 where
 	H: HeaderCoding<Item = H>,
@@ -684,11 +643,11 @@ where
 	type Item = Vec<H>;
 
 	fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<H>> {
-		let length = u64::decode_directly(data)? as usize;
-		let mut vec = Vec::with_capacity(length);
+		let length = decode_len(data)?;
+		let mut vec = Vec::new();
+		vec.try_reserve_exact(length)?;
 		for _ in 0..length {
-			let content = H::decode_directly(data)?;
-			vec.push(content);
+			vec.push(H::decode_directly(data)?);
 		}
 		Ok(vec)
 	}

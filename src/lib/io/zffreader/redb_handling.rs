@@ -137,9 +137,12 @@ pub(crate) fn extract_redb_chunk_header_map(db: &mut Database) -> Result<HashMap
 	let mut table_iterator = table_offset.iter()?;
 	while let Some(offset_data) = table_iterator.next_back() {
 		let (chunk_no, offset) = offset_data?;
-		let size = table_size.get(chunk_no.value())?.unwrap();
-		let flags = table_flags.get(chunk_no.value())?.unwrap();
-		let integrity_hash = table_integrity_hash.get(chunk_no.value())?.unwrap();
+		let size = table_size.get(chunk_no.value())?
+		.ok_or(ZffError::new(ZffErrorKind::DatabaseError, ERROR_NOT_IN_MAP))?;
+		let flags = table_flags.get(chunk_no.value())?
+		.ok_or(ZffError::new(ZffErrorKind::DatabaseError, ERROR_NOT_IN_MAP))?;
+		let integrity_hash = table_integrity_hash.get(chunk_no.value())?
+		.ok_or(ZffError::new(ZffErrorKind::DatabaseError, ERROR_NOT_IN_MAP))?;
 		let chunk_header = ChunkHeader::new(
 			offset.value(),
 			size.value(),

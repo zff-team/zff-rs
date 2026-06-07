@@ -4,14 +4,16 @@
 //! including data structure helpers and encoding/decoding utilities.
 
 // - STD
-use std::io::{Error as IoError, ErrorKind as IoEKind};
+use std::io::{Error as IoError, ErrorKind as IoEKind, Read};
 use std::collections::BTreeMap;
 
 // - internal
 use crate::{
+    ValueDecoder,
     ChunkContent,
     Result,
     ERROR_MALFORMED_SEGMENT,
+    ZffError, ZffErrorKind,
 };
 // - external
 #[cfg(feature = "serde")]
@@ -201,4 +203,40 @@ pub(crate) fn copy_chunk_content_to_buf(
 		ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
 	};
 	Ok(())
+}
+
+pub(crate) fn decode_len<R: Read>(data: &mut R) -> Result<usize> {
+    let length = u64::decode_directly(data)?;
+    usize::try_from(length)
+        .map_err(|_| ZffError::new(ZffErrorKind::EncodingError, "decoded length does not fit usize"))
+}
+
+pub(crate) fn zstd_compress_if_worthwhile(
+    buf: &[u8],
+    compression_level: i32,
+    compression_threshold: f32,
+) -> Result<Option<Vec<u8>>> {
+    if !compression_threshold.is_finite() || compression_threshold <= 0.0 {
+        return Err(ZffError::new(
+            ZffErrorKind::Invalid,
+            "invalid compression threshold",
+        ));
+    }
+
+    let max_compressed_len = ((buf.len() as f64) / compression_threshold as f64).floor() as usize;
+    let read_limit = max_compressed_len.saturating_add(1) as u64;
+
+    let mut stream = zstd::stream::read::Encoder::new(buf, compression_level)?;
+    let mut compressed = Vec::new();
+
+    stream
+        .by_ref()
+        .take(read_limit)
+        .read_to_end(&mut compressed)?;
+
+    if compressed.len() > max_compressed_len {
+        Ok(None)
+    } else {
+        Ok(Some(compressed))
+    }
 }

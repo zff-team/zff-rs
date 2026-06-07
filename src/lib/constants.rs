@@ -114,6 +114,7 @@ pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP: &str = "Coul
 pub(crate) const ERROR_NOT_IN_MAP: &str = "Data not in map";
 pub(crate) const ERROR_NO_INPUT_FILE: &str = "There is no input file";
 pub(crate) const ERROR_UNKNOWN_SPECIAL_FILETYPE: &str = "Unknown file type";
+pub(crate) const ERROR_FILE_NOT_IN_ROOT_PATH: &str = "File not in Root-path.";
 pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str = "Could not read header offsets of object no. ";
 pub(crate) const ERROR_UNSUPPORTED_METADATA_EXT: &str = "Unsupported metadata extended type identifier: ";
 pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segment footer";

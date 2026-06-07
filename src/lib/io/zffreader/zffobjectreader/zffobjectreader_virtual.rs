@@ -333,7 +333,12 @@ impl<R: ReadAt> ReadAtFile for ZffObjectReaderVirtual<R> {
 						.ok_or(IoError::other(ERROR_MALFORMED_SEGMENT))?
 						+ source_pos / source_chunk_size
 				},
-				_ => unimplemented!(),
+				ObjectFooter::Virtual(_) => {
+				return Err(IoError::new(
+					IoEKind::Unsupported,
+					"virtual object extents cannot currently reference another virtual object",
+				));
+			}
 			};
 
 			let source_inner_pos = (source_pos % source_chunk_size) as usize;

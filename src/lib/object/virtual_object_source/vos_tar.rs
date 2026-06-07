@@ -216,7 +216,8 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
                 // as we have already checked that the current file is 
                 // not in root path.
                 let path = entry.path()?;
-                let parent_path = path.parent()?;
+                let parent_path = path.parent()
+                .ok_or_else(|| ZffError::new(ZffErrorKind::IO, ERROR_FILE_NOT_IN_ROOT_PATH))?;
                 let parent_filenumber = match parent_dir_filenumber_map.get(&parent_path.to_path_buf()) { // check if the trailing separator is a problem.
                     Some(parent_filenumber) => *parent_filenumber,
                     None => return Err(ZffError::new(ZffErrorKind::EncodingError, 

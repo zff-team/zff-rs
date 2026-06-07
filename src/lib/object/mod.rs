@@ -29,8 +29,8 @@ use crate::{
 	io::{
 		calculate_xxhash,
 		check_same_byte,
-		buffer_chunk,
 	},
+	helper::zstd_compress_if_worthwhile,
 };
 #[cfg(any(feature = "los_tar", feature = "vos_tar"))]
 use crate::helper::parse_unix_timestamp_nanos;
@@ -96,12 +96,12 @@ pub struct EncodingThreadPoolManager {
 
 impl EncodingThreadPoolManager {
     /// creates a new ThreadPoolManager with the given number of hashing threads.
-    pub fn new(compression_header: CompressionHeader, chunk_size: usize) -> Self {
+    pub fn new(compression_header: CompressionHeader) -> Self {
         let data = Arc::new(RwLock::new(Vec::new()));
         let hashing_thread_manager = HashingThreadManager::new(Arc::clone(&data));
         Self {
             hashing_threads: hashing_thread_manager,
-            compression_thread: CompressionThread::new(compression_header, chunk_size, Arc::clone(&data)),
+            compression_thread: CompressionThread::new(compression_header, Arc::clone(&data)),
 			same_bytes_thread: SameBytesThread::new(Arc::clone(&data)),
             xxhash_thread: XxHashThread::new(Arc::clone(&data)),
             data,
@@ -371,7 +371,7 @@ pub(crate) struct CompressionThread {
 
 impl CompressionThread {
 	/// creates a new compression thread.
-	pub fn new(compression_header: CompressionHeader, chunk_size: usize, data: Arc<RwLock<Vec<u8>>>) -> Self {
+	pub fn new(compression_header: CompressionHeader, data: Arc<RwLock<Vec<u8>>>) -> Self {
 		let (trigger, trigger_receiver) = crossbeam::channel::unbounded::<crossbeam::sync::WaitGroup>();
 		let result = Arc::new(RwLock::new(CompressedData::Raw));
 		let c_result = Arc::clone(&result);
@@ -380,7 +380,7 @@ impl CompressionThread {
 			while let Ok(wg) = trigger_receiver.recv() {
 				let mut w_result = c_result.write().unwrap();
 				let r_data = c_data.read().unwrap();
-				*w_result = Self::compress_buffer(&r_data, chunk_size, &compression_header);
+				*w_result = Self::compress_buffer(&r_data, &compression_header);
 				drop(wg);
 			}
 		});
@@ -391,25 +391,20 @@ impl CompressionThread {
 		}
 	}
 
-	fn compress_buffer(buf: &std::sync::RwLockReadGuard<'_, Vec<u8>>, chunk_size: usize,compression_header: &CompressionHeader) -> CompressedData {
+	fn compress_buffer(buf: &std::sync::RwLockReadGuard<'_, Vec<u8>>, compression_header: &CompressionHeader) -> CompressedData {
 		let compression_threshold = compression_header.threshold;
 	
 		match compression_header.algorithm {
 			CompressionAlgorithm::None => CompressedData::Raw,
 			CompressionAlgorithm::Zstd => {
 				let compression_level = compression_header.level as i32;
-				let mut stream = match zstd::stream::read::Encoder::new(buf.as_slice(), compression_level) {
-					Ok(stream) => stream,
-					Err(e) => return CompressedData::Err(ZffError::from(e)),
-				};
-				// unwrap is safe here, because the read will not fail on a Vec<u8>.
-				let buffered_chunk = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize).unwrap();
-				if (buf.len() as f32 / buffered_chunk.buffer.len() as f32) < compression_threshold {
-					CompressedData::Raw
-				} else {
-					CompressedData::Compressed(buffered_chunk.buffer)
+
+				match zstd_compress_if_worthwhile(&buf, compression_level, compression_threshold) {
+					Ok(Some(compressed_data)) => CompressedData::Compressed(compressed_data),
+					Ok(None) => CompressedData::Raw,
+					Err(e) => CompressedData::Err(e),
 				}
-			},
+			}
 			CompressionAlgorithm::Lz4 => {
 				let buffer = Vec::new();
 				let mut compressor = lz4_flex::frame::FrameEncoder::new(buffer);

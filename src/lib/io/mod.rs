@@ -25,6 +25,7 @@ use std::os::unix::fs::{
 // - internal
 use crate::prelude::*;
 use crate::{
+    helper::zstd_compress_if_worthwhile,
     LogicalObjectEncoder,
     ObjectEncoder,
     PhysicalObjectEncoder,
@@ -180,7 +181,7 @@ pub fn calculate_xxhash(buffer: &[u8]) -> u64 {
 /// 
 /// If the compression rate is greater than the threshold value of the given
 /// [CompressionHeader], the function returns a tuple of compressed bytes and the flag, if the bytes was compressed or not.
-pub fn compress_buffer(buf: Vec<u8>, chunk_size: usize, compression_header: &CompressionHeader) -> Result<(Vec<u8>, bool)> {
+pub fn compress_buffer(buf: Vec<u8>, compression_header: &CompressionHeader) -> Result<(Vec<u8>, bool)> {
     let mut compression_flag = false;
     let compression_threshold = compression_header.threshold;
 
@@ -188,15 +189,12 @@ pub fn compress_buffer(buf: Vec<u8>, chunk_size: usize, compression_header: &Com
         CompressionAlgorithm::None => Ok((buf, compression_flag)),
         CompressionAlgorithm::Zstd => {
             let compression_level = compression_header.level as i32;
-            let mut stream = zstd::stream::read::Encoder::new(buf.as_slice(), compression_level)?;
-            let buffered_chunk = buffer_chunk(&mut stream, chunk_size * compression_header.level as usize)?;
-            if (buf.len() as f32 / buffered_chunk.buffer.len() as f32) < compression_threshold {
-                Ok((buf, compression_flag))
-            } else {
-                compression_flag = true;
-                Ok((buffered_chunk.buffer, compression_flag))
+
+            match zstd_compress_if_worthwhile(&buf, compression_level, compression_threshold)? {
+                Some(compressed_data) => Ok((compressed_data, true)),
+                None => Ok((buf, false)),
             }
-        },
+        }
         CompressionAlgorithm::Lz4 => {
             let buffer = Vec::new();
             let mut compressor = lz4_flex::frame::FrameEncoder::new(buffer);
@@ -397,7 +395,7 @@ pub(crate) fn add_to_hardlink_map(
     metadata: &Metadata,
     filenumber: u64) -> Option<u64> {
     if metadata.nlink() > 1 {
-        let inner_map = hardlink_map.entry(metadata.dev()).or_insert_with(HashMap::new);
+        let inner_map = hardlink_map.entry(metadata.dev()).or_default();
         if let Some(fno) = inner_map.get_mut(&metadata.ino()) {
             return Some(*fno);
         }
@@ -627,7 +625,7 @@ pub(crate) fn create_iterator<C: AsRef<Path>>(
 
     directory_children
     .entry(dir_parent_file_number)
-    .or_insert(Vec::new())
+    .or_default()
     .push(dir_current_file_number);
 
 	let mut file_header = get_file_header(current_dir.as_ref(), dir_current_file_number, dir_parent_file_number)?;

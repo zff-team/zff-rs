@@ -175,7 +175,7 @@ impl LogicalObjectSourceFilesystem {
 
 					directory_children
 					.entry(parent_file_number)
-					.or_insert(Vec::new())
+					.or_default()
 					.push(current_file_number);
 
 					match read_link(inner_element.path()) {
