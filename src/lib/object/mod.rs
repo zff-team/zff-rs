@@ -399,7 +399,7 @@ impl CompressionThread {
 			CompressionAlgorithm::Zstd => {
 				let compression_level = compression_header.level as i32;
 
-				match zstd_compress_if_worthwhile(&buf, compression_level, compression_threshold) {
+				match zstd_compress_if_worthwhile(buf, compression_level, compression_threshold) {
 					Ok(Some(compressed_data)) => CompressedData::Compressed(compressed_data),
 					Ok(None) => CompressedData::Raw,
 					Err(e) => CompressedData::Err(e),

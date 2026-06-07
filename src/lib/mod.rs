@@ -35,6 +35,9 @@ mod platform_string;
 /// Re-exports commonly used types, traits, and constants for convenient access.
 pub mod prelude;
 
+#[cfg(test)]
+mod tests;
+
 // - re-exports
 pub use hashing::*;
 pub use compression::*;
