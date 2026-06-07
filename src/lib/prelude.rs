@@ -20,22 +20,9 @@
 
 // - internal
 pub use crate::{
-    constants::*,
-    CompressionAlgorithm,
-    EncryptionAlgorithm,
-    footer::*,
-    header::*,
-    Hash,
-    HashType,
-    KDFScheme,
-    PlatformString,
-    PBEScheme,
-    Result,
-    traits::*,
-    VirtualFileFooterMetadata,
-    ZffError, ZffErrorKind,
+    CompressionAlgorithm, EncryptionAlgorithm, Hash, HashType, KDFScheme, PBEScheme,
+    PlatformString, Result, VirtualFileFooterMetadata, ZffError, ZffErrorKind, constants::*,
+    footer::*, header::*, traits::*,
 };
 
-pub(crate) use crate::{
-    chunk::ChunkContent,
-};
+pub(crate) use crate::chunk::ChunkContent;

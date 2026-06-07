@@ -3,13 +3,12 @@ use std::io::{Cursor, Read};
 use std::sync::Mutex;
 
 use crate::io::{
-    compress_buffer,
+    ZffCreationParameters, compress_buffer,
     zffreader::{ObjectType as ReaderObjectType, ZffReader},
     zffwriter::{ZffFilesOutput, ZffWriter},
-    ZffCreationParameters,
 };
 use crate::prelude::*;
-use crate::{decompress_buffer, HashType};
+use crate::{HashType, decompress_buffer};
 
 fn physical_object_header(chunk_size: u64, compression_header: CompressionHeader) -> ObjectHeader {
     ObjectHeader::new(

@@ -1,141 +1,146 @@
 // - STD
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::fmt;
-use std::io::{Cursor};
+use std::io::Cursor;
 
 // - internal
 use crate::prelude::*;
 
 // - external
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// The main footer is the last thing, which is written at the end of the last segment.\
 /// This footer contains a lot of variable information about the zff container (e.g. number of segments, ...).
-#[derive(Debug,Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct MainFooter {
-	/// the total number of segments for this container
-	pub number_of_segments: u64,
-	/// the segment numbers where the appropriate object header can be found.
-	pub object_header: BTreeMap<u64, u64>, // <object number, segment number>
-	/// the segment numbers where the appropriate object footer can be found.
-	pub object_footer: BTreeMap<u64, u64>, // <object number, segment number>
-	/// the segment numbers where the appropriate chunkmap can be found.
-	pub chunk_header_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
-	/// The segment numbers where the appropriate chunkmap can be found.
-	pub chunk_samebytes_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
-	/// The segment numbers where the appropriate chunkmap can be found.
-	pub chunk_dedup_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
-	/// some optional (globally) description notes for the container.
-	pub description_notes: Option<String>,
-	/// offset in the current segment, where the footer starts.
-	pub footer_offset: u64,
+    /// the total number of segments for this container
+    pub number_of_segments: u64,
+    /// the segment numbers where the appropriate object header can be found.
+    pub object_header: BTreeMap<u64, u64>, // <object number, segment number>
+    /// the segment numbers where the appropriate object footer can be found.
+    pub object_footer: BTreeMap<u64, u64>, // <object number, segment number>
+    /// the segment numbers where the appropriate chunkmap can be found.
+    pub chunk_header_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+    /// The segment numbers where the appropriate chunkmap can be found.
+    pub chunk_samebytes_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+    /// The segment numbers where the appropriate chunkmap can be found.
+    pub chunk_dedup_maps: BTreeMap<u64, u64>, //<highest chunk number, segment number>
+    /// some optional (globally) description notes for the container.
+    pub description_notes: Option<String>,
+    /// offset in the current segment, where the footer starts.
+    pub footer_offset: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
 impl MainFooter {
-	/// creates a new MainFooter with a given values.
-	pub fn new(
-		number_of_segments: u64,
-		object_header: BTreeMap<u64, u64>,
-		object_footer: BTreeMap<u64, u64>,
-		chunk_header_maps: BTreeMap<u64, u64>,
-		chunk_samebytes_maps: BTreeMap<u64, u64>,
-		chunk_dedup_maps: BTreeMap<u64, u64>,
-		description_notes: Option<String>,
-		footer_offset: u64) -> MainFooter {
-		Self {
-			number_of_segments,
-			object_header,
-			object_footer,
-			chunk_header_maps,
-			chunk_samebytes_maps,
-			chunk_dedup_maps,
-			description_notes,
-			footer_offset,
-		}
-	}
+    /// creates a new MainFooter with a given values.
+    pub fn new(
+        number_of_segments: u64,
+        object_header: BTreeMap<u64, u64>,
+        object_footer: BTreeMap<u64, u64>,
+        chunk_header_maps: BTreeMap<u64, u64>,
+        chunk_samebytes_maps: BTreeMap<u64, u64>,
+        chunk_dedup_maps: BTreeMap<u64, u64>,
+        description_notes: Option<String>,
+        footer_offset: u64,
+    ) -> MainFooter {
+        Self {
+            number_of_segments,
+            object_header,
+            object_footer,
+            chunk_header_maps,
+            chunk_samebytes_maps,
+            chunk_dedup_maps,
+            description_notes,
+            footer_offset,
+        }
+    }
 
-	/// returns the description notes of the zff container (Not to be mixed up with the "notes" which can be created in the description header of each object!)).
-	pub fn description_notes(&self) -> Option<&str> {
-		Some(self.description_notes.as_ref()?)
-	}
+    /// returns the description notes of the zff container (Not to be mixed up with the "notes" which can be created in the description header of each object!)).
+    pub fn description_notes(&self) -> Option<&str> {
+        Some(self.description_notes.as_ref()?)
+    }
 
-	/// Returns a reference of the global chunk samebytes table.
-	pub fn chunk_samebytes_maps(&self) -> &BTreeMap<u64, u64> {
-		&self.chunk_samebytes_maps
-	}
+    /// Returns a reference of the global chunk samebytes table.
+    pub fn chunk_samebytes_maps(&self) -> &BTreeMap<u64, u64> {
+        &self.chunk_samebytes_maps
+    }
 
-	/// Returns a reference of the global chunk deduplication table.
-	pub fn chunk_dedup_maps(&self) -> &BTreeMap<u64, u64> {
-		&self.chunk_dedup_maps
-	}
+    /// Returns a reference of the global chunk deduplication table.
+    pub fn chunk_dedup_maps(&self) -> &BTreeMap<u64, u64> {
+        &self.chunk_dedup_maps
+    }
 }
 
 impl HeaderCoding for MainFooter {
-	type Item = Self;
+    type Item = Self;
 
-	fn identifier() -> u32 {
-		FOOTER_IDENTIFIER_MAIN_FOOTER
-	}
+    fn identifier() -> u32 {
+        FOOTER_IDENTIFIER_MAIN_FOOTER
+    }
 
-	fn version() -> u8 {
-		DEFAULT_FOOTER_VERSION_MAIN_FOOTER
-	}
+    fn version() -> u8 {
+        DEFAULT_FOOTER_VERSION_MAIN_FOOTER
+    }
 
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.number_of_segments.encode_directly());
-		vec.extend_from_slice(&self.object_header.encode_directly());
-		vec.extend_from_slice(&self.object_footer.encode_directly());
-		vec.extend_from_slice(&self.chunk_header_maps.encode_directly());
-		vec.extend_from_slice(&self.chunk_samebytes_maps.encode_directly());
-		vec.extend_from_slice(&self.chunk_dedup_maps.encode_directly());
-		if let Some(description_notes) = &self.description_notes {
-			vec.extend_from_slice(&description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES));
-		};
-		vec.extend_from_slice(&self.footer_offset.encode_directly());
-		vec
-	}
+    fn encode_content(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(&self.number_of_segments.encode_directly());
+        vec.extend_from_slice(&self.object_header.encode_directly());
+        vec.extend_from_slice(&self.object_footer.encode_directly());
+        vec.extend_from_slice(&self.chunk_header_maps.encode_directly());
+        vec.extend_from_slice(&self.chunk_samebytes_maps.encode_directly());
+        vec.extend_from_slice(&self.chunk_dedup_maps.encode_directly());
+        if let Some(description_notes) = &self.description_notes {
+            vec.extend_from_slice(
+                &description_notes.encode_for_key(ENCODING_KEY_DESCRIPTION_NOTES),
+            );
+        };
+        vec.extend_from_slice(&self.footer_offset.encode_directly());
+        vec
+    }
 
-	fn decode_content(data: &[u8]) -> Result<MainFooter> {
-		let mut cursor = Cursor::new(data);
-		Self::check_version(&mut cursor)?;
-		let number_of_segments = u64::decode_directly(&mut cursor)?;
-		let object_header = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let object_footer = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_header_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_samebytes_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let chunk_dedup_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
-		let position = cursor.position();
-		let description_notes = match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
-			Ok(value) => Some(value),
-			Err(e) => match e.kind_ref() {
-				ZffErrorKind::KeyNotOnPosition => {
-					cursor.set_position(position);
-					None
-				},
-				_ => return Err(e)
-			},
-		};
-		let footer_offset = u64::decode_directly(&mut cursor)?;
-		Ok(MainFooter::new(
-			number_of_segments, 
-			object_header, 
-			object_footer, 
-			chunk_header_maps,
-			chunk_samebytes_maps,
-			chunk_dedup_maps,
-			description_notes, 
-			footer_offset))
-	}
+    fn decode_content(data: &[u8]) -> Result<MainFooter> {
+        let mut cursor = Cursor::new(data);
+        Self::check_version(&mut cursor)?;
+        let number_of_segments = u64::decode_directly(&mut cursor)?;
+        let object_header = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let object_footer = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let chunk_header_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let chunk_samebytes_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let chunk_dedup_maps = BTreeMap::<u64, u64>::decode_directly(&mut cursor)?;
+        let position = cursor.position();
+        let description_notes =
+            match String::decode_for_key(&mut cursor, ENCODING_KEY_DESCRIPTION_NOTES) {
+                Ok(value) => Some(value),
+                Err(e) => match e.kind_ref() {
+                    ZffErrorKind::KeyNotOnPosition => {
+                        cursor.set_position(position);
+                        None
+                    }
+                    _ => return Err(e),
+                },
+            };
+        let footer_offset = u64::decode_directly(&mut cursor)?;
+        Ok(MainFooter::new(
+            number_of_segments,
+            object_header,
+            object_footer,
+            chunk_header_maps,
+            chunk_samebytes_maps,
+            chunk_dedup_maps,
+            description_notes,
+            footer_offset,
+        ))
+    }
 }
 
 // - implement fmt::Display
 impl fmt::Display for MainFooter {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", Self::struct_name())
-	}
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", Self::struct_name())
+    }
 }

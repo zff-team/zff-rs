@@ -71,65 +71,87 @@ pub const ENCODING_KEY_NOTES: &str = "no";
 pub const ENCODING_KEY_DESCRIPTION_NOTES: &str = "dn";
 
 // chunk header flags
-pub(crate) const ERROR_FLAG_VALUE: u8 = 1<<0;
-pub(crate) const COMPRESSION_FLAG_VALUE: u8 = 1<<1;
-pub(crate) const SAME_BYTES_FLAG_VALUE: u8 = 1<<2;
-pub(crate) const DUPLICATION_FLAG_VALUE: u8 = 1<<3;
-pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1<<4;
-pub(crate) const EMPTY_FILE_FLAG_VALUE: u8 = 1<<5;
-pub(crate) const VIRTUAL_FLAG_VALUE: u8 = 1<<6;
+pub(crate) const ERROR_FLAG_VALUE: u8 = 1 << 0;
+pub(crate) const COMPRESSION_FLAG_VALUE: u8 = 1 << 1;
+pub(crate) const SAME_BYTES_FLAG_VALUE: u8 = 1 << 2;
+pub(crate) const DUPLICATION_FLAG_VALUE: u8 = 1 << 3;
+pub(crate) const ENCRYPTION_FLAG_VALUE: u8 = 1 << 4;
+pub(crate) const EMPTY_FILE_FLAG_VALUE: u8 = 1 << 5;
+pub(crate) const VIRTUAL_FLAG_VALUE: u8 = 1 << 6;
 
 // object header flags
-pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1<<0;
-pub(crate) const SIGN_HASH_FLAG_VALUE: u8 = 1<<1;
-pub(crate) const PASSIVE_OBJECT_FLAG: u8 = 1<<2;
+pub(crate) const ENCRYPT_OBJECT_FLAG_VALUE: u8 = 1 << 0;
+pub(crate) const SIGN_HASH_FLAG_VALUE: u8 = 1 << 1;
+pub(crate) const PASSIVE_OBJECT_FLAG: u8 = 1 << 2;
 
 // - Error messages
 pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_HASH_TYPE: &str = "Unknown hash type value.";
-pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF: &str = "The read identifier does not match to any known KDF header identifier.";
-pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME: &str = "Unknown PBEncryption scheme value.";
+pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER_KDF: &str =
+    "The read identifier does not match to any known KDF header identifier.";
+pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_PBE_SCHEME: &str =
+    "Unknown PBEncryption scheme value.";
 pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_KDF_SCHEME: &str = "Unknown KDF scheme value.";
-pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM: &str = "Unknown encryption algorithm value.";
+pub(crate) const ERROR_HEADER_DECODER_UNKNOWN_ENCRYPTION_ALGORITHM: &str =
+    "Unknown encryption algorithm value.";
 pub(crate) const FILE_EXTENSION_PARSER_ERROR: &str = "Error while trying to parse extension value";
-pub(crate) const ERROR_HEADER_DECODER_HEADER_LENGTH: &str = "Unable to read header length from given data.";
+pub(crate) const ERROR_HEADER_DECODER_HEADER_LENGTH: &str =
+    "Unable to read header length from given data.";
 pub(crate) const ERROR_HEADER_DECODER_KEY_POSITION: &str = "Key not in position.";
-pub(crate) const ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM: &str = "unknown compression algorithm value";
-pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER: &str = "The read identifier does not match the header identifier.";
-pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &str = "A segment with a valid zff main footer is missing.";
+pub(crate) const ERROR_HEADER_DECODER_COMPRESSION_ALGORITHM: &str =
+    "unknown compression algorithm value";
+pub(crate) const ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER: &str =
+    "The read identifier does not match the header identifier.";
+pub(crate) const ERROR_MISSING_SEGMENT_MAIN_FOOTER: &str =
+    "A segment with a valid zff main footer is missing.";
 pub(crate) const ERROR_MISSING_SEGMENT: &str = "A segment is missing. Segment no: ";
-pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str = "Missing object header in segment with following object number: ";
-pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str = "Missing object footer in segment with following object number: ";
+pub(crate) const ERROR_MISSING_OBJECT_HEADER_IN_SEGMENT: &str =
+    "Missing object header in segment with following object number: ";
+pub(crate) const ERROR_MISSING_OBJECT_FOOTER_IN_SEGMENT: &str =
+    "Missing object footer in segment with following object number: ";
 pub(crate) const ERROR_MALFORMED_SEGMENT: &str = "A Segment is malformed.";
 pub(crate) const ERROR_MISSING_OBJECT_NO: &str = "Missing object number: ";
 pub(crate) const ERROR_MISSING_FILE_NUMBER: &str = "Missing filenumber: ";
-pub(crate) const ERROR_ENCRYPTION_PRECONDITION_FAILED: &str = "Encryption and encoding precondition failed.";
-pub(crate) const ERROR_MISSING_ENCRYPTION_HEADER_KEY: &str = "Trying to decode encrypted content, but encryption header or key is missing.";
+pub(crate) const ERROR_ENCRYPTION_PRECONDITION_FAILED: &str =
+    "Encryption and encoding precondition failed.";
+pub(crate) const ERROR_MISSING_ENCRYPTION_HEADER_KEY: &str =
+    "Trying to decode encrypted content, but encryption header or key is missing.";
 pub(crate) const NO_ENCRYPTION_DETECTED: &str = "No encryption detected.";
-pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str = "Trying to decrypt unencryted object.";
+pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str =
+    "Trying to decrypt unencryted object.";
 pub(crate) const ERROR_INVALID_TYPE_FLAG_VALUE: &str = "Invalid type flag value:";
 pub(crate) const ERROR_UNSUPPORTED_VERSION: &str = "Unsupported version: ";
 pub(crate) const ERROR_WRONG_SIGNATURE_KEY_LENGTH: &str = "Wrong signature key length.";
-pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_SAMEBYTE: &str = "Could not find expected samebyte in chunk content.";
-pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP: &str = "Could not find expected chunk number in map: ";
+pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_SAMEBYTE: &str =
+    "Could not find expected samebyte in chunk content.";
+pub(crate) const ERROR_COULD_NOT_FIND_EXPECTED_CHUNK_NUMBER_IN_MAP: &str =
+    "Could not find expected chunk number in map: ";
 pub(crate) const ERROR_NOT_IN_MAP: &str = "Data not in map";
 pub(crate) const ERROR_NO_INPUT_FILE: &str = "There is no input file";
 pub(crate) const ERROR_UNKNOWN_SPECIAL_FILETYPE: &str = "Unknown file type";
 #[cfg(any(feature = "los_tar", feature = "vos_tar"))]
 pub(crate) const ERROR_FILE_NOT_IN_ROOT_PATH: &str = "File not in Root-path.";
-pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str = "Could not read header offsets of object no. ";
-pub(crate) const ERROR_UNSUPPORTED_METADATA_EXT: &str = "Unsupported metadata extended type identifier: ";
+pub(crate) const ERROR_UNREADABLE_OBJECT_HEADER_OFFSET_NO: &str =
+    "Could not read header offsets of object no. ";
+pub(crate) const ERROR_UNSUPPORTED_METADATA_EXT: &str =
+    "Unsupported metadata extended type identifier: ";
 pub(crate) const ERROR_UNDECODABLE_SEGMENT_FOOTER: &str = "Could not decode segment footer";
 pub(crate) const ERROR_UNDECODABLE_MAIN_FOOTER: &str = "Could not decode main footer";
 pub(crate) const ERROR_CHUNK_IS_ENCRYPTED_: &str = "The chunk is encrypted; chunk no ";
-pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str = "The segment of the chunk was not found.";
+pub(crate) const ERROR_ZFFREADER_SEGMENT_NOT_FOUND: &str =
+    "The segment of the chunk was not found.";
 pub(crate) const ERROR_ZFFREADER_OPERATION: &str = "Operation not available.";
-pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str = "Operation not available for encrypted objects.";
-pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str = "Operation not available for physical objects.";
-pub(crate) const ERROR_ZFFREADER_MISSING_VFM: &str = "Missing virtual file map information for virtual file: ";
+pub(crate) const ERROR_ZFFREADER_OPERATION_ENCRYPTED_OBJECT: &str =
+    "Operation not available for encrypted objects.";
+pub(crate) const ERROR_ZFFREADER_OPERATION_PHYSICAL_OBJECT: &str =
+    "Operation not available for physical objects.";
+pub(crate) const ERROR_ZFFREADER_MISSING_VFM: &str =
+    "Missing virtual file map information for virtual file: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VFM: &str = "Missing offset in virtual file map: ";
-pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str = "Necessary passive object is not initialized/decrypted correctly: Object no. ";
+pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str =
+    "Necessary passive object is not initialized/decrypted correctly: Object no. ";
 
-pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str = "Unseekable position (position is negative).";
+pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str =
+    "Unseekable position (position is negative).";
 
 pub(crate) const ERROR_ZFFREADER_MISSING_OBJECT: &str = "Missing object number in zffreader: ";
 
@@ -138,11 +160,12 @@ pub(crate) const ERROR_TAR_ENCODING_ERROR_NO_FILENAME: &str = "Missing filename 
 #[cfg(feature = "los_tar")]
 pub(crate) const ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF: &str = "unexpected EOF in tar entry";
 #[cfg(feature = "los_tar")]
-pub(crate) const ERROR_ENCODING_TAR_NO_BACKWARD: &str = "cannot seek backwards in forward tar stream";
+pub(crate) const ERROR_ENCODING_TAR_NO_BACKWARD: &str =
+    "cannot seek backwards in forward tar stream";
 #[cfg(any(feature = "los_tar", feature = "vos_tar"))]
-pub(crate) const ERROR_TAR_PREPROCESSED_ENTRY: &str ="cannot process the entry type. This tar entry type should already be preprocessed. This is an application bug. The appropriate entry type is: ";
+pub(crate) const ERROR_TAR_PREPROCESSED_ENTRY: &str = "cannot process the entry type. This tar entry type should already be preprocessed. This is an application bug. The appropriate entry type is: ";
 #[cfg(any(feature = "los_tar", feature = "vos_tar"))]
-pub(crate) const ERROR_TAR_MISSING_HARDLINK_TARGET: &str = "Missing hardlink target for tar entry"; 
+pub(crate) const ERROR_TAR_MISSING_HARDLINK_TARGET: &str = "Missing hardlink target for tar entry";
 
 // Default values
 pub(crate) const DEFAULT_LENGTH_HEADER_IDENTIFIER: usize = 4;
@@ -154,7 +177,6 @@ pub(crate) const DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT: u8 = 11;
 pub(crate) const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
 
 pub(crate) const DEFAULT_CHUNK_CACHE_CAPACITY: u64 = 10;
-
 
 /// The number of the first object in a zff container.
 pub const INITIAL_OBJECT_NUMBER: u64 = 1;
@@ -250,7 +272,6 @@ pub const DEFAULT_READ_BUFFER_SIZE: usize = 65536;
 /// Small buffer size for metadata operations
 pub const SMALL_BUFFER_SIZE: usize = 8192;
 
-
 // file metadata extended values
 #[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_DEVID: &str = "devid";
@@ -275,24 +296,29 @@ pub const METADATA_CTIME: &str = "ctime";
 /// The metadata key for btime.
 pub const METADATA_BTIME: &str = "btime";
 
-
 // - ChunkMap
 /// Table name for the redb deduplication chunkmap (xxhashes)
 pub const CHUNK_MAP_TABLE: TableDefinition<u64, Vec<u64>> = TableDefinition::new("map");
 /// Table name for the redb deduplication chunkmap (blake3 hashes)
 pub const CHUNK_MAP_B3_TABLE: TableDefinition<u64, &[u8; 32]> = TableDefinition::new("b3_map");
 /// Table name for the redb preloaded chunk offset map
-pub const PRELOADED_CHUNK_OFFSET_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_offset_map");
+pub const PRELOADED_CHUNK_OFFSET_MAP_TABLE: TableDefinition<u64, u64> =
+    TableDefinition::new("preloaded_offset_map");
 /// Table name for the redb preloaded chunk size map
-pub const PRELOADED_CHUNK_SIZE_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_size_map");
+pub const PRELOADED_CHUNK_SIZE_MAP_TABLE: TableDefinition<u64, u64> =
+    TableDefinition::new("preloaded_size_map");
 /// Table name for the redb preloaded chunk flags map
-pub const PRELOADED_CHUNK_FLAGS_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_flags_map");
+pub const PRELOADED_CHUNK_FLAGS_MAP_TABLE: TableDefinition<u64, u8> =
+    TableDefinition::new("preloaded_flags_map");
 /// Table name for the redb preloaded chunk xxhash map
-pub const PRELOADED_CHUNK_XXHASH_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_xxhash_map");
+pub const PRELOADED_CHUNK_XXHASH_MAP_TABLE: TableDefinition<u64, u64> =
+    TableDefinition::new("preloaded_xxhash_map");
 /// Table name for the redb preloaded same byte data
-pub const PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE: TableDefinition<u64, u8> = TableDefinition::new("preloaded_same_bytes");
+pub const PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE: TableDefinition<u64, u8> =
+    TableDefinition::new("preloaded_same_bytes");
 /// Table name for the redb preloaded chunk duplication map
-pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> = TableDefinition::new("preloaded_dedup_map");
+pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> =
+    TableDefinition::new("preloaded_dedup_map");
 
 // Unix ACLs
 #[cfg(target_family = "unix")]

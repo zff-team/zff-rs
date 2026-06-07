@@ -20,7 +20,7 @@ use std::os::unix::fs::FileExt;
 use std::os::windows::fs::FileExt;
 
 // - internal
-use crate::constants::{SMALL_BUFFER_SIZE, DEFAULT_READ_BUFFER_SIZE};
+use crate::constants::{DEFAULT_READ_BUFFER_SIZE, SMALL_BUFFER_SIZE};
 
 pub(crate) struct ReadAtCursor<'a, R: ReadAt + ?Sized> {
     data: &'a R,
@@ -92,7 +92,10 @@ pub trait ReadAt {
         while !buf.is_empty() {
             match self.read_at(buf, offset) {
                 Ok(0) => return Err(Error::new(ErrorKind::UnexpectedEof, "early eof")),
-                Ok(n) => { buf = &mut buf[n..]; offset += n as u64; }
+                Ok(n) => {
+                    buf = &mut buf[n..];
+                    offset += n as u64;
+                }
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e),
             }
@@ -127,7 +130,7 @@ pub trait ReadAt {
             }
         }
 
-        Ok((offset-start_offset) as usize)
+        Ok((offset - start_offset) as usize)
     }
 
     /// Returns the total size in bytes (=max offset).
@@ -194,7 +197,6 @@ impl<R: Read + Seek> ReadAt for std::sync::Mutex<R> {
     }
 }
 
-
 /// Trait similar to ReadAt but for underlying files.
 ///
 /// This trait is used for reading specific files within objects.
@@ -203,8 +205,13 @@ pub trait ReadAtFile {
     fn read_at_file(&self, buf: &mut [u8], offset: u64, file_no: u64) -> std::io::Result<usize>;
 
     /// Same as read_to_end, but starts at given offset.
-    fn read_at_file_to_end(&self, buf: &mut Vec<u8>, mut offset: u64, file_no: u64) -> std::io::Result<usize> {
-		let start_offset = offset;
+    fn read_at_file_to_end(
+        &self,
+        buf: &mut Vec<u8>,
+        mut offset: u64,
+        file_no: u64,
+    ) -> std::io::Result<usize> {
+        let start_offset = offset;
         let mut chunk = [0u8; DEFAULT_READ_BUFFER_SIZE];
         loop {
             match self.read_at_file(&mut chunk, offset, file_no) {
@@ -218,6 +225,6 @@ pub trait ReadAtFile {
             }
         }
 
-        Ok((offset-start_offset) as usize)
-	}
+        Ok((offset - start_offset) as usize)
+    }
 }

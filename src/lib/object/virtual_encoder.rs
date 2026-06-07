@@ -3,17 +3,11 @@ use std::time::SystemTime;
 
 // - internal
 use crate::prelude::*;
-use crate::{
-    EncodingState,
-    PreparedData,
-    VirtualFileContent,
-    VirtualFileEncoder,
-    Signature,
-};
+use crate::{EncodingState, PreparedData, Signature, VirtualFileContent, VirtualFileEncoder};
 
 // - external
-use time::{OffsetDateTime};
-use ed25519_dalek::{SigningKey};
+use ed25519_dalek::SigningKey;
+use time::OffsetDateTime;
 use zeroize::Zeroize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,14 +32,14 @@ enum ReadState {
 /// readers can later resolve every virtual file header and footer inside the
 /// container.
 pub struct VirtualObjectEncoder {
-	/// The appropriate original object header
-	pub(crate) obj_header: ObjectHeader,
-	/// Object footer populated while virtual file headers and footers are emitted.
-	pub(crate) obj_footer: ObjectFooterVirtual,
-	/// Source that yields virtual file headers and footer metadata.
-	pub(crate) virtual_object_source: Box<dyn VirtualObjectSource>,
-	/// Encoder for the virtual file currently being emitted.
-	pub(crate) current_file_encoder: Option<VirtualFileEncoder>,
+    /// The appropriate original object header
+    pub(crate) obj_header: ObjectHeader,
+    /// Object footer populated while virtual file headers and footers are emitted.
+    pub(crate) obj_footer: ObjectFooterVirtual,
+    /// Source that yields virtual file headers and footer metadata.
+    pub(crate) virtual_object_source: Box<dyn VirtualObjectSource>,
+    /// Encoder for the virtual file currently being emitted.
+    pub(crate) current_file_encoder: Option<VirtualFileEncoder>,
     /// Encryption information derived from the object header, if the object is encrypted.
     enc_info: Option<EncryptionInformation>,
     /// Optional signing key used to sign virtual file hash values.
@@ -100,29 +94,31 @@ impl VirtualObjectEncoder {
         })
     }
 
-	/// Returns the appropriate object number.
-	pub fn obj_number(&self) -> u64 {
-		self.obj_header.object_number
-	}
+    /// Returns the appropriate object number.
+    pub fn obj_number(&self) -> u64 {
+        self.obj_header.object_number
+    }
 
-	/// Returns a reference to the [ObjectHeader].
-	pub fn object_header(&self) -> &ObjectHeader {
-		&self.obj_header
-	}
+    /// Returns a reference to the [ObjectHeader].
+    pub fn object_header(&self) -> &ObjectHeader {
+        &self.obj_header
+    }
 
-	/// Returns the encoded object header.
+    /// Returns the encoded object header.
     ///
     /// If the object header contains encryption information, the encrypted
     /// header representation is returned. Otherwise the plain encoded header is
     /// returned.
-	pub fn get_encoded_header(&mut self) -> Vec<u8> {
-		if let Some(encryption_information) = &self.enc_info {
-			//unwrap should be safe here, because we have already testet this before.
-	    	self.obj_header.encrypt_directly(encryption_information).unwrap()
-	    } else {
-	    	self.obj_header.encode_directly()
-	    }
-	}
+    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+        if let Some(encryption_information) = &self.enc_info {
+            //unwrap should be safe here, because we have already testet this before.
+            self.obj_header
+                .encrypt_directly(encryption_information)
+                .unwrap()
+        } else {
+            self.obj_header.encode_directly()
+        }
+    }
 
     /// Returns the next encoded virtual object item.
     ///
@@ -143,9 +139,10 @@ impl VirtualObjectEncoder {
     /// or if a virtual file map cannot be encoded with the configured encryption
     /// settings.
     pub(crate) fn get_next_data(
-		&mut self, 
-		current_offset: u64, 
-		current_segment_no: u64) -> Result<EncodingState> {
+        &mut self,
+        current_offset: u64,
+        current_segment_no: u64,
+    ) -> Result<EncodingState> {
         match self.current_file_encoder {
             None => Ok(EncodingState::ReadEOF),
             Some(ref mut file_encoder) => {
@@ -156,23 +153,38 @@ impl VirtualObjectEncoder {
                         } else {
                             self.read_state = ReadState::FileFooter;
                         }
-                        self.obj_footer.file_header_segment_numbers.insert(file_encoder.file_header.file_number, current_segment_no);
-                        self.obj_footer.file_header_offsets.insert(file_encoder.file_header.file_number, current_offset);
+                        self.obj_footer
+                            .file_header_segment_numbers
+                            .insert(file_encoder.file_header.file_number, current_segment_no);
+                        self.obj_footer
+                            .file_header_offsets
+                            .insert(file_encoder.file_header.file_number, current_offset);
 
-                        Ok(EncodingState::PreparedData(PreparedData::PreparedFileHeader(file_encoder.encoded_header())))
-                    },
+                        Ok(EncodingState::PreparedData(
+                            PreparedData::PreparedFileHeader(file_encoder.encoded_header()),
+                        ))
+                    }
                     ReadState::Vfm => {
                         self.read_state = ReadState::FileFooter;
-                        file_encoder.file_footer.vffc = VirtualFileFooterContent::FileMap(current_segment_no, current_offset);
+                        file_encoder.file_footer.vffc =
+                            VirtualFileFooterContent::FileMap(current_segment_no, current_offset);
                         // unwrap should be safe at this point: We will only reach the ReadState::VFM through ReadState::FileHeader
                         // which always ensures hat the VFM exists.
-                        Ok(EncodingState::PreparedData(PreparedData::PreparedVFM(file_encoder.encoded_vfm()?.unwrap())))
-                    },
+                        Ok(EncodingState::PreparedData(PreparedData::PreparedVFM(
+                            file_encoder.encoded_vfm()?.unwrap(),
+                        )))
+                    }
                     ReadState::FileFooter => {
                         self.read_state = ReadState::FileHeader;
-                        self.obj_footer.file_footer_segment_numbers.insert(file_encoder.file_header.file_number, current_segment_no);
-                        self.obj_footer.file_footer_offsets.insert(file_encoder.file_header.file_number, current_offset);
-                        let encoding_state = EncodingState::PreparedData(PreparedData::PreparedFileHeader(file_encoder.encoded_footer()));
+                        self.obj_footer
+                            .file_footer_segment_numbers
+                            .insert(file_encoder.file_header.file_number, current_segment_no);
+                        self.obj_footer
+                            .file_footer_offsets
+                            .insert(file_encoder.file_header.file_number, current_offset);
+                        let encoding_state = EncodingState::PreparedData(
+                            PreparedData::PreparedFileHeader(file_encoder.encoded_footer()),
+                        );
                         match self.virtual_object_source.next() {
                             None => self.current_file_encoder = None,
                             Some(virtual_source) => {
@@ -186,9 +198,14 @@ impl VirtualObjectEncoder {
                                 );
                                 let vfm = match vffm.vfc {
                                     VirtualFileContent::FileMap(vfm) => Some(vfm),
-                                    _ => None
+                                    _ => None,
                                 };
-                                self.current_file_encoder = Some(VirtualFileEncoder::new(file_header, vff, vfm, self.enc_info.clone()));
+                                self.current_file_encoder = Some(VirtualFileEncoder::new(
+                                    file_header,
+                                    vff,
+                                    vfm,
+                                    self.enc_info.clone(),
+                                ));
                             }
                         }
 
@@ -199,28 +216,27 @@ impl VirtualObjectEncoder {
         }
     }
 
-	/// Returns the encoded footer for this object.
-	///
-	/// Before encoding, this method copies the source's root directory file
-	/// numbers into the footer and sets the creation timestamp to the current
-	/// system time.
-	///
-	/// # Errors
-	///
-	/// Returns an error if encrypting the footer fails.
-	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
-		self.obj_footer.root_dir_filenumbers = self.virtual_object_source.root_dir_filenumbers().clone();
-		let systemtime = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
-		self.obj_footer.creation_timestamp = systemtime;
-		if let Some(enc_info) = &self.enc_info {
-	    	self.obj_footer.encrypt_directly(enc_info)
-	    } else {
-	    	Ok(self.obj_footer.encode_directly())
-	    }
-	}
-
+    /// Returns the encoded footer for this object.
+    ///
+    /// Before encoding, this method copies the source's root directory file
+    /// numbers into the footer and sets the creation timestamp to the current
+    /// system time.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if encrypting the footer fails.
+    pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
+        self.obj_footer.root_dir_filenumbers =
+            self.virtual_object_source.root_dir_filenumbers().clone();
+        let systemtime = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+        self.obj_footer.creation_timestamp = systemtime;
+        if let Some(enc_info) = &self.enc_info {
+            self.obj_footer.encrypt_directly(enc_info)
+        } else {
+            Ok(self.obj_footer.encode_directly())
+        }
+    }
 }
-
 
 /// Reads the next virtual file from `virtual_object_source` and wraps it in a
 /// [VirtualFileEncoder].
@@ -244,7 +260,7 @@ fn next_virtual_file_encoder(
             );
             let vfm = match vffm.vfc {
                 VirtualFileContent::FileMap(vfm) => Some(vfm),
-                _ => None
+                _ => None,
             };
             Ok(Some(VirtualFileEncoder::new(
                 file_header,

@@ -1,17 +1,16 @@
 // - STD
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::io::{Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 // - internal
 use crate::prelude::*;
 use crate::{
-    FileTypeEncodingInformation,
-    helper::{result_combine, makedev},
+    FileTypeEncodingInformation, SpecialFileEncodingInformation,
+    helper::{makedev, result_combine},
     object::{check_root_path, get_file_header_tar},
-    SpecialFileEncodingInformation,
 };
 
 // - external
@@ -29,25 +28,25 @@ pub struct LogicalObjectSourceTar {
 }
 
 impl LogicalObjectSource for LogicalObjectSourceTar {
-	fn remaining_elements(&self) -> u64 {
-		(self.entries.len() - self.iterator_index) as u64
-	}
- 
-	fn root_dir_filenumbers(&self) -> &Vec<u64> {
-		&self.root_dir_filenumbers
-	}
+    fn remaining_elements(&self) -> u64 {
+        (self.entries.len() - self.iterator_index) as u64
+    }
 
-	fn directory_children(&self) -> &HashMap<u64, Vec<u64>> {
-		&self.directory_children
-	}
+    fn root_dir_filenumbers(&self) -> &Vec<u64> {
+        &self.root_dir_filenumbers
+    }
 
-	fn hardlink_map(&self) -> &HashMap<u64, u64> {
-		&self.hardlink_map
-	}
+    fn directory_children(&self) -> &HashMap<u64, Vec<u64>> {
+        &self.directory_children
+    }
 
-	fn symlink_real_paths(&self) -> &HashMap<u64, PathBuf> {
-		&self.symlink_real_paths
-	}
+    fn hardlink_map(&self) -> &HashMap<u64, u64> {
+        &self.hardlink_map
+    }
+
+    fn symlink_real_paths(&self) -> &HashMap<u64, PathBuf> {
+        &self.symlink_real_paths
+    }
 }
 
 impl TryFrom<&Path> for LogicalObjectSourceTar {
@@ -87,7 +86,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             // Must be mutable to read the possibly stored
             // xattr's in pax_extensions() of entry.
             let mut entry = entry?;
-            
+
             // to build the [FileHeader].
             let filetype = match entry.header().entry_type() {
                 EntryType::Regular => FileType::File,
@@ -98,9 +97,28 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                 EntryType::Fifo => FileType::SpecialFile,
                 EntryType::Directory => FileType::Directory,
                 EntryType::Continuous => FileType::File,
-                EntryType::GNULongName | EntryType::GNULongLink | EntryType::XHeader | EntryType::XGlobalHeader => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
+                EntryType::GNULongName
+                | EntryType::GNULongLink
+                | EntryType::XHeader
+                | EntryType::XGlobalHeader => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Invalid,
+                        format!(
+                            "{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}",
+                            entry.header().entry_type()
+                        ),
+                    ));
+                }
                 EntryType::GNUSparse => FileType::File,
-                _ => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
+                _ => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Invalid,
+                        format!(
+                            "{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}",
+                            entry.header().entry_type()
+                        ),
+                    ));
+                }
             };
             match filetype {
                 FileType::File | FileType::Directory | FileType::SpecialFile => {
@@ -109,8 +127,8 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                     // and be added to the hardlink_map.
                     let path = entry.path()?;
                     path_to_filenumber_map.insert(path.to_path_buf(), current_file_number);
-                },
-                _ => () //Symlinks and other hardlinks should not be added.
+                }
+                _ => (), //Symlinks and other hardlinks should not be added.
             }
 
             // This will merge the appropriate rdev major and rdev minor to a single rdev
@@ -134,9 +152,14 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             let path = entry.path()?;
             let filename = match path.file_name() {
                 Some(filename) => filename,
-                None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
-                    format!("{ERROR_TAR_ENCODING_ERROR_NO_FILENAME} {:?}", path)))
-            }.into();
+                None => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::EncodingError,
+                        format!("{ERROR_TAR_ENCODING_ERROR_NO_FILENAME} {:?}", path),
+                    ));
+                }
+            }
+            .into();
 
             // check if file path is root file
             let parent_filenumber = if check_root_path(path) {
@@ -144,17 +167,25 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                 0
             } else {
                 let path = entry.path()?;
-                let parent_path = path.parent()
-                .ok_or_else(|| ZffError::new(ZffErrorKind::IO, ERROR_FILE_NOT_IN_ROOT_PATH))?;
-                let parent_filenumber = match parent_dir_filenumber_map.get(&parent_path.to_path_buf()) { // check if the trailing separator is a problem.
-                    Some(parent_filenumber) => *parent_filenumber,
-                    None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
-                        format!("{ERROR_NOT_IN_MAP} {:?}", parent_path)))
-                };
+                let parent_path = path
+                    .parent()
+                    .ok_or_else(|| ZffError::new(ZffErrorKind::IO, ERROR_FILE_NOT_IN_ROOT_PATH))?;
+                let parent_filenumber =
+                    match parent_dir_filenumber_map.get(&parent_path.to_path_buf()) {
+                        // check if the trailing separator is a problem.
+                        Some(parent_filenumber) => *parent_filenumber,
+                        None => {
+                            return Err(ZffError::new(
+                                ZffErrorKind::EncodingError,
+                                format!("{ERROR_NOT_IN_MAP} {:?}", parent_path),
+                            ));
+                        }
+                    };
 
-                directory_children.entry(parent_filenumber)
-                .and_modify(|vec| vec.push(current_file_number))
-                .or_insert(vec![current_file_number]);
+                directory_children
+                    .entry(parent_filenumber)
+                    .and_modify(|vec| vec.push(current_file_number))
+                    .or_insert(vec![current_file_number]);
 
                 parent_filenumber
             };
@@ -177,24 +208,40 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
             if filetype == FileType::Hardlink {
                 let target = match entry.link_name()? {
                     Some(linkname_path) => linkname_path.to_path_buf(),
-                    None => return Err(ZffError::new(
-                        ZffErrorKind::Invalid,
-                        format!("{ERROR_TAR_MISSING_HARDLINK_TARGET} {:?}", entry.path()?.into_owned()),
-                    )),
+                    None => {
+                        return Err(ZffError::new(
+                            ZffErrorKind::Invalid,
+                            format!(
+                                "{ERROR_TAR_MISSING_HARDLINK_TARGET} {:?}",
+                                entry.path()?.into_owned()
+                            ),
+                        ));
+                    }
                 };
                 let hardlink_filenumber = match path_to_filenumber_map.get(&target) {
                     Some(filenumber) => *filenumber,
-                    None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
-                        format!("{ERROR_NOT_IN_MAP} {:?}", target)))
+                    None => {
+                        return Err(ZffError::new(
+                            ZffErrorKind::EncodingError,
+                            format!("{ERROR_NOT_IN_MAP} {:?}", target),
+                        ));
+                    }
                 };
                 hardlink_map.insert(current_file_number, hardlink_filenumber);
             }
 
             let entry_start_offset = entry.raw_file_position();
             let entry_size = entry.size();
-            let fileheader = get_file_header_tar(&mut entry, filetype, filename, current_file_number, parent_filenumber)?;
+            let fileheader = get_file_header_tar(
+                &mut entry,
+                filetype,
+                filename,
+                current_file_number,
+                parent_filenumber,
+            )?;
             let entry_reader_rc_clone = Rc::clone(&tar_stream_state_rc);
-            let tar_entry_reader = TarEntryReader::new(entry_reader_rc_clone, entry_start_offset, entry_size);
+            let tar_entry_reader =
+                TarEntryReader::new(entry_reader_rc_clone, entry_start_offset, entry_size);
 
             entries.push_back((tar_entry_reader, fileheader));
         }
@@ -228,63 +275,82 @@ impl TryFrom<PathBuf> for LogicalObjectSourceTar {
 }
 
 impl Iterator for LogicalObjectSourceTar {
-	type Item = Result<(FileTypeEncodingInformation, FileHeader)>;
+    type Item = Result<(FileTypeEncodingInformation, FileHeader)>;
 
-	fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> {
         let (tar_entry_reader, file_header) = self.entries.pop_front()?;
-		let filetype_encoding_information = gen_filetype_encoding_information(self, tar_entry_reader, &file_header);
+        let filetype_encoding_information =
+            gen_filetype_encoding_information(self, tar_entry_reader, &file_header);
         self.iterator_index += 1;
-		Some(result_combine((filetype_encoding_information, file_header)))
-	}
+        Some(result_combine((filetype_encoding_information, file_header)))
+    }
 
-	fn count(self) -> usize
-		where
-			Self: Sized, {
-		self.entries.len()
-	}
+    fn count(self) -> usize
+    where
+        Self: Sized,
+    {
+        self.entries.len()
+    }
 }
 
-fn gen_filetype_encoding_information(logical_object_source: &mut LogicalObjectSourceTar,
+fn gen_filetype_encoding_information(
+    logical_object_source: &mut LogicalObjectSourceTar,
     tar_entry_reader: TarEntryReader,
-    current_file_header: &FileHeader) -> Result<FileTypeEncodingInformation> {
-        let current_file_number = current_file_header.file_number;
+    current_file_header: &FileHeader,
+) -> Result<FileTypeEncodingInformation> {
+    let current_file_number = current_file_header.file_number;
 
-        match current_file_header.file_type {
-            FileType::File => {
-                #[cfg_attr(target_os = "windows", allow(clippy::needless_borrows_for_generic_args))]
-                Ok(FileTypeEncodingInformation::File(Box::new(tar_entry_reader)))
-            },
-            FileType::Directory => {
-                let mut children = Vec::new();
-                for child in logical_object_source.directory_children.get(&current_file_number).unwrap_or(&Vec::new()) {
-                    children.push(*child);
-                };
-                Ok(FileTypeEncodingInformation::Directory(children))
-            },
-            FileType::Symlink => {
-                let real_path = logical_object_source
-                                            .symlink_real_paths
-                                            .get(&current_file_number)
-                                            .unwrap_or(&PathBuf::new())
-                                            .clone();
-                Ok(FileTypeEncodingInformation::Symlink(real_path))
-            },
-            FileType::Hardlink => {
-                let hardlink_filenumber = logical_object_source.hardlink_map.get(&current_file_number).unwrap_or(&0);
-                Ok(FileTypeEncodingInformation::Hardlink(*hardlink_filenumber))
-            },
-            #[cfg(target_family = "windows")]
-            FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
-            #[cfg(target_family = "unix")]
-            FileType::SpecialFile => {
-                let specialfile_info = match logical_object_source.special_files_rdev_map.remove(&current_file_number) {
-                    Some(info) => info,
-                    None => unreachable!(), //should already be handled in construction phase. Should never reached.
-                };
-                Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))
-            },
+    match current_file_header.file_type {
+        FileType::File =>
+        {
+            #[cfg_attr(
+                target_os = "windows",
+                allow(clippy::needless_borrows_for_generic_args)
+            )]
+            Ok(FileTypeEncodingInformation::File(Box::new(
+                tar_entry_reader,
+            )))
         }
-    
+        FileType::Directory => {
+            let mut children = Vec::new();
+            for child in logical_object_source
+                .directory_children
+                .get(&current_file_number)
+                .unwrap_or(&Vec::new())
+            {
+                children.push(*child);
+            }
+            Ok(FileTypeEncodingInformation::Directory(children))
+        }
+        FileType::Symlink => {
+            let real_path = logical_object_source
+                .symlink_real_paths
+                .get(&current_file_number)
+                .unwrap_or(&PathBuf::new())
+                .clone();
+            Ok(FileTypeEncodingInformation::Symlink(real_path))
+        }
+        FileType::Hardlink => {
+            let hardlink_filenumber = logical_object_source
+                .hardlink_map
+                .get(&current_file_number)
+                .unwrap_or(&0);
+            Ok(FileTypeEncodingInformation::Hardlink(*hardlink_filenumber))
+        }
+        #[cfg(target_family = "windows")]
+        FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
+        #[cfg(target_family = "unix")]
+        FileType::SpecialFile => {
+            let specialfile_info = match logical_object_source
+                .special_files_rdev_map
+                .remove(&current_file_number)
+            {
+                Some(info) => info,
+                None => unreachable!(), //should already be handled in construction phase. Should never reached.
+            };
+            Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))
+        }
+    }
 }
 
 struct TarStreamState {
@@ -296,7 +362,7 @@ impl TarStreamState {
     fn new<R: Read + 'static>(reader: R) -> Self {
         Self {
             reader: Box::new(reader),
-            absolute_pos: 0
+            absolute_pos: 0,
         }
     }
 
@@ -313,7 +379,10 @@ impl TarStreamState {
             let want = remaining.min(scratch.len() as u64) as usize;
             let n = self.reader.read(&mut scratch[..want])?;
             if n == 0 {
-                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF,
+                ));
             }
             remaining -= n as u64;
             self.absolute_pos += n as u64;
@@ -332,7 +401,13 @@ struct TarEntryReader {
 
 impl TarEntryReader {
     fn new(shared: Rc<RefCell<TarStreamState>>, start: u64, len: u64) -> Self {
-        Self { shared, start, len, consumed: 0, activated: false }
+        Self {
+            shared,
+            start,
+            len,
+            consumed: 0,
+            activated: false,
+        }
     }
 }
 
@@ -353,7 +428,10 @@ impl Read for TarEntryReader {
         let want = remaining.min(buf.len());
         let n = st.reader.read(&mut buf[..want])?;
         if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                ERROR_ERROR_ENCODING_TAR_UNEXPECTED_EOF,
+            ));
         }
 
         self.consumed += n as u64;

@@ -3,208 +3,217 @@ use std::io::Read;
 use std::time::SystemTime;
 
 // - internal
-use crate::{
-	EncodingState,
-	EncodingThreadPoolManager,
-};
-use crate::prelude::*;
-use crate::{
-	io::buffer_chunk,
-	chunking,
-	PreparedData,
-	Signature,
-};
 #[cfg(feature = "log")]
 use crate::hashes_to_log;
+use crate::prelude::*;
+use crate::{EncodingState, EncodingThreadPoolManager};
+use crate::{PreparedData, Signature, chunking, io::buffer_chunk};
 
 // - external
-use time::{OffsetDateTime};
-use ed25519_dalek::{SigningKey};
+use ed25519_dalek::SigningKey;
+use time::OffsetDateTime;
 use zeroize::Zeroize;
-
-
 
 /// The [PhysicalObjectEncoder] can be used to encode a physical object.
 pub struct PhysicalObjectEncoder<R: Read> {
-	/// The appropriate object header
-	pub(crate) obj_header: ObjectHeader,
-	pub(crate) underlying_data: R,
-	pub(crate) read_bytes_underlying_data: u64,
-	pub(crate) current_chunk_number: u64,
-	pub(crate) initial_chunk_number: u64,
-	pub(crate) encoding_thread_pool_manager: EncodingThreadPoolManager,
-	pub(crate) signing_key: Option<SigningKey>,
-	pub(crate) encryption_information: Option<EncryptionInformation>,
-	pub(crate) acquisition_start: u64,
-	pub(crate) acquisition_end: u64,
+    /// The appropriate object header
+    pub(crate) obj_header: ObjectHeader,
+    pub(crate) underlying_data: R,
+    pub(crate) read_bytes_underlying_data: u64,
+    pub(crate) current_chunk_number: u64,
+    pub(crate) initial_chunk_number: u64,
+    pub(crate) encoding_thread_pool_manager: EncodingThreadPoolManager,
+    pub(crate) signing_key: Option<SigningKey>,
+    pub(crate) encryption_information: Option<EncryptionInformation>,
+    pub(crate) acquisition_start: u64,
+    pub(crate) acquisition_end: u64,
 }
 
 impl<R: Read> Drop for PhysicalObjectEncoder<R> {
-	fn drop(&mut self) {
-		self.encryption_information.zeroize();
-	}
+    fn drop(&mut self) {
+        self.encryption_information.zeroize();
+    }
 }
 
 impl<R: Read> PhysicalObjectEncoder<R> {
-	/// Returns a new [PhysicalObjectEncoder] by the given values.
-	pub fn new(
-		obj_header: ObjectHeader,
-		reader: R,
-		hash_types: Vec<HashType>,
-		signing_key_bytes: Option<Vec<u8>>,
-		current_chunk_number: u64) -> Result<PhysicalObjectEncoder<R>> {
-		
-		let signing_key = match &signing_key_bytes {
-	    	Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
-	    	None => None
-	    };
+    /// Returns a new [PhysicalObjectEncoder] by the given values.
+    pub fn new(
+        obj_header: ObjectHeader,
+        reader: R,
+        hash_types: Vec<HashType>,
+        signing_key_bytes: Option<Vec<u8>>,
+        current_chunk_number: u64,
+    ) -> Result<PhysicalObjectEncoder<R>> {
+        let signing_key = match &signing_key_bytes {
+            Some(bytes) => Some(Signature::bytes_to_signingkey(bytes)?),
+            None => None,
+        };
 
-		// I've commented out this code...not sure if the "test" is necessary. TODO: check.
-		/*let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
-			match encryption_header.get_encryption_key() {
-				Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
-				None => return Err(ZffError::new(
-					ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY))
-			}
-	    } else {
-	    	(obj_header.encode_directly(), None)
-	    };*/
-		let encryption_information = if obj_header.encryption_header.is_some() {
-			Some(EncryptionInformation::try_from(&obj_header)?)
-		} else {
-			None
-		};
+        // I've commented out this code...not sure if the "test" is necessary. TODO: check.
+        /*let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
+            match encryption_header.get_encryption_key() {
+                Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
+                None => return Err(ZffError::new(
+                    ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY))
+            }
+        } else {
+            (obj_header.encode_directly(), None)
+        };*/
+        let encryption_information = if obj_header.encryption_header.is_some() {
+            Some(EncryptionInformation::try_from(&obj_header)?)
+        } else {
+            None
+        };
 
-		let mut encoding_thread_pool_manager = EncodingThreadPoolManager::new(
-			obj_header.compression_header.clone());
+        let mut encoding_thread_pool_manager =
+            EncodingThreadPoolManager::new(obj_header.compression_header.clone());
 
-	    for h_type in hash_types {
-			encoding_thread_pool_manager.add_hashing_thread(h_type.clone());
-	    };
-		
-		Ok(Self {
-			obj_header,
-			underlying_data: reader,
-			read_bytes_underlying_data: 0,
-			current_chunk_number,
-			initial_chunk_number: current_chunk_number,
-			encoding_thread_pool_manager,
-			encryption_information,
-			signing_key,
-			acquisition_start: 0,
-			acquisition_end: 0,
-		})
-	}
+        for h_type in hash_types {
+            encoding_thread_pool_manager.add_hashing_thread(h_type.clone());
+        }
 
-	/// Returns the current chunk number.
-	pub fn object_header(&self) -> &ObjectHeader {
-		&self.obj_header
-	}
+        Ok(Self {
+            obj_header,
+            underlying_data: reader,
+            read_bytes_underlying_data: 0,
+            current_chunk_number,
+            initial_chunk_number: current_chunk_number,
+            encoding_thread_pool_manager,
+            encryption_information,
+            signing_key,
+            acquisition_start: 0,
+            acquisition_end: 0,
+        })
+    }
 
-	/// Returns the current chunk number.
-	pub fn current_chunk_number(&self) -> u64 {
-		self.current_chunk_number
-	}
+    /// Returns the current chunk number.
+    pub fn object_header(&self) -> &ObjectHeader {
+        &self.obj_header
+    }
 
-	/// Returns the encoded object header.
-	/// Note: **A call of this method sets the acquisition start time to the current time**.
-	pub fn get_encoded_header(&mut self) -> Vec<u8> {
-		if self.acquisition_start == 0 {
-			self.acquisition_start = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
-		}
-		if let Some(encryption_information) = &self.encryption_information {
-			//unwrap should be safe here, because we have already testet this before.
-	    	self.obj_header.encrypt_directly(encryption_information).unwrap()
-	    } else {
-	    	self.obj_header.encode_directly()
-	    }
-	}
+    /// Returns the current chunk number.
+    pub fn current_chunk_number(&self) -> u64 {
+        self.current_chunk_number
+    }
 
+    /// Returns the encoded object header.
+    /// Note: **A call of this method sets the acquisition start time to the current time**.
+    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+        if self.acquisition_start == 0 {
+            self.acquisition_start =
+                OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+        }
+        if let Some(encryption_information) = &self.encryption_information {
+            //unwrap should be safe here, because we have already testet this before.
+            self.obj_header
+                .encrypt_directly(encryption_information)
+                .unwrap()
+        } else {
+            self.obj_header.encode_directly()
+        }
+    }
 
-	/// Returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
-	pub(crate) fn get_next_chunk<D: ReadAt>(
-		&mut self,
-		deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
-		) -> Result<EncodingState> {
-			
-		// checks and adds a deduplication thread to the internal thread manager (check is included in the add_deduplication_thread method)
-		if deduplication_metadata.is_some() {
-			self.encoding_thread_pool_manager.hashing_threads.add_deduplication_thread();
-		};
+    /// Returns the encoded Chunk - this method will increment the self.current_chunk_number automatically.
+    pub(crate) fn get_next_chunk<D: ReadAt>(
+        &mut self,
+        deduplication_metadata: Option<&mut DeduplicationMetadata<D>>,
+    ) -> Result<EncodingState> {
+        // checks and adds a deduplication thread to the internal thread manager (check is included in the add_deduplication_thread method)
+        if deduplication_metadata.is_some() {
+            self.encoding_thread_pool_manager
+                .hashing_threads
+                .add_deduplication_thread();
+        };
 
-		// prepare chunked data:
-	    let chunk_size = self.obj_header.chunk_size as usize;
-	    let buffered_chunk = buffer_chunk(&mut self.underlying_data, chunk_size)?;
-	    self.read_bytes_underlying_data += buffered_chunk.bytes_read;
-	    if buffered_chunk.buffer.is_empty() {
-	    	return Ok(EncodingState::ReadEOF);
-	    };
+        // prepare chunked data:
+        let chunk_size = self.obj_header.chunk_size as usize;
+        let buffered_chunk = buffer_chunk(&mut self.underlying_data, chunk_size)?;
+        self.read_bytes_underlying_data += buffered_chunk.bytes_read;
+        if buffered_chunk.buffer.is_empty() {
+            return Ok(EncodingState::ReadEOF);
+        };
 
-		self.encoding_thread_pool_manager.update(buffered_chunk.buffer);
+        self.encoding_thread_pool_manager
+            .update(buffered_chunk.buffer);
 
-		let encryption_algorithm = self.obj_header.encryption_header.as_ref().map(|encryption_header| &encryption_header.algorithm);
-		let encryption_key = if let Some(encryption_header) = &self.obj_header.encryption_header {
-			match encryption_header.get_encryption_key_ref() {
-				Some(key) => Some(key),
-				None => return Err(ZffError::new(
-					ZffErrorKind::EncryptionError, 
-					ERROR_MISSING_ENCRYPTION_HEADER_KEY))
-			}
-	    } else {
-	    	None
-	    };
+        let encryption_algorithm = self
+            .obj_header
+            .encryption_header
+            .as_ref()
+            .map(|encryption_header| &encryption_header.algorithm);
+        let encryption_key = if let Some(encryption_header) = &self.obj_header.encryption_header {
+            match encryption_header.get_encryption_key_ref() {
+                Some(key) => Some(key),
+                None => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::EncryptionError,
+                        ERROR_MISSING_ENCRYPTION_HEADER_KEY,
+                    ));
+                }
+            }
+        } else {
+            None
+        };
 
-		let chunk = chunking(
-			&mut self.encoding_thread_pool_manager,
-			self.current_chunk_number,
-			buffered_chunk.bytes_read,
-			chunk_size as u64,
-			deduplication_metadata,
-			encryption_key,
-			encryption_algorithm)?;
-	    
-		self.current_chunk_number += 1;
-	    Ok(EncodingState::PreparedData(PreparedData::PreparedChunk(chunk)))
-	}
+        let chunk = chunking(
+            &mut self.encoding_thread_pool_manager,
+            self.current_chunk_number,
+            buffered_chunk.bytes_read,
+            chunk_size as u64,
+            deduplication_metadata,
+            encryption_key,
+            encryption_algorithm,
+        )?;
 
-	/// Generates a appropriate footer. Attention: A call of this method ...
-	/// - sets the acquisition end time to the current time
-	/// - finalizes the underlying hashing threads
-	pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
-		self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
-		let mut hash_values = Vec::new();
-	    for (hash_type, hash) in self.encoding_thread_pool_manager.hashing_threads.finalize_all() {
-	        let mut hash_value = HashValue::new_empty(hash_type.clone());
-	        hash_value.set_hash(hash.to_vec());
-			if let Some(signing_key) = &self.signing_key {
-				let signature = Signature::sign(signing_key, &hash);
-				hash_value.set_ed25519_signature(signature);
-			}
-	        hash_values.push(hash_value);
-	    }
+        self.current_chunk_number += 1;
+        Ok(EncodingState::PreparedData(PreparedData::PreparedChunk(
+            chunk,
+        )))
+    }
 
-	    #[cfg(feature = "log")]
-		hashes_to_log(self.obj_header.object_number, None, &hash_values);
+    /// Generates a appropriate footer. Attention: A call of this method ...
+    /// - sets the acquisition end time to the current time
+    /// - finalizes the underlying hashing threads
+    pub fn get_encoded_footer(&mut self) -> Result<Vec<u8>> {
+        self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
+        let mut hash_values = Vec::new();
+        for (hash_type, hash) in self
+            .encoding_thread_pool_manager
+            .hashing_threads
+            .finalize_all()
+        {
+            let mut hash_value = HashValue::new_empty(hash_type.clone());
+            hash_value.set_hash(hash.to_vec());
+            if let Some(signing_key) = &self.signing_key {
+                let signature = Signature::sign(signing_key, &hash);
+                hash_value.set_ed25519_signature(signature);
+            }
+            hash_values.push(hash_value);
+        }
 
-	    let hash_header = HashHeader::new(hash_values);
-		let footer = ObjectFooterPhysical::new(
-			self.obj_number(),
-			self.acquisition_start,
-			self.acquisition_end,
-			self.read_bytes_underlying_data,
-			self.initial_chunk_number,
-			self.current_chunk_number - self.initial_chunk_number,
-			hash_header);
+        #[cfg(feature = "log")]
+        hashes_to_log(self.obj_header.object_number, None, &hash_values);
 
-		if let Some(encryption_information) = &self.encryption_information {
-	    	footer.encrypt_directly(encryption_information)
-	    } else {
-	    	Ok(footer.encode_directly())
-	    }
-	}
+        let hash_header = HashHeader::new(hash_values);
+        let footer = ObjectFooterPhysical::new(
+            self.obj_number(),
+            self.acquisition_start,
+            self.acquisition_end,
+            self.read_bytes_underlying_data,
+            self.initial_chunk_number,
+            self.current_chunk_number - self.initial_chunk_number,
+            hash_header,
+        );
 
-	/// Returns the appropriate object number.
-	pub fn obj_number(&self) -> u64 {
-		self.obj_header.object_number
-	}
+        if let Some(encryption_information) = &self.encryption_information {
+            footer.encrypt_directly(encryption_information)
+        } else {
+            Ok(footer.encode_directly())
+        }
+    }
+
+    /// Returns the appropriate object number.
+    pub fn obj_number(&self) -> u64 {
+        self.obj_header.object_number
+    }
 }

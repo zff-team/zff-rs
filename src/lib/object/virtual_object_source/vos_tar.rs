@@ -6,11 +6,10 @@ use std::path::PathBuf;
 // - internal
 use crate::prelude::*;
 use crate::{
+    SpecialFileEncodingInformation, VirtualFileContent,
     helper::makedev,
     io::zffreader::ZffReader,
     object::{check_root_path, get_file_header_tar},
-    SpecialFileEncodingInformation,
-    VirtualFileContent,
 };
 
 // - external
@@ -114,9 +113,9 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
     /// yields a [`FileHeader`] together with [`VirtualFileFooterMetadata`] for
     /// one virtual file.
     ///
-    /// The [ZffReader] has to be prepared before (objects **must** be 
+    /// The [ZffReader] has to be prepared before (objects **must** be
     /// initialized).
-    /// 
+    ///
     /// # Errors
     ///
     /// Returns an error if the reader cannot select the requested object/file,
@@ -124,10 +123,11 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
     /// records that should have been handled by the `tar` crate, or an entry
     /// cannot be represented as a virtual ZFF file.
     pub fn new(
-        mut zffreader: ZffReader<R>, 
-        object_number: u64, 
-        file_number: Option<u64>, 
-        hash_types: Vec<HashType>) -> Result<Self> {
+        mut zffreader: ZffReader<R>,
+        object_number: u64,
+        file_number: Option<u64>,
+        hash_types: Vec<HashType>,
+    ) -> Result<Self> {
         zffreader.set_active_object(object_number)?;
         if let Some(file_number) = file_number {
             zffreader.set_active_file(file_number)?;
@@ -167,9 +167,28 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
                 EntryType::Fifo => FileType::SpecialFile,
                 EntryType::Directory => FileType::Directory,
                 EntryType::Continuous => FileType::File,
-                EntryType::GNULongName | EntryType::GNULongLink | EntryType::XHeader | EntryType::XGlobalHeader => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
+                EntryType::GNULongName
+                | EntryType::GNULongLink
+                | EntryType::XHeader
+                | EntryType::XGlobalHeader => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Invalid,
+                        format!(
+                            "{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}",
+                            entry.header().entry_type()
+                        ),
+                    ));
+                }
                 EntryType::GNUSparse => FileType::File,
-                _ => return Err(ZffError::new(ZffErrorKind::Invalid, format!("{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}", entry.header().entry_type()))),
+                _ => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Invalid,
+                        format!(
+                            "{ERROR_TAR_PREPROCESSED_ENTRY}: {:?}",
+                            entry.header().entry_type()
+                        ),
+                    ));
+                }
             };
             match filetype {
                 FileType::File | FileType::Directory | FileType::SpecialFile => {
@@ -178,8 +197,8 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
                     // and be added to the hardlink_map.
                     let path = entry.path()?;
                     path_to_filenumber_map.insert(path.to_path_buf(), current_file_number);
-                },
-                _ => () //Symlinks and other hardlinks should not be added.
+                }
+                _ => (), //Symlinks and other hardlinks should not be added.
             }
 
             // This will merge the appropriate rdev major and rdev minor to a single rdev
@@ -203,9 +222,14 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
             let path = entry.path()?;
             let filename = match path.file_name() {
                 Some(filename) => filename,
-                None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
-                    format!("{ERROR_TAR_ENCODING_ERROR_NO_FILENAME} {:?}", path)))
-            }.into();
+                None => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::EncodingError,
+                        format!("{ERROR_TAR_ENCODING_ERROR_NO_FILENAME} {:?}", path),
+                    ));
+                }
+            }
+            .into();
 
             // check if file path is root file
             let parent_filenumber = if check_root_path(path) {
@@ -213,20 +237,28 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
                 0
             } else {
                 // unwrap should be safe here
-                // as we have already checked that the current file is 
+                // as we have already checked that the current file is
                 // not in root path.
                 let path = entry.path()?;
-                let parent_path = path.parent()
-                .ok_or_else(|| ZffError::new(ZffErrorKind::IO, ERROR_FILE_NOT_IN_ROOT_PATH))?;
-                let parent_filenumber = match parent_dir_filenumber_map.get(&parent_path.to_path_buf()) { // check if the trailing separator is a problem.
-                    Some(parent_filenumber) => *parent_filenumber,
-                    None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
-                        format!("{ERROR_NOT_IN_MAP} {:?}", parent_path)))
-                };
+                let parent_path = path
+                    .parent()
+                    .ok_or_else(|| ZffError::new(ZffErrorKind::IO, ERROR_FILE_NOT_IN_ROOT_PATH))?;
+                let parent_filenumber =
+                    match parent_dir_filenumber_map.get(&parent_path.to_path_buf()) {
+                        // check if the trailing separator is a problem.
+                        Some(parent_filenumber) => *parent_filenumber,
+                        None => {
+                            return Err(ZffError::new(
+                                ZffErrorKind::EncodingError,
+                                format!("{ERROR_NOT_IN_MAP} {:?}", parent_path),
+                            ));
+                        }
+                    };
 
-                directory_children.entry(parent_filenumber)
-                .and_modify(|vec| vec.push(current_file_number))
-                .or_insert(vec![current_file_number]);
+                directory_children
+                    .entry(parent_filenumber)
+                    .and_modify(|vec| vec.push(current_file_number))
+                    .or_insert(vec![current_file_number]);
 
                 parent_filenumber
             };
@@ -249,25 +281,39 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
             if filetype == FileType::Hardlink {
                 let target = match entry.link_name()? {
                     Some(linkname_path) => linkname_path.to_path_buf(),
-                    None => return Err(ZffError::new(
-                        ZffErrorKind::Invalid,
-                        format!("{ERROR_TAR_MISSING_HARDLINK_TARGET} {:?}", entry.path()?.into_owned()),
-                    )),
+                    None => {
+                        return Err(ZffError::new(
+                            ZffErrorKind::Invalid,
+                            format!(
+                                "{ERROR_TAR_MISSING_HARDLINK_TARGET} {:?}",
+                                entry.path()?.into_owned()
+                            ),
+                        ));
+                    }
                 };
                 let hardlink_filenumber = match path_to_filenumber_map.get(&target) {
                     Some(filenumber) => *filenumber,
-                    None => return Err(ZffError::new(ZffErrorKind::EncodingError, 
-                        format!("{ERROR_NOT_IN_MAP} {:?}", target)))
+                    None => {
+                        return Err(ZffError::new(
+                            ZffErrorKind::EncodingError,
+                            format!("{ERROR_NOT_IN_MAP} {:?}", target),
+                        ));
+                    }
                 };
                 hardlink_map.insert(current_file_number, hardlink_filenumber);
             }
             let entry_start_offset = entry.raw_file_position();
             let entry_size = entry.size();
-            let fileheader = get_file_header_tar(&mut entry, filetype, filename, current_file_number, parent_filenumber)?;
+            let fileheader = get_file_header_tar(
+                &mut entry,
+                filetype,
+                filename,
+                current_file_number,
+                parent_filenumber,
+            )?;
             let vos_file_entry = VosFileEntry::new(entry_start_offset, entry_size);
             let vos_entry = VosEntry::new(fileheader, VosEntryPayload::File(vos_file_entry));
             vos_entries.insert(current_file_number, vos_entry);
-
         }
 
         //merge the whole stuff
@@ -291,8 +337,6 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
                 vos_entry.update_payload(VosEntryPayload::HardLink(payload));
             }
         }
-
-
 
         let zffreader = archive.into_inner();
         Ok(Self {
@@ -339,10 +383,7 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
             .collect()
     }
 
-    fn finalize_hashers(
-        &self,
-        hashers: Vec<(HashType, Box<dyn DynDigest>)>,
-    ) -> Result<HashHeader> {
+    fn finalize_hashers(&self, hashers: Vec<(HashType, Box<dyn DynDigest>)>) -> Result<HashHeader> {
         let mut hash_values = Vec::new();
         for (hash_type, hasher) in hashers {
             let hash = hasher.finalize().to_vec();
@@ -391,10 +432,9 @@ impl<R: ReadAt> Iterator for VirtualObjectSourceLogicalTar<R> {
         let file_header = entry.file_header.clone();
         let (hash_header, length, vfc) = match entry.payload {
             VosEntryPayload::File(vos_file_entry) => {
-                let hash_header = match self.hash_zffreader_range(
-                    vos_file_entry.entry_start,
-                    vos_file_entry.entry_len,
-                ) {
+                let hash_header = match self
+                    .hash_zffreader_range(vos_file_entry.entry_start, vos_file_entry.entry_len)
+                {
                     Ok(hash_header) => hash_header,
                     Err(e) => return Some(Err(e)),
                 };
@@ -411,15 +451,23 @@ impl<R: ReadAt> Iterator for VirtualObjectSourceLogicalTar<R> {
                     extents.insert(0, virtual_file_extent);
                     VirtualFileMap::new(file_header.file_number, extents)
                 };
-                (hash_header, vos_file_entry.entry_len, VirtualFileContent::FileMap(virtual_file_map))
-            },
+                (
+                    hash_header,
+                    vos_file_entry.entry_len,
+                    VirtualFileContent::FileMap(virtual_file_map),
+                )
+            }
             VosEntryPayload::Directory(children) => {
                 let hash_header = match self.hash_bytes(&children.encode_directly()) {
                     Ok(hash_header) => hash_header,
                     Err(e) => return Some(Err(e)),
                 };
-                (hash_header, children.encode_directly().len() as u64, VirtualFileContent::Directory(children))
-            },
+                (
+                    hash_header,
+                    children.encode_directly().len() as u64,
+                    VirtualFileContent::Directory(children),
+                )
+            }
             VosEntryPayload::Symlink(target) => {
                 let target = PlatformString::from(target.as_os_str());
                 let encoded_target = target.encode_directly();
@@ -427,31 +475,52 @@ impl<R: ReadAt> Iterator for VirtualObjectSourceLogicalTar<R> {
                     Ok(hash_header) => hash_header,
                     Err(e) => return Some(Err(e)),
                 };
-                (hash_header, encoded_target.len() as u64, VirtualFileContent::Symlink(target))
-            },
+                (
+                    hash_header,
+                    encoded_target.len() as u64,
+                    VirtualFileContent::Symlink(target),
+                )
+            }
             VosEntryPayload::HardLink(target_filenumber) => {
                 let encoded_target = target_filenumber.encode_directly();
                 let hash_header = match self.hash_bytes(&encoded_target) {
                     Ok(hash_header) => hash_header,
                     Err(e) => return Some(Err(e)),
                 };
-                (hash_header, encoded_target.len() as u64, VirtualFileContent::Hardlink(target_filenumber))
-            },
+                (
+                    hash_header,
+                    encoded_target.len() as u64,
+                    VirtualFileContent::Hardlink(target_filenumber),
+                )
+            }
             VosEntryPayload::SpecialFile(special_file) => {
                 let (rdev_id, special_file_type) = match special_file {
-                    SpecialFileEncodingInformation::Fifo(rdev_id) => (rdev_id, SpecialFileType::Fifo),
-                    SpecialFileEncodingInformation::Char(rdev_id) => (rdev_id, SpecialFileType::Char),
-                    SpecialFileEncodingInformation::Block(rdev_id) => (rdev_id, SpecialFileType::Block),
-                    SpecialFileEncodingInformation::Socket(rdev_id) => (rdev_id, SpecialFileType::Socket),
+                    SpecialFileEncodingInformation::Fifo(rdev_id) => {
+                        (rdev_id, SpecialFileType::Fifo)
+                    }
+                    SpecialFileEncodingInformation::Char(rdev_id) => {
+                        (rdev_id, SpecialFileType::Char)
+                    }
+                    SpecialFileEncodingInformation::Block(rdev_id) => {
+                        (rdev_id, SpecialFileType::Block)
+                    }
+                    SpecialFileEncodingInformation::Socket(rdev_id) => {
+                        (rdev_id, SpecialFileType::Socket)
+                    }
                 };
                 let mut encoded_special_file = rdev_id.encode_directly();
-                encoded_special_file.extend_from_slice(&(special_file_type as u8).encode_directly());
+                encoded_special_file
+                    .extend_from_slice(&(special_file_type as u8).encode_directly());
                 let hash_header = match self.hash_bytes(&encoded_special_file) {
                     Ok(hash_header) => hash_header,
                     Err(e) => return Some(Err(e)),
                 };
-                (hash_header, encoded_special_file.len() as u64,VirtualFileContent::SpecialFile(rdev_id, special_file_type))
-            },
+                (
+                    hash_header,
+                    encoded_special_file.len() as u64,
+                    VirtualFileContent::SpecialFile(rdev_id, special_file_type),
+                )
+            }
         };
         let virtual_file_footer_metadata = VirtualFileFooterMetadata::new(hash_header, length, vfc);
         Some(Ok((file_header, virtual_file_footer_metadata)))

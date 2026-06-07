@@ -1,8 +1,8 @@
 // - STD
 use std::borrow::Borrow;
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::fmt;
-use std::io::{Read, Cursor};
+use std::io::{Cursor, Read};
 
 // - internal
 #[cfg(feature = "serde")]
@@ -11,175 +11,192 @@ use crate::prelude::*;
 
 // - external
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize, Serializer, ser::SerializeStruct};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 
 /// The `ChunkSamebytesMap` stores the same-byte value for each chunk.
-#[derive(Debug,Clone,PartialEq,Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct ChunkSamebytesMap {
-	/// Map of chunk numbers to their same-byte value.
-	chunkmap: BTreeMap<u64, u8>,
-	/// The object number this map belongs to.
-	object_number: u64,
-	/// Target size for the chunkmap.
-	target_size: usize,
+    /// Map of chunk numbers to their same-byte value.
+    chunkmap: BTreeMap<u64, u8>,
+    /// The object number this map belongs to.
+    object_number: u64,
+    /// Target size for the chunkmap.
+    target_size: usize,
 }
 
 impl ChunkMap for ChunkSamebytesMap {
-	type Value = u8;
+    type Value = u8;
 
-	/// Returns a new `ChunkSamebytesMap` with the given values.
-	fn new(object_number: u64, chunkmap: BTreeMap<u64, Self::Value>) -> Self {
-		Self {
-			chunkmap,
-			object_number,
-			target_size: 0,
-		}
-	}
+    /// Returns a new `ChunkSamebytesMap` with the given values.
+    fn new(object_number: u64, chunkmap: BTreeMap<u64, Self::Value>) -> Self {
+        Self {
+            chunkmap,
+            object_number,
+            target_size: 0,
+        }
+    }
 
-	/// Returns a new, empty `ChunkSamebytesMap` with the given object number.
-	fn new_empty(object_number: u64) -> Self {
-		Self {
-			chunkmap: BTreeMap::new(),
-			object_number,
-			target_size: 0,
-		}
-	}
+    /// Returns a new, empty `ChunkSamebytesMap` with the given object number.
+    fn new_empty(object_number: u64) -> Self {
+        Self {
+            chunkmap: BTreeMap::new(),
+            object_number,
+            target_size: 0,
+        }
+    }
 
-	fn flush(&mut self) -> BTreeMap<u64, Self::Value> {
-		std::mem::take(&mut self.chunkmap)
-	}
+    fn flush(&mut self) -> BTreeMap<u64, Self::Value> {
+        std::mem::take(&mut self.chunkmap)
+    }
 
-	fn current_size(&self) -> usize {
-		match self.chunkmap.first_key_value() {
-			Some(_) => self.chunkmap.len() * (8 + 1) + 8, //8 -> 8bytes for the chunk no, 1 byte for samebyte
-			None => 0,
-		}
-	}
+    fn current_size(&self) -> usize {
+        match self.chunkmap.first_key_value() {
+            Some(_) => self.chunkmap.len() * (8 + 1) + 8, //8 -> 8bytes for the chunk no, 1 byte for samebyte
+            None => 0,
+        }
+    }
 
-	fn chunkmap(&self) -> &BTreeMap<u64, Self::Value> {
-		&self.chunkmap
-	}
+    fn chunkmap(&self) -> &BTreeMap<u64, Self::Value> {
+        &self.chunkmap
+    }
 
-	fn object_number(&self) -> u64 {
-		self.object_number
-	}
+    fn object_number(&self) -> u64 {
+        self.object_number
+    }
 
-	fn append(&mut self, mut map: Self) {
-		self.chunkmap.append(&mut map.flush());
-	}
+    fn append(&mut self, mut map: Self) {
+        self.chunkmap.append(&mut map.flush());
+    }
 
-	fn set_target_size(&mut self, target_size: usize) {
-		self.target_size = target_size
-	}
+    fn set_target_size(&mut self, target_size: usize) {
+        self.target_size = target_size
+    }
 
-	fn set_object_number(&mut self, object_number: u64) {
-		self.object_number = object_number
-	}
+    fn set_object_number(&mut self, object_number: u64) {
+        self.object_number = object_number
+    }
 
-	fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool {
-		if self.is_full() {
-			false
-		} else {
-			self.chunkmap.entry(chunk_no).or_insert(*value.borrow());
-			true
-		}
-	}
+    fn add_chunk_entry(&mut self, chunk_no: u64, value: Self::Value) -> bool {
+        if self.is_full() {
+            false
+        } else {
+            self.chunkmap.entry(chunk_no).or_insert(*value.borrow());
+            true
+        }
+    }
 
-	fn is_full(&self) -> bool {
-		self.target_size < self.current_size() + 17
-	}
+    fn is_full(&self) -> bool {
+        self.target_size < self.current_size() + 17
+    }
 
-	fn is_empty(&self) -> bool {
-		self.chunkmap.is_empty()
-	}
+    fn is_empty(&self) -> bool {
+        self.chunkmap.is_empty()
+    }
 
-	fn decrypt_and_decode<K, A, D>(key: K, encryption_algorithm: A, data: &mut D, chunk_no: u64) -> Result<Self> 
+    fn decrypt_and_decode<K, A, D>(
+        key: K,
+        encryption_algorithm: A,
+        data: &mut D,
+        chunk_no: u64,
+    ) -> Result<Self>
     where
-    K: AsRef<[u8]>, 
-    A: Borrow<EncryptionAlgorithm>, 
-    D: Read,
-    Self: Sized {
-		let inner_structure_data = Self::inner_structure_data(data)?;
-		let enc_buffer = Self::decrypt(key, inner_structure_data.structure_data, chunk_no, encryption_algorithm.borrow())?;
-		let mut reader = Cursor::new(enc_buffer);
-		let map = BTreeMap::decode_directly(&mut reader)?;
-		Ok(Self::new(inner_structure_data.object_number, map))
-	}
+        K: AsRef<[u8]>,
+        A: Borrow<EncryptionAlgorithm>,
+        D: Read,
+        Self: Sized,
+    {
+        let inner_structure_data = Self::inner_structure_data(data)?;
+        let enc_buffer = Self::decrypt(
+            key,
+            inner_structure_data.structure_data,
+            chunk_no,
+            encryption_algorithm.borrow(),
+        )?;
+        let mut reader = Cursor::new(enc_buffer);
+        let map = BTreeMap::decode_directly(&mut reader)?;
+        Ok(Self::new(inner_structure_data.object_number, map))
+    }
 
-	fn encode_map(&self) -> Vec<u8> {
-		self.chunkmap.encode_directly()
-	}
+    fn encode_map(&self) -> Vec<u8> {
+        self.chunkmap.encode_directly()
+    }
 
-	fn encrypt_encoded_map<K, A>(&self, key: K, encryption_algorithm: A, chunk_no: u64) -> Result<Vec<u8>>
-		where
-		K: AsRef<[u8]>,
-		A: Borrow<EncryptionAlgorithm>,
-		Self: HeaderCoding, {
-		let mut vec = Vec::new();
-		let encoded_map = Self::encode_map(self);
-		let encrypted_map = Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
-		let encoded_version = Self::version().encode_directly();
-		let encoded_object_number = self.object_number.encode_directly();
-		let identifier = Self::identifier();
-		let encoded_header_length = (
-			DEFAULT_LENGTH_HEADER_IDENTIFIER + 
-			DEFAULT_LENGTH_VALUE_HEADER_LENGTH + 
-			encoded_object_number.len() +
-			encrypted_map.len() +
-			encoded_version.len()) as u64;
-		vec.extend_from_slice(&identifier.to_be_bytes());
-		vec.extend_from_slice(&encoded_header_length.to_le_bytes());
-		vec.extend_from_slice(&encoded_version);
-		vec.extend_from_slice(&encoded_object_number);
-		vec.extend_from_slice(&encrypted_map);
-		Ok(vec)
-	}
+    fn encrypt_encoded_map<K, A>(
+        &self,
+        key: K,
+        encryption_algorithm: A,
+        chunk_no: u64,
+    ) -> Result<Vec<u8>>
+    where
+        K: AsRef<[u8]>,
+        A: Borrow<EncryptionAlgorithm>,
+        Self: HeaderCoding,
+    {
+        let mut vec = Vec::new();
+        let encoded_map = Self::encode_map(self);
+        let encrypted_map =
+            Self::encrypt(key, encoded_map, chunk_no, encryption_algorithm.borrow())?;
+        let encoded_version = Self::version().encode_directly();
+        let encoded_object_number = self.object_number.encode_directly();
+        let identifier = Self::identifier();
+        let encoded_header_length = (DEFAULT_LENGTH_HEADER_IDENTIFIER
+            + DEFAULT_LENGTH_VALUE_HEADER_LENGTH
+            + encoded_object_number.len()
+            + encrypted_map.len()
+            + encoded_version.len()) as u64;
+        vec.extend_from_slice(&identifier.to_be_bytes());
+        vec.extend_from_slice(&encoded_header_length.to_le_bytes());
+        vec.extend_from_slice(&encoded_version);
+        vec.extend_from_slice(&encoded_object_number);
+        vec.extend_from_slice(&encrypted_map);
+        Ok(vec)
+    }
 }
 
 impl HeaderCoding for ChunkSamebytesMap {
-	type Item = Self;
+    type Item = Self;
 
-	fn identifier() -> u32 {
-		HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP
-	}
+    fn identifier() -> u32 {
+        HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP
+    }
 
-	fn version() -> u8 {
-		DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP
-	}
-	
-	fn encode_content(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.encode_map());
-		vec
-	}
+    fn version() -> u8 {
+        DEFAULT_HEADER_VERSION_CHUNK_SAMEBYTES_MAP
+    }
 
-	fn encode_fixed_fields(&self) -> Vec<u8> {
-		let mut vec = Vec::new();
-		vec.extend_from_slice(&self.object_number.encode_directly());
-		vec
-	}
+    fn encode_content(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(&self.encode_map());
+        vec
+    }
 
-	fn decode_content(data: &[u8]) -> Result<Self> {
-		let mut cursor = Cursor::new(data);
-		Self::check_version(&mut cursor)?;
-		let object_number = u64::decode_directly(&mut cursor)?;
-		let chunkmap = BTreeMap::<u64, u8>::decode_directly(&mut cursor)?;
-		Ok(Self::new(object_number, chunkmap))
-	}
+    fn encode_fixed_fields(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(&self.object_number.encode_directly());
+        vec
+    }
+
+    fn decode_content(data: &[u8]) -> Result<Self> {
+        let mut cursor = Cursor::new(data);
+        Self::check_version(&mut cursor)?;
+        let object_number = u64::decode_directly(&mut cursor)?;
+        let chunkmap = BTreeMap::<u64, u8>::decode_directly(&mut cursor)?;
+        Ok(Self::new(object_number, chunkmap))
+    }
 }
 
 // - implement fmt::Display
 impl fmt::Display for ChunkSamebytesMap {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", Self::struct_name())
-	}
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", Self::struct_name())
+    }
 }
 
 impl Encryption for ChunkSamebytesMap {
-	fn crypto_nonce_padding() -> u8 {
-		0b00011111
-	}
+    fn crypto_nonce_padding() -> u8 {
+        0b00011111
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -190,7 +207,7 @@ impl Serialize for ChunkSamebytesMap {
     {
         let mut state = serializer.serialize_struct(Self::struct_name(), 2)?;
         for (key, value) in &self.chunkmap {
-        	state.serialize_field(string_to_str(key.to_string()), &value)?;
+            state.serialize_field(string_to_str(key.to_string()), &value)?;
         }
         state.end()
     }

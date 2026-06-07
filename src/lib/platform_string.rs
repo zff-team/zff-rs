@@ -9,9 +9,9 @@
 
 // - STD
 use std::cmp::Ordering;
-use std::fmt;
 use std::ffi::{OsStr, OsString};
-use std::io::{Read};
+use std::fmt;
+use std::io::Read;
 #[cfg(target_family = "unix")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(target_family = "windows")]
@@ -22,7 +22,7 @@ use crate::prelude::*;
 
 // - external
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 /// Represents a platform-native string in an interoperable on-disk form.
 ///
@@ -86,25 +86,36 @@ impl PlatformString {
     pub fn to_string_strict(&self) -> Result<String> {
         match self {
             Self::Unix(bytes) => String::from_utf8(bytes.clone()).map_err(|e| {
-                ZffError::new_with_source(ZffErrorKind::EncodingError, Some(Box::new(e)), "Invalid UTF-8")
+                ZffError::new_with_source(
+                    ZffErrorKind::EncodingError,
+                    Some(Box::new(e)),
+                    "Invalid UTF-8",
+                )
             }),
             Self::WindowsUtf16Le(bytes) => {
                 if bytes.len() % 2 != 0 {
-                    return Err(ZffError::new(ZffErrorKind::EncodingError, "Odd number of bytes for UTF-16LE"));
+                    return Err(ZffError::new(
+                        ZffErrorKind::EncodingError,
+                        "Odd number of bytes for UTF-16LE",
+                    ));
                 }
                 let u16s = bytes
                     .chunks_exact(2)
                     .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
                     .collect::<Vec<_>>();
                 String::from_utf16(&u16s).map_err(|e| {
-                    ZffError::new_with_source(ZffErrorKind::EncodingError, Some(Box::new(e)), "Invalid UTF-16LE")
+                    ZffError::new_with_source(
+                        ZffErrorKind::EncodingError,
+                        Some(Box::new(e)),
+                        "Invalid UTF-16LE",
+                    )
                 })
             }
         }
     }
 
-    /// Lossy conversation to [String]. Note: This conversion is 
-    /// lossy and only intended only for human-readable output, not 
+    /// Lossy conversation to [String]. Note: This conversion is
+    /// lossy and only intended only for human-readable output, not
     /// for forensic round-tripping.
     pub fn to_string_lossy(&self) -> String {
         match self {
@@ -244,7 +255,6 @@ impl ValueDecoder for PlatformString {
         }
     }
 }
-
 
 impl PartialOrd for PlatformString {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

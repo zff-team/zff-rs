@@ -9,34 +9,27 @@
 //! Public functions include `calculate_xxhash` and `compress_buffer`.
 
 // - STD
-use std::collections::{HashMap};
-use std::fs::{File, Metadata, read_dir, metadata};
+use std::collections::HashMap;
+use std::fs::{File, Metadata, metadata, read_dir};
 use std::io::{Read, copy as io_copy};
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
-#[cfg(target_family = "unix")]
-use std::os::unix::fs::{
-    FileTypeExt,
-    MetadataExt,
-};
-
 
 // - internal
 use crate::prelude::*;
 use crate::{
+    LogicalObjectEncoder, ObjectEncoder, PhysicalObjectEncoder, VirtualObjectEncoder,
     helper::zstd_compress_if_worthwhile,
-    LogicalObjectEncoder,
-    ObjectEncoder,
-    PhysicalObjectEncoder,
-    VirtualObjectEncoder,
 };
 
 // - external
-use ed25519_dalek::{SigningKey};
+use ed25519_dalek::SigningKey;
 #[cfg(feature = "log")]
 use log::{debug, info, warn};
-use posix_acl::{ACLEntry, Qualifier, PosixACL};
+use posix_acl::{ACLEntry, PosixACL, Qualifier};
 use time::OffsetDateTime;
 use xattr::XAttrs;
 use xxhash_rust::xxh3::xxh3_64;
@@ -49,32 +42,32 @@ pub mod zffwriter;
 
 #[derive(Debug, Clone, Default)]
 struct ZffExtenderParameter {
-	pub current_segment: PathBuf,
-	pub next_object_no: u64,
-	pub initial_chunk_number: u64,
+    pub current_segment: PathBuf,
+    pub next_object_no: u64,
+    pub initial_chunk_number: u64,
     pub segment_number: u64,
     pub segment_footer: SegmentFooter,
     pub main_footer: MainFooter,
 }
 
 impl ZffExtenderParameter {
-	fn new(
-		current_segment: PathBuf,
-		next_object_no: u64,
-		initial_chunk_number: u64,
+    fn new(
+        current_segment: PathBuf,
+        next_object_no: u64,
+        initial_chunk_number: u64,
         segment_number: u64,
         segment_footer: SegmentFooter,
         main_footer: MainFooter,
-		) -> Self {
-		Self {
-			current_segment,
-			next_object_no,
-			initial_chunk_number,
+    ) -> Self {
+        Self {
+            current_segment,
+            next_object_no,
+            initial_chunk_number,
             segment_number,
             segment_footer,
             main_footer,
-		}
-	}
+        }
+    }
 }
 
 /// This struct contains optional, additional parameter for the [ZffWriter](zffwriter::ZffWriter).
@@ -82,19 +75,19 @@ impl ZffExtenderParameter {
 #[derive(Default, Debug)]
 pub struct ZffCreationParameters<R: ReadAt> {
     /// If given, the appropriate data will be signed by the given [SigningKey].
-	pub signature_key: Option<SigningKey>,
-	/// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.
-	pub target_segment_size: Option<u64>,
-	/// An optional description for the container
-	/// (note: you can describe every object with custom descriptions by using the [DescriptionHeader]).
-	pub description_notes: Option<String>,
-	/// If set, the chunkmaps will not grow larger than the given size. Otherwise, the default size 32k will be used.
-	pub chunkmap_size: Option<u64>, //default is 32k
-	/// Optional [DeduplicationChunkMap] to ensure a chunk deduplication (and safe some disk space).
-	pub deduplication_metadata: Option<DeduplicationMetadata<R>>,
-	/// Will be used as a unique identifier, to assign each segment to the appropriate zff container.
-	/// If the [ZffWriter](zffwriter::ZffWriter) will be extend an existing Zff container, this value will be ignored.
-	pub unique_identifier: u64
+    pub signature_key: Option<SigningKey>,
+    /// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.
+    pub target_segment_size: Option<u64>,
+    /// An optional description for the container
+    /// (note: you can describe every object with custom descriptions by using the [DescriptionHeader]).
+    pub description_notes: Option<String>,
+    /// If set, the chunkmaps will not grow larger than the given size. Otherwise, the default size 32k will be used.
+    pub chunkmap_size: Option<u64>, //default is 32k
+    /// Optional [DeduplicationChunkMap] to ensure a chunk deduplication (and safe some disk space).
+    pub deduplication_metadata: Option<DeduplicationMetadata<R>>,
+    /// Will be used as a unique identifier, to assign each segment to the appropriate zff container.
+    /// If the [ZffWriter](zffwriter::ZffWriter) will be extend an existing Zff container, this value will be ignored.
+    pub unique_identifier: u64,
 }
 
 #[derive(Default, Debug)]
@@ -111,44 +104,50 @@ impl BufferedChunk {
             bytes_read: 0,
             error_flag: false,
         }
-    } 
+    }
 }
 
 // returns the buffer with the read bytes and the number of bytes which was read.
-pub(crate) fn buffer_chunk<R>(
-	input: &mut R,
-	chunk_size: usize,
-	) -> Result<BufferedChunk> 
+pub(crate) fn buffer_chunk<R>(input: &mut R, chunk_size: usize) -> Result<BufferedChunk>
 where
-	R: Read,
+    R: Read,
 {
     let mut buffered_chunk = BufferedChunk::with_chunksize(chunk_size);
     let mut interrupt_retries = 0;
 
     while (buffered_chunk.bytes_read as usize) < chunk_size {
         let r = match input.read(&mut buffered_chunk.buffer[buffered_chunk.bytes_read as usize..]) {
-        	Ok(r) => r,
-        	Err(e) => match e.kind() {
-                //the Error::io::ErrorKind::Interrupted guarantees 
+            Ok(r) => r,
+            Err(e) => match e.kind() {
+                //the Error::io::ErrorKind::Interrupted guarantees
                 // that the read operation can be retried (see https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read)
-        		std::io::ErrorKind::Interrupted => {
+                std::io::ErrorKind::Interrupted => {
                     if interrupt_retries < DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT {
                         #[cfg(feature = "log")]
-                        warn!("Read operation was interrupted. Retry reading ({} of {}).", interrupt_retries, DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT);
+                        warn!(
+                            "Read operation was interrupted. Retry reading ({} of {}).",
+                            interrupt_retries, DEFAULT_NUMBER_OF_RETRIES_IO_INTERRUPT
+                        );
                         sleep(Duration::from_millis(DEFAULT_WAIT_TIME_IO_INTERRUPT_RETRY));
                         interrupt_retries += 1;
                         continue;
                     } else {
                         buffered_chunk.error_flag = true;
-                        #[cfg(feature = "log")] {
-                            warn!("The read operation was interrupted {} times.", interrupt_retries);
-                            warn!("The appropriate chunk will be marked with error flag and the content will be zeroed");
+                        #[cfg(feature = "log")]
+                        {
+                            warn!(
+                                "The read operation was interrupted {} times.",
+                                interrupt_retries
+                            );
+                            warn!(
+                                "The appropriate chunk will be marked with error flag and the content will be zeroed"
+                            );
                         }
                         chunk_size
                     }
-                },
-        		_ => return Err(ZffError::from(e)),
-        	},
+                }
+                _ => return Err(ZffError::from(e)),
+            },
         };
         if r == 0 {
             break;
@@ -156,7 +155,8 @@ where
         buffered_chunk.bytes_read += r as u64;
     }
     if buffered_chunk.bytes_read as usize != chunk_size {
-        buffered_chunk.buffer = buffered_chunk.buffer[..buffered_chunk.bytes_read as usize].to_vec();
+        buffered_chunk.buffer =
+            buffered_chunk.buffer[..buffered_chunk.bytes_read as usize].to_vec();
     }
     if buffered_chunk.error_flag {
         buffered_chunk.buffer = vec![0; chunk_size];
@@ -177,11 +177,14 @@ pub fn calculate_xxhash(buffer: &[u8]) -> u64 {
     xxh3_64(buffer)
 }
 
-/// This function takes the buffered bytes and tries to compress them. 
-/// 
+/// This function takes the buffered bytes and tries to compress them.
+///
 /// If the compression rate is greater than the threshold value of the given
 /// [CompressionHeader], the function returns a tuple of compressed bytes and the flag, if the bytes was compressed or not.
-pub fn compress_buffer(buf: Vec<u8>, compression_header: &CompressionHeader) -> Result<(Vec<u8>, bool)> {
+pub fn compress_buffer(
+    buf: Vec<u8>,
+    compression_header: &CompressionHeader,
+) -> Result<(Vec<u8>, bool)> {
     let mut compression_flag = false;
     let compression_threshold = compression_header.threshold;
 
@@ -242,7 +245,10 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataE
     // check acls on unix systems
     #[cfg(target_family = "unix")]
     if let Ok(acl) = PosixACL::read_acl(path.as_ref()) {
-        metadata_ext.extend(get_posix_acls(&acl, PosixACL::read_default_acl(path.as_ref()).ok().as_ref()));
+        metadata_ext.extend(get_posix_acls(
+            &acl,
+            PosixACL::read_default_acl(path.as_ref()).ok().as_ref(),
+        ));
     }
 
     // check extended attributes on unix systems
@@ -261,7 +267,10 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataE
     let mut metadata_ext = HashMap::new();
 
     //dwFileAttributes
-    metadata_ext.insert(METADATA_EXT_DW_FILE_ATTRIBUTES.into(), metadata.file_attributes().into());
+    metadata_ext.insert(
+        METADATA_EXT_DW_FILE_ATTRIBUTES.into(),
+        metadata.file_attributes().into(),
+    );
 
     Ok(metadata_ext)
 }
@@ -271,7 +280,7 @@ pub(crate) struct MetadataTimestamps {
     atime: u64,
     mtime: u64,
     ctime: u64,
-    btime: u64
+    btime: u64,
 }
 
 impl MetadataTimestamps {
@@ -280,7 +289,7 @@ impl MetadataTimestamps {
             atime,
             mtime,
             ctime,
-            btime
+            btime,
         }
     }
 }
@@ -289,29 +298,33 @@ impl MetadataTimestamps {
 fn get_time_from_metadata(metadata: &Metadata) -> MetadataTimestamps {
     let atime = match metadata.accessed() {
         Ok(atime) => OffsetDateTime::from(atime).unix_timestamp() as u64,
-        Err(_) => 0
+        Err(_) => 0,
     };
     let mtime = match metadata.modified() {
         Ok(mtime) => OffsetDateTime::from(mtime).unix_timestamp() as u64,
-        Err(_) => 0
+        Err(_) => 0,
     };
     #[cfg(target_family = "windows")]
     let ctime = match metadata.modified() {
         Ok(ctime) => OffsetDateTime::from(ctime).unix_timestamp() as u64,
-        Err(_) => 0
+        Err(_) => 0,
     };
     #[cfg(target_family = "unix")]
     let ctime = metadata.ctime() as u64;
 
     let btime = match metadata.created() {
         Ok(btime) => OffsetDateTime::from(btime).unix_timestamp() as u64,
-        Err(_) => 0
+        Err(_) => 0,
     };
 
     MetadataTimestamps::new(atime, mtime, ctime, btime)
 }
 
-pub(crate) fn get_file_header(path: &Path, current_file_number: u64, parent_file_number: u64) -> Result<FileHeader> {
+pub(crate) fn get_file_header(
+    path: &Path,
+    current_file_number: u64,
+    parent_file_number: u64,
+) -> Result<FileHeader> {
     let metadata = std::fs::symlink_metadata(path)?;
 
     let filetype = if metadata.file_type().is_dir() {
@@ -327,38 +340,51 @@ pub(crate) fn get_file_header(path: &Path, current_file_number: u64, parent_file
             if ft.is_block_device() || ft.is_char_device() || ft.is_fifo() || ft.is_socket() {
                 FileType::SpecialFile
             } else {
-                return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
+                return Err(ZffError::new(
+                    ZffErrorKind::Unsupported,
+                    ERROR_UNKNOWN_SPECIAL_FILETYPE,
+                ));
             }
         }
         #[cfg(not(unix))]
         {
-            return Err(ZffError::new(ZffErrorKind::Unsupported, ERROR_UNKNOWN_SPECIAL_FILETYPE));
+            return Err(ZffError::new(
+                ZffErrorKind::Unsupported,
+                ERROR_UNKNOWN_SPECIAL_FILETYPE,
+            ));
         }
     };
 
     let filename = match path.file_name() {
         Some(filename) => filename,
         None => path.as_os_str(),
-    }.into();
+    }
+    .into();
 
     let metadata_ext = get_metadata_ext(path);
 
     let file_header = FileHeader::new(
-                    current_file_number,
-                    filetype,
-                    filename,
-                    parent_file_number,
-                    metadata_ext?);
+        current_file_number,
+        filetype,
+        filename,
+        parent_file_number,
+        metadata_ext?,
+    );
     Ok(file_header)
 }
 
 #[cfg(target_family = "unix")]
-fn get_xattr_metadata<P: AsRef<Path>>(xattrs: XAttrs, path: P) -> Result<HashMap<String, MetadataExtendedValue>> {
+fn get_xattr_metadata<P: AsRef<Path>>(
+    xattrs: XAttrs,
+    path: P,
+) -> Result<HashMap<String, MetadataExtendedValue>> {
     let mut metadata_ext_map = HashMap::new();
     for ext_attr in xattrs {
         let ext_attr = ext_attr.to_string_lossy().to_string();
         // skip posix acls as we have defined the acl in other ways.
-        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL) || ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL_DEFAULT) {
+        if ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL)
+            || ext_attr.starts_with(XATTR_ATTRNAME_POSIX_ACL_DEFAULT)
+        {
             continue;
         }
         let value = xattr::get(path.as_ref(), &ext_attr)?.unwrap_or_default();
@@ -367,21 +393,23 @@ fn get_xattr_metadata<P: AsRef<Path>>(xattrs: XAttrs, path: P) -> Result<HashMap
     Ok(metadata_ext_map)
 }
 
-
 #[cfg(target_family = "unix")]
-pub(crate) fn get_posix_acls(acl: &PosixACL, default_acls: Option<&PosixACL>) -> HashMap<String, MetadataExtendedValue> {
+pub(crate) fn get_posix_acls(
+    acl: &PosixACL,
+    default_acls: Option<&PosixACL>,
+) -> HashMap<String, MetadataExtendedValue> {
     let mut metadata_ext_map = HashMap::new();
     for entry in acl.entries() {
         if let Some((key, value)) = gen_acl_key_value(false, &entry) {
             metadata_ext_map.insert(key, value.into());
         }
-    };
+    }
     if let Some(default_acls) = default_acls {
         for entry in default_acls.entries() {
             if let Some((key, value)) = gen_acl_key_value(false, &entry) {
                 metadata_ext_map.insert(key, value.into());
             }
-        };
+        }
     }
     metadata_ext_map
 }
@@ -393,7 +421,8 @@ pub(crate) fn get_posix_acls(acl: &PosixACL, default_acls: Option<&PosixACL>) ->
 pub(crate) fn add_to_hardlink_map(
     hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>,
     metadata: &Metadata,
-    filenumber: u64) -> Option<u64> {
+    filenumber: u64,
+) -> Option<u64> {
     if metadata.nlink() > 1 {
         let inner_map = hardlink_map.entry(metadata.dev()).or_default();
         if let Some(fno) = inner_map.get_mut(&metadata.ino()) {
@@ -481,21 +510,23 @@ fn gen_acl_mask(default: bool) -> String {
 
 /// This function sets up the [ObjectEncoder] for the physical objects.
 fn setup_physical_object_encoder<R: Read>(
-	physical_objects: HashMap<ObjectHeader, R>,
-	hash_types: &Vec<HashType>,
-	signature_key_bytes: &Option<Vec<u8>>,
-	chunk_number: u64,
-	object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
-	for (object_header, stream) in physical_objects {
-		let encoder = PhysicalObjectEncoder::new(
-			object_header,
-			stream,
-			hash_types.to_owned(),
-			signature_key_bytes.clone(),
-			chunk_number)?;
-		object_encoder.push(ObjectEncoder::Physical(Box::new(encoder)));
-	}
-	Ok(())
+    physical_objects: HashMap<ObjectHeader, R>,
+    hash_types: &Vec<HashType>,
+    signature_key_bytes: &Option<Vec<u8>>,
+    chunk_number: u64,
+    object_encoder: &mut Vec<ObjectEncoder<R>>,
+) -> Result<()> {
+    for (object_header, stream) in physical_objects {
+        let encoder = PhysicalObjectEncoder::new(
+            object_header,
+            stream,
+            hash_types.to_owned(),
+            signature_key_bytes.clone(),
+            chunk_number,
+        )?;
+        object_encoder.push(ObjectEncoder::Physical(Box::new(encoder)));
+    }
+    Ok(())
 }
 
 /// This function sets up the [ObjectEncoder] for the logical objects.
@@ -504,18 +535,22 @@ fn setup_logical_object_encoder<R: Read>(
     hash_types: &Vec<HashType>,
     signature_key_bytes: &Option<Vec<u8>>,
     chunk_number: u64,
-    object_encoder: &mut Vec<ObjectEncoder<R>>) -> Result<()> {
+    object_encoder: &mut Vec<ObjectEncoder<R>>,
+) -> Result<()> {
     for (logical_object_header, logical_object_source) in logical_objects {
         #[cfg(feature = "log")]
-        info!("Setting up logical object encoder for object {}",
-            logical_object_header.object_number);
+        info!(
+            "Setting up logical object encoder for object {}",
+            logical_object_header.object_number
+        );
 
         let lobj = setup_logical_object(
             logical_object_header,
             logical_object_source,
             hash_types,
             signature_key_bytes,
-            chunk_number)?;
+            chunk_number,
+        )?;
         object_encoder.push(ObjectEncoder::Logical(Box::new(lobj)));
     }
     Ok(())
@@ -529,8 +564,10 @@ fn setup_virtual_object_encoder<R: Read>(
 ) -> Result<()> {
     for (virtual_object_header, virtual_object_source) in virtual_objects {
         #[cfg(feature = "log")]
-        info!("Setting up virtual object encoder for object {}",
-            virtual_object_header.object_number);
+        info!(
+            "Setting up virtual object encoder for object {}",
+            virtual_object_header.object_number
+        );
 
         let vobj = setup_virtual_object(
             virtual_object_header,
@@ -555,34 +592,37 @@ fn setup_virtual_object(
     Ok(virt_obj)
 }
 
-
 fn setup_logical_object(
     logical_object_header: ObjectHeader,
     logical_object_source: Box<dyn LogicalObjectSource>,
     hash_types: &Vec<HashType>,
     signature_key_bytes: &Option<Vec<u8>>,
-    chunk_number: u64) -> Result<LogicalObjectEncoder> {
+    chunk_number: u64,
+) -> Result<LogicalObjectEncoder> {
     let log_obj = LogicalObjectEncoder::new(
         logical_object_header,
         logical_object_source,
         hash_types.to_owned(),
         signature_key_bytes.clone(),
-        chunk_number)?;
+        chunk_number,
+    )?;
     Ok(log_obj)
 }
 
-
 pub(crate) fn check_and_get_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
-	match std::fs::symlink_metadata(path.as_ref()) {
-		Ok(metadata) => Ok(metadata),
-		Err(e) => {
-			#[cfg(feature = "log")]
-			warn!("The metadata of the file {:?} can't be read. This file will be completly ignored.", path.as_ref().display());
-			#[cfg(feature = "log")]
-			debug!("{e}");
-			Err(e.into())
-		},
-	}
+    match std::fs::symlink_metadata(path.as_ref()) {
+        Ok(metadata) => Ok(metadata),
+        Err(e) => {
+            #[cfg(feature = "log")]
+            warn!(
+                "The metadata of the file {:?} can't be read. This file will be completly ignored.",
+                path.as_ref().display()
+            );
+            #[cfg(feature = "log")]
+            debug!("{e}");
+            Err(e.into())
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "log"), allow(unused_variables))]
@@ -594,82 +634,104 @@ pub(crate) fn check_file_accessibility<P: AsRef<Path>>(path: P, file_header: &mu
             Ok(_) => (),
             Err(e) => {
                 #[cfg(feature = "log")]
-                warn!("The content of the file {} can't be read, due the following error: {e}.\
-                    The file will be stored as an empty file.", path.as_ref().display());
+                warn!(
+                    "The content of the file {} can't be read, due the following error: {e}.\
+                    The file will be stored as an empty file.",
+                    path.as_ref().display()
+                );
                 // set the "ua" tag and the full path in file metadata.
-                file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), path.as_ref().to_string_lossy().to_string().into());
-            },
+                file_header.metadata_ext.insert(
+                    METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(),
+                    path.as_ref().to_string_lossy().to_string().into(),
+                );
+            }
         }
     };
 }
 
 pub(crate) fn create_iterator<C: AsRef<Path>>(
-	current_dir: C,
-	hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>,
-	dir_current_file_number: u64,
-	dir_parent_file_number: u64,
-	directory_children: &mut HashMap::<u64, Vec<u64>>,
-	files: &mut Vec<(PathBuf, FileHeader)>,
-	) -> Result<std::fs::ReadDir> {
+    current_dir: C,
+    hardlink_map: &mut HashMap<u64, HashMap<u64, u64>>,
+    dir_current_file_number: u64,
+    dir_parent_file_number: u64,
+    directory_children: &mut HashMap<u64, Vec<u64>>,
+    files: &mut Vec<(PathBuf, FileHeader)>,
+) -> Result<std::fs::ReadDir> {
     #[cfg_attr(not(feature = "log"), allow(unused_variables))]
-	let metadata = match std::fs::symlink_metadata(current_dir.as_ref()) {
-		Ok(metadata) => metadata,
-		Err(e) => {
-			#[cfg(feature = "log")]
-			warn!("The metadata of the file {} can't be read. This file will be completly ignored.", &current_dir.as_ref().display());
-			#[cfg(feature = "log")]
-			debug!("{e}");
-			return Err(e.into());
-		},
-	};
+    let metadata = match std::fs::symlink_metadata(current_dir.as_ref()) {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            #[cfg(feature = "log")]
+            warn!(
+                "The metadata of the file {} can't be read. This file will be completly ignored.",
+                &current_dir.as_ref().display()
+            );
+            #[cfg(feature = "log")]
+            debug!("{e}");
+            return Err(e.into());
+        }
+    };
 
     directory_children
-    .entry(dir_parent_file_number)
-    .or_default()
-    .push(dir_current_file_number);
+        .entry(dir_parent_file_number)
+        .or_default()
+        .push(dir_current_file_number);
 
-	let mut file_header = get_file_header(current_dir.as_ref(), dir_current_file_number, dir_parent_file_number)?;
+    let mut file_header = get_file_header(
+        current_dir.as_ref(),
+        dir_current_file_number,
+        dir_parent_file_number,
+    )?;
 
-	let iterator = match read_dir(current_dir.as_ref()) {
-		Ok(iterator) => iterator,
-		Err(e) => {
-			// if the directory is not readable, we should continue but read the metadata of the directory.
-			#[cfg(feature = "log")]
-			warn!("The content of the file {} can't be read, due the following error: {e}.\
-				The file will be stored as an empty file.", &current_dir.as_ref().display());
-			file_header.metadata_ext.insert(METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(), current_dir.as_ref().to_string_lossy().to_string().into());
-			files.push((current_dir.as_ref().to_path_buf(), file_header));
-			return Err(e.into());
-		}
-	};
-	add_to_hardlink_map(hardlink_map, &metadata, dir_current_file_number);
-	files.push((current_dir.as_ref().to_path_buf(), file_header));
-	
-	Ok(iterator)
+    let iterator = match read_dir(current_dir.as_ref()) {
+        Ok(iterator) => iterator,
+        Err(e) => {
+            // if the directory is not readable, we should continue but read the metadata of the directory.
+            #[cfg(feature = "log")]
+            warn!(
+                "The content of the file {} can't be read, due the following error: {e}.\
+				The file will be stored as an empty file.",
+                &current_dir.as_ref().display()
+            );
+            file_header.metadata_ext.insert(
+                METADATA_EXT_KEY_UNACCESSABLE_FILE.to_string(),
+                current_dir.as_ref().to_string_lossy().to_string().into(),
+            );
+            files.push((current_dir.as_ref().to_path_buf(), file_header));
+            return Err(e.into());
+        }
+    };
+    add_to_hardlink_map(hardlink_map, &metadata, dir_current_file_number);
+    files.push((current_dir.as_ref().to_path_buf(), file_header));
+
+    Ok(iterator)
 }
 
 #[cfg(target_family = "unix")]
-pub(crate) fn transform_hardlink_map(hardlink_map: HashMap<u64, HashMap<u64, u64>>, files: &mut Vec<(PathBuf, FileHeader)>) -> Result<HashMap<u64, u64>> {
-	let mut inner_hardlink_map = HashMap::new();
-	for (path, file_header) in files {
-		let metadata = metadata(path)?;
-		if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
-    		if let Some(fno) = inner_map.get(&metadata.ino()) {
-				if *fno != file_header.file_number {
-					file_header.transform_to_hardlink();
-					inner_hardlink_map.insert(file_header.file_number, *fno);
-				};
-	    	}
-     	}
-	}
+pub(crate) fn transform_hardlink_map(
+    hardlink_map: HashMap<u64, HashMap<u64, u64>>,
+    files: &mut Vec<(PathBuf, FileHeader)>,
+) -> Result<HashMap<u64, u64>> {
+    let mut inner_hardlink_map = HashMap::new();
+    for (path, file_header) in files {
+        let metadata = metadata(path)?;
+        if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
+            if let Some(fno) = inner_map.get(&metadata.ino()) {
+                if *fno != file_header.file_number {
+                    file_header.transform_to_hardlink();
+                    inner_hardlink_map.insert(file_header.file_number, *fno);
+                };
+            }
+        }
+    }
     Ok(inner_hardlink_map)
 }
 
 fn prepare_object_header<R: Read>(
     physical_objects: &mut HashMap<ObjectHeader, R>, // <ObjectHeader, input_data stream>
-	logical_objects: &mut HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
+    logical_objects: &mut HashMap<ObjectHeader, Box<dyn LogicalObjectSource>>,
     virtual_objects: &mut HashMap<ObjectHeader, Box<dyn VirtualObjectSource>>,
-    extender_parameter: &Option<ZffExtenderParameter>
+    extender_parameter: &Option<ZffExtenderParameter>,
 ) -> Result<()> {
     let mut next_object_number = match &extender_parameter {
         None => INITIAL_OBJECT_NUMBER,
@@ -692,11 +754,11 @@ fn prepare_object_header<R: Read>(
     let mut modify_map_log = HashMap::new();
     for (mut header, logical_object_source) in logical_objects.drain() {
         //check if all EncryptionHeader are contain a decrypted encryption key.
-        check_encryption_key_in_header(&header)?;        
+        check_encryption_key_in_header(&header)?;
         // modifies the appropriate object numbers to the right values.
         header.object_number = next_object_number;
         next_object_number += 1;
-        
+
         modify_map_log.insert(header, logical_object_source);
     }
     logical_objects.extend(modify_map_log);
@@ -704,11 +766,11 @@ fn prepare_object_header<R: Read>(
     let mut modify_map_virt = HashMap::new();
     for (mut header, virtual_object_source) in virtual_objects.drain() {
         //check if all EncryptionHeader are contain a decrypted encryption key.
-        check_encryption_key_in_header(&header)?;        
+        check_encryption_key_in_header(&header)?;
         // modifies the appropriate object numbers to the right values.
         header.object_number = next_object_number;
         next_object_number += 1;
-        
+
         modify_map_virt.insert(header, virtual_object_source);
     }
     virtual_objects.extend(modify_map_virt);
@@ -721,7 +783,8 @@ fn check_encryption_key_in_header(object_header: &ObjectHeader) -> Result<()> {
         if encryption_header.get_encryption_key_ref().is_none() {
             return Err(ZffError::new(
                 ZffErrorKind::EncryptionError,
-                ERROR_MISSING_ENCRYPTION_HEADER_KEY))
+                ERROR_MISSING_ENCRYPTION_HEADER_KEY,
+            ));
         };
     }
     Ok(())
