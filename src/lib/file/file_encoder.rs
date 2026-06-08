@@ -173,7 +173,7 @@ impl FileEncoder {
                     BufferedChunk::default()
                 }
             }
-            FileTypeEncodingInformation::File(ref mut reader) => {
+            FileTypeEncodingInformation::File(reader) => {
                 let buffered_chunk = buffer_chunk(reader, chunk_size)?;
                 self.read_bytes_underlying_data += buffered_chunk.bytes_read;
                 buffered_chunk

@@ -274,8 +274,8 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
     pub fn output_path(&self) -> Option<PathBuf> {
         match &self.output {
             ZffFilesOutput::Stream => None,
-            ZffFilesOutput::NewContainer(ref path) => Some(path.clone()),
-            ZffFilesOutput::ExtendContainer(ref path_vec) => Some(path_vec[0].clone()),
+            ZffFilesOutput::NewContainer(path) => Some(path.clone()),
+            ZffFilesOutput::ExtendContainer(path_vec) => Some(path_vec[0].clone()),
         }
     }
 
@@ -325,8 +325,8 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
             file_extension = file_extension_next_value(&file_extension)?;
             let mut segment_filename = match &self.output {
                 ZffFilesOutput::Stream => unreachable!(),
-                ZffFilesOutput::NewContainer(ref path) => path.clone(),
-                ZffFilesOutput::ExtendContainer(ref path_vec) => path_vec[0].clone(), // should never get out of bound when fn setup_container was used before.
+                ZffFilesOutput::NewContainer(path) => path.clone(),
+                ZffFilesOutput::ExtendContainer(path_vec) => path_vec[0].clone(), // should never get out of bound when fn setup_container was used before.
             };
 
             generated_files.push(segment_filename.clone());

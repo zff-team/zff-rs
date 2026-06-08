@@ -115,7 +115,7 @@ pub(crate) fn get_segment_of_chunk_no(
     }
 
     // Find the next higher key and return its value.
-    if let Some((_, &segment_no)) = mainfooter_chunkmap.iter().find(|(&key, _)| key > chunk_no) {
+    if let Some((_, &segment_no)) = mainfooter_chunkmap.iter().find(|(key, _)| key > &&chunk_no) {
         return Some(segment_no);
     }
 

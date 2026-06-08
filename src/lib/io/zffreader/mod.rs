@@ -106,7 +106,7 @@ impl PreloadedChunkMaps {
                 *self = PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory::default())
             }
             PreloadedChunkMaps::InMemory(_) => (),
-            PreloadedChunkMaps::Redb(ref mut db) => {
+            PreloadedChunkMaps::Redb(db) => {
                 *self = PreloadedChunkMaps::InMemory(
                     convert_redb_into_in_memory_preloaded_chunkmaps(db)?,
                 )
@@ -673,7 +673,7 @@ impl<R: ReadAt> ZffReader<R> {
             chunkmap_offset_info(ChunkMapType::HeaderMap, chunk_number, &self.metadata)
         {
             if let Some(segment) = self.metadata.segments.get(&segment_no) {
-                let mut map = if let Some(ref enc_info) = encryption_information {
+                let mut map = if let Some(enc_info) = encryption_information {
                     ChunkHeaderMap::decrypt_and_decode_at(
                         &enc_info.encryption_key,
                         &enc_info.algorithm,
@@ -751,7 +751,7 @@ impl<R: ReadAt> ZffReader<R> {
                 .chunk_samebytes_map_table
                 .get(&chunk_number)
             {
-                let mut map = if let Some(ref enc_info) = encryption_information {
+                let mut map = if let Some(enc_info) = encryption_information {
                     ChunkSamebytesMap::decrypt_and_decode_at(
                         &enc_info.encryption_key,
                         &enc_info.algorithm,
@@ -829,7 +829,7 @@ impl<R: ReadAt> ZffReader<R> {
     ) -> Result<()> {
         for segment in self.metadata.segments.values() {
             if let Some(offset) = segment.footer().chunk_dedup_map_table.get(&chunk_number) {
-                let mut map = if let Some(ref enc_info) = encryption_information {
+                let mut map = if let Some(enc_info) = encryption_information {
                     ChunkDeduplicationMap::decrypt_and_decode_at(
                         &enc_info.encryption_key,
                         &enc_info.algorithm,

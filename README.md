@@ -229,7 +229,7 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 [docs-image]: https://docs.rs/zff/badge.svg
 [docs-link]: https://docs.rs/zff/
 [license-image]: https://img.shields.io/badge/license-Apache2.0/MIT-blue.svg
-[rustc-image]: https://img.shields.io/badge/rustc-1.67.1+-blue.svg
+[rustc-image]: https://img.shields.io/badge/rustc-1.89.0+-blue.svg
 [website-image]: https://img.shields.io/website-up-down-green-red/http/zff.dev.svg
 [website-link]: https://zff.dev
 

@@ -321,9 +321,9 @@ pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> =
     TableDefinition::new("preloaded_dedup_map");
 
 // Unix ACLs
-#[cfg(target_family = "unix")]
+#[cfg(feature = "posix-acl")]
 pub(crate) const ACL_PREFIX: &str = "acl";
-#[cfg(target_family = "unix")]
+#[cfg(feature = "posix-acl")]
 pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";
 
 // XAttr
