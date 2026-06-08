@@ -197,7 +197,7 @@ impl fmt::Display for ChunkHeaderMap {
 
 impl Encryption for ChunkHeaderMap {
     fn crypto_nonce_padding() -> u8 {
-        0b00000001
+        CRYPTO_NONCE_PADDING_CHUNKHEADER_MAP
     }
 }
 

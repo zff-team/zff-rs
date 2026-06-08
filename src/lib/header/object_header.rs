@@ -245,7 +245,7 @@ impl HeaderEncryption for ObjectHeader {
 
 impl Encryption for ObjectHeader {
     fn crypto_nonce_padding() -> u8 {
-        0b00010000
+        CRYPTO_NONCE_PADDING_OBJECT_HEADER
     }
 }
 
@@ -489,6 +489,6 @@ impl HeaderCoding for EncryptedObjectHeader {
 
 impl Encryption for EncryptedObjectHeader {
     fn crypto_nonce_padding() -> u8 {
-        0b00010000
+        CRYPTO_NONCE_PADDING_OBJECT_HEADER
     }
 }

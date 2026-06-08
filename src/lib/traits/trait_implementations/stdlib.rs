@@ -654,6 +654,6 @@ where
 /// implements Encryption for `Vec<u8>` to use this for chunk content data
 impl Encryption for Vec<u8> {
     fn crypto_nonce_padding() -> u8 {
-        0b00000000
+        CRYPTO_NONCE_PADDING_CHUNK_CONTENT
     }
 }

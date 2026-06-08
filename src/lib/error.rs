@@ -266,9 +266,6 @@ impl From<std::io::Error> for ZffError {
 impl From<PKCS5CryptoError> for ZffError {
     fn from(e: PKCS5CryptoError) -> ZffError {
         let err_msg = e.to_string();
-        //TODO: time of writing, pkcs5 does not implement std::error::Error (stable is version 0.7.1, 0.8.0
-        // is just a release canidate which implements std::error::Error using the feature-flag std).
-        // As soon as version 0.8.0 is released, we can use the source of the error.
         ZffError::new_with_source(ZffErrorKind::EncryptionError, Some(Box::new(e)), err_msg)
     }
 }

@@ -195,7 +195,7 @@ impl fmt::Display for ChunkSamebytesMap {
 
 impl Encryption for ChunkSamebytesMap {
     fn crypto_nonce_padding() -> u8 {
-        0b00011111
+        CRYPTO_NONCE_PADDING_SAMEBYTES_MAP
     }
 }
 

@@ -201,7 +201,7 @@ impl ObjectFooter {
 
 impl Encryption for ObjectFooter {
     fn crypto_nonce_padding() -> u8 {
-        0b00100000
+        CRYPTO_NONCE_PADDING_OBJECT_FOOTER
     }
 }
 

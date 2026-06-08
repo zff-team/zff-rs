@@ -201,7 +201,7 @@ impl fmt::Display for ChunkDeduplicationMap {
 
 impl Encryption for ChunkDeduplicationMap {
     fn crypto_nonce_padding() -> u8 {
-        0b00111111
+        CRYPTO_NONCE_PADDING_DEDUPLICATION_CHUNKMAP
     }
 }
 

@@ -308,7 +308,7 @@ impl fmt::Display for FileHeader {
 
 impl Encryption for FileHeader {
     fn crypto_nonce_padding() -> u8 {
-        0b00000100
+        CRYPTO_NONCE_PADDING_FILE_HEADER
     }
 }
 

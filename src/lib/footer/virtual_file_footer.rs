@@ -284,7 +284,7 @@ impl HeaderCoding for VirtualFileFooter {
 
 impl Encryption for VirtualFileFooter {
     fn crypto_nonce_padding() -> u8 {
-        0b00001000 //TODO: move all crypto paddings to constants (#codeCleanup)
+        CRYPTO_NONCE_PADDING_FILE_FOOTER
     }
 }
 
@@ -405,7 +405,7 @@ impl HeaderCoding for VirtualFileMap {
 
 impl Encryption for VirtualFileMap {
     fn crypto_nonce_padding() -> u8 {
-        0b01111111 //TODO: move all crypto paddings to constants (#codeCleanup)
+         CRYPTO_NONCE_PADDING_VIRTUAL_FILE_MAP
     }
 }
 

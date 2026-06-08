@@ -364,3 +364,23 @@ pub(crate) const VIRTUALFILEFOOTERCONTENT_DIRECTORY: u8 = 0x00000001;
 pub(crate) const VIRTUALFILEFOOTERCONTENT_SYMLINK: u8 = 0x00000002;
 pub(crate) const VIRTUALFILEFOOTERCONTENT_HARDLINK: u8 = 0x00000003;
 pub(crate) const VIRTUALFILEFOOTERCONTENT_SPECIAL_FILE: u8 = 0x00000004;
+
+// crypto nonce padding
+/// Crypto nonce padding used for `FileHeader`.
+pub const CRYPTO_NONCE_PADDING_FILE_HEADER: u8 = 0b00000100;
+/// Crypto nonce padding used for `FileFooter` and `VirtualFileFooter`.
+pub const CRYPTO_NONCE_PADDING_FILE_FOOTER: u8 = 0b00001000;
+/// Crypto nonce padding used for `VirtualFileMap`.
+pub const CRYPTO_NONCE_PADDING_VIRTUAL_FILE_MAP: u8 = 0b01111111;
+/// Crypto nonce padding used for `ObjectHeader`.
+pub const CRYPTO_NONCE_PADDING_OBJECT_HEADER: u8 = 0b00010000;
+/// Crypto nonce padding used for `ObjectFooter`.
+pub const CRYPTO_NONCE_PADDING_OBJECT_FOOTER: u8 = 0b00100000;
+/// Crypto nonce padding used for `DeduplicationChunkMap`.
+pub const CRYPTO_NONCE_PADDING_DEDUPLICATION_CHUNKMAP: u8 = 0b00111111;
+/// Crypto nonce padding used for `ChunkHeaderMap`.
+pub const CRYPTO_NONCE_PADDING_CHUNKHEADER_MAP: u8 = 0b00000001;
+/// Crypto nonce padding used for `SameBytesMap`.
+pub const CRYPTO_NONCE_PADDING_SAMEBYTES_MAP: u8 = 0b00011111;
+/// Crypto nonce padding used for chunk content.
+pub const CRYPTO_NONCE_PADDING_CHUNK_CONTENT: u8 = 0b00000000;
