@@ -101,19 +101,18 @@ The following benchmarks evaluate the performance of **zff tooling** compared to
 #### Test Setup
 
 The following benchmarks were all run on a notebook, which has the following specifications:
-- Lenovo Thinkbook 14S Yoga ITL  
-- Intel(R) 11th Gen i5-1135G7 @ AVG: 2.40GHz (MAX: 4.2 GHz)  
-- 16GB DDR4-3200 RAM  
+- AMD Ryzen 7 7800X3D 8-Core Processor
+- 32GB DDR5 RAM  
 - internal Samsung 980 Pro NVMe 1TB 
 The installed operating system was Gentoo Linux.  
-Input and output storage device was the internal NVMe.  
+Input storage device was the internal NVMe.  
 
 The following benchmark was created for a \~20GB prebuilt image, which was generated using [the benchmark script](/benchmarks/gen_benchmark_image.sh).
 
 #### Results
 
 > [WARNING!] Comparisons reflect specific tool implementations and configurations, not inherent properties of the formats themselves.
-
+ 
 ```mermaid
 ---
 config:
