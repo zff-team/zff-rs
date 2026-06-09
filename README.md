@@ -114,23 +114,45 @@ The following benchmark was created for a \~20GB prebuilt image, which was gener
 
 > [WARNING!] Comparisons reflect specific tool implementations and configurations, not inherent properties of the formats themselves.
 
-![Acquisition time](/benchmarks/acquisition_time.png)  
+```mermaid
+---
+config:
+  xyChart:
+    showDataLabel: true
+---
+xychart horizontal
+    title "Benchmark: Acquisition time"
+    x-axis "Tool" ["ewfacquire¹", "ewfacquire (Ex01)²", "zffacquire³", "zffacquire (+encryption)⁴", "zffacquire (+data signing)⁵", "zffacquire (lz4)⁶", "Guymager (e01-Image)⁷", "linpmem/aff4 (default settings)⁸", "linpmem/aff4 (default settings with 8 threads)⁹", "linpmem (snappy compression)¹⁰", "linpmem (lz4 compression)¹¹" ]
+    y-axis "Time (s) - lower is better" 0 --> 200
+    bar [108.44, 110.21, 16.48, 28.81, 19.49, 12.11, 55.33, 133.18, 27.57, 28.38, 15.83, 12.36 ]
+```
 
-¹using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20171104.  
-²using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```  
-³using ```zffacquire physical -i raw/example01.dd -o zff``` 
-⁴using ```zffacquire physical -i raw/example01.dd -o zff -p -L debug```  
-⁵using ```zffacquire physical -i raw/example01.dd -o zff -S```  
-⁶using ```zffacquire physical -i raw/example01.dd -o zff_lz4 -z lz4```   
+
+¹using ```ewfacquire example01.dd -t example01_ewf -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20240506 (example01_ewf.E01 was a symlink to /dev/null to provide equivalent write speed).  
+²using ```ewfacquire example01.dd -t example01_ewf -f encase7-v2 -b 64 -c fast -S 7.9EiB -u```, using ewfacquire 20240506 (example01_ewf.E01 was a symlink to /dev/null to provide equivalent write speed)
+³using ```zffacquire physical -i raw/example01.dd > /dev/null``` 
+⁴using ```zffacquire physical -i raw/example01.dd -p > /dev/null```  
+⁵using ```zffacquire physical -i raw/example01.dd -S > /dev/null```  
+⁶using ```zffacquire physical -i raw/example01.dd -z lz4 > /dev/null```   
 ⁷Using Guymager 0.8.12, with the default guymager.cfg, MD5 hash calculation, without "HashVerifyDest".  
-⁸Using Guymager 0.8.12, with enabled Aff support and Aff compression level 1 in guymager.cfg, with MD5 hash calculation, without "HashVerifyDest".  
-⁹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4```  
-¹⁰using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 --threads 8```  
-¹¹using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy```  
-¹²using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c snappy --threads 8```  
-¹³using ```linpmem-3.3-rc1 -i example01.dd -o output.aff4 -c lz4```  
+⁸using ```linpmem-3.3-rc1 -i example01.dd -o /dev/null```  
+⁹using ```linpmem-3.3-rc1 -i example01.dd -o /dev/null --threads 8```  
+¹⁰using ```linpmem-3.3-rc1 -i example01.dd -o /dev/null -c snappy```  
+¹¹using ```linpmem-3.3-rc1 -i example01.dd -o /dev/null -c lz4```  
 
-![Read speed](/benchmarks/read_speed_dd.png)
+```mermaid
+---
+config:
+  xyChart:
+    showDataLabel: true
+---
+xychart horizontal
+    title "Benchmark: Read speed"
+    x-axis "Tool" ["zffacquire (Zffv3, zstd-Image)¹", "zffacquire (Zffv2, zstd-Image)²", "xmount (ewfacquire Ex01-Image)³", "xmount (guymager e01-Image)⁴" ]
+    y-axis "GB/s - higher is better" 0.0 --> 4.5
+    bar [4.24, 1.98, 1.13, 1.05]
+```
+
 \
 ¹The following commands were used:
 ```bash
@@ -144,20 +166,10 @@ dd if=/tmp/zffmount/zff_image.dd of=/dev/null bs=1M
 ```
 ³The following commands were used:
 ```bash
-affuse aff_image.aff /tmp/affmount
-dd if=/tmp/affmount/aff_example01.aff.raw of=/dev/null bs=1M
-```
-⁴The following commands were used:
-```bash
-xmount --in aff aff_image.aff /tmp/affmount
-dd if=/tmp/affmount/aff_image.dd of=/dev/null bs=1M
-```
-⁵The following commands were used:
-```bash
 xmount --in ewf ewfacquired.Ex01 /tmp/ewfmount
 dd if=/tmp/ewfmount/ewfacquired.dd of=/dev/null bs=1M
 ```
-⁶The following commands were used:
+⁴The following commands were used:
 ```bash
 xmount --in ewf guymager.e01 /tmp/ewfmount
 dd if=/tmp/ewfmount/guymager.dd of=/dev/null b=1M
