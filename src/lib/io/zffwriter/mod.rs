@@ -275,7 +275,7 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
         match &self.output {
             ZffFilesOutput::Stream => None,
             ZffFilesOutput::NewContainer(path) => Some(path.clone()),
-            ZffFilesOutput::ExtendContainer(path_vec) => Some(path_vec[0].clone()),
+            ZffFilesOutput::ExtendContainer(path_vec) => path_vec.first().cloned(),
         }
     }
 
