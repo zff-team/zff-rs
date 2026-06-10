@@ -405,7 +405,7 @@ impl HeaderCoding for VirtualFileMap {
 
 impl Encryption for VirtualFileMap {
     fn crypto_nonce_padding() -> u8 {
-         CRYPTO_NONCE_PADDING_VIRTUAL_FILE_MAP
+        CRYPTO_NONCE_PADDING_VIRTUAL_FILE_MAP
     }
 }
 

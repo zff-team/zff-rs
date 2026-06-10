@@ -108,10 +108,10 @@ pub(crate) fn get_segment_of_chunk_no(
     }
 
     // If the chunk_no is higher than the highest key, return None.
-    if let Some((&highest_chunk_no, _)) = mainfooter_chunkmap.iter().next_back() {
-        if chunk_no > highest_chunk_no {
-            return None;
-        }
+    if let Some((&highest_chunk_no, _)) = mainfooter_chunkmap.iter().next_back()
+        && chunk_no > highest_chunk_no
+    {
+        return None;
     }
 
     // Find the next higher key and return its value.

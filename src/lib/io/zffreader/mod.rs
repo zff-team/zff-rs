@@ -671,37 +671,33 @@ impl<R: ReadAt> ZffReader<R> {
     ) -> Result<()> {
         if let Some((segment_no, offset)) =
             chunkmap_offset_info(ChunkMapType::HeaderMap, chunk_number, &self.metadata)
+            && let Some(segment) = self.metadata.segments.get(&segment_no)
         {
-            if let Some(segment) = self.metadata.segments.get(&segment_no) {
-                let mut map = if let Some(enc_info) = encryption_information {
-                    ChunkHeaderMap::decrypt_and_decode_at(
-                        &enc_info.encryption_key,
-                        &enc_info.algorithm,
-                        segment,
-                        chunk_number,
-                        offset,
-                    )?
-                } else {
-                    ChunkHeaderMap::decode_at(segment, offset)?
-                };
-                let inner_map = map.flush();
+            let mut map = if let Some(enc_info) = encryption_information {
+                ChunkHeaderMap::decrypt_and_decode_at(
+                    &enc_info.encryption_key,
+                    &enc_info.algorithm,
+                    segment,
+                    chunk_number,
+                    offset,
+                )?
+            } else {
+                ChunkHeaderMap::decode_at(segment, offset)?
+            };
+            let inner_map = map.flush();
 
-                let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
-                match *preloaded_chunkmaps {
-                    PreloadedChunkMaps::None => {
-                        initialize_new_map_if_empty(Arc::clone(&self.metadata))
-                    }
-                    PreloadedChunkMaps::InMemory(ref mut maps) => {
-                        maps.chunk_header.extend(inner_map)
-                    }
-                    PreloadedChunkMaps::Redb(ref mut db) => {
-                        for (chunk_no, value) in inner_map {
-                            preloaded_redb_chunk_header_map_add_entry(db, chunk_no, value)?;
-                        }
+            let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
+            match *preloaded_chunkmaps {
+                PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+                PreloadedChunkMaps::InMemory(ref mut maps) => maps.chunk_header.extend(inner_map),
+                PreloadedChunkMaps::Redb(ref mut db) => {
+                    for (chunk_no, value) in inner_map {
+                        preloaded_redb_chunk_header_map_add_entry(db, chunk_no, value)?;
                     }
                 }
             }
         }
+
         Ok(())
     }
 

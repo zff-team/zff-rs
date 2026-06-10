@@ -32,8 +32,8 @@ use log::{debug, info, warn};
 #[cfg(feature = "posix-acl")]
 use posix_acl::{ACLEntry, PosixACL, Qualifier};
 use time::OffsetDateTime;
-use xattr::XAttrs;
 use twox_hash::xxhash3_64;
+use xattr::XAttrs;
 
 // - modules
 /// Module for reading zff containers. Provides ZffReader and helper functions.
@@ -716,14 +716,13 @@ pub(crate) fn transform_hardlink_map(
     let mut inner_hardlink_map = HashMap::new();
     for (path, file_header) in files {
         let metadata = metadata(path)?;
-        if let Some(inner_map) = hardlink_map.get(&metadata.dev()) {
-            if let Some(fno) = inner_map.get(&metadata.ino()) {
-                if *fno != file_header.file_number {
-                    file_header.transform_to_hardlink();
-                    inner_hardlink_map.insert(file_header.file_number, *fno);
-                };
-            }
-        }
+        if let Some(inner_map) = hardlink_map.get(&metadata.dev())
+            && let Some(fno) = inner_map.get(&metadata.ino())
+            && *fno != file_header.file_number
+        {
+            file_header.transform_to_hardlink();
+            inner_hardlink_map.insert(file_header.file_number, *fno);
+        };
     }
     Ok(inner_hardlink_map)
 }
@@ -780,13 +779,13 @@ fn prepare_object_header<R: Read>(
 }
 
 fn check_encryption_key_in_header(object_header: &ObjectHeader) -> Result<()> {
-    if let Some(encryption_header) = &object_header.encryption_header {
-        if encryption_header.get_encryption_key_ref().is_none() {
-            return Err(ZffError::new(
-                ZffErrorKind::EncryptionError,
-                ERROR_MISSING_ENCRYPTION_HEADER_KEY,
-            ));
-        };
+    if let Some(encryption_header) = &object_header.encryption_header
+        && encryption_header.get_encryption_key_ref().is_none()
+    {
+        return Err(ZffError::new(
+            ZffErrorKind::EncryptionError,
+            ERROR_MISSING_ENCRYPTION_HEADER_KEY,
+        ));
     }
     Ok(())
 }

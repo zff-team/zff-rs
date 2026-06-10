@@ -905,21 +905,20 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                         }
                                         _ => unreachable!(),
                                     };
-                                if let Some(samebytes) = samebytes {
-                                    if !self
+                                if let Some(samebytes) = samebytes
+                                    && !self
                                         .in_progress_data
                                         .chunkmaps
                                         .same_bytes_map
                                         .add_chunk_entry(current_chunk_number, samebytes)
-                                    {
-                                        self.flush_chunkmap(ChunkMapType::SamebytesMap)?;
-                                        self.read_state = ReadState::ChunkSamebytesMap;
-                                        self.in_progress_data
-                                            .chunkmaps
-                                            .same_bytes_map
-                                            .add_chunk_entry(current_chunk_number, samebytes);
-                                        continue 'read_loop;
-                                    }
+                                {
+                                    self.flush_chunkmap(ChunkMapType::SamebytesMap)?;
+                                    self.read_state = ReadState::ChunkSamebytesMap;
+                                    self.in_progress_data
+                                        .chunkmaps
+                                        .same_bytes_map
+                                        .add_chunk_entry(current_chunk_number, samebytes);
+                                    continue 'read_loop;
                                 }
                                 self.in_progress_data.current_prepared_data_queue_state =
                                     PreparedDataQueueState::Deduplication;
@@ -933,21 +932,20 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                         }
                                         _ => unreachable!(),
                                     };
-                                if let Some(deduplication) = deduplication {
-                                    if !self
+                                if let Some(deduplication) = deduplication
+                                    && !self
                                         .in_progress_data
                                         .chunkmaps
                                         .duplicate_chunks
                                         .add_chunk_entry(current_chunk_number, deduplication)
-                                    {
-                                        self.flush_chunkmap(ChunkMapType::DeduplicationMap)?;
-                                        self.read_state = ReadState::ChunkDeduplicationMap;
-                                        self.in_progress_data
-                                            .chunkmaps
-                                            .duplicate_chunks
-                                            .add_chunk_entry(current_chunk_number, deduplication);
-                                        continue 'read_loop;
-                                    }
+                                {
+                                    self.flush_chunkmap(ChunkMapType::DeduplicationMap)?;
+                                    self.read_state = ReadState::ChunkDeduplicationMap;
+                                    self.in_progress_data
+                                        .chunkmaps
+                                        .duplicate_chunks
+                                        .add_chunk_entry(current_chunk_number, deduplication);
+                                    continue 'read_loop;
                                 }
                                 self.in_progress_data.current_prepared_data_queue_state =
                                     PreparedDataQueueState::Data;
