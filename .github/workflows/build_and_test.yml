@@ -51,7 +51,7 @@ jobs:
     
     - name: Install deps (Linux only)
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get install -y ${{ matrix.libacl }} ${{ matrix.aarch64-compiler }} ${{ matrix.pkg_config }} ${{ matrix.libudev }}
+      run: sudo apt update && sudo apt install -y ${{ matrix.libacl }} ${{ matrix.aarch64-compiler }} ${{ matrix.pkg_config }} ${{ matrix.libudev }}
     
     - name: Build ${{ matrix.target }}
       run: cargo clippy --verbose --all-features --target ${{ matrix.target }}
