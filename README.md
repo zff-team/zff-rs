@@ -111,8 +111,9 @@ The following benchmark was created for a \~20GB prebuilt image, which was gener
 
 #### Results
 
-> [WARNING!] Comparisons reflect specific tool implementations and configurations, not inherent properties of the formats themselves.
- 
+> ⚠️ Comparisons reflect specific tool implementations and configurations, not inherent properties of the formats themselves.
+
+
 ```mermaid
 ---
 config:
