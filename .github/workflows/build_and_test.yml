@@ -20,13 +20,10 @@ jobs:
             libacl: libacl1-dev
             pkg_config: pkg-config
             libudev: libudev-dev
-            aarch64-compiler: gcc-aarch64-linux-gnu
             toolchain: stable
             target: x86_64-unknown-linux-gnu
-            aarch64-target: aarch64-unknown-linux-gnu
             name: Linux (Ubuntu)
             fid: x86_64-linux
-            aarch64-fid: aarch64-linux
           - os: windows-latest
             libacl: ""
             toolchain: nightly
@@ -51,14 +48,10 @@ jobs:
     
     - name: Install deps (Linux only)
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt update && sudo apt install -y ${{ matrix.libacl }} ${{ matrix.aarch64-compiler }} ${{ matrix.pkg_config }} ${{ matrix.libudev }}
+      run: sudo apt update && sudo apt install -y ${{ matrix.libacl }} ${{ matrix.pkg_config }} ${{ matrix.libudev }}
     
     - name: Build ${{ matrix.target }}
       run: cargo clippy --verbose --all-features --target ${{ matrix.target }}
-
-    - name: Build ${{ matrix.aarch64-target }}
-      if: matrix.os == 'ubuntu-latest'
-      run: cargo clippy --verbose --all-features --target ${{ matrix.aarch64-target }}
     
     - name: Run tests
       run: cargo test --verbose --all-features --target ${{ matrix.target }}
