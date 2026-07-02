@@ -14,6 +14,8 @@ use std::fs::{File, Metadata, metadata, read_dir};
 use std::io::{Read, copy as io_copy};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[cfg(target_family = "windows")]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
@@ -31,6 +33,7 @@ use ed25519_dalek::SigningKey;
 use log::{debug, info, warn};
 #[cfg(feature = "posix-acl")]
 use posix_acl::{ACLEntry, PosixACL, Qualifier};
+#[cfg(target_family = "unix")]
 use time::OffsetDateTime;
 use twox_hash::xxhash3_64;
 use xattr::XAttrs;
