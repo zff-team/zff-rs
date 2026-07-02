@@ -39,7 +39,7 @@ log = { version = "0.4.32", optional = true }
 lz4_flex = "0.13.1"
 moka = { version = "0.12.15", features = ["sync"] }
 ordered-float = "5.2.0"
-phollpers = { version = "0.1.0", features = ["compression"]}
+phollpers = { version = "0.1.1", features = ["compression", "read_at"]} #TODO: use v0.1.1 after official release
 pkcs5 = { version = "0.8.0", features = [ "pbes2", "alloc" ] }
 rand = { version = "0.10.1", features = ["sys_rng"]}
 redb = "4.1.0"

@@ -13,7 +13,6 @@
 mod encryption;
 mod header_coding;
 mod logical_object_source;
-mod read_at;
 mod trait_implementations;
 mod value_decoder;
 mod value_encoder;
@@ -23,7 +22,6 @@ mod virtual_object_source;
 pub use encryption::*;
 pub use header_coding::*;
 pub use logical_object_source::*;
-pub use read_at::*;
 pub use value_decoder::*;
 pub use value_encoder::*;
 pub use virtual_object_source::*;

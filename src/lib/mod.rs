@@ -57,6 +57,11 @@ pub use traits::*;
 use aes_gcm::Nonce as AesGcmNonce;
 use typenum::consts::U12;
 
+pub use phollpers::{
+    traits::read_at::*,
+    read_at::ReadAtCursor
+};
+
 // - types
 /// Result for std::result::Result<T, ZffError>.
 pub type Result<T> = std::result::Result<T, ZffError>;
