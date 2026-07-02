@@ -15,7 +15,7 @@ use std::io::Read;
 #[cfg(target_family = "unix")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(target_family = "windows")]
-use std::os::windows::ffi::OsStringExt;
+use std::os::windows::ffi::OsStrExt;
 
 // - internal
 use crate::prelude::*;
