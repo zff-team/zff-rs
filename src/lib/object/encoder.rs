@@ -73,6 +73,15 @@ impl<R: Read> ObjectEncoder<R> {
         }
     }
 
+    /// sets the first chunk number before the encoder emits any chunks.
+    pub(crate) fn set_initial_chunk_number(&mut self, chunk_number: u64) {
+        match self {
+            ObjectEncoder::Physical(obj) => obj.set_initial_chunk_number(chunk_number),
+            ObjectEncoder::Logical(obj) => obj.set_initial_chunk_number(chunk_number),
+            ObjectEncoder::Virtual(_) => (),
+        }
+    }
+
     /// returns a reference of the appropriate [ObjectHeader].
     pub fn get_obj_header(&self) -> &ObjectHeader {
         match self {

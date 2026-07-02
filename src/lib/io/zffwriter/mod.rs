@@ -986,6 +986,7 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                     };
 
                     // switch to the next state
+                    let next_chunk_number = self.current_object_encoder.current_chunk_number();
                     self.current_object_encoder = match self.object_encoder.pop() {
                         Some(creator_obj_encoder) => creator_obj_encoder,
                         None => {
@@ -1007,6 +1008,8 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                             continue;
                         }
                     };
+                    self.current_object_encoder
+                        .set_initial_chunk_number(next_chunk_number);
                     self.in_progress_data.main_footer.object_header.insert(
                         self.current_object_encoder.obj_number(),
                         self.current_segment_no(),
@@ -1017,6 +1020,8 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                     self.read_state = ReadState::ObjectHeader;
                     self.in_progress_data.current_encoded_object_header =
                         self.current_object_encoder.get_encoded_header();
+                    self.in_progress_data
+                        .current_encoded_object_header_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data
                         .segment_footer
                         .object_header_offsets

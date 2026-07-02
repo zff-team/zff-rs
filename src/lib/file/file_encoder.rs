@@ -111,6 +111,11 @@ impl FileEncoder {
         &self.file_header
     }
 
+    pub(crate) fn set_initial_chunk_number(&mut self, chunk_number: u64) {
+        self.initial_chunk_number = chunk_number;
+        self.current_chunk_number = chunk_number;
+    }
+
     /// returns the underlying encoded header
     pub fn get_encoded_header(&mut self) -> Vec<u8> {
         if self.acquisition_start == 0 {
