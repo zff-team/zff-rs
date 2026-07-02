@@ -72,7 +72,7 @@ pub trait Encryption {
         buffer.append(&mut vec![0u8; 4]);
         let buffer_len = buffer.len();
         buffer[buffer_len - 1] |= Self::crypto_nonce_padding();
-        Ok(*Nonce::from_slice(&buffer))
+        Ok(Nonce::try_from(buffer.as_slice())?)
     }
 
     /// The appropriate, type specific padding value for the nonce (see official zff documentation).

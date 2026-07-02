@@ -8,6 +8,7 @@
 //! The module implements `From` conversions for many standard and external error types,
 //! allowing for seamless error handling and propagation throughout the codebase.
 // - STD
+use std::array::TryFromSliceError;
 use std::fmt;
 use std::{collections::TryReserveError, num::ParseIntError, string::FromUtf8Error};
 
@@ -16,7 +17,6 @@ use aes::cipher::block_padding::Error as AesBlockpaddingError;
 use aes_gcm::{aead::Error as AesError, aes::cipher::InvalidLength as AesInvalidLengthError};
 use argon2::Error as Argon2Error;
 use base64::DecodeError as Base64DecodingError;
-use digest::InvalidLength;
 use ed25519_dalek::ed25519::Error as Ed25519Error;
 use lz4_flex::frame::Error as Lz4Error;
 use pkcs5::Error as PKCS5CryptoError;
@@ -333,17 +333,17 @@ impl From<FromUtf8Error> for ZffError {
     }
 }
 
+impl From<TryFromSliceError> for ZffError {
+    fn from(e: TryFromSliceError) -> ZffError {
+        let err_msg = e.to_string();
+        ZffError::new_with_source(ZffErrorKind::ParsingError, Some(Box::new(e)), err_msg)
+    }
+}
+
 impl From<TryReserveError> for ZffError {
     fn from(e: TryReserveError) -> ZffError {
         let err_msg = e.to_string();
         ZffError::new_with_source(ZffErrorKind::Other, Some(Box::new(e)), err_msg)
-    }
-}
-
-impl From<InvalidLength> for ZffError {
-    fn from(e: InvalidLength) -> ZffError {
-        let err_msg = e.to_string();
-        ZffError::new_with_source(ZffErrorKind::Invalid, Some(Box::new(e)), err_msg)
     }
 }
 
