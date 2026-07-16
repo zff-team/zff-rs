@@ -588,7 +588,7 @@ where
     type Item = HashMap<K, V>;
 
     fn decode_directly<R: Read>(data: &mut R) -> Result<HashMap<K, V>> {
-        let length = u64::decode_directly(data)? as usize;
+        let length = decode_len(data)?;
         let mut hash_map = HashMap::new();
         hash_map.try_reserve(length)?;
         for _ in 0..length {
@@ -609,7 +609,7 @@ where
     type Item = BTreeMap<K, V>;
 
     fn decode_directly<R: Read>(data: &mut R) -> Result<BTreeMap<K, V>> {
-        let length = u64::decode_directly(data)? as usize;
+        let length = decode_len(data)?;
         let mut btreemap = BTreeMap::new();
         for _ in 0..length {
             let key = K::decode_directly(data)?;

@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 use std::io::{Error as IoError, ErrorKind as IoEKind, Read};
 
 // - internal
-use crate::{ChunkContent, ERROR_MALFORMED_SEGMENT, Result, ValueDecoder, ZffError, ZffErrorKind};
+use crate::{
+    ChunkContent, DEFAULT_LENGTH_HEADER_IDENTIFIER, DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
+    ERROR_MALFORMED_SEGMENT, Result, ValueDecoder, ZffError, ZffErrorKind,
+};
 // - external
 #[cfg(feature = "serde")]
 use base64::{Engine, engine::general_purpose::STANDARD as base64engine};
@@ -214,6 +217,25 @@ pub(crate) fn decode_len<R: Read>(data: &mut R) -> Result<usize> {
             "decoded length does not fit usize",
         )
     })
+}
+
+pub(crate) fn decode_header_content_len(
+    header_length: u64,
+    already_read_content_len: usize,
+) -> Result<usize> {
+    let header_length = usize::try_from(header_length).map_err(|_| {
+        ZffError::new(
+            ZffErrorKind::EncodingError,
+            "decoded header length does not fit usize",
+        )
+    })?;
+    header_length
+        .checked_sub(
+            DEFAULT_LENGTH_HEADER_IDENTIFIER
+                + DEFAULT_LENGTH_VALUE_HEADER_LENGTH
+                + already_read_content_len,
+        )
+        .ok_or_else(|| ZffError::new(ZffErrorKind::EncodingError, ERROR_MALFORMED_SEGMENT))
 }
 
 pub(crate) fn zstd_compress_if_worthwhile(

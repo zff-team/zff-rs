@@ -499,12 +499,12 @@ impl<R: ReadAt> ZffReader<R> {
             let map_table = segment.footer().chunk_header_map_table.clone();
             //trying to decode the map entries - will fail if the map is encrypted.
             for offset in map_table.values() {
-                match ChunkHeaderMap::decode_at(segment, *offset) {
-                    Ok(inner_map) => inner_map.chunkmap().iter().for_each(|(chunk_no, header)| {
+                ChunkHeaderMap::decode_at(segment, *offset)?
+                    .chunkmap()
+                    .iter()
+                    .for_each(|(chunk_no, header)| {
                         map.insert(*chunk_no, header.integrity_hash);
-                    }),
-                    Err(e) => return Err(e),
-                }
+                    })
             }
         }
         Ok(map)
@@ -1455,9 +1455,7 @@ fn get_chunks_of_unencrypted_object<R: ReadAt>(
             }
             chunk_numbers
         }
-        ZffObjectReader::Virtual(_) => {
-            Vec::new()
-        }
+        ZffObjectReader::Virtual(_) => Vec::new(),
         ZffObjectReader::Encrypted(_) => {
             return Err(ZffError::new(
                 ZffErrorKind::EncryptionError,

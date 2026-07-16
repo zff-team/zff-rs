@@ -3,6 +3,7 @@ use std::fmt;
 use std::io::{Cursor, Read};
 
 // - internal
+use crate::helper::decode_len;
 use crate::prelude::*;
 use crate::{
     decrypt_argon2_aes128cbc, decrypt_argon2_aes256cbc, decrypt_pbkdf2sha256_aes128cbc,
@@ -294,8 +295,10 @@ impl HeaderCoding for EncryptionHeader {
                 ));
             }
         };
-        let key_length = u64::decode_directly(&mut cursor)? as usize;
-        let mut encryption_key = vec![0u8; key_length];
+        let key_length = decode_len(&mut cursor)?;
+        let mut encryption_key = Vec::new();
+        encryption_key.try_reserve_exact(key_length)?;
+        encryption_key.resize(key_length, 0);
         cursor.read_exact(&mut encryption_key)?;
         Ok(EncryptionHeader::new(
             pbe_header,

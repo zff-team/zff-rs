@@ -9,7 +9,7 @@ use std::borrow::Borrow;
 use std::io::Read;
 
 // - internal
-use crate::prelude::*;
+use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
@@ -126,14 +126,11 @@ pub trait HeaderCoding {
                 ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
             ));
         }
-        let header_length = Self::decode_header_length(data)? as usize;
-        let header_content_length = header_length
-            .checked_sub(DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH)
-            .ok_or(ZffError::new(
-                ZffErrorKind::EncodingError,
-                ERROR_MALFORMED_SEGMENT,
-            ))?;
-        let mut header_content = vec![0u8; header_content_length];
+        let header_content_length =
+            decode_header_content_len(Self::decode_header_length(data)?, 0)?;
+        let mut header_content = Vec::new();
+        header_content.try_reserve_exact(header_content_length)?;
+        header_content.resize(header_content_length, 0);
         data.read_exact(&mut header_content)?;
         Self::decode_content(&header_content)
     }

@@ -396,7 +396,7 @@ impl<R: ReadAt> Read for ZffObjectReaderLogical<R> {
             None => {
                 return Err(IoError::new(
                     IoEKind::NotFound,
-                    format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file),
+                    format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file),
                 ));
             }
         };
@@ -406,7 +406,7 @@ impl<R: ReadAt> Read for ZffObjectReaderLogical<R> {
             None => {
                 return Err(IoError::new(
                     IoEKind::NotFound,
-                    format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file),
+                    format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file),
                 ));
             }
         };
@@ -422,7 +422,7 @@ impl<R: ReadAt> Seek for ZffObjectReaderLogical<R> {
             None => {
                 return Err(IoError::new(
                     IoEKind::NotFound,
-                    format!("{ERROR_MISSING_FILE_NUMBER}{}", &self.active_file),
+                    format!("{ERROR_MISSING_FILE_NUMBER}{}", self.active_file),
                 ));
             }
         };

@@ -149,7 +149,8 @@ pub(crate) const ERROR_ZFFREADER_MISSING_VFM: &str =
 pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VFM: &str = "Missing offset in virtual file map: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str =
     "Necessary passive object is not initialized/decrypted correctly: Object no. ";
-pub(crate) const ERROR_ZFFWRITER_GENERATE_FILES_STREAM: &str = "could not generate files using the Stream output type";
+pub(crate) const ERROR_ZFFWRITER_GENERATE_FILES_STREAM: &str =
+    "could not generate files using the Stream output type";
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str =
     "Unseekable position (position is negative).";
 

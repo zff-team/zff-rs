@@ -6,7 +6,7 @@ use std::fmt;
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::prelude::*;
+use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
 use ordered_float::OrderedFloat;
@@ -186,13 +186,11 @@ impl FileHeader {
                 ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
             ));
         };
-        let header_length = Self::decode_header_length(data)? as usize;
-        let mut header_content = vec![
-            0u8;
-            header_length
-                - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-        ];
+        let header_content_length =
+            decode_header_content_len(Self::decode_header_length(data)?, 0)?;
+        let mut header_content = Vec::new();
+        header_content.try_reserve_exact(header_content_length)?;
+        header_content.resize(header_content_length, 0);
         data.read_exact(&mut header_content)?;
         let mut cursor = Cursor::new(header_content);
         Self::check_version(&mut cursor)?;

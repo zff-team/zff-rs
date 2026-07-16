@@ -316,7 +316,12 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
         let mut generated_files = Vec::new();
         let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
         let mut initial_extend = match &self.output {
-            ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFWRITER_GENERATE_FILES_STREAM)),
+            ZffFilesOutput::Stream => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Invalid,
+                    ERROR_ZFFWRITER_GENERATE_FILES_STREAM,
+                ));
+            }
             ZffFilesOutput::NewContainer(_) => false,
             ZffFilesOutput::ExtendContainer(_) => true,
         };

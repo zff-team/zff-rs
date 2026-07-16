@@ -26,7 +26,7 @@ jobs:
             fid: x86_64-linux
           - os: windows-latest
             libacl: ""
-            toolchain: nightly
+            toolchain: stable
             target: x86_64-pc-windows-msvc
             name: Windows x86_64 (MSVC)
           - os: macos-latest

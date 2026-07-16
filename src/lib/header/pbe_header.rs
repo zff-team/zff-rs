@@ -3,6 +3,7 @@ use std::fmt;
 use std::io::{Cursor, Read};
 
 // - internal
+use crate::helper::decode_len;
 use crate::prelude::*;
 
 // - external
@@ -160,8 +161,13 @@ impl ValueDecoder for KDFParameters {
 
     fn decode_directly<R: Read>(data: &mut R) -> Result<KDFParameters> {
         let identifier = data.read_u32::<BigEndian>()?;
-        let size = u64::decode_directly(data)?;
-        let mut params = vec![0u8; (size - 12) as usize];
+        let size = decode_len(data)?;
+        let params_len = size
+            .checked_sub(DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH)
+            .ok_or_else(|| ZffError::new(ZffErrorKind::EncodingError, ERROR_MALFORMED_SEGMENT))?;
+        let mut params = Vec::new();
+        params.try_reserve_exact(params_len)?;
+        params.resize(params_len, 0);
         data.read_exact(&mut params)?;
 
         let mut params_cursor = Cursor::new(params);

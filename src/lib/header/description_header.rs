@@ -6,7 +6,7 @@ use std::io::{Cursor, Read};
 // - internal
 #[cfg(feature = "serde")]
 use crate::helper::string_to_str;
-use crate::prelude::*;
+use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
 #[cfg(feature = "serde")]
@@ -156,8 +156,10 @@ impl DescriptionHeader {
 
     /// sets the physical sector size of the source device.
     pub fn set_physical_sector_size<V: Into<String>>(&mut self, value: V) {
-        self.identifier_map
-            .insert(String::from(ENCODING_KEY_PHYSICAL_SECTOR_SIZE), value.into());
+        self.identifier_map.insert(
+            String::from(ENCODING_KEY_PHYSICAL_SECTOR_SIZE),
+            value.into(),
+        );
     }
 
     /// returns the physical sector size of the source device, if available.
@@ -288,13 +290,11 @@ impl HeaderCoding for DescriptionHeader {
                 ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
             ));
         }
-        let header_length = Self::decode_header_length(data)? as usize;
-        let mut header_content = vec![
-            0u8;
-            header_length
-                - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-        ];
+        let header_content_length =
+            decode_header_content_len(Self::decode_header_length(data)?, 0)?;
+        let mut header_content = Vec::new();
+        header_content.try_reserve_exact(header_content_length)?;
+        header_content.resize(header_content_length, 0);
         data.read_exact(&mut header_content)?;
         Self::decode_content(&header_content)
     }

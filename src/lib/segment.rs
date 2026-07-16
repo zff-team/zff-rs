@@ -77,7 +77,10 @@ impl<R: Read + Seek> Segment<Mutex<R>> {
             Ok(footer) => footer,
             Err(_) => {
                 //if a MainFooter is present...
-                data.seek(SeekFrom::Start(footer_offset - 8))?;
+                let s_footer_offset = footer_offset.checked_sub(8).ok_or_else(|| {
+                    ZffError::new(ZffErrorKind::ParsingError, footer_offset.to_string())
+                })?;
+                data.seek(SeekFrom::Start(s_footer_offset))?;
                 let footer_offset = u64::decode_directly(&mut data)?;
                 data.seek(SeekFrom::Start(footer_offset))?;
                 SegmentFooter::decode_directly(&mut data)?
@@ -317,6 +320,12 @@ impl<R: ReadAt> Segment<R> {
             Ok(ChunkContent::SameBytes(*single_byte))
         } else if flags.duplicate {
             let mut arr: [u8; 8] = Default::default();
+            if chunk_content.len() != 8 {
+                return Err(ZffError::new(
+                    ZffErrorKind::EncodingError,
+                    chunk_content.len().to_string(),
+                ));
+            }
             arr.copy_from_slice(&chunk_content);
             Ok(ChunkContent::Duplicate(u64::from_le_bytes(arr)))
         } else {

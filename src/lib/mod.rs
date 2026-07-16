@@ -5,9 +5,6 @@
 //! Zff is a new file format for forensic images, as an alternative to EWF and AFF.
 //! Zff is focused on speed and security. If you want to learn more about ZFF, visit [https://codeberg.org/zff-team/zff-rs](https://codeberg.org/zff-team/zff-rs).
 
-// adds #![feature(windows_by_handle)] to the crate for windows platforms only.
-#![cfg_attr(target_os = "windows", feature(windows_by_handle))]
-
 // - modules
 mod chunk;
 mod compression;
@@ -57,10 +54,7 @@ pub use traits::*;
 use aes_gcm::Nonce as AesGcmNonce;
 use typenum::consts::U12;
 
-pub use phollpers::{
-    traits::read_at::*,
-    read_at::ReadAtCursor
-};
+pub use phollpers::{read_at::ReadAtCursor, traits::read_at::*};
 
 // - types
 /// Result for std::result::Result<T, ZffError>.

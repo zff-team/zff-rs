@@ -13,7 +13,7 @@ use std::fmt;
 use std::io::Read;
 
 // - internal
-use crate::prelude::*;
+use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
@@ -93,40 +93,22 @@ impl ObjectFooter {
     pub fn decode_directly<R: Read>(data: &mut R) -> Result<ObjectFooter> {
         match Self::check_identifier(data) {
             1 => {
-                let length = Self::decode_header_length(data)? as usize;
-                let mut content_buffer = vec![
-                    0u8;
-                    length
-                        - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                        - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                ];
-                data.read_exact(&mut content_buffer)?;
+                let length = Self::decode_header_length(data)?;
+                let content_buffer = decode_object_footer_content(data, length)?;
                 Ok(ObjectFooter::Physical(
                     ObjectFooterPhysical::decode_content(&content_buffer)?,
                 ))
             }
             2 => {
-                let length = Self::decode_header_length(data)? as usize;
-                let mut content_buffer = vec![
-                    0u8;
-                    length
-                        - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                        - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                ];
-                data.read_exact(&mut content_buffer)?;
+                let length = Self::decode_header_length(data)?;
+                let content_buffer = decode_object_footer_content(data, length)?;
                 Ok(ObjectFooter::Logical(ObjectFooterLogical::decode_content(
                     &content_buffer,
                 )?))
             }
             3 => {
-                let length = Self::decode_header_length(data)? as usize;
-                let mut content_buffer = vec![
-                    0u8;
-                    length
-                        - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                        - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                ];
-                data.read_exact(&mut content_buffer)?;
+                let length = Self::decode_header_length(data)?;
+                let content_buffer = decode_object_footer_content(data, length)?;
                 Ok(ObjectFooter::Virtual(ObjectFooterVirtual::decode_content(
                     &content_buffer,
                 )?))
@@ -267,40 +249,22 @@ impl EncryptedObjectFooter {
     pub fn decode_directly<R: Read>(data: &mut R) -> Result<EncryptedObjectFooter> {
         match Self::check_identifier(data) {
             1 => {
-                let length = Self::decode_header_length(data)? as usize;
-                let mut content_buffer = vec![
-                    0u8;
-                    length
-                        - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                        - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                ];
-                data.read_exact(&mut content_buffer)?;
+                let length = Self::decode_header_length(data)?;
+                let content_buffer = decode_object_footer_content(data, length)?;
                 Ok(EncryptedObjectFooter::Physical(
                     EncryptedObjectFooterPhysical::decode_content(&content_buffer)?,
                 ))
             }
             2 => {
-                let length = Self::decode_header_length(data)? as usize;
-                let mut content_buffer = vec![
-                    0u8;
-                    length
-                        - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                        - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                ];
-                data.read_exact(&mut content_buffer)?;
+                let length = Self::decode_header_length(data)?;
+                let content_buffer = decode_object_footer_content(data, length)?;
                 Ok(EncryptedObjectFooter::Logical(
                     EncryptedObjectFooterLogical::decode_content(&content_buffer)?,
                 ))
             }
             3 => {
-                let length = Self::decode_header_length(data)? as usize;
-                let mut content_buffer = vec![
-                    0u8;
-                    length
-                        - DEFAULT_LENGTH_HEADER_IDENTIFIER
-                        - DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                ];
-                data.read_exact(&mut content_buffer)?;
+                let length = Self::decode_header_length(data)?;
+                let content_buffer = decode_object_footer_content(data, length)?;
                 Ok(EncryptedObjectFooter::Virtual(
                     EncryptedObjectFooterVirtual::decode_content(&content_buffer)?,
                 ))
@@ -342,4 +306,13 @@ impl EncryptedObjectFooter {
     {
         self.decrypt(key, algorithm)
     }
+}
+
+fn decode_object_footer_content<R: Read>(data: &mut R, length: u64) -> Result<Vec<u8>> {
+    let content_length = decode_header_content_len(length, 0)?;
+    let mut content_buffer = Vec::new();
+    content_buffer.try_reserve_exact(content_length)?;
+    content_buffer.resize(content_length, 0);
+    data.read_exact(&mut content_buffer)?;
+    Ok(content_buffer)
 }

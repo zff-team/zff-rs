@@ -25,7 +25,7 @@ use std::io::Read;
 // - internal
 #[cfg(feature = "serde")]
 use crate::helper::string_to_str;
-use crate::prelude::*;
+use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
 #[cfg(feature = "serde")]
@@ -191,7 +191,7 @@ pub trait ChunkMap {
                 ERROR_HEADER_DECODER_MISMATCH_IDENTIFIER,
             ));
         }
-        let header_length = Self::decode_header_length(data)? as usize;
+        let header_length = Self::decode_header_length(data)?;
         let version = u8::decode_directly(data)?;
         if version != Self::version() {
             return Err(ZffError::new(
@@ -200,17 +200,11 @@ pub trait ChunkMap {
             ));
         }
         let object_number = u64::decode_directly(data)?;
-        let structure_content_length = header_length
-            .checked_sub(
-                DEFAULT_LENGTH_HEADER_IDENTIFIER
-                    + DEFAULT_LENGTH_VALUE_HEADER_LENGTH
-                    + 1
-                    + object_number.encoded_size(),
-            )
-            .ok_or_else(|| {
-                ZffError::new(ZffErrorKind::Invalid, ERROR_HEADER_DECODER_HEADER_LENGTH)
-            })?;
-        let mut structure_content = vec![0u8; structure_content_length];
+        let structure_content_length =
+            decode_header_content_len(header_length, 1 + object_number.encoded_size())?;
+        let mut structure_content = Vec::new();
+        structure_content.try_reserve_exact(structure_content_length)?;
+        structure_content.resize(structure_content_length, 0);
         data.read_exact(&mut structure_content)?;
         Ok(ChunkMapInnerStructureData::new(
             object_number,
