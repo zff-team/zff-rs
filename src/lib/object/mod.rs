@@ -257,7 +257,7 @@ pub(crate) struct DeduplicationThread {
     /// triggers the deduplication thread to continue the hashing process with the updated data field.
     pub trigger: crossbeam::channel::Sender<crossbeam::sync::WaitGroup>,
     /// will be used to receive the hash of the given data.
-    pub result: Arc<RwLock<blake3::Hash>>, //TODO: Use xxhash additionally?
+    pub result: Arc<RwLock<blake3::Hash>>,
     /// the waitgroup, which will be used to wait until the deduplication thread has finished the hashing process.
     waitgroup: Option<crossbeam::sync::WaitGroup>,
 }
@@ -603,7 +603,6 @@ pub(crate) fn chunking<R: ReadAt>(
                     ));
                 }
             };
-            //TODO: check to encrypt the content if the chunked data also in the "compression_thread" -> performance?.
             Vec::<u8>::encrypt(
                 encryption_key,
                 &chunked_data,

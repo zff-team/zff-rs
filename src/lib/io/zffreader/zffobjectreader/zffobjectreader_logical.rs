@@ -229,7 +229,12 @@ impl<R: ReadAt> ZffObjectReaderLogical<R> {
             .unwrap()
             .files
             .set(Arc::clone(&files))
-            .map_err(|_| ZffError::new(ZffErrorKind::Other, ""))?; //TODO: Write a sufficient error msg.
+            .map_err(|_| {
+                ZffError::new(
+                    ZffErrorKind::Invalid,
+                    format!("object files already initialized: {object_no}"),
+                )
+            })?;
 
         Ok(Self {
             metadata,

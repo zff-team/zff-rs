@@ -1358,7 +1358,7 @@ fn extract_chunk_header_from_preloaded_chunkmap(
     match preloaded_chunkmap {
         PreloadedChunkMaps::None => None,
         PreloadedChunkMaps::InMemory(preloaded_maps) => {
-            preloaded_maps.chunk_header.get(&chunk_number).cloned() //TODO: find a more efficient way?
+            preloaded_maps.chunk_header.get(&chunk_number).copied()
         }
         PreloadedChunkMaps::Redb(db) => {
             let read_txn = db.begin_read().ok()?;
@@ -1428,7 +1428,6 @@ fn get_chunks_of_unencrypted_object<R: ReadAt>(
     object_reader: &HashMap<u64, ZffObjectReader<R>>,
     object_number: u64,
 ) -> Result<Vec<u64>> {
-    //TODO-Check: Return a Range for better performance?
     let obj_reader = match object_reader.get(&object_number) {
         Some(reader) => reader,
         None => {
@@ -1457,7 +1456,6 @@ fn get_chunks_of_unencrypted_object<R: ReadAt>(
             chunk_numbers
         }
         ZffObjectReader::Virtual(_) => {
-            //TODO: not sure if I should return chunk numbers...I'll skip this and check this later
             Vec::new()
         }
         ZffObjectReader::Encrypted(_) => {

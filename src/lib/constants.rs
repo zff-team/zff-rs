@@ -149,7 +149,7 @@ pub(crate) const ERROR_ZFFREADER_MISSING_VFM: &str =
 pub(crate) const ERROR_ZFFREADER_MISSING_VALUE_VFM: &str = "Missing offset in virtual file map: ";
 pub(crate) const ERROR_ZFFREADER_MISSING_PASSIVE_OBJECT: &str =
     "Necessary passive object is not initialized/decrypted correctly: Object no. ";
-
+pub(crate) const ERROR_ZFFWRITER_GENERATE_FILES_STREAM: &str = "could not generate files using the Stream output type";
 pub(crate) const ERROR_IO_NOT_SEEKABLE_NEGATIVE_POSITION: &str =
     "Unseekable position (position is negative).";
 
@@ -384,3 +384,20 @@ pub const CRYPTO_NONCE_PADDING_CHUNKHEADER_MAP: u8 = 0b00000001;
 pub const CRYPTO_NONCE_PADDING_SAMEBYTES_MAP: u8 = 0b00011111;
 /// Crypto nonce padding used for chunk content.
 pub const CRYPTO_NONCE_PADDING_CHUNK_CONTENT: u8 = 0b00000000;
+
+/// Encoding key for the logical sector size of the source device.
+pub const ENCODING_KEY_LOGICAL_SECTOR_SIZE: &str = "lss";
+/// Encoding key for the physical sector size of the source device.
+pub const ENCODING_KEY_PHYSICAL_SECTOR_SIZE: &str = "pss";
+/// Encoding key for the model name/number of the source device.
+pub const ENCODING_KEY_MODEL: &str = "mdl";
+/// Encoding key for the serial number of the source device.
+pub const ENCODING_KEY_SERIAL_NUMBER: &str = "sn";
+/// Encoding key for the firmware version of the source device.
+pub const ENCODING_KEY_FIRMWARE: &str = "fw";
+/// Encoding key for the media type of the source device.
+pub const ENCODING_KEY_MEDIA_TYPE: &str = "mt";
+/// Encoding key for the input source path.
+pub const ENCODING_KEY_INPUT_SOURCE: &str = "is";
+/// Encoding key for the operating system/platform.
+pub const ENCODING_KEY_OPERATING_SYSTEM: &str = "os";

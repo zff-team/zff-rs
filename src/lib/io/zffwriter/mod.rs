@@ -316,7 +316,7 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
         let mut generated_files = Vec::new();
         let mut file_extension = String::from(FILE_EXTENSION_INITIALIZER);
         let mut initial_extend = match &self.output {
-            ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::Invalid, "")), //TODO: Define other kind of error here?
+            ZffFilesOutput::Stream => return Err(ZffError::new(ZffErrorKind::Invalid, ERROR_ZFFWRITER_GENERATE_FILES_STREAM)),
             ZffFilesOutput::NewContainer(_) => false,
             ZffFilesOutput::ExtendContainer(_) => true,
         };
@@ -877,7 +877,7 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                 match data {
                                     PreparedData::PreparedChunk(ref prepared_chunk) => {
                                         // sets the appropriate offset in chunk header.
-                                        let mut chunk_header = prepared_chunk.chunk_header.clone();
+                                        let mut chunk_header = prepared_chunk.chunk_header;
                                         chunk_header.offset =
                                             self.in_progress_data.bytes_read.current_segment;
                                         if self.in_progress_data.chunkmaps.header_map.is_full() {

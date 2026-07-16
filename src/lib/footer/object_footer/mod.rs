@@ -42,7 +42,6 @@ pub enum ObjectFooter {
     Virtual(ObjectFooterVirtual),
 }
 
-//TODO: impl Headercoding?
 impl ObjectFooter {
     /// returns the version of the object footer.
     pub fn version(&self) -> u8 {

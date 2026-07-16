@@ -448,9 +448,10 @@ fn add_to_hardlink_map(
     metadata: &Metadata,
     filenumber: u64,
 ) -> Option<u64> {
-    //TODO: remove unwrap()s
-    let file_index = metadata.file_index().unwrap();
-    let volume_serial_number = metadata.volume_serial_number().unwrap() as u64;
+    // if the appropriate file_index or VSN could not be read, 
+    // this function will return None.
+    let file_index = metadata.file_index().ok()?;
+    let volume_serial_number = metadata.volume_serial_number().ok()? as u64;
 
     hardlink_map
         .entry(volume_serial_number)

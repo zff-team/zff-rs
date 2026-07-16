@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Header for the chunked data (typically stored in a chunk header map).
 /// A header doesn't contain a chunk number, because it is stored in a map with the chunk number as key.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct ChunkHeader {

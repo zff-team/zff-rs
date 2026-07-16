@@ -53,8 +53,6 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
     type Error = ZffError;
 
     fn try_from(archive_path: &Path) -> Result<Self> {
-        //TODO: check if this is an tar archive and return Err if not -
-        // tar could have some magic bytes?
         let file = std::fs::File::open(archive_path)?;
         let decompressor = phollpers::compression::decompress(file)?;
         let mut archive = Archive::new(decompressor);
@@ -80,6 +78,7 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
         let mut path_to_filenumber_map = HashMap::new();
         let mut hardlink_map = HashMap::new();
 
+        // returns an error if the appropriate input file is not a valid tar archive.
         for entry in archive.entries()? {
             current_file_number += 1;
 

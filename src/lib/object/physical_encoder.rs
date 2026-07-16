@@ -49,16 +49,6 @@ impl<R: Read> PhysicalObjectEncoder<R> {
             None => None,
         };
 
-        // I've commented out this code...not sure if the "test" is necessary. TODO: check.
-        /*let (_, encryption_key) = if let Some(encryption_header) = &obj_header.encryption_header {
-            match encryption_header.get_encryption_key() {
-                Some(key) => (obj_header.encode_encrypted_header_directly(&key)?, Some(key)),
-                None => return Err(ZffError::new(
-                    ZffErrorKind::EncryptionError, ERROR_MISSING_ENCRYPTION_HEADER_KEY))
-            }
-        } else {
-            (obj_header.encode_directly(), None)
-        };*/
         let encryption_information = if obj_header.encryption_header.is_some() {
             Some(EncryptionInformation::try_from(&obj_header)?)
         } else {

@@ -21,6 +21,16 @@ use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 /// - evidence number (for the appropriate HashMap key, see [ENCODING_KEY_EVIDENCE_NUMBER](crate::constants::ENCODING_KEY_EVIDENCE_NUMBER))
 /// - examiner name (for the appropriate HashMap key, see [ENCODING_KEY_EXAMINER_NAME](crate::constants::ENCODING_KEY_EXAMINER_NAME))
 /// - notes (for the appropriate HashMap key, see [ENCODING_KEY_NOTES](crate::constants::ENCODING_KEY_NOTES))
+/// - tool name (for the appropriate HashMap key, see [ENCODING_KEY_TOOL_NAME](crate::constants::ENCODING_KEY_TOOL_NAME))
+/// - tool version (for the appropriate HashMap key, see [ENCODING_KEY_TOOL_VERSION](crate::constants::ENCODING_KEY_TOOL_VERSION))
+/// - logical sector size (for the appropriate HashMap key, see [ENCODING_KEY_LOGICAL_SECTOR_SIZE](crate::constants::ENCODING_KEY_LOGICAL_SECTOR_SIZE))
+/// - physical sector size (for the appropriate HashMap key, see [ENCODING_KEY_PHYSICAL_SECTOR_SIZE](crate::constants::ENCODING_KEY_PHYSICAL_SECTOR_SIZE))
+/// - model name/number (for the appropriate HashMap key, see [ENCODING_KEY_MODEL](crate::constants::ENCODING_KEY_MODEL))
+/// - serial number (for the appropriate HashMap key, see [ENCODING_KEY_SERIAL_NUMBER](crate::constants::ENCODING_KEY_SERIAL_NUMBER))
+/// - firmware version (for the appropriate HashMap key, see [ENCODING_KEY_FIRMWARE](crate::constants::ENCODING_KEY_FIRMWARE))
+/// - media type (for the appropriate HashMap key, see [ENCODING_KEY_MEDIA_TYPE](crate::constants::ENCODING_KEY_MEDIA_TYPE))
+/// - input source path (for the appropriate HashMap key, see [ENCODING_KEY_INPUT_SOURCE](crate::constants::ENCODING_KEY_INPUT_SOURCE))
+/// - operating system/platform (for the appropriate HashMap key, see [ENCODING_KEY_OPERATING_SYSTEM](crate::constants::ENCODING_KEY_OPERATING_SYSTEM))
 ///
 /// But you are free to define custom additional key-value pairs.
 ///
@@ -51,7 +61,6 @@ impl Serialize for DescriptionHeader {
             .serialize_struct(Self::struct_name(), self.identifier_map.keys().len() + 1)?;
         state.serialize_field("version", &Self::version())?;
         for (key, value) in &self.identifier_map {
-            //work around lifetime checking (there is maybe a more elegant solution...)
             state.serialize_field(
                 string_to_str(key.to_string()),
                 string_to_str(value.to_string()),
@@ -131,6 +140,118 @@ impl DescriptionHeader {
         }
     }
 
+    /// sets the logical sector size of the source device.
+    pub fn set_logical_sector_size<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_LOGICAL_SECTOR_SIZE), value.into());
+    }
+
+    /// returns the logical sector size of the source device, if available.
+    pub fn logical_sector_size(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_LOGICAL_SECTOR_SIZE) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the physical sector size of the source device.
+    pub fn set_physical_sector_size<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_PHYSICAL_SECTOR_SIZE), value.into());
+    }
+
+    /// returns the physical sector size of the source device, if available.
+    pub fn physical_sector_size(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_PHYSICAL_SECTOR_SIZE) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the model name/number of the source device.
+    pub fn set_model<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_MODEL), value.into());
+    }
+
+    /// returns the model name/number of the source device, if available.
+    pub fn model(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_MODEL) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the serial number of the source device.
+    pub fn set_serial_number<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_SERIAL_NUMBER), value.into());
+    }
+
+    /// returns the serial number of the source device, if available.
+    pub fn serial_number(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_SERIAL_NUMBER) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the firmware version of the source device.
+    pub fn set_firmware<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_FIRMWARE), value.into());
+    }
+
+    /// returns the firmware version of the source device, if available.
+    pub fn firmware(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_FIRMWARE) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the media type of the source device (e.g. "hdd", "ssd", "nvme", "usb", "sd", "emmc").
+    pub fn set_media_type<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_MEDIA_TYPE), value.into());
+    }
+
+    /// returns the media type of the source device, if available.
+    pub fn media_type(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_MEDIA_TYPE) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the input source path of the acquired device (e.g. "/dev/sda").
+    pub fn set_input_source<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_INPUT_SOURCE), value.into());
+    }
+
+    /// returns the input source path, if available.
+    pub fn input_source(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_INPUT_SOURCE) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
+    /// sets the operating system/platform the acquisition tool ran on (e.g. "Linux 6.8.0-49-generic").
+    pub fn set_operating_system<V: Into<String>>(&mut self, value: V) {
+        self.identifier_map
+            .insert(String::from(ENCODING_KEY_OPERATING_SYSTEM), value.into());
+    }
+
+    /// returns the operating system/platform, if available.
+    pub fn operating_system(&self) -> Option<&str> {
+        match &self.identifier_map.get(ENCODING_KEY_OPERATING_SYSTEM) {
+            Some(x) => Some(x),
+            None => None,
+        }
+    }
+
     /// inserts a custom key-value pair
     pub fn custom_identifier_value<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
         self.identifier_map.insert(key.into(), value.into());
@@ -188,7 +309,6 @@ impl HeaderCoding for DescriptionHeader {
     }
 }
 
-// - implement fmt::Display
 impl fmt::Display for DescriptionHeader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Self::struct_name())

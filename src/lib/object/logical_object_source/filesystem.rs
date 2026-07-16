@@ -22,7 +22,24 @@ use crate::{
 use log::{debug, warn};
 
 /// A [LogicalObjectSource] implementation to handle files from the filesystem.
-/// TODO: Example
+///
+/// # Example
+/// ```no_run
+/// use std::path::PathBuf;
+/// use zff::LogicalObjectSourceFilesystem;
+///
+/// fn main() -> zff::Result<()> {
+///     let paths = vec![PathBuf::from("/path/to/evidence")];
+///     let mut source = LogicalObjectSourceFilesystem::new(paths)?;
+///
+///     while let Some(entry) = source.next() {
+///         let (_filetype_info, file_header) = entry?;
+///         println!("{}: {:?}", file_header.file_number, file_header.filename);
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub struct LogicalObjectSourceFilesystem {
     files: Vec<(PathBuf, FileHeader)>,
     iterator_index: usize,
