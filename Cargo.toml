@@ -23,19 +23,19 @@ crate-type = ["lib"]
 aes = "0.9.1"
 aes-gcm = { version = "0.11.0" }
 base64 = "0.22"
-bitflags = "2.13"
-blake2 = "0.11.0-rc.6" #TODO: must be stable before stable release of zff-rs
+bitflags = "2.13.1"
+blake2 = "0.11.0-rc.6"
 blake3 = { version = "1.8.3", features = [ "traits-preview" ] }
 byteorder = "1.4.3"
 chacha20poly1305 = "0.11.0"
 cbc = { version = "0.2.1", features = [ "alloc" ] }
 crossbeam = "0.8.2"
 digest = { version = "0.11.3", features = [ "alloc" ] }
-ed25519-dalek = { version = "2.2.0", features = [ "digest" ] }
+ed25519-dalek = { version = "3.0.0", features = [ "digest" ] }
 hex = { version = "0.4", optional = true }
 itertools = "0.15"
 log = { version = "0.4.33", optional = true }
-lz4_flex = "0.13.1"
+lz4_flex = "0.14.0"
 moka = { version = "0.12.15", features = ["sync"] }
 ordered-float = "5.2.0"
 phollpers = { version = "0.1.1", features = ["compression", "read_at"]}
