@@ -202,8 +202,8 @@ impl TryFrom<&PlatformString> for OsString {
 }
 
 #[cfg(target_os = "windows")]
-impl From<std::ffi::OsString> for PlatformString {
-    fn from(value: std::ffi::OsString) -> Self {
+impl From<OsString> for PlatformString {
+    fn from(value: OsString) -> Self {
         let bytes = value
             .encode_wide()
             .flat_map(|unit| unit.to_le_bytes())
