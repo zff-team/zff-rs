@@ -462,12 +462,22 @@ where
 
     match scheme {
         PBEScheme::AES128CBC => {
-            let key: [u8; 16] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+            let key: [u8; 16] = hash.try_into().map_err(|_| {
+                ZffError::new(
+                    ZffErrorKind::EncryptionError,
+                    ERROR_DERIVED_KEY_LENGTH_MISMATCH,
+                )
+            })?;
             Ok(Aes128CbcEnc::new(&key.into(), aes_iv.into())
                 .encrypt_padded_vec::<Pkcs7>(plaintext.as_ref()))
         }
         PBEScheme::AES256CBC => {
-            let key: [u8; 32] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+            let key: [u8; 32] = hash.try_into().map_err(|_| {
+                ZffError::new(
+                    ZffErrorKind::EncryptionError,
+                    ERROR_DERIVED_KEY_LENGTH_MISMATCH,
+                )
+            })?;
             Ok(Aes256CbcEnc::new(&key.into(), aes_iv.into())
                 .encrypt_padded_vec::<Pkcs7>(plaintext.as_ref()))
         }
@@ -499,12 +509,22 @@ where
 
     match scheme {
         PBEScheme::AES128CBC => {
-            let key: [u8; 16] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+            let key: [u8; 16] = hash.try_into().map_err(|_| {
+                ZffError::new(
+                    ZffErrorKind::EncryptionError,
+                    ERROR_DERIVED_KEY_LENGTH_MISMATCH,
+                )
+            })?;
             Ok(Aes128CbcDec::new(&key.into(), aes_iv.into())
                 .decrypt_padded_vec::<Pkcs7>(ciphertext.as_ref())?)
         }
         PBEScheme::AES256CBC => {
-            let key: [u8; 32] = hash.try_into().unwrap(); // The hash length is guaranteed by hash_password_argon2, so unwrap is safe here.
+            let key: [u8; 32] = hash.try_into().map_err(|_| {
+                ZffError::new(
+                    ZffErrorKind::EncryptionError,
+                    ERROR_DERIVED_KEY_LENGTH_MISMATCH,
+                )
+            })?;
             Ok(Aes256CbcDec::new(&key.into(), aes_iv.into())
                 .decrypt_padded_vec::<Pkcs7>(ciphertext.as_ref())?)
         }

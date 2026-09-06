@@ -109,14 +109,13 @@ impl VirtualObjectEncoder {
     /// If the object header contains encryption information, the encrypted
     /// header representation is returned. Otherwise the plain encoded header is
     /// returned.
-    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the object header is encrypted and the encryption fails.
+    pub fn get_encoded_header(&mut self) -> Result<Vec<u8>> {
         if let Some(encryption_information) = &self.enc_info {
-            //unwrap should be safe here, because we have already testet this before.
-            self.obj_header
-                .encrypt_directly(encryption_information)
-                .unwrap()
+            self.obj_header.encrypt_directly(encryption_information)
         } else {
-            self.obj_header.encode_directly()
+            Ok(self.obj_header.encode_directly())
         }
     }
 
@@ -161,17 +160,28 @@ impl VirtualObjectEncoder {
                             .insert(file_encoder.file_header.file_number, current_offset);
 
                         Ok(EncodingState::PreparedData(
-                            PreparedData::PreparedFileHeader(file_encoder.encoded_header()),
+                            PreparedData::PreparedFileHeader(file_encoder.encoded_header()?),
                         ))
                     }
                     ReadState::Vfm => {
                         self.read_state = ReadState::FileFooter;
                         file_encoder.file_footer.vffc =
                             VirtualFileFooterContent::FileMap(current_segment_no, current_offset);
-                        // unwrap should be safe at this point: We will only reach the ReadState::VFM through ReadState::FileHeader
-                        // which always ensures hat the VFM exists.
+                        // ReadState::Vfm is only entered from ReadState::FileHeader,
+                        // which ensures the VFM exists. Report a missing VFM as an
+                        // error anyway, so a future change to the state machine
+                        // cannot abort a running acquisition.
+                        let encoded_vfm = match file_encoder.encoded_vfm()? {
+                            Some(encoded_vfm) => encoded_vfm,
+                            None => {
+                                return Err(ZffError::new(
+                                    ZffErrorKind::Missing,
+                                    ERROR_MISSING_VIRTUAL_FILE_MAP,
+                                ));
+                            }
+                        };
                         Ok(EncodingState::PreparedData(PreparedData::PreparedVFM(
-                            file_encoder.encoded_vfm()?.unwrap(),
+                            encoded_vfm,
                         )))
                     }
                     ReadState::FileFooter => {
@@ -183,7 +193,7 @@ impl VirtualObjectEncoder {
                             .file_footer_offsets
                             .insert(file_encoder.file_header.file_number, current_offset);
                         let encoding_state = EncodingState::PreparedData(
-                            PreparedData::PreparedFileHeader(file_encoder.encoded_footer()),
+                            PreparedData::PreparedFileHeader(file_encoder.encoded_footer()?),
                         );
                         match self.virtual_object_source.next() {
                             None => self.current_file_encoder = None,

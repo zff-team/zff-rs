@@ -1,9 +1,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-#![deny(warnings)]
 //! This crate provides the reference implementation of the forensic file format Zff.
 //! Zff is a new file format for forensic images, as an alternative to EWF and AFF.
 //! Zff is focused on speed and security. If you want to learn more about ZFF, visit [https://codeberg.org/zff-team/zff-rs](https://codeberg.org/zff-team/zff-rs).
+
+// Note: lints are denied in CI (via RUSTFLAGS=-Dwarnings), not in the crate itself.
+// A crate-level `deny(warnings)` breaks downstream builds on every new toolchain
+// release, because new rustc/clippy lints then become hard errors for consumers.
 
 // - modules
 mod chunk;

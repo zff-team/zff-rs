@@ -93,10 +93,23 @@ impl<R: ReadAt> ZffObjectReaderVirtual<R> {
 
     /// creates a new [ZffObjectReaderVirtual] with the given metadata.
     fn with_obj_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
-        let object_header = metadata.object_header(&object_no).unwrap().clone();
+        let object_header = match metadata.object_header(&object_no) {
+            Some(object_header) => object_header.clone(),
+            None => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Missing,
+                    format!("{ERROR_MISSING_OBJECT_HEADER_FOR_OBJECT_NO}{object_no}"),
+                ));
+            }
+        };
         let object_footer = match metadata.object_footer(&object_no) {
             Some(ObjectFooter::Virtual(footer)) => footer.clone(),
-            _ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
+            _ => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Invalid,
+                    format!("{ERROR_OBJECT_FOOTER_TYPE_MISMATCH}{object_no}"),
+                ));
+            }
         };
         let mut passive_object_filemetadata = HashMap::new();
         for passive_object_number in &object_footer.passive_objects {
@@ -318,7 +331,7 @@ impl<R: ReadAt> ZffObjectReaderVirtual<R> {
             .metadata
             .preloaded_chunkmaps
             .read()
-            .unwrap()
+            .map_err(ZffError::from)?
             .get_samebyte(chunk_number)
         {
             Arc::new(ChunkContent::SameBytes(samebyte))

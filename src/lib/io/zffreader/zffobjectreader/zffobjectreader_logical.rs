@@ -111,10 +111,23 @@ impl<R: ReadAt> ZffObjectReaderLogical<R> {
     fn with_obj_metadata(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
         #[cfg(feature = "log")]
         debug!("Initialize logical object {}", object_no);
-        let object_header = metadata.object_header(&object_no).unwrap().clone();
+        let object_header = match metadata.object_header(&object_no) {
+            Some(object_header) => object_header.clone(),
+            None => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Missing,
+                    format!("{ERROR_MISSING_OBJECT_HEADER_FOR_OBJECT_NO}{object_no}"),
+                ));
+            }
+        };
         let object_footer = match metadata.object_footer(&object_no) {
             Some(ObjectFooter::Logical(footer)) => footer.clone(),
-            _ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
+            _ => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Invalid,
+                    format!("{ERROR_OBJECT_FOOTER_TYPE_MISMATCH}{object_no}"),
+                ));
+            }
         };
 
         let enc_info = if let Some(encryption_header) = &object_header.encryption_header {
@@ -220,13 +233,18 @@ impl<R: ReadAt> ZffObjectReaderLogical<R> {
             files.len(),
             object_header.object_number
         );
-        // unwrap is safe here, we've already used this before to obtain the appropriate object header and footer ;)
+        // The object metadata was obtained above to read the object header and
+        // footer, so it is present here; report its absence instead of panicking.
         metadata
             .object_metadata
             .get(&object_no)
-            .unwrap()
-            .get()
-            .unwrap()
+            .and_then(|object_metadata| object_metadata.get())
+            .ok_or_else(|| {
+                ZffError::new(
+                    ZffErrorKind::Missing,
+                    format!("{ERROR_MISSING_OBJECT_NO}{object_no}"),
+                )
+            })?
             .files
             .set(Arc::clone(&files))
             .map_err(|_| {
@@ -312,7 +330,7 @@ impl<R: ReadAt> ZffObjectReaderLogical<R> {
             .metadata
             .preloaded_chunkmaps
             .read()
-            .unwrap()
+            .map_err(ZffError::from)?
             .get_samebyte(chunk_number)
         {
             Arc::new(ChunkContent::SameBytes(samebyte))
@@ -347,8 +365,11 @@ impl<R: ReadAt> ReadAtFile for ZffObjectReaderLogical<R> {
 
         let bytes_to_read = (buf.len() as u64).min(filemetadata.length_of_data() - offset) as usize;
         let mut read_bytes = 0;
-        //unwrap is safe here: we've never initialized FileMetadata for ZffObjectReaderLogical with ::with_virtual_file_footer().
-        let first_chunk_number = filemetadata.first_chunk_number().unwrap();
+        // FileMetadata for a logical object reader is never built with
+        // ::with_virtual_file_footer(), so a first chunk number is always present.
+        let first_chunk_number = filemetadata
+            .first_chunk_number()
+            .ok_or_else(|| IoError::new(IoEKind::InvalidData, ERROR_MALFORMED_SEGMENT))?;
 
         while read_bytes < bytes_to_read {
             let current_offset = offset + read_bytes as u64;

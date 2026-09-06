@@ -387,6 +387,9 @@ pub enum ZffErrorKind {
     NoDataLeft,
     /// The error occurs, if the selected option or given data is unsupported.
     Unsupported,
+    /// This error occurs, if a worker thread of the encoding pipeline has
+    /// terminated unexpectedly, so the operation could not be completed.
+    Interrupted,
     /// This error handles all other errors.
     Other,
     /// Custom errors.
@@ -410,6 +413,7 @@ impl fmt::Display for ZffErrorKind {
             ZffErrorKind::Missing => "Missing",
             ZffErrorKind::NoDataLeft => "NoDataLeft",
             ZffErrorKind::Unsupported => "Unsupported",
+            ZffErrorKind::Interrupted => "Interrupted",
             ZffErrorKind::Other => "Other",
             ZffErrorKind::Custom => "Custom",
         };

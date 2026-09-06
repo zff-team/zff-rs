@@ -322,7 +322,10 @@ fn gen_filetype_encoding_information(
             Ok(FileTypeEncodingInformation::Hardlink(*hardlink_filenumber))
         }
         #[cfg(target_family = "windows")]
-        FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
+        FileType::SpecialFile => Err(ZffError::new(
+            ZffErrorKind::Unsupported,
+            ERROR_SPECIAL_FILES_UNSUPPORTED_ON_WINDOWS,
+        )),
         #[cfg(target_family = "unix")]
         FileType::SpecialFile => {
             let metadata = std::fs::metadata(path)?;

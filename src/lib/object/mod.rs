@@ -49,6 +49,17 @@ pub use virtual_encoder::*;
 #[cfg(feature = "vos_tar")]
 pub use virtual_object_source::*;
 
+/// Builds the error returned when an encoding worker thread can no longer be
+/// reached. A failed send/recv on a worker channel means the thread has
+/// terminated unexpectedly (for example because it panicked), so the encoding
+/// pipeline cannot make further progress and the caller has to abort.
+fn worker_thread_unavailable(worker: &str) -> ZffError {
+    ZffError::new(
+        ZffErrorKind::Interrupted,
+        format!("the encoding worker thread '{worker}' is no longer available"),
+    )
+}
+
 /// Indicates if the data are compressed or not.
 /// This enum is used to avoid unnecessary copy operations.
 /// If the data are compressed, the data will be used directly.
@@ -103,26 +114,33 @@ impl EncodingThreadPoolManager {
     }
 
     /// updates the data of the encoding threads.
-    pub fn update(&mut self, data: Vec<u8>) {
+    /// # Error
+    /// Returns an error if the shared data lock is poisoned or if one of the
+    /// worker threads has terminated unexpectedly.
+    pub fn update(&mut self, data: Vec<u8>) -> Result<()> {
         {
-            let mut w = self.data.write().unwrap();
+            let mut w = self.data.write()?;
             *w = data;
         }
-        self.trigger();
+        self.trigger()
     }
 
     /// finalizes all hashing threads and returns a `HashMap<HashType, Vec<u8>>` with the appropriate hash values.
-    pub fn finalize_all_hashing_threads(&mut self) -> HashMap<HashType, Vec<u8>> {
+    /// # Error
+    /// Returns an error if one of the hashing threads has terminated unexpectedly.
+    pub fn finalize_all_hashing_threads(&mut self) -> Result<HashMap<HashType, Vec<u8>>> {
         self.hashing_threads.finalize_all()
     }
 
     /// triggers the underlying HashingThreadManager, the CompressionThread and the XxHashThread to continue processes with the updated data field.
     /// This function should be called after the data field was updated.
-    fn trigger(&mut self) {
-        self.same_bytes_thread.trigger();
-        self.compression_thread.trigger();
-        self.xxhash_thread.trigger();
-        self.hashing_threads.trigger();
+    /// # Error
+    /// Returns an error if one of the worker threads has terminated unexpectedly.
+    fn trigger(&mut self) -> Result<()> {
+        self.same_bytes_thread.trigger()?;
+        self.compression_thread.trigger()?;
+        self.xxhash_thread.trigger()?;
+        self.hashing_threads.trigger()
     }
 }
 
@@ -166,35 +184,45 @@ impl HashingThreadManager {
 
     /// returns the deduplication result. Adds a new deduplication thread and - in this case -
     /// triggers the appropriate thread to continue, if the thread not exists.
-    pub fn get_deduplication_result(&mut self) -> RwLockReadGuard<'_, blake3::Hash> {
+    pub fn get_deduplication_result(&mut self) -> Result<RwLockReadGuard<'_, blake3::Hash>> {
         if self.deduplication_thread.is_none() {
             self.add_deduplication_thread();
-            self.deduplication_thread.as_mut().unwrap().trigger();
         }
-        self.deduplication_thread.as_mut().unwrap().get_result()
+        // add_deduplication_thread() guarantees the thread exists at this point.
+        let thread = match self.deduplication_thread.as_mut() {
+            Some(thread) => thread,
+            None => return Err(worker_thread_unavailable("deduplication")),
+        };
+        thread.trigger()?;
+        thread.get_result()
     }
 
     /// triggers all hashing threads to continue the hashing process with the updated data field.
     /// This function should be called after the data field was updated.
-    pub fn trigger(&mut self) {
+    /// # Error
+    /// Returns an error if one of the hashing threads has terminated unexpectedly.
+    pub fn trigger(&mut self) -> Result<()> {
         for thread in self.threads.values_mut() {
             let wg = crossbeam::sync::WaitGroup::new();
-            thread.trigger(wg.clone());
+            thread.trigger(wg.clone())?;
             wg.wait();
         }
         // trigger the deduplication thread (if exists)
         if let Some(thread) = &mut self.deduplication_thread {
-            thread.trigger();
+            thread.trigger()?;
         }
+        Ok(())
     }
 
     /// finalizes all hashing threads and returns a HashMap<HashType, Vec<u8>> with the appropriate hash values.
-    pub fn finalize_all(&mut self) -> HashMap<HashType, Vec<u8>> {
+    /// # Error
+    /// Returns an error if one of the hashing threads has terminated unexpectedly.
+    pub fn finalize_all(&mut self) -> Result<HashMap<HashType, Vec<u8>>> {
         let mut result = HashMap::new();
         for (hash_type, thread) in &self.threads {
-            result.insert(hash_type.clone(), thread.finalize());
+            result.insert(hash_type.clone(), thread.finalize()?);
         }
-        result
+        Ok(result)
     }
 }
 
@@ -220,13 +248,20 @@ impl HashingThread {
             let mut hasher = Hash::new_hasher(&hash_type);
             while let Ok((wg, eof)) = receiver.recv() {
                 if !eof {
-                    let r_data = c_data.read().unwrap();
+                    // A poisoned lock means a peer thread panicked; end this
+                    // worker so the coordinating side reports an error instead
+                    // of every later access panicking in turn.
+                    let Ok(r_data) = c_data.read() else {
+                        break;
+                    };
                     drop(wg);
                     hasher.update(&r_data);
                 } else {
                     let hash = hasher.finalize_reset();
                     drop(wg);
-                    hash_sender.send(hash.to_vec()).unwrap();
+                    if hash_sender.send(hash.to_vec()).is_err() {
+                        break;
+                    }
                 }
             }
         });
@@ -237,17 +272,27 @@ impl HashingThread {
     }
 
     /// trigger the thread to continue the hashing process with the updated data field.
-    pub fn trigger(&self, wg: crossbeam::sync::WaitGroup) {
-        self.trigger.send((wg, false)).unwrap();
+    /// # Error
+    /// Returns an error if the hashing thread has terminated unexpectedly.
+    pub fn trigger(&self, wg: crossbeam::sync::WaitGroup) -> Result<()> {
+        self.trigger
+            .send((wg, false))
+            .map_err(|_| worker_thread_unavailable("hashing"))
     }
 
     /// returns the hash of the given data.
     /// This function blocks until the hash is calculated.
-    pub fn finalize(&self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the hashing thread has terminated unexpectedly.
+    pub fn finalize(&self) -> Result<Vec<u8>> {
         let wg = crossbeam::sync::WaitGroup::new();
-        self.trigger.send((wg.clone(), true)).unwrap();
+        self.trigger
+            .send((wg.clone(), true))
+            .map_err(|_| worker_thread_unavailable("hashing"))?;
         wg.wait();
-        self.hash_receiver.recv().unwrap()
+        self.hash_receiver
+            .recv()
+            .map_err(|_| worker_thread_unavailable("hashing"))
     }
 }
 
@@ -272,8 +317,9 @@ impl DeduplicationThread {
         let c_data = Arc::clone(&data);
         let _ = thread::spawn(move || {
             while let Ok(wg) = trigger_receiver.recv() {
-                let mut w_result = c_result.write().unwrap();
-                let r_data = c_data.read().unwrap();
+                let (Ok(mut w_result), Ok(r_data)) = (c_result.write(), c_data.read()) else {
+                    break;
+                };
                 *w_result = blake3::hash(&r_data);
                 drop(wg);
             }
@@ -287,18 +333,24 @@ impl DeduplicationThread {
 
     /// triggers the deduplication thread to continue the hashing process with the updated data field.
     /// This function should be called after the data field was updated.
-    pub fn trigger(&mut self) {
+    /// # Error
+    /// Returns an error if the deduplication thread has terminated unexpectedly.
+    pub fn trigger(&mut self) -> Result<()> {
         let wg = crossbeam::sync::WaitGroup::new();
         self.waitgroup = Some(wg.clone());
-        self.trigger.send(wg).unwrap();
+        self.trigger
+            .send(wg)
+            .map_err(|_| worker_thread_unavailable("deduplication"))
     }
 
     /// returns the hash of the given data.
-    pub fn get_result(&mut self) -> RwLockReadGuard<'_, blake3::Hash> {
+    /// # Error
+    /// Returns an error if the result lock is poisoned.
+    pub fn get_result(&mut self) -> Result<RwLockReadGuard<'_, blake3::Hash>> {
         if let Some(wg) = self.waitgroup.take() {
             wg.wait();
         }
-        self.result.read().unwrap()
+        Ok(self.result.read()?)
     }
 }
 
@@ -323,8 +375,9 @@ impl XxHashThread {
         let c_data = Arc::clone(&data);
         let _ = thread::spawn(move || {
             while let Ok(wg) = trigger_receiver.recv() {
-                let mut w_result = c_result.write().unwrap();
-                let r_data = c_data.read().unwrap();
+                let (Ok(mut w_result), Ok(r_data)) = (c_result.write(), c_data.read()) else {
+                    break;
+                };
                 *w_result = calculate_xxhash(&r_data);
                 drop(wg);
             }
@@ -337,18 +390,24 @@ impl XxHashThread {
     }
 
     /// trigger the thread to continue the xxhash calculation with the updated data field.
-    pub fn trigger(&mut self) {
+    /// # Error
+    /// Returns an error if the xxhash thread has terminated unexpectedly.
+    pub fn trigger(&mut self) -> Result<()> {
         let wg = crossbeam::sync::WaitGroup::new();
         self.waitgroup = Some(wg.clone());
-        self.trigger.send(wg).unwrap();
+        self.trigger
+            .send(wg)
+            .map_err(|_| worker_thread_unavailable("xxhash"))
     }
 
     /// returns the xxhash of the given data.
-    pub fn get_result(&mut self) -> RwLockReadGuard<'_, u64> {
+    /// # Error
+    /// Returns an error if the result lock is poisoned.
+    pub fn get_result(&mut self) -> Result<RwLockReadGuard<'_, u64>> {
         if let Some(wg) = self.waitgroup.take() {
             wg.wait();
         }
-        self.result.read().unwrap()
+        Ok(self.result.read()?)
     }
 }
 
@@ -373,8 +432,9 @@ impl CompressionThread {
         let c_data = Arc::clone(&data);
         let _ = thread::spawn(move || {
             while let Ok(wg) = trigger_receiver.recv() {
-                let mut w_result = c_result.write().unwrap();
-                let r_data = c_data.read().unwrap();
+                let (Ok(mut w_result), Ok(r_data)) = (c_result.write(), c_data.read()) else {
+                    break;
+                };
                 *w_result = Self::compress_buffer(&r_data, &compression_header);
                 drop(wg);
             }
@@ -424,18 +484,24 @@ impl CompressionThread {
 
     /// triggers the compression thread to continue the compression process with the updated data field.
     /// This function should be called after the data field was updated.
-    pub fn trigger(&mut self) {
+    /// # Error
+    /// Returns an error if the compression thread has terminated unexpectedly.
+    pub fn trigger(&mut self) -> Result<()> {
         let wg = crossbeam::sync::WaitGroup::new();
         self.waitgroup = Some(wg.clone());
-        self.trigger.send(wg).unwrap();
+        self.trigger
+            .send(wg)
+            .map_err(|_| worker_thread_unavailable("compression"))
     }
 
     /// returns the compressed data and if the compression flag has to be set or not.
-    pub fn get_result(&mut self) -> RwLockReadGuard<'_, CompressedData> {
+    /// # Error
+    /// Returns an error if the result lock is poisoned.
+    pub fn get_result(&mut self) -> Result<RwLockReadGuard<'_, CompressedData>> {
         if let Some(wg) = self.waitgroup.take() {
             wg.wait();
         }
-        self.result.read().unwrap()
+        Ok(self.result.read()?)
     }
 }
 
@@ -460,8 +526,9 @@ impl SameBytesThread {
         let c_data = Arc::clone(&data);
         let _ = thread::spawn(move || {
             while let Ok(wg) = trigger_receiver.recv() {
-                let mut w_result = c_result.write().unwrap();
-                let r_data = c_data.read().unwrap();
+                let (Ok(mut w_result), Ok(r_data)) = (c_result.write(), c_data.read()) else {
+                    break;
+                };
                 *w_result = Self::check_same_bytes(&r_data);
                 drop(wg)
             }
@@ -480,18 +547,24 @@ impl SameBytesThread {
 
     /// triggers the same bytes thread to continue the same bytes check with the updated data field.
     /// This function should be called after the data field was updated.
-    pub fn trigger(&mut self) {
+    /// # Error
+    /// Returns an error if the same bytes thread has terminated unexpectedly.
+    pub fn trigger(&mut self) -> Result<()> {
         let wg = crossbeam::sync::WaitGroup::new();
         self.waitgroup = Some(wg.clone());
-        self.trigger.send(wg).unwrap();
+        self.trigger
+            .send(wg)
+            .map_err(|_| worker_thread_unavailable("same bytes"))
     }
 
     /// returns the result of the same bytes check.
-    pub fn get_result(&mut self) -> RwLockReadGuard<'_, bool> {
+    /// # Error
+    /// Returns an error if the result lock is poisoned.
+    pub fn get_result(&mut self) -> Result<RwLockReadGuard<'_, bool>> {
         if let Some(wg) = self.waitgroup.take() {
             wg.wait();
         }
-        self.result.read().unwrap()
+        Ok(self.result.read()?)
     }
 }
 
@@ -511,22 +584,23 @@ pub(crate) fn chunking<R: ReadAt>(
     let mut duplicate = None;
 
     // get xxhash
-    let xxhash = *encoding_thread_pool_manager.xxhash_thread.get_result();
+    let xxhash = *encoding_thread_pool_manager.xxhash_thread.get_result()?;
 
     // check same byte
     // if the length of the buffer is not equal the target chunk size,
     // the condition failed and same byte flag can not be set.
     let chunk_content = if samebyte_checklen_value == chunk_size
-        && *encoding_thread_pool_manager.same_bytes_thread.get_result()
+        && *encoding_thread_pool_manager
+            .same_bytes_thread
+            .get_result()?
     {
         flags.same_bytes = true;
         let first_byte = encoding_thread_pool_manager.data.read()?[0];
         ChunkContent::SameBytes(first_byte)
     } else if let Some(deduplication_metadata) = deduplication_metadata {
-        // unwrap should be safe here, because we have already testet this before.
         let b3h = encoding_thread_pool_manager
             .hashing_threads
-            .get_deduplication_result();
+            .get_deduplication_result()?;
         if let Ok(chunk_no_set) = deduplication_metadata
             .deduplication_map
             .get_chunk_number(xxhash)
@@ -559,12 +633,30 @@ pub(crate) fn chunking<R: ReadAt>(
             }
             match content {
                 Some(chunk_no) => ChunkContent::Duplicate(chunk_no),
-                None => ChunkContent::Raw(Vec::new()),
+                None => {
+                    // The xxhash matched, but no stored chunk had the same
+                    // content. Register this chunk as well, so that a later
+                    // identical chunk can still be deduplicated against it.
+                    deduplication_metadata
+                        .deduplication_map
+                        .append_entry(xxhash, current_chunk_number)?;
+                    deduplication_metadata
+                        .deduplication_map
+                        .append_verification_hash(current_chunk_number, *b3h)?;
+                    ChunkContent::Raw(Vec::new())
+                }
             }
         } else {
+            // Record the verification hash together with the entry. Without it,
+            // a later duplicate could only be verified by re-reading the
+            // original chunk, which is impossible while a new container is
+            // being written (there is no original reader to read it from).
             deduplication_metadata
                 .deduplication_map
                 .append_entry(xxhash, current_chunk_number)?;
+            deduplication_metadata
+                .deduplication_map
+                .append_verification_hash(current_chunk_number, *b3h)?;
             ChunkContent::Raw(Vec::new())
         }
     } else {
@@ -581,7 +673,10 @@ pub(crate) fn chunking<R: ReadAt>(
         ChunkContent::SameBytes(single_byte) => (vec![single_byte], false),
         ChunkContent::Duplicate(chunk_no) => (chunk_no.to_le_bytes().to_vec(), false),
         ChunkContent::Raw(_) => {
-            match &*encoding_thread_pool_manager.compression_thread.get_result() {
+            match &*encoding_thread_pool_manager
+                .compression_thread
+                .get_result()?
+            {
                 CompressedData::Compressed(compressed_data) => (compressed_data.clone(), true),
                 CompressedData::Raw => (encoding_thread_pool_manager.data.read()?.clone(), false),
                 CompressedData::Err(e) => return Err(ZffError::from(e)),

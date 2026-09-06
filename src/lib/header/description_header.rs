@@ -21,8 +21,6 @@ use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 /// - evidence number (for the appropriate HashMap key, see [ENCODING_KEY_EVIDENCE_NUMBER](crate::constants::ENCODING_KEY_EVIDENCE_NUMBER))
 /// - examiner name (for the appropriate HashMap key, see [ENCODING_KEY_EXAMINER_NAME](crate::constants::ENCODING_KEY_EXAMINER_NAME))
 /// - notes (for the appropriate HashMap key, see [ENCODING_KEY_NOTES](crate::constants::ENCODING_KEY_NOTES))
-/// - tool name (for the appropriate HashMap key, see [ENCODING_KEY_TOOL_NAME](crate::constants::ENCODING_KEY_TOOL_NAME))
-/// - tool version (for the appropriate HashMap key, see [ENCODING_KEY_TOOL_VERSION](crate::constants::ENCODING_KEY_TOOL_VERSION))
 /// - logical sector size (for the appropriate HashMap key, see [ENCODING_KEY_LOGICAL_SECTOR_SIZE](crate::constants::ENCODING_KEY_LOGICAL_SECTOR_SIZE))
 /// - physical sector size (for the appropriate HashMap key, see [ENCODING_KEY_PHYSICAL_SECTOR_SIZE](crate::constants::ENCODING_KEY_PHYSICAL_SECTOR_SIZE))
 /// - model name/number (for the appropriate HashMap key, see [ENCODING_KEY_MODEL](crate::constants::ENCODING_KEY_MODEL))

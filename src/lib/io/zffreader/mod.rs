@@ -688,7 +688,9 @@ impl<R: ReadAt> ZffReader<R> {
 
             let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
             match *preloaded_chunkmaps {
-                PreloadedChunkMaps::None => initialize_new_map_if_empty(Arc::clone(&self.metadata)),
+                PreloadedChunkMaps::None => {
+                    initialize_new_map_if_empty(Arc::clone(&self.metadata))?
+                }
                 PreloadedChunkMaps::InMemory(ref mut maps) => maps.chunk_header.extend(inner_map),
                 PreloadedChunkMaps::Redb(ref mut db) => {
                     for (chunk_no, value) in inner_map {
@@ -703,7 +705,7 @@ impl<R: ReadAt> ZffReader<R> {
 
     /// Preloads all chunk header maps for the specific object.
     pub fn preload_chunk_header_map_per_object(&mut self, object_number: u64) -> Result<()> {
-        initialize_new_map_if_empty(Arc::clone(&self.metadata));
+        initialize_new_map_if_empty(Arc::clone(&self.metadata))?;
 
         #[cfg(feature = "log")]
         log::debug!("Preloading chunk offset map for object {}", object_number);
@@ -763,7 +765,7 @@ impl<R: ReadAt> ZffReader<R> {
                 let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
                 match *preloaded_chunkmaps {
                     PreloadedChunkMaps::None => {
-                        initialize_new_map_if_empty(Arc::clone(&self.metadata))
+                        initialize_new_map_if_empty(Arc::clone(&self.metadata))?
                     }
                     PreloadedChunkMaps::InMemory(ref mut maps) => maps.same_bytes.extend(inner_map),
                     PreloadedChunkMaps::Redb(ref mut db) => {
@@ -780,7 +782,7 @@ impl<R: ReadAt> ZffReader<R> {
 
     /// Preloads all samebyte chunk maps for the specific object.
     pub fn preload_chunk_samebytes_map_per_object(&mut self, object_number: u64) -> Result<()> {
-        initialize_new_map_if_empty(Arc::clone(&self.metadata));
+        initialize_new_map_if_empty(Arc::clone(&self.metadata))?;
 
         #[cfg(feature = "log")]
         log::debug!(
@@ -841,7 +843,7 @@ impl<R: ReadAt> ZffReader<R> {
                 let mut preloaded_chunkmaps = self.metadata.preloaded_chunkmaps.write()?;
                 match *preloaded_chunkmaps {
                     PreloadedChunkMaps::None => {
-                        initialize_new_map_if_empty(Arc::clone(&self.metadata))
+                        initialize_new_map_if_empty(Arc::clone(&self.metadata))?
                     }
                     PreloadedChunkMaps::InMemory(ref mut maps) => {
                         maps.duplicate_chunks.extend(inner_map)
@@ -860,7 +862,7 @@ impl<R: ReadAt> ZffReader<R> {
 
     /// Preloads all deduplication chunk maps for the specific object.
     pub fn preload_chunk_deduplication_map_per_object(&mut self, object_number: u64) -> Result<()> {
-        initialize_new_map_if_empty(Arc::clone(&self.metadata));
+        initialize_new_map_if_empty(Arc::clone(&self.metadata))?;
 
         #[cfg(feature = "log")]
         log::debug!(
@@ -1061,14 +1063,23 @@ fn get_chunk_data<R>(
 where
     R: ReadAt,
 {
-    let optional_chunk_header = extract_chunk_header_from_preloaded_chunkmap(
-        &metadata.preloaded_chunkmaps.read().unwrap(),
-        current_chunk_number,
-    );
-    let optional_chunk_deduplication = extract_deduplication_chunks_from_preloaded_chunkmap(
-        &metadata.preloaded_chunkmaps.read().unwrap(),
-        current_chunk_number,
-    );
+    // Scoped so the read guard is released before the recursive call below.
+    let (optional_chunk_header, optional_chunk_deduplication) = {
+        let preloaded_chunkmaps = metadata
+            .preloaded_chunkmaps
+            .read()
+            .map_err(ZffError::from)?;
+        (
+            extract_chunk_header_from_preloaded_chunkmap(
+                &preloaded_chunkmaps,
+                current_chunk_number,
+            ),
+            extract_deduplication_chunks_from_preloaded_chunkmap(
+                &preloaded_chunkmaps,
+                current_chunk_number,
+            ),
+        )
+    };
 
     if let Some(dedup_chunk_no) = optional_chunk_deduplication {
         return get_chunk_data(current_object_no, metadata, dedup_chunk_no);
@@ -1252,7 +1263,7 @@ fn initialize_unencrypted_object_reader<R: ReadAt>(
 
     let obj_reader = match footer {
         ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
-            ZffObjectReaderPhysical::new(obj_number, Arc::clone(&metadata)),
+            ZffObjectReaderPhysical::new(obj_number, Arc::clone(&metadata))?,
         )),
         ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
             ZffObjectReaderLogical::new(obj_number, Arc::clone(&metadata))?,
@@ -1448,9 +1459,18 @@ fn get_chunks_of_unencrypted_object<R: ReadAt>(
         ZffObjectReader::Logical(reader) => {
             let mut chunk_numbers = Vec::new();
             for filemetadata in reader.files().values() {
-                // unwrap is safe here: you cannot initialize a ZffObjectReaderLogical with a [VirtualFileFooter].
-                let first_chunk_no = filemetadata.first_chunk_number().unwrap();
-                let last_chunk_no = filemetadata.number_of_chunks().unwrap() + first_chunk_no - 1;
+                // A ZffObjectReaderLogical is never initialized with a
+                // [VirtualFileFooter], so both values are present here.
+                let (Some(first_chunk_no), Some(number_of_chunks)) = (
+                    filemetadata.first_chunk_number(),
+                    filemetadata.number_of_chunks(),
+                ) else {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Missing,
+                        ERROR_MISSING_FILE_CHUNK_INFORMATION,
+                    ));
+                };
+                let last_chunk_no = number_of_chunks + first_chunk_no - 1;
                 chunk_numbers.extend(first_chunk_no..=last_chunk_no);
             }
             chunk_numbers
@@ -1497,15 +1517,16 @@ fn get_enc_info_from_obj_reader<R: ReadAt>(
     Ok(enc_info)
 }
 
-fn initialize_new_map_if_empty<R: ReadAt>(metadata: ArcZffReaderMetadata<R>) {
-    let mut preloaded_chunkmaps = metadata.preloaded_chunkmaps.write().unwrap();
+fn initialize_new_map_if_empty<R: ReadAt>(metadata: ArcZffReaderMetadata<R>) -> Result<()> {
+    let mut preloaded_chunkmaps = metadata.preloaded_chunkmaps.write()?;
     let new_preloaded_chunkmaps = match *preloaded_chunkmaps {
         PreloadedChunkMaps::None => PreloadedChunkMaps::InMemory(PreloadedChunkMapsInMemory {
             ..Default::default()
         }),
-        _ => return,
+        _ => return Ok(()),
     };
     *preloaded_chunkmaps = new_preloaded_chunkmaps;
+    Ok(())
 }
 
 /// Returns the segment number and the appropriate offset of a chunkmap

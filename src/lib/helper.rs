@@ -10,7 +10,8 @@ use std::io::{Error as IoError, ErrorKind as IoEKind, Read};
 // - internal
 use crate::{
     ChunkContent, DEFAULT_LENGTH_HEADER_IDENTIFIER, DEFAULT_LENGTH_VALUE_HEADER_LENGTH,
-    ERROR_MALFORMED_SEGMENT, Result, ValueDecoder, ZffError, ZffErrorKind,
+    ERROR_MALFORMED_SEGMENT, ERROR_UNEXPECTED_DUPLICATE_CHUNK_CONTENT, Result, ValueDecoder,
+    ZffError, ZffErrorKind,
 };
 // - external
 #[cfg(feature = "serde")]
@@ -72,7 +73,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-/// Serializes `buffer` (Option) to a lowecase base64 Option<String>.
+/// Serializes `buffer` (Option) to a lowercase base64 `Option<String>`.
 pub fn option_buffer_to_base64<S>(
     buffer: &Option<Vec<u8>>,
     serializer: S,
@@ -204,7 +205,13 @@ pub(crate) fn copy_chunk_content_to_buf(
         ChunkContent::SameBytes(byte) => {
             buf[read_bytes..read_bytes + current_read_len].fill(*byte);
         }
-        ChunkContent::Duplicate(_) => unreachable!(), //should never reached, while get_chunk_data() already handle this.
+        // Duplicates are resolved by get_chunk_data() before reaching this point.
+        ChunkContent::Duplicate(_) => {
+            return Err(ZffError::new(
+                ZffErrorKind::Invalid,
+                ERROR_UNEXPECTED_DUPLICATE_CHUNK_CONTENT,
+            ));
+        }
     };
     Ok(())
 }

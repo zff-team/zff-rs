@@ -25,13 +25,29 @@ pub(crate) struct ZffObjectReaderPhysical<R: ReadAt> {
 
 impl<R: ReadAt> ZffObjectReaderPhysical<R> {
     /// creates a new [ZffObjectReaderPhysical] with the given metadata.
-    pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Self {
-        let object_header = metadata.object_header(&object_no).unwrap().clone();
+    /// # Error
+    /// Returns an error if no object header is available for the given object
+    /// number, or if the stored object footer is not a physical object footer.
+    pub fn new(object_no: u64, metadata: ArcZffReaderMetadata<R>) -> Result<Self> {
+        let object_header = match metadata.object_header(&object_no) {
+            Some(object_header) => object_header.clone(),
+            None => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Missing,
+                    format!("{ERROR_MISSING_OBJECT_HEADER_FOR_OBJECT_NO}{object_no}"),
+                ));
+            }
+        };
         let object_footer = match metadata.object_footer(&object_no) {
             Some(ObjectFooter::Physical(footer)) => footer.clone(),
-            _ => unreachable!(), // already checked before in zffreader::initialize_unencrypted_object_reader();
+            _ => {
+                return Err(ZffError::new(
+                    ZffErrorKind::Invalid,
+                    format!("{ERROR_OBJECT_FOOTER_TYPE_MISMATCH}{object_no}"),
+                ));
+            }
         };
-        Self {
+        Ok(Self {
             metadata,
             object_header,
             object_footer,
@@ -39,7 +55,7 @@ impl<R: ReadAt> ZffObjectReaderPhysical<R> {
                 .max_capacity(DEFAULT_CHUNK_CACHE_CAPACITY)
                 .build(),
             position: 0,
-        }
+        })
     }
 
     /// Returns a reference to the [ObjectHeader](crate::header::ObjectHeader).
@@ -66,7 +82,7 @@ impl<R: ReadAt> ZffObjectReaderPhysical<R> {
             .metadata
             .preloaded_chunkmaps
             .read()
-            .unwrap()
+            .map_err(ZffError::from)?
             .get_samebyte(chunk_number)
         {
             Arc::new(ChunkContent::SameBytes(samebyte))

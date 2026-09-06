@@ -115,6 +115,49 @@ pub(crate) const ERROR_ENCRYPTION_PRECONDITION_FAILED: &str =
     "Encryption and encoding precondition failed.";
 pub(crate) const ERROR_MISSING_ENCRYPTION_HEADER_KEY: &str =
     "Trying to decode encrypted content, but encryption header or key is missing.";
+pub(crate) const ERROR_DERIVED_KEY_LENGTH_MISMATCH: &str =
+    "The derived key does not have the length required by the selected PBE scheme.";
+pub(crate) const ERROR_MISSING_FILE_CHUNK_INFORMATION: &str =
+    "The file metadata does not contain the expected chunk information.";
+pub(crate) const ERROR_UNEXPECTED_DUPLICATE_CHUNK_CONTENT: &str =
+    "Encountered a duplicate chunk content, which should already have been resolved.";
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
+pub(crate) const ERROR_UNSUPPORTED_SPECIAL_FILE_TYPE: &str =
+    "Unsupported special file type for file number: ";
+#[cfg(feature = "los_tar")]
+pub(crate) const ERROR_MISSING_SPECIAL_FILE_INFORMATION: &str =
+    "Missing special file information for file number: ";
+#[cfg(target_family = "windows")]
+pub(crate) const ERROR_SPECIAL_FILES_UNSUPPORTED_ON_WINDOWS: &str =
+    "Special files are not supported on Windows.";
+pub(crate) const ERROR_UNEXPECTED_ENCODING_STATE: &str =
+    "The encoder returned an unexpected encoding state.";
+// - segment size accounting
+/// Upper bound of the bytes a flushed chunkmap costs on top of its payload size
+/// (as reported by [ChunkMap::current_size](crate::header::ChunkMap::current_size)):
+/// the header identifier (4), the header length (8), the version (1), the object
+/// number (8) and, for encrypted objects, the AEAD tag (16). Rounded up.
+pub(crate) const CHUNKMAP_ENCODING_OVERHEAD: u64 = 40;
+
+/// Upper bound of the bytes the segment footer grows by while a segment is being
+/// closed. Closing flushes the three chunkmaps, and each flush inserts one
+/// (chunk number, offset) pair into the matching footer table. Rounded up.
+pub(crate) const SEGMENT_FOOTER_CLOSING_GROWTH: u64 = 64;
+
+/// Upper bound of the bytes a single additional chunk costs inside a segment, on
+/// top of the chunk payload itself: the AEAD tag of an encrypted chunk (16), one
+/// chunk header map entry (46), one same bytes map entry (9) and one
+/// deduplication map entry (16). Rounded up.
+pub(crate) const CHUNK_SEGMENT_OVERHEAD: u64 = 96;
+
+pub(crate) const ERROR_ZFFWRITER_UNEXPECTED_INTERNAL_STATE: &str =
+    "The zff writer reached an unexpected internal state at: ";
+pub(crate) const ERROR_MISSING_OBJECT_HEADER_FOR_OBJECT_NO: &str =
+    "No object header available for object number: ";
+pub(crate) const ERROR_OBJECT_FOOTER_TYPE_MISMATCH: &str =
+    "The object footer does not match the expected object type for object number: ";
+pub(crate) const ERROR_MISSING_VIRTUAL_FILE_MAP: &str =
+    "The virtual file map is missing, but was expected to be present.";
 pub(crate) const NO_ENCRYPTION_DETECTED: &str = "No encryption detected.";
 pub(crate) const ERROR_DECODE_UNENCRYPTED_OBJECT_WITH_DECRYPTION_FN: &str =
     "Trying to decrypt unencryted object.";

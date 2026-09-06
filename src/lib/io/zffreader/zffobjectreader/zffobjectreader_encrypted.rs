@@ -56,7 +56,7 @@ impl<R: ReadAt> ZffObjectReaderEncrypted<R> {
 
         let obj_reader = match decrypted_footer {
             ObjectFooter::Physical(_) => ZffObjectReader::Physical(Box::new(
-                ZffObjectReaderPhysical::new(obj_no, Arc::clone(&self.metadata)),
+                ZffObjectReaderPhysical::new(obj_no, Arc::clone(&self.metadata))?,
             )),
             ObjectFooter::Logical(_) => ZffObjectReader::Logical(Box::new(
                 ZffObjectReaderLogical::new(obj_no, Arc::clone(&self.metadata))?,

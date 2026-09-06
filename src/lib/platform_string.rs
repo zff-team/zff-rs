@@ -101,8 +101,10 @@ impl PlatformString {
                     ));
                 }
                 let u16s = bytes
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|chunk| u16::from_le_bytes(*chunk))
                     .collect::<Vec<_>>();
                 String::from_utf16(&u16s).map_err(|e| {
                     ZffError::new_with_source(
@@ -126,8 +128,10 @@ impl PlatformString {
                     return String::from_utf8_lossy(bytes).into_owned();
                 }
                 let u16s = bytes
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|chunk| u16::from_le_bytes(*chunk))
                     .collect::<Vec<_>>();
                 String::from_utf16_lossy(&u16s)
             }

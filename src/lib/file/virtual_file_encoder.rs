@@ -46,12 +46,13 @@ impl VirtualFileEncoder {
     }
 
     /// Returns the encoded [`FileHeader`].
-    pub fn encoded_header(&self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the file header is encrypted and the encryption fails.
+    pub fn encoded_header(&self) -> Result<Vec<u8>> {
         if let Some(enc_info) = &self.encryption_information {
-            //unwrap should be safe here, because we have already testet this before.
-            self.file_header.encrypt_directly(enc_info).unwrap()
+            self.file_header.encrypt_directly(enc_info)
         } else {
-            self.file_header.encode_directly()
+            Ok(self.file_header.encode_directly())
         }
     }
 
@@ -73,12 +74,13 @@ impl VirtualFileEncoder {
     }
 
     /// Returns the appropriate encoded [VirtualFileFooter].
-    pub fn encoded_footer(&self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the file footer is encrypted and the encryption fails.
+    pub fn encoded_footer(&self) -> Result<Vec<u8>> {
         if let Some(enc_info) = &self.encryption_information {
-            //unwrap should be safe here, because we have already testet this before.
-            self.file_footer.encrypt_directly(enc_info).unwrap()
+            self.file_footer.encrypt_directly(enc_info)
         } else {
-            self.file_footer.encode_directly()
+            Ok(self.file_footer.encode_directly())
         }
     }
 }

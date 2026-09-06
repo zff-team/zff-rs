@@ -4,12 +4,16 @@ on: [ push, pull_request ]
 
 env:
   CARGO_TERM_COLOR: always
+  # Lints are denied here rather than via a crate-level `#![deny(warnings)]`,
+  # so that new toolchain lints break CI instead of breaking downstream users.
+  RUSTFLAGS: -Dwarnings
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.name }}
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -34,24 +38,75 @@ jobs:
             toolchain: stable
             target: aarch64-apple-darwin
             name: macOS (arm64)
-    
+
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Set up Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.toolchain }}
-        target: ${{ matrix.target }}
-        components: clippy
-        default: true
-    
+        targets: ${{ matrix.target }}
+        components: clippy, rustfmt
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ matrix.target }}
+
     - name: Install deps (Linux only)
       if: matrix.os == 'ubuntu-latest'
       run: sudo apt update && sudo apt install -y ${{ matrix.libacl }} ${{ matrix.pkg_config }} ${{ matrix.libudev }}
-    
-    - name: Build ${{ matrix.target }}
-      run: cargo clippy --verbose --all-features --target ${{ matrix.target }}
-    
+
+    - name: Check formatting
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo fmt --all --check
+
+    # The default feature set is what most consumers actually compile, so it is
+    # linted separately -- `--all-features` alone would never exercise it.
+    - name: Clippy (default features) ${{ matrix.target }}
+      run: cargo clippy --verbose --all-targets --no-default-features --target ${{ matrix.target }}
+
+    - name: Clippy (all features) ${{ matrix.target }}
+      run: cargo clippy --verbose --all-targets --all-features --target ${{ matrix.target }}
+
     - name: Run tests
       run: cargo test --verbose --all-features --target ${{ matrix.target }}
+
+    - name: Run tests (default features)
+      run: cargo test --verbose --no-default-features --target ${{ matrix.target }}
+
+  msrv:
+    runs-on: ubuntu-latest
+    name: MSRV (rust-version in Cargo.toml)
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Read MSRV from Cargo.toml
+      id: msrv
+      run: echo "version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].rust_version')" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Rust ${{ steps.msrv.outputs.version }}
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.msrv.outputs.version }}
+
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Install deps
+      run: sudo apt update && sudo apt install -y libacl1-dev pkg-config libudev-dev
+
+    # Build only: the MSRV job proves the declared rust-version can compile the
+    # crate. Clippy lints vary across toolchains, so they are not denied here.
+    - name: Build with MSRV
+      env:
+        RUSTFLAGS: ""
+      run: cargo build --all-features
+
+  deny:
+    runs-on: ubuntu-latest
+    name: cargo-deny (licenses, advisories, sources)
+    steps:
+    - uses: actions/checkout@v4
+    - uses: EmbarkStudios/cargo-deny-action@v2
+      with:
+        command: check

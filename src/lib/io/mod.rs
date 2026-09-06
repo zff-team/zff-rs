@@ -83,7 +83,14 @@ impl ZffExtenderParameter {
 pub struct ZffCreationParameters<R: ReadAt> {
     /// If given, the appropriate data will be signed by the given [SigningKey].
     pub signature_key: Option<SigningKey>,
-    /// If None, the container will not be segmentized. Otherwise, [ZffWriter](zffwriter::ZffWriter) ensure that no segment will be larger than this size.
+    /// If None, the container will not be segmentized. Otherwise, the
+    /// [ZffWriter](zffwriter::ZffWriter) ensures that no segment will be larger
+    /// than this size. The chunkmaps and the segment footer that closing a
+    /// segment writes are accounted for before the segment is filled further.
+    ///
+    /// A segment always holds at least one chunk. If the value is too small to
+    /// hold a single chunk together with the segment metadata, it cannot be
+    /// honoured and the segments will be larger than requested.
     pub target_segment_size: Option<u64>,
     /// An optional description for the container
     /// (note: you can describe every object with custom descriptions by using the [DescriptionHeader]).

@@ -123,6 +123,10 @@ impl AddAssign<u64> for BytesRead {
 #[derive(Debug, Clone, Default)]
 struct ZffWriterInProgressData {
     bytes_read: BytesRead,
+    /// Payload bytes written into the current segment. A segment is only closed
+    /// once this is non-zero, so that a target segment size too small to hold a
+    /// single chunk cannot produce an endless run of empty segments.
+    payload_bytes_in_current_segment: u64,
     encoded_segment_header: Vec<u8>, // the encoded segment header,
     encoded_segment_header_read_bytes: ReadBytes, // the number of bytes read from the encoded segment header,
     segment_footer: SegmentFooter,                // the segment footer,
@@ -301,6 +305,7 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
                 self.in_progress_data.segment_footer.first_chunk_number =
                     self.current_object_encoder.current_chunk_number();
                 self.in_progress_data.bytes_read.clean();
+                self.in_progress_data.payload_bytes_in_current_segment = 0;
                 SegmentationState::SegmentFinished
             }
             SegmentationInnerState::FullLastSegment(_) => SegmentationState::SegmentNotFinished,
@@ -329,7 +334,10 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
         loop {
             file_extension = file_extension_next_value(&file_extension)?;
             let mut segment_filename = match &self.output {
-                ZffFilesOutput::Stream => unreachable!(),
+                // Rejected at the top of this method.
+                ZffFilesOutput::Stream => {
+                    return Err(unexpected_internal_state("generate_files: stream output"));
+                }
                 ZffFilesOutput::NewContainer(path) => path.clone(),
                 ZffFilesOutput::ExtendContainer(path_vec) => path_vec[0].clone(), // should never get out of bound when fn setup_container was used before.
             };
@@ -368,7 +376,11 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
 
             match self.next_segment() {
                 SegmentationState::LastSegmentFinished => return Ok(generated_files),
-                SegmentationState::SegmentNotFinished => unreachable!(),
+                SegmentationState::SegmentNotFinished => {
+                    return Err(unexpected_internal_state(
+                        "generate_files: segment not finished after a full read",
+                    ));
+                }
                 SegmentationState::SegmentFinished => (),
             };
         }
@@ -414,12 +426,81 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
             .get_obj_header()
             .encryption_header
         {
-            let key = encryption_header.get_encryption_key_ref().unwrap(); //unwrap should be safe here - I don't know how we would encrypt all the other stuff, without knowing the key. :D
+            // The key is present whenever the object is being written encrypted;
+            // report its absence rather than aborting a running acquisition.
+            let key = encryption_header.get_encryption_key_ref().ok_or_else(|| {
+                ZffError::new(
+                    ZffErrorKind::EncryptionError,
+                    ERROR_MISSING_ENCRYPTION_HEADER_KEY,
+                )
+            })?;
             let algorithm = &encryption_header.algorithm;
             Ok(chunkmap.encrypt_encoded_map(key, algorithm, last_chunk_no)?)
         } else {
             Ok(chunkmap.encode_directly())
         }
+    }
+
+    /// Returns an upper bound of the bytes that closing the current segment will
+    /// still append to it: the three chunkmaps that have to be flushed, plus the
+    /// segment footer including the table entries those flushes add to it.
+    fn closing_overhead(&self) -> u64 {
+        let chunkmaps = &self.in_progress_data.chunkmaps;
+        let mut overhead = 0;
+        for map_size in [
+            chunkmaps.header_map.current_size(),
+            chunkmaps.same_bytes_map.current_size(),
+            chunkmaps.duplicate_chunks.current_size(),
+        ] {
+            // An empty map is not written at all.
+            if map_size > 0 {
+                overhead += map_size as u64 + CHUNKMAP_ENCODING_OVERHEAD;
+            }
+        }
+        overhead
+            + self.in_progress_data.segment_footer.header_size() as u64
+            + SEGMENT_FOOTER_CLOSING_GROWTH
+    }
+
+    /// Returns an upper bound of the bytes one more chunk would add to the
+    /// current segment.
+    ///
+    /// The largest chunk size of any object still to be written is used, because
+    /// the next chunk may already belong to the next object.
+    fn next_chunk_allowance(&self) -> u64 {
+        let largest_chunk_size = self
+            .object_encoder
+            .iter()
+            .map(|encoder| encoder.get_obj_header().chunk_size)
+            .chain(std::iter::once(
+                self.current_object_encoder.get_obj_header().chunk_size,
+            ))
+            .max()
+            .unwrap_or_default();
+        largest_chunk_size + CHUNK_SEGMENT_OVERHEAD
+    }
+
+    /// Returns true if the current segment has to be closed before another chunk
+    /// is written, so that the finished segment stays within the configured
+    /// target segment size.
+    ///
+    /// A segment always holds at least one chunk. If the target is too small to
+    /// hold a single chunk plus the segment metadata, it cannot be honoured and
+    /// the segment will be larger than requested.
+    fn segment_is_full(&self) -> bool {
+        let Some(target_segment_size) = self.optional_parameters.target_segment_size else {
+            return false;
+        };
+        // Never close a segment that has not received any payload yet: the
+        // segment header alone can already exceed a very small target, and
+        // closing here would make no progress at all.
+        if self.in_progress_data.payload_bytes_in_current_segment == 0 {
+            return false;
+        }
+        self.in_progress_data.bytes_read.current_segment
+            + self.closing_overhead()
+            + self.next_chunk_allowance()
+            > target_segment_size
     }
 
     /// flushes the current chunkmap.
@@ -526,6 +607,20 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
     }
 }
 
+/// Builds the error used when the writer observes a state combination that the
+/// segmentation state machine is not supposed to produce.
+///
+/// These conditions are unreachable as long as the state machine is correct.
+/// They are reported as errors rather than panics so that a bug cannot abort a
+/// running acquisition and leave a partially written container behind: the
+/// caller gets a chance to fail cleanly and to clean up.
+fn unexpected_internal_state(context: &str) -> ZffError {
+    ZffError::new(
+        ZffErrorKind::Invalid,
+        format!("{ERROR_ZFFWRITER_UNEXPECTED_INTERNAL_STATE}{context}"),
+    )
+}
+
 impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut bytes_written_to_buffer = 0; // the number of bytes which are written to the current buffer,
@@ -576,8 +671,10 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                 self.current_segment_no(),
                             );
                             // prepare the current object header
-                            self.in_progress_data.current_encoded_object_header =
-                                self.current_object_encoder.get_encoded_header();
+                            self.in_progress_data.current_encoded_object_header = self
+                                .current_object_encoder
+                                .get_encoded_header()
+                                .map_err(std::io::Error::other)?;
                             self.in_progress_data
                                 .segment_footer
                                 .object_header_offsets
@@ -632,9 +729,13 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                             self.read_state = ReadState::ChunkSamebytesMap;
                             self.flush_chunkmap(ChunkMapType::SamebytesMap)?;
                         }
-                        SegmentationInnerState::Finished(_) => unreachable!(),
-                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
-                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_)
+                        | SegmentationInnerState::FullLastSegment(_)
+                        | SegmentationInnerState::FinishedLastSegment(_) => {
+                            return Err(
+                                unexpected_internal_state("ReadState::ChunkHeaderMap").into()
+                            );
+                        }
                     };
                 }
 
@@ -661,9 +762,13 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                             self.read_state = ReadState::ChunkDeduplicationMap;
                             self.flush_chunkmap(ChunkMapType::DeduplicationMap)?;
                         }
-                        SegmentationInnerState::Finished(_) => unreachable!(),
-                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
-                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_)
+                        | SegmentationInnerState::FullLastSegment(_)
+                        | SegmentationInnerState::FinishedLastSegment(_) => {
+                            return Err(
+                                unexpected_internal_state("ReadState::ChunkSamebytesMap").into()
+                            );
+                        }
                     };
                 }
 
@@ -692,9 +797,14 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                         SegmentationInnerState::Full(_) => {
                             self.read_state = ReadState::SegmentFooter
                         }
-                        SegmentationInnerState::Finished(_) => unreachable!(),
-                        SegmentationInnerState::FullLastSegment(_) => unreachable!(),
-                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Finished(_)
+                        | SegmentationInnerState::FullLastSegment(_)
+                        | SegmentationInnerState::FinishedLastSegment(_) => {
+                            return Err(unexpected_internal_state(
+                                "ReadState::ChunkDeduplicationMap",
+                            )
+                            .into());
+                        }
                     };
 
                     if let ReadState::SegmentFooter = self.read_state {
@@ -817,24 +927,28 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                         &mut bytes_written_to_buffer,
                     )?;
                     self.in_progress_data.bytes_read += read_bytes as u64;
+                    self.in_progress_data.payload_bytes_in_current_segment += read_bytes as u64;
                     if bytes_written_to_buffer >= buf_len {
                         return Ok(bytes_written_to_buffer);
                     };
 
-                    // check the read bytes (for segment length)
-                    // TODO: calculate also the sizes of the current chunkmaps
-                    if self.in_progress_data.bytes_read.current_segment
-                        >= self
-                            .optional_parameters
-                            .target_segment_size
-                            .unwrap_or(u64::MAX)
-                    {
+                    // Close the segment if one more chunk plus the metadata that
+                    // closing writes would push it past the target segment size.
+                    // The check has to happen before the next chunk is prepared:
+                    // preparing it records its offset in the current segment, so a
+                    // prepared chunk can no longer be moved to the next one.
+                    if self.segment_is_full() {
                         // set the appropriate segmentation state to full (with the next segment number)
                         self.segmentation_state = match self.segmentation_state {
                             SegmentationInnerState::Partial(segment_number) => {
                                 SegmentationInnerState::Full(segment_number)
                             }
-                            _ => unreachable!(),
+                            _ => {
+                                return Err(unexpected_internal_state(
+                                    "target segment size reached outside a partial segment",
+                                )
+                                .into());
+                            }
                         };
                         // flush the first chunkmap and set the appropriate read state
                         self.flush_chunkmap(ChunkMapType::HeaderMap)?;
@@ -876,7 +990,12 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                         self.read_state = ReadState::LastChunkHeaderMapOfObject;
                                         break;
                                     }
-                                    EncodingState::PreparedChunk(_) => unreachable!(),
+                                    EncodingState::PreparedChunk(_) => {
+                                        return Err(unexpected_internal_state(
+                                            "object encoder returned a bare chunk",
+                                        )
+                                        .into());
+                                    }
                                 };
 
                                 match data {
@@ -908,7 +1027,12 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                         Some(PreparedData::PreparedChunk(prepared_chunk)) => {
                                             prepared_chunk.samebytes
                                         }
-                                        _ => unreachable!(),
+                                        _ => {
+                                            return Err(unexpected_internal_state(
+                                                "PreparedDataQueueState::SameBytes",
+                                            )
+                                            .into());
+                                        }
                                     };
                                 if let Some(samebytes) = samebytes
                                     && !self
@@ -935,7 +1059,12 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                         Some(PreparedData::PreparedChunk(prepared_chunk)) => {
                                             prepared_chunk.duplicated
                                         }
-                                        _ => unreachable!(),
+                                        _ => {
+                                            return Err(unexpected_internal_state(
+                                                "PreparedDataQueueState::Deduplication",
+                                            )
+                                            .into());
+                                        }
                                     };
                                 if let Some(deduplication) = deduplication
                                     && !self
@@ -960,7 +1089,12 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                                 let data = match &self.in_progress_data.current_prepared_data_queue
                                 {
                                     Some(prepared_data) => prepared_data.inner_data_ref(),
-                                    None => unreachable!(),
+                                    None => {
+                                        return Err(unexpected_internal_state(
+                                            "PreparedDataQueueState::Data without queued data",
+                                        )
+                                        .into());
+                                    }
                                 };
                                 self.in_progress_data.current_encoded_chunked_data = data.to_vec();
                                 self.in_progress_data
@@ -1023,8 +1157,10 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                         .chunkmaps
                         .set_object_number(self.current_object_encoder.obj_number());
                     self.read_state = ReadState::ObjectHeader;
-                    self.in_progress_data.current_encoded_object_header =
-                        self.current_object_encoder.get_encoded_header();
+                    self.in_progress_data.current_encoded_object_header = self
+                        .current_object_encoder
+                        .get_encoded_header()
+                        .map_err(std::io::Error::other)?;
                     self.in_progress_data
                         .current_encoded_object_header_read_bytes = ReadBytes::NotRead;
                     self.in_progress_data
@@ -1066,12 +1202,16 @@ impl<R: Read, C: ReadAt> Read for ZffWriter<R, C> {
                             self.segmentation_state =
                                 SegmentationInnerState::Finished(segment_number)
                         }
-                        SegmentationInnerState::Partial(_) => unreachable!(),
-                        SegmentationInnerState::Finished(_) => unreachable!(),
                         SegmentationInnerState::FullLastSegment(_) => {
                             self.read_state = ReadState::MainFooter
                         }
-                        SegmentationInnerState::FinishedLastSegment(_) => unreachable!(),
+                        SegmentationInnerState::Partial(_)
+                        | SegmentationInnerState::Finished(_)
+                        | SegmentationInnerState::FinishedLastSegment(_) => {
+                            return Err(
+                                unexpected_internal_state("ReadState::SegmentFooter").into()
+                            );
+                        }
                     }
                 }
                 ReadState::MainFooter => {
@@ -1217,7 +1357,7 @@ fn setup_container<R: Read, C: ReadAt>(
         let offset = file.seek(SeekFrom::End(0))?;
         in_progress_data.bytes_read.current_segment = offset;
         in_progress_data.current_encoded_object_header =
-            current_object_encoder.get_encoded_header();
+            current_object_encoder.get_encoded_header()?;
         in_progress_data.segment_footer = extender_parameter.segment_footer;
         in_progress_data
             .segment_footer

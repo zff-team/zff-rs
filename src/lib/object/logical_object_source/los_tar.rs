@@ -143,7 +143,12 @@ impl TryFrom<&Path> for LogicalObjectSourceTar {
                     EntryType::Char => SpecialFileEncodingInformation::Char(rdev),
                     EntryType::Block => SpecialFileEncodingInformation::Block(rdev),
                     EntryType::Fifo => SpecialFileEncodingInformation::Fifo(rdev),
-                    _ => unreachable!(), //should be handled before.
+                    _ => {
+                        return Err(ZffError::new(
+                            ZffErrorKind::Unsupported,
+                            format!("{ERROR_UNSUPPORTED_SPECIAL_FILE_TYPE}{current_file_number}"),
+                        ));
+                    }
                 };
                 special_files_rdev_map.insert(current_file_number, speical_file);
             }
@@ -342,7 +347,12 @@ fn gen_filetype_encoding_information(
                 .remove(&current_file_number)
             {
                 Some(info) => info,
-                None => unreachable!(), //should already be handled in construction phase. Should never reached.
+                None => {
+                    return Err(ZffError::new(
+                        ZffErrorKind::Missing,
+                        format!("{ERROR_MISSING_SPECIAL_FILE_INFORMATION}{current_file_number}"),
+                    ));
+                }
             };
             Ok(FileTypeEncodingInformation::SpecialFile(specialfile_info))
         }

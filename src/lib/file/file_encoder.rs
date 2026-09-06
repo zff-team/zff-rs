@@ -115,16 +115,17 @@ impl FileEncoder {
     }
 
     /// returns the underlying encoded header
-    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the file header is encrypted and the encryption fails.
+    pub fn get_encoded_header(&mut self) -> Result<Vec<u8>> {
         if self.acquisition_start == 0 {
             self.acquisition_start =
                 OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
         }
         if let Some(enc_info) = &self.encryption_information {
-            //unwrap should be safe here, because we have already testet this before.
-            self.file_header.encrypt_directly(enc_info).unwrap()
+            self.file_header.encrypt_directly(enc_info)
         } else {
-            self.file_header.encode_directly()
+            Ok(self.file_header.encode_directly())
         }
     }
 
@@ -226,7 +227,7 @@ impl FileEncoder {
 
         let mut encoding_thread_pool_manager = self.encoding_thread_pool_manager.borrow_mut();
 
-        encoding_thread_pool_manager.update(buffered_chunk.buffer);
+        encoding_thread_pool_manager.update(buffered_chunk.buffer)?;
 
         let encryption_algorithm = self
             .encryption_information
@@ -258,7 +259,7 @@ impl FileEncoder {
 
         self.acquisition_end = OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
         let mut hash_values = Vec::new();
-        for (hash_type, hash) in encoding_thread_pool_manager.finalize_all_hashing_threads() {
+        for (hash_type, hash) in encoding_thread_pool_manager.finalize_all_hashing_threads()? {
             let mut hash_value = HashValue::new_empty(hash_type.clone());
             hash_value.set_hash(hash.to_vec());
             if let Some(signing_key) = &self.signing_key {

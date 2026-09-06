@@ -141,14 +141,13 @@ impl LogicalObjectEncoder {
     }
 
     /// Returns the encoded object header.
-    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the object header is encrypted and the encryption fails.
+    pub fn get_encoded_header(&mut self) -> Result<Vec<u8>> {
         if let Some(encryption_information) = &self.encryption_information {
-            //unwrap should be safe here, because we have already testet this before.
-            self.obj_header
-                .encrypt_directly(encryption_information)
-                .unwrap()
+            self.obj_header.encrypt_directly(encryption_information)
         } else {
-            self.obj_header.encode_directly()
+            Ok(self.obj_header.encode_directly())
         }
     }
 
@@ -176,7 +175,7 @@ impl LogicalObjectEncoder {
                         .file_header_offsets
                         .insert(self.current_file_number, current_offset);
                     let prepared_data =
-                        PreparedData::PreparedFileHeader(file_encoder.get_encoded_header());
+                        PreparedData::PreparedFileHeader(file_encoder.get_encoded_header()?);
                     return Ok(EncodingState::PreparedData(prepared_data));
                 }
 
@@ -191,7 +190,12 @@ impl LogicalObjectEncoder {
                             let prepared_data = PreparedData::PreparedChunk(data);
                             return Ok(EncodingState::PreparedData(prepared_data));
                         }
-                        EncodingState::PreparedData(_) => unreachable!(),
+                        EncodingState::PreparedData(_) => {
+                            return Err(ZffError::new(
+                                ZffErrorKind::Invalid,
+                                ERROR_UNEXPECTED_ENCODING_STATE,
+                            ));
+                        }
                         EncodingState::ReadEOF => (),
                     };
                 } else {

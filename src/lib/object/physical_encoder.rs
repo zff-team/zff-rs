@@ -93,18 +93,17 @@ impl<R: Read> PhysicalObjectEncoder<R> {
 
     /// Returns the encoded object header.
     /// Note: **A call of this method sets the acquisition start time to the current time**.
-    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the object header is encrypted and the encryption fails.
+    pub fn get_encoded_header(&mut self) -> Result<Vec<u8>> {
         if self.acquisition_start == 0 {
             self.acquisition_start =
                 OffsetDateTime::from(SystemTime::now()).unix_timestamp() as u64;
         }
         if let Some(encryption_information) = &self.encryption_information {
-            //unwrap should be safe here, because we have already testet this before.
-            self.obj_header
-                .encrypt_directly(encryption_information)
-                .unwrap()
+            self.obj_header.encrypt_directly(encryption_information)
         } else {
-            self.obj_header.encode_directly()
+            Ok(self.obj_header.encode_directly())
         }
     }
 
@@ -129,7 +128,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
         };
 
         self.encoding_thread_pool_manager
-            .update(buffered_chunk.buffer);
+            .update(buffered_chunk.buffer)?;
 
         let encryption_algorithm = self
             .obj_header
@@ -175,7 +174,7 @@ impl<R: Read> PhysicalObjectEncoder<R> {
         for (hash_type, hash) in self
             .encoding_thread_pool_manager
             .hashing_threads
-            .finalize_all()
+            .finalize_all()?
         {
             let mut hash_value = HashValue::new_empty(hash_type.clone());
             hash_value.set_hash(hash.to_vec());

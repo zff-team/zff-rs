@@ -214,7 +214,12 @@ impl<R: ReadAt> VirtualObjectSourceLogicalTar<R> {
                     EntryType::Char => SpecialFileEncodingInformation::Char(rdev),
                     EntryType::Block => SpecialFileEncodingInformation::Block(rdev),
                     EntryType::Fifo => SpecialFileEncodingInformation::Fifo(rdev),
-                    _ => unreachable!(), //should be handled before.
+                    _ => {
+                        return Err(ZffError::new(
+                            ZffErrorKind::Unsupported,
+                            format!("{ERROR_UNSUPPORTED_SPECIAL_FILE_TYPE}{current_file_number}"),
+                        ));
+                    }
                 };
                 special_files_rdev_map.insert(current_file_number, special_file);
             }

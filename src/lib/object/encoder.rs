@@ -92,7 +92,9 @@ impl<R: Read> ObjectEncoder<R> {
     }
 
     /// returns the appropriate encoded [ObjectHeader].
-    pub fn get_encoded_header(&mut self) -> Vec<u8> {
+    /// # Error
+    /// Returns an error if the object header is encrypted and the encryption fails.
+    pub fn get_encoded_header(&mut self) -> Result<Vec<u8>> {
         match self {
             ObjectEncoder::Physical(obj) => obj.get_encoded_header(),
             ObjectEncoder::Logical(obj) => obj.get_encoded_header(),
