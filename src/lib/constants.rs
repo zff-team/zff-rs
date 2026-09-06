@@ -67,6 +67,10 @@ pub const ENCODING_KEY_EVIDENCE_NUMBER: &str = "ev";
 pub const ENCODING_KEY_EXAMINER_NAME: &str = "ex";
 /// Encoding key for the notes.
 pub const ENCODING_KEY_NOTES: &str = "no";
+/// Encoding key for the name of the acquisition tool.
+pub const ENCODING_KEY_TOOL_NAME: &str = "tn";
+/// Encoding key for the version of the acquisition tool.
+pub const ENCODING_KEY_TOOL_VERSION: &str = "tv";
 /// Encoding key for the global description notes.
 pub const ENCODING_KEY_DESCRIPTION_NOTES: &str = "dn";
 
@@ -132,6 +136,17 @@ pub(crate) const ERROR_SPECIAL_FILES_UNSUPPORTED_ON_WINDOWS: &str =
     "Special files are not supported on Windows.";
 pub(crate) const ERROR_UNEXPECTED_ENCODING_STATE: &str =
     "The encoder returned an unexpected encoding state.";
+
+// - encoded sizes of primitive building blocks
+/// Encoded size of an u64 value.
+pub(crate) const ENCODED_U64_SIZE: usize = 8;
+/// Encoded size of a header version byte.
+pub(crate) const ENCODED_VERSION_SIZE: usize = 1;
+/// Encoded size of the length prefix that precedes an encoded map.
+pub(crate) const ENCODED_MAP_LENGTH_SIZE: usize = 8;
+/// Encoded size of one u64 key / u64 value pair inside an encoded map.
+pub(crate) const ENCODED_U64_PAIR_SIZE: usize = 16;
+
 // - segment size accounting
 /// Upper bound of the bytes a flushed chunkmap costs on top of its payload size
 /// (as reported by [ChunkMap::current_size](crate::header::ChunkMap::current_size)):
@@ -150,6 +165,8 @@ pub(crate) const SEGMENT_FOOTER_CLOSING_GROWTH: u64 = 64;
 /// deduplication map entry (16). Rounded up.
 pub(crate) const CHUNK_SEGMENT_OVERHEAD: u64 = 96;
 
+pub(crate) const ERROR_INVALID_CHUNKMAP_SIZE: &str =
+    "The chunkmap size has to be a multiple of 16, as required by the zff specification, but is: ";
 pub(crate) const ERROR_ZFFWRITER_UNEXPECTED_INTERNAL_STATE: &str =
     "The zff writer reached an unexpected internal state at: ";
 pub(crate) const ERROR_MISSING_OBJECT_HEADER_FOR_OBJECT_NO: &str =
@@ -311,6 +328,9 @@ pub const HEADER_LENGTH_LENGTH: usize = 8;
 pub const HEADER_VERSION_LENGTH: usize = 1;
 /// The default chunkmap size
 pub const DEFAULT_CHUNKMAP_SIZE: u64 = 32768;
+/// The chunkmap size has to be a multiple of this value, as required by the
+/// zff specification for the segment header's chunkmap size field.
+pub const CHUNKMAP_SIZE_ALIGNMENT: u64 = 16;
 /// Default buffer size for read operations (64KB)
 pub const DEFAULT_READ_BUFFER_SIZE: usize = 65536;
 /// Small buffer size for metadata operations

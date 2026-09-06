@@ -1825,3 +1825,425 @@ fn an_impossibly_small_target_segment_size_still_terminates() {
 
     assert_eq!(output, input);
 }
+
+#[test]
+fn segment_footer_encoded_size_matches_the_real_encoding() {
+    // The segment size cap uses the arithmetic size instead of encoding the
+    // footer once per chunk. The two must agree exactly, or the cap silently
+    // starts using a wrong reserve.
+    let mut footer = SegmentFooter::new_empty();
+    assert_eq!(footer.encoded_size(), footer.header_size());
+
+    for entry in 1..8u64 {
+        footer.object_header_offsets.insert(entry, entry * 100);
+        footer.object_footer_offsets.insert(entry, entry * 200);
+        footer.chunk_header_map_table.insert(entry, entry * 300);
+        footer.chunk_samebytes_map_table.insert(entry, entry * 400);
+        footer.chunk_dedup_map_table.insert(entry, entry * 500);
+        footer.length_of_segment = entry * 4096;
+        footer.first_chunk_number = entry;
+        footer.footer_offset = entry * 64;
+
+        assert_eq!(
+            footer.encoded_size(),
+            footer.header_size(),
+            "mismatch with {entry} entries per map"
+        );
+        assert_eq!(footer.encoded_size(), footer.encode_directly().len());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Specification conformance
+// ---------------------------------------------------------------------------
+//
+// The round-trip tests above only prove that this crate's writer and reader
+// agree with each other. They would still pass if both deviated from the zff
+// specification in the same way. The tests in this section instead assert the
+// exact on-disk bytes against the layout tables of the zff v3 specification, so
+// that a third-party implementation reading these containers stays possible.
+//
+// Every expectation below is transcribed from the specification wiki
+// (Encoding.md, Header-layout.md, Footer-layout.md).
+
+#[test]
+fn magic_bytes_match_the_specification() {
+    // Header-layout.md, "Magic bytes".
+    assert_eq!(HEADER_IDENTIFIER_SEGMENT_HEADER, 0x7A66666D);
+    assert_eq!(HEADER_IDENTIFIER_ENCRYPTION_HEADER, 0x7A666665);
+    assert_eq!(HEADER_IDENTIFIER_PBE_HEADER, 0x7A666670);
+    assert_eq!(HEADER_IDENTIFIER_COMPRESSION_HEADER, 0x7A666663);
+    assert_eq!(HEADER_IDENTIFIER_DESCRIPTION_HEADER, 0x7A666664);
+    assert_eq!(HEADER_IDENTIFIER_HASH_HEADER, 0x7A666668);
+    assert_eq!(HEADER_IDENTIFIER_FILE_HEADER, 0x7A666666);
+    assert_eq!(HEADER_IDENTIFIER_OBJECT_HEADER, 0x7A66664F);
+    assert_eq!(HEADER_IDENTIFIER_CHUNK_HEADER, 0x7A666643);
+    assert_eq!(HEADER_IDENTIFIER_CHUNK_OFFSET_MAP, 0x7A666678);
+    assert_eq!(HEADER_IDENTIFIER_HASH_VALUE, 0x7A666648);
+    assert_eq!(HEADER_IDENTIFIER_CHUNK_SAMEBYTES_MAP, 0x7A666653);
+    assert_eq!(HEADER_IDENTIFIER_CHUNK_DEDUPLICATION_MAP, 0x7A666644);
+}
+
+#[test]
+fn flag_values_match_the_specification() {
+    // Header-layout.md, "Hash types flag".
+    assert_eq!(HashType::Blake2b512 as u8, 0);
+    assert_eq!(HashType::SHA256 as u8, 1);
+    assert_eq!(HashType::SHA512 as u8, 2);
+    assert_eq!(HashType::SHA3_256 as u8, 3);
+    assert_eq!(HashType::Blake3 as u8, 4);
+
+    // Header-layout.md, "compression algorithm flag".
+    assert_eq!(CompressionAlgorithm::None as u8, 0);
+    assert_eq!(CompressionAlgorithm::Zstd as u8, 1);
+    assert_eq!(CompressionAlgorithm::Lz4 as u8, 2);
+
+    // Header-layout.md, "Encryption algorithms".
+    assert_eq!(EncryptionAlgorithm::AES128GCM as u8, 0);
+    assert_eq!(EncryptionAlgorithm::AES256GCM as u8, 1);
+    assert_eq!(EncryptionAlgorithm::CHACHA20POLY1305 as u8, 2);
+
+    // Header-layout.md, "KDF Flag" and "Encryption scheme Flag".
+    assert_eq!(KDFScheme::PBKDF2SHA256 as u8, 0);
+    assert_eq!(KDFScheme::Scrypt as u8, 1);
+    assert_eq!(KDFScheme::Argon2id as u8, 2);
+    assert_eq!(PBEScheme::AES128CBC as u8, 0);
+    assert_eq!(PBEScheme::AES256CBC as u8, 1);
+
+    // Header-layout.md, "Object Type".
+    assert_eq!(ObjectType::Physical as u8, 0);
+    assert_eq!(ObjectType::Logical as u8, 1);
+    assert_eq!(ObjectType::Virtual as u8, 2);
+
+    // Header-layout.md, "File type flags".
+    assert_eq!(FileType::File as u8, 1);
+    assert_eq!(FileType::Directory as u8, 2);
+    assert_eq!(FileType::Symlink as u8, 3);
+    assert_eq!(FileType::Hardlink as u8, 4);
+    assert_eq!(FileType::SpecialFile as u8, 5);
+}
+
+#[test]
+fn object_flag_bits_match_the_specification() {
+    // Header-layout.md, "Object Flags": encryption 0b001, sign hash 0b010,
+    // passive object 0b100.
+    let encrypted = ObjectFlags {
+        encryption: true,
+        sign_hash: false,
+        passive_object: false,
+    };
+    let signed = ObjectFlags {
+        encryption: false,
+        sign_hash: true,
+        passive_object: false,
+    };
+    let passive = ObjectFlags {
+        encryption: false,
+        sign_hash: false,
+        passive_object: true,
+    };
+    assert_eq!(u8::from(&encrypted), 0b0000_0001);
+    assert_eq!(u8::from(&signed), 0b0000_0010);
+    assert_eq!(u8::from(&passive), 0b0000_0100);
+    assert_eq!(u8::from(&ObjectFlags::default()), 0);
+
+    // And the bits decode back to the same flags.
+    for flags in [encrypted, signed, passive] {
+        assert_eq!(ObjectFlags::from(u8::from(&flags)), flags);
+    }
+}
+
+#[test]
+fn chunk_flag_bits_match_the_specification() {
+    // Header-layout.md, "Chunk Flags", in the order the table lists them.
+    let bit = |apply: fn(&mut ChunkFlags)| {
+        let mut flags = ChunkFlags::default();
+        apply(&mut flags);
+        flags.as_bytes()
+    };
+    assert_eq!(bit(|f| f.error = true), 1 << 0);
+    assert_eq!(bit(|f| f.compression = true), 1 << 1);
+    assert_eq!(bit(|f| f.same_bytes = true), 1 << 2);
+    assert_eq!(bit(|f| f.duplicate = true), 1 << 3);
+    assert_eq!(bit(|f| f.encryption = true), 1 << 4);
+    assert_eq!(bit(|f| f.empty_file = true), 1 << 5);
+    assert_eq!(bit(|f| f.virtual_chunk = true), 1 << 6);
+}
+
+#[test]
+fn segment_header_layout_matches_the_specification() {
+    // Header-layout.md, "Segment header", version 3:
+    // magic(4) length(8) version(1) unique identifier(8) segment number(8)
+    // chunkmap size(8) = 37 bytes.
+    let encoded = SegmentHeader::new(0x5AFF, 1, 32768).encode_directly();
+
+    assert_eq!(encoded.len(), 37);
+    assert_eq!(&encoded[0..4], &0x7A66666Du32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &37u64.to_le_bytes());
+    assert_eq!(encoded[12], 3, "segment header version");
+    assert_eq!(&encoded[13..21], &0x5AFFu64.to_le_bytes());
+    assert_eq!(&encoded[21..29], &1u64.to_le_bytes());
+    assert_eq!(&encoded[29..37], &32768u64.to_le_bytes());
+}
+
+#[test]
+fn compression_header_layout_matches_the_specification() {
+    // Header-layout.md, "Compression header":
+    // magic(4) length(8) version(1) algorithm(1) level(1) threshold(float32, 4).
+    let encoded = CompressionHeader::new(CompressionAlgorithm::Zstd, 3, 1.05).encode_directly();
+
+    assert_eq!(encoded.len(), 19);
+    assert_eq!(&encoded[0..4], &0x7A666663u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &19u64.to_le_bytes());
+    assert_eq!(encoded[13], CompressionAlgorithm::Zstd as u8);
+    assert_eq!(encoded[14], 3, "compression level");
+    // Encoding.md gives 0x6666863f as the float32 encoding of 1.05.
+    assert_eq!(&encoded[15..19], &[0x66, 0x66, 0x86, 0x3f]);
+}
+
+#[test]
+fn chunk_header_layout_matches_the_specification() {
+    // Header-layout.md, "Chunk Header", version 2:
+    // magic(4) length(8) version(1) offset(8) size(8) flags(1) integrity hash(8).
+    let flags = ChunkFlags {
+        compression: true,
+        ..Default::default()
+    };
+    let encoded = HeaderCoding::encode_directly(&ChunkHeader::new(0x1122, 0x3344, flags, 0x5566));
+
+    assert_eq!(encoded.len(), 38);
+    assert_eq!(&encoded[0..4], &0x7A666643u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &38u64.to_le_bytes());
+    assert_eq!(&encoded[13..21], &0x1122u64.to_le_bytes());
+    assert_eq!(&encoded[21..29], &0x3344u64.to_le_bytes());
+    assert_eq!(encoded[29], 1 << 1, "compression flag");
+    assert_eq!(&encoded[30..38], &0x5566u64.to_le_bytes());
+
+    // The chunk header map reserves exactly this size per entry.
+    assert_eq!(
+        ValueEncoder::encode_directly(&ChunkHeader::new(0, 0, ChunkFlags::default(), 0)).len(),
+        38
+    );
+}
+
+#[test]
+fn hash_value_layout_matches_the_specification() {
+    // Header-layout.md, "hash value structure":
+    // magic(4) length(8) version(1) hash type(1) hash(bytes) [signature(64)].
+    let mut hash_value = HashValue::new_empty(HashType::Blake3);
+    hash_value.set_hash(vec![0xAB; 32]);
+    let encoded = hash_value.encode_directly();
+
+    assert_eq!(encoded.len(), 54);
+    assert_eq!(&encoded[0..4], &0x7A666648u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &54u64.to_le_bytes());
+    assert_eq!(encoded[13], HashType::Blake3 as u8);
+    assert_eq!(&encoded[14..22], &32u64.to_le_bytes(), "hash byte length");
+    assert_eq!(&encoded[22..54], &[0xAB; 32]);
+
+    // With a signature, the structure grows by exactly the 64 signature bytes.
+    hash_value.set_ed25519_signature([0xCD; 64]);
+    assert_eq!(hash_value.encode_directly().len(), 54 + 64);
+}
+
+#[test]
+fn file_header_layout_matches_the_specification() {
+    // Header-layout.md, "File header", unencrypted variant:
+    // magic(4) length(8) version(1) file number(8) file type(1)
+    // file name(PlatformString) parent file number(8) metadata map.
+    let encoded = FileHeader::new(
+        7,
+        FileType::File,
+        PlatformString::from(OsString::from("a")),
+        3,
+        HashMap::new(),
+    )
+    .encode_directly();
+
+    assert_eq!(&encoded[0..4], &0x7A666666u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &(encoded.len() as u64).to_le_bytes());
+    assert_eq!(&encoded[13..21], &7u64.to_le_bytes(), "file number");
+    assert_eq!(encoded[21], FileType::File as u8);
+    // Encoding.md, PlatformString: encoding byte (unix = 0x00), length, bytes.
+    assert_eq!(encoded[22], 0x00, "PlatformString unix encoding marker");
+    assert_eq!(&encoded[23..31], &1u64.to_le_bytes());
+    assert_eq!(encoded[31], b'a');
+    assert_eq!(&encoded[32..40], &3u64.to_le_bytes(), "parent file number");
+    assert_eq!(&encoded[40..48], &0u64.to_le_bytes(), "empty metadata map");
+    assert_eq!(encoded.len(), 48);
+}
+
+#[test]
+fn kdf_parameter_structures_match_the_specification() {
+    let salt = [0u8; 32];
+
+    // Header-layout.md, "KDF structure PBKDF2 / SHA256":
+    // magic(4) length(8) iterations(uint32) salt(32). No version byte.
+    let encoded = PBKDF2SHA256Parameters::new(1000, salt).encode_directly();
+    assert_eq!(encoded.len(), 48);
+    assert_eq!(&encoded[0..4], &0x6B646670u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &48u64.to_le_bytes());
+    assert_eq!(&encoded[12..16], &1000u32.to_le_bytes());
+    assert_eq!(&encoded[16..48], &salt);
+
+    // Header-layout.md, "KDF structure scrypt":
+    // magic(4) length(8) log_n(uint8) r(uint32) p(uint32) salt(32).
+    let encoded = ScryptParameters::new(2, 8, 1, salt).encode_directly();
+    assert_eq!(encoded.len(), 53);
+    assert_eq!(&encoded[0..4], &0x6B646673u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &53u64.to_le_bytes());
+    assert_eq!(encoded[12], 2, "log_n");
+    assert_eq!(&encoded[13..17], &8u32.to_le_bytes(), "r");
+    assert_eq!(&encoded[17..21], &1u32.to_le_bytes(), "p");
+    assert_eq!(&encoded[21..53], &salt);
+}
+
+#[test]
+fn argon2id_parameter_structure_stores_all_three_cost_parameters() {
+    // Header-layout.md, "KDF structure argon2id":
+    // magic(4) length(8) mem_cost(uint32) lanes(uint32) iterations(uint32)
+    // salt(32) = 56 bytes. All three argon2id cost parameters (memory,
+    // parallelism and time) have to be stored; without iterations the key
+    // cannot be reproduced and the container would be undecryptable.
+    let salt = [0u8; 32];
+    let encoded = Argon2idParameters::new(8, 1, 3, salt).encode_directly();
+
+    assert_eq!(encoded.len(), 56);
+    assert_eq!(&encoded[0..4], &0x6B646661u32.to_be_bytes());
+    assert_eq!(&encoded[4..12], &56u64.to_le_bytes());
+    assert_eq!(&encoded[12..16], &8u32.to_le_bytes(), "mem_cost");
+    assert_eq!(&encoded[16..20], &1u32.to_le_bytes(), "lanes");
+    assert_eq!(&encoded[20..24], &3u32.to_le_bytes(), "iterations");
+    assert_eq!(&encoded[24..56], &salt);
+}
+
+#[test]
+fn maps_are_encoded_sorted_by_key() {
+    // Footer-layout.md requires the offset maps to be "stored sorted by keys".
+    // The in-memory type is a HashMap, so this has to be enforced on encoding.
+    let mut footer = SegmentFooter::new_empty();
+    for key in [9u64, 2, 7, 1, 5] {
+        footer.object_header_offsets.insert(key, key * 10);
+    }
+    let encoded = footer.encode_directly();
+
+    // Locate the map: version(1) + length_of_segment(8) follow the 12 byte
+    // header prefix, then the object header offsets map begins.
+    let map_start = 4 + 8 + 1 + 8;
+    assert_eq!(&encoded[map_start..map_start + 8], &5u64.to_le_bytes());
+    let mut offset = map_start + 8;
+    for expected_key in [1u64, 2, 5, 7, 9] {
+        assert_eq!(
+            &encoded[offset..offset + 8],
+            &expected_key.to_le_bytes(),
+            "keys must be encoded in ascending order"
+        );
+        assert_eq!(
+            &encoded[offset + 8..offset + 16],
+            &(expected_key * 10).to_le_bytes()
+        );
+        offset += 16;
+    }
+}
+
+#[test]
+fn description_header_uses_the_specified_encoding_keys() {
+    // Header-layout.md, "Description header hashmap".
+    assert_eq!(ENCODING_KEY_CASE_NUMBER, "cn");
+    assert_eq!(ENCODING_KEY_EVIDENCE_NUMBER, "ev");
+    assert_eq!(ENCODING_KEY_EXAMINER_NAME, "ex");
+    assert_eq!(ENCODING_KEY_NOTES, "no");
+    assert_eq!(ENCODING_KEY_TOOL_NAME, "tn");
+    assert_eq!(ENCODING_KEY_TOOL_VERSION, "tv");
+    assert_eq!(ENCODING_KEY_LOGICAL_SECTOR_SIZE, "lss");
+    assert_eq!(ENCODING_KEY_PHYSICAL_SECTOR_SIZE, "pss");
+    assert_eq!(ENCODING_KEY_MODEL, "mdl");
+    assert_eq!(ENCODING_KEY_SERIAL_NUMBER, "sn");
+    assert_eq!(ENCODING_KEY_FIRMWARE, "fw");
+    assert_eq!(ENCODING_KEY_MEDIA_TYPE, "mt");
+    assert_eq!(ENCODING_KEY_INPUT_SOURCE, "is");
+    assert_eq!(ENCODING_KEY_OPERATING_SYSTEM, "os");
+    // Footer-layout.md, "Main footer": the description notes use "dn".
+    assert_eq!(ENCODING_KEY_DESCRIPTION_NOTES, "dn");
+}
+
+#[test]
+fn a_chunkmap_size_violating_the_specification_is_rejected() {
+    // Header-layout.md, "Segment header": "Mandatory requirement: size % 16 = 0".
+    let build = |chunkmap_size: u64| {
+        let mut physical_objects = HashMap::new();
+        physical_objects.insert(
+            physical_object_header(
+                64,
+                CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            ),
+            Cursor::new(b"payload".to_vec()),
+        );
+        ZffWriter::<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>>::new(
+            physical_objects,
+            HashMap::new(),
+            HashMap::new(),
+            vec![HashType::Blake3],
+            ZffCreationParameters {
+                chunkmap_size: Some(chunkmap_size),
+                ..default_creation_parameters()
+            },
+            ZffFilesOutput::Stream,
+        )
+    };
+
+    for valid in [16u64, 32, 4096, DEFAULT_CHUNKMAP_SIZE] {
+        assert!(build(valid).is_ok(), "{valid} is a valid chunkmap size");
+    }
+    for invalid in [1u64, 15, 1000, 32767] {
+        assert!(
+            build(invalid).is_err(),
+            "{invalid} is not a multiple of 16 and has to be rejected"
+        );
+    }
+}
+
+#[test]
+fn the_default_chunkmap_size_satisfies_the_specification() {
+    assert_eq!(DEFAULT_CHUNKMAP_SIZE % CHUNKMAP_SIZE_ALIGNMENT, 0);
+}
+
+#[test]
+fn tool_name_and_version_survive_a_description_header_roundtrip() {
+    // The specification defines "tn" and "tv" as predefined description keys,
+    // so the crate has to be able to write and read them.
+    let mut description_header = DescriptionHeader::new_empty();
+    description_header.set_tool_name("zffacquire");
+    description_header.set_tool_version("3.0.0");
+    description_header.set_examiner_name("tester");
+
+    let decoded =
+        DescriptionHeader::decode_directly(&mut Cursor::new(description_header.encode_directly()))
+            .unwrap();
+
+    assert_eq!(decoded.tool_name(), Some("zffacquire"));
+    assert_eq!(decoded.tool_version(), Some("3.0.0"));
+    assert_eq!(decoded.examiner_name(), Some("tester"));
+    assert_eq!(decoded, description_header);
+}
+
+#[test]
+fn tool_name_and_version_survive_a_container_roundtrip() {
+    let mut object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    object_header.description_header.set_tool_name("zffacquire");
+    object_header.description_header.set_tool_version("3.0.0");
+    let container = encode_physical_container(vec![(object_header, b"payload".repeat(16))]);
+
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let description_header = &reader
+        .active_object_header_ref()
+        .unwrap()
+        .description_header;
+
+    assert_eq!(description_header.tool_name(), Some("zffacquire"));
+    assert_eq!(description_header.tool_version(), Some("3.0.0"));
+}

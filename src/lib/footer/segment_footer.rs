@@ -43,6 +43,31 @@ impl Default for SegmentFooter {
 }
 
 impl SegmentFooter {
+    /// Returns the encoded size of this footer without encoding it.
+    ///
+    /// [HeaderCoding::header_size](crate::header::HeaderCoding::header_size)
+    /// determines the size by encoding the whole footer into a fresh buffer.
+    /// The writer needs this size once per chunk to decide whether the current
+    /// segment still has room, so it is computed arithmetically here instead.
+    /// Every field is a u64 or a map of u64 to u64, which makes this exact.
+    pub(crate) fn encoded_size(&self) -> usize {
+        // Every map is encoded as an u64 length followed by u64 key/value pairs.
+        let encoded_map_size =
+            |entries: usize| ENCODED_MAP_LENGTH_SIZE + entries * ENCODED_U64_PAIR_SIZE;
+
+        DEFAULT_LENGTH_HEADER_IDENTIFIER // the header identifier
+            + DEFAULT_LENGTH_VALUE_HEADER_LENGTH // the header length value itself
+            + ENCODED_VERSION_SIZE
+            + ENCODED_U64_SIZE // length_of_segment
+            + encoded_map_size(self.object_header_offsets.len())
+            + encoded_map_size(self.object_footer_offsets.len())
+            + encoded_map_size(self.chunk_header_map_table.len())
+            + encoded_map_size(self.chunk_samebytes_map_table.len())
+            + encoded_map_size(self.chunk_dedup_map_table.len())
+            + ENCODED_U64_SIZE // first_chunk_number
+            + ENCODED_U64_SIZE // footer_offset
+    }
+
     /// creates a new empty SegmentFooter.
     pub fn new_empty() -> SegmentFooter {
         Self {

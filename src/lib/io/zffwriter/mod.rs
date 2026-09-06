@@ -458,7 +458,7 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
             }
         }
         overhead
-            + self.in_progress_data.segment_footer.header_size() as u64
+            + self.in_progress_data.segment_footer.encoded_size() as u64
             + SEGMENT_FOOTER_CLOSING_GROWTH
     }
 
@@ -1244,6 +1244,18 @@ fn setup_container<R: Read, C: ReadAt>(
     params: ZffCreationParameters<C>,
     output: ZffFilesOutput,
 ) -> Result<ZffWriter<R, C>> {
+    // The specification requires the chunkmap size of the segment header to be
+    // a multiple of 16. Reject a violating value here instead of writing a
+    // container that other implementations are not required to read.
+    if let Some(chunkmap_size) = params.chunkmap_size
+        && chunkmap_size % CHUNKMAP_SIZE_ALIGNMENT != 0
+    {
+        return Err(ZffError::new(
+            ZffErrorKind::Invalid,
+            format!("{ERROR_INVALID_CHUNKMAP_SIZE}{chunkmap_size}"),
+        ));
+    }
+
     let mut physical_objects = physical_objects;
     let mut logical_objects = logical_objects;
     let mut virtual_objects = virtual_objects;
