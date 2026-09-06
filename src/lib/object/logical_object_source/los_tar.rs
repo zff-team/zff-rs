@@ -336,9 +336,6 @@ fn gen_filetype_encoding_information(
                 .unwrap_or(&0);
             Ok(FileTypeEncodingInformation::Hardlink(*hardlink_filenumber))
         }
-        #[cfg(target_family = "windows")]
-        FileType::SpecialFile => unreachable!("Special files are not supported on Windows."),
-        #[cfg(target_family = "unix")]
         FileType::SpecialFile => {
             let specialfile_info = match logical_object_source
                 .special_files_rdev_map

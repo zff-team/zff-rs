@@ -18,3 +18,10 @@ Cargo.lock
 
 # ignore vscode folder
 /.vscode
+
+# Local build and verification helpers for the sandboxed builder on this
+# machine. Machine configuration, not project configuration.
+/.scripts/
+
+# Feature selection for that builder; same reason.
+.secure-build.env

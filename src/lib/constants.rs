@@ -274,9 +274,9 @@ pub const DEFAULT_READ_BUFFER_SIZE: usize = 65536;
 pub const SMALL_BUFFER_SIZE: usize = 8192;
 
 // file metadata extended values
-#[cfg(any(target_family = "unix", feature = "los_tar"))]
+#[cfg(target_family = "unix")]
 pub(crate) const METADATA_EXT_KEY_DEVID: &str = "devid";
-#[cfg(any(target_family = "unix", feature = "los_tar"))]
+#[cfg(target_family = "unix")]
 pub(crate) const METADATA_EXT_KEY_INODE: &str = "inode";
 #[cfg(any(target_family = "unix", feature = "los_tar"))]
 pub(crate) const METADATA_EXT_KEY_MODE: &str = "mode";
@@ -322,9 +322,9 @@ pub const PRELOADED_CHUNK_DUPLICATION_MAP_TABLE: TableDefinition<u64, u64> =
     TableDefinition::new("preloaded_dedup_map");
 
 // Unix ACLs
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 pub(crate) const ACL_PREFIX: &str = "acl";
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 pub(crate) const ACL_DEFAULT_PREFIX: &str = "acl::d";
 
 // XAttr

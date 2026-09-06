@@ -10,7 +10,9 @@
 
 // - STD
 use std::collections::HashMap;
-use std::fs::{File, Metadata, metadata, read_dir};
+#[cfg(target_family = "unix")]
+use std::fs::metadata;
+use std::fs::{File, Metadata, read_dir};
 use std::io::{Read, copy as io_copy};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -31,11 +33,12 @@ use crate::{
 use ed25519_dalek::SigningKey;
 #[cfg(feature = "log")]
 use log::{debug, info, warn};
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 use posix_acl::{ACLEntry, PosixACL, Qualifier};
 #[cfg(target_family = "unix")]
 use time::OffsetDateTime;
 use twox_hash::xxhash3_64;
+#[cfg(target_family = "unix")]
 use xattr::XAttrs;
 
 // - modules
@@ -287,6 +290,7 @@ pub(crate) struct MetadataTimestamps {
     btime: u64,
 }
 
+#[cfg(target_family = "unix")]
 impl MetadataTimestamps {
     fn new(atime: u64, mtime: u64, ctime: u64, btime: u64) -> Self {
         Self {
@@ -397,7 +401,7 @@ fn get_xattr_metadata<P: AsRef<Path>>(
     Ok(metadata_ext_map)
 }
 
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 pub(crate) fn get_posix_acls(
     acl: &PosixACL,
     default_acls: Option<&PosixACL>,
@@ -450,7 +454,7 @@ pub(crate) fn check_same_byte(vec: &[u8]) -> bool {
     }
 }
 
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)> {
     let key = match entry.qual {
         Qualifier::User(uid) => gen_acl_key_uid(default, uid),
@@ -461,7 +465,7 @@ fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)
     Some((key, entry.perm.to_string()))
 }
 
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_key_uid(default: bool, uid: u32) -> String {
     let start = if default {
         ACL_PREFIX
@@ -471,7 +475,7 @@ fn gen_acl_key_uid(default: bool, uid: u32) -> String {
     format!("{start}:user:{uid}")
 }
 
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_key_gid(default: bool, gid: u32) -> String {
     let start = if default {
         ACL_PREFIX
@@ -481,7 +485,7 @@ fn gen_acl_key_gid(default: bool, gid: u32) -> String {
     format!("{start}:group:{gid}")
 }
 
-#[cfg(feature = "posix-acl")]
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_mask(default: bool) -> String {
     let start = if default {
         ACL_PREFIX
@@ -643,7 +647,7 @@ pub(crate) fn create_iterator<C: AsRef<Path>>(
     directory_children: &mut HashMap<u64, Vec<u64>>,
     files: &mut Vec<(PathBuf, FileHeader)>,
 ) -> Result<std::fs::ReadDir> {
-    #[cfg_attr(not(feature = "log"), allow(unused_variables))]
+    #[cfg_attr(not(target_family = "unix"), allow(unused_variables))]
     let metadata = match std::fs::symlink_metadata(current_dir.as_ref()) {
         Ok(metadata) => metadata,
         Err(e) => {

@@ -9,12 +9,15 @@ use std::path::{Path, PathBuf};
 // internal
 use crate::prelude::*;
 use crate::{
-    FileTypeEncodingInformation, SpecialFileEncodingInformation,
+    FileTypeEncodingInformation,
     helper::result_combine,
-    io::{
-        add_to_hardlink_map, check_and_get_metadata, check_file_accessibility, create_iterator,
-        get_file_header, transform_hardlink_map,
-    },
+    io::{check_and_get_metadata, check_file_accessibility, create_iterator, get_file_header},
+};
+
+#[cfg(target_family = "unix")]
+use crate::{
+    SpecialFileEncodingInformation,
+    io::{add_to_hardlink_map, transform_hardlink_map},
 };
 
 // - external

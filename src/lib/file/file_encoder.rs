@@ -30,12 +30,10 @@ pub enum FileTypeEncodingInformation {
     /// A hardlink with the given twin filenumber.
     Hardlink(u64), // hardlink filenumber
     /// A special file with the given special file information.
-    #[cfg(target_family = "unix")]
     SpecialFile(SpecialFileEncodingInformation), // special file information (rdev)
 }
 
 /// This enum contains the information, which are needed to encode the different special file types.
-#[cfg(target_family = "unix")]
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum SpecialFileEncodingInformation {
     /// A fifo file with the given rdev-id.
@@ -185,7 +183,6 @@ impl FileEncoder {
             }
             // contains the rdev-id and a flag for the type of the special file
             // (0 if fifo-, 1 if char-, 2 if block-, and 3 if it is a socket-file).
-            #[cfg(target_family = "unix")]
             FileTypeEncodingInformation::SpecialFile(specialfile_encoding_information) => {
                 let (rdev_id, type_flag) = match specialfile_encoding_information {
                     SpecialFileEncodingInformation::Fifo(rdev_id) => (rdev_id, 0_u8),
