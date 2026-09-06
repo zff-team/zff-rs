@@ -3,7 +3,7 @@ use std::fmt;
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::helper::decode_len;
+use crate::helper::{decode_len, read_exact_buffer};
 use crate::prelude::*;
 
 // - external
@@ -165,10 +165,7 @@ impl ValueDecoder for KDFParameters {
         let params_len = size
             .checked_sub(DEFAULT_LENGTH_HEADER_IDENTIFIER + DEFAULT_LENGTH_VALUE_HEADER_LENGTH)
             .ok_or_else(|| ZffError::new(ZffErrorKind::EncodingError, ERROR_MALFORMED_SEGMENT))?;
-        let mut params = Vec::new();
-        params.try_reserve_exact(params_len)?;
-        params.resize(params_len, 0);
-        data.read_exact(&mut params)?;
+        let params = read_exact_buffer(data, params_len)?;
 
         let mut params_cursor = Cursor::new(params);
 

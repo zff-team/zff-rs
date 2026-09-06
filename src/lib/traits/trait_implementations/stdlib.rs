@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 
 // - internal
-use crate::helper::decode_len;
+use crate::helper::{decode_len, read_exact_buffer};
 use crate::prelude::*;
 
 // - external
@@ -532,10 +532,7 @@ impl ValueDecoder for String {
 
     fn decode_directly<R: Read>(data: &mut R) -> Result<String> {
         let length = decode_len(data)?;
-        let mut buffer = Vec::new();
-        buffer.try_reserve_exact(length)?;
-        buffer.resize(length, 0);
-        data.read_exact(&mut buffer)?;
+        let buffer = read_exact_buffer(data, length)?;
         Ok(String::from_utf8(buffer)?)
     }
 }
@@ -545,10 +542,7 @@ impl ValueDecoder for str {
 
     fn decode_directly<R: Read>(data: &mut R) -> Result<String> {
         let length = decode_len(data)?;
-        let mut buffer = Vec::new();
-        buffer.try_reserve_exact(length)?;
-        buffer.resize(length, 0);
-        data.read_exact(&mut buffer)?;
+        let buffer = read_exact_buffer(data, length)?;
         Ok(String::from_utf8(buffer)?)
     }
 }
@@ -558,10 +552,7 @@ impl ValueDecoder for Vec<u8> {
 
     fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u8>> {
         let length = decode_len(data)?;
-        let mut buffer = Vec::new();
-        buffer.try_reserve_exact(length)?;
-        buffer.resize(length, 0);
-        data.read_exact(&mut buffer)?;
+        let buffer = read_exact_buffer(data, length)?;
         Ok(buffer)
     }
 }

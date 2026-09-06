@@ -9,6 +9,7 @@ use std::borrow::Borrow;
 use std::io::Read;
 
 // - internal
+use crate::helper::read_exact_buffer;
 use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
@@ -128,10 +129,7 @@ pub trait HeaderCoding {
         }
         let header_content_length =
             decode_header_content_len(Self::decode_header_length(data)?, 0)?;
-        let mut header_content = Vec::new();
-        header_content.try_reserve_exact(header_content_length)?;
-        header_content.resize(header_content_length, 0);
-        data.read_exact(&mut header_content)?;
+        let header_content = read_exact_buffer(data, header_content_length)?;
         Self::decode_content(&header_content)
     }
 

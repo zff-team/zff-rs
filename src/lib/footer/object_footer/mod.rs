@@ -13,6 +13,7 @@ use std::fmt;
 use std::io::Read;
 
 // - internal
+use crate::helper::read_exact_buffer;
 use crate::{helper::decode_header_content_len, prelude::*};
 
 // - external
@@ -310,9 +311,6 @@ impl EncryptedObjectFooter {
 
 fn decode_object_footer_content<R: Read>(data: &mut R, length: u64) -> Result<Vec<u8>> {
     let content_length = decode_header_content_len(length, 0)?;
-    let mut content_buffer = Vec::new();
-    content_buffer.try_reserve_exact(content_length)?;
-    content_buffer.resize(content_length, 0);
-    data.read_exact(&mut content_buffer)?;
+    let content_buffer = read_exact_buffer(data, content_length)?;
     Ok(content_buffer)
 }

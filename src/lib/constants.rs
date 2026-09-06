@@ -165,6 +165,14 @@ pub(crate) const SEGMENT_FOOTER_CLOSING_GROWTH: u64 = 64;
 /// deduplication map entry (16). Rounded up.
 pub(crate) const CHUNK_SEGMENT_OVERHEAD: u64 = 96;
 
+/// Upper bound for a single allocation step while reading chunk data. A chunk
+/// size decoded from a container is untrusted, so the buffer grows in steps of
+/// this size as data is actually read instead of being allocated up front.
+pub(crate) const CHUNK_READ_ALLOCATION_STEP: usize = 1024 * 1024;
+pub(crate) const ERROR_CHUNK_SIZE_EXCEEDS_SEGMENT: &str =
+    "The chunk exceeds the segment it is stored in, for chunk number: ";
+pub(crate) const ERROR_CHUNK_ALLOCATION_FAILED: &str =
+    "Could not allocate the buffer for chunk number: ";
 pub(crate) const ERROR_INVALID_CHUNKMAP_SIZE: &str =
     "The chunkmap size has to be a multiple of 16, as required by the zff specification, but is: ";
 pub(crate) const ERROR_ZFFWRITER_UNEXPECTED_INTERNAL_STATE: &str =

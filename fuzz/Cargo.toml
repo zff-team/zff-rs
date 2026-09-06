@@ -1,0 +1,36 @@
+[package]
+name = "zff-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace, so the root crate is not built with the fuzzer's flags.
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.zff]
+path = ".."
+features = ["serde", "log"]
+
+[profile.release]
+debug = true
+
+[[bin]]
+name = "decode_structures"
+path = "fuzz_targets/decode_structures.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_container"
+path = "fuzz_targets/read_container.rs"
+test = false
+doc = false
+bench = false

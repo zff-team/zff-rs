@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{Cursor, Read};
 
 // - internal
-use crate::helper::decode_header_content_len;
+use crate::helper::{decode_header_content_len, read_exact_buffer};
 use crate::prelude::*;
 
 // - external
@@ -165,10 +165,7 @@ impl ObjectHeader {
         };
         let header_content_length =
             decode_header_content_len(Self::decode_header_length(data)?, 0)?;
-        let mut header_content = Vec::new();
-        header_content.try_reserve_exact(header_content_length)?;
-        header_content.resize(header_content_length, 0);
-        data.read_exact(&mut header_content)?;
+        let header_content = read_exact_buffer(data, header_content_length)?;
         let mut cursor = Cursor::new(header_content);
         Self::check_version(&mut cursor)?;
         let object_number = u64::decode_directly(&mut cursor)?;

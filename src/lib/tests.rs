@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
+use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -11,12 +12,16 @@ use crate::io::{
 };
 use crate::prelude::*;
 use crate::{
-    FileTypeEncodingInformation, HashType, LogicalObjectSource, Signature, VirtualFileContent,
-    decompress_buffer, decrypt_argon2_aes128cbc, decrypt_argon2_aes256cbc,
-    decrypt_pbkdf2sha256_aes256cbc, decrypt_scrypt_aes256cbc, encrypt_argon2_aes128cbc,
-    encrypt_argon2_aes256cbc, encrypt_pbkdf2sha256_aes256cbc, encrypt_scrypt_aes256cbc,
-    gen_random_iv, gen_random_key, gen_random_salt,
+    FileTypeEncodingInformation, HashType, LogicalObjectSource, LogicalObjectSourceFilesystem,
+    Signature, VirtualFileContent, decompress_buffer, decrypt_argon2_aes128cbc,
+    decrypt_argon2_aes256cbc, decrypt_pbkdf2sha256_aes256cbc, decrypt_scrypt_aes256cbc,
+    encrypt_argon2_aes128cbc, encrypt_argon2_aes256cbc, encrypt_pbkdf2sha256_aes256cbc,
+    encrypt_scrypt_aes256cbc, gen_random_iv, gen_random_key, gen_random_salt,
 };
+
+/// The writer used throughout these tests: an in-memory input source and an
+/// in-memory reader for the deduplication metadata.
+type TestZffWriter = ZffWriter<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>>;
 
 fn physical_object_header_with_number(
     object_number: u64,
@@ -55,7 +60,7 @@ fn encode_physical_container(objects: Vec<(ObjectHeader, Vec<u8>)>) -> Vec<u8> {
         physical_objects.insert(object_header, Cursor::new(input));
     }
 
-    let mut writer: ZffWriter<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>> = ZffWriter::new(
+    let mut writer: TestZffWriter = ZffWriter::new(
         physical_objects,
         HashMap::new(),
         HashMap::new(),
@@ -606,7 +611,7 @@ fn encode_physical_container_with_params(
         physical_objects.insert(object_header, Cursor::new(input));
     }
 
-    let mut writer: ZffWriter<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>> = ZffWriter::new(
+    let mut writer: TestZffWriter = ZffWriter::new(
         physical_objects,
         HashMap::new(),
         HashMap::new(),
@@ -747,7 +752,7 @@ fn encode_segmented_container(
         target_segment_size: Some(target_segment_size),
         ..default_creation_parameters()
     };
-    let mut writer: ZffWriter<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>> = ZffWriter::new(
+    let mut writer: TestZffWriter = ZffWriter::new(
         physical_objects,
         HashMap::new(),
         HashMap::new(),
@@ -1115,7 +1120,7 @@ fn encode_logical_container(object_header: ObjectHeader, source: InMemoryLogical
     let mut logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>> = HashMap::new();
     logical_objects.insert(object_header, Box::new(source));
 
-    let mut writer: ZffWriter<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>> = ZffWriter::new(
+    let mut writer: TestZffWriter = ZffWriter::new(
         HashMap::new(),
         logical_objects,
         HashMap::new(),
@@ -1599,7 +1604,7 @@ fn encode_virtual_container(source_data: Vec<u8>, virtual_files: InMemoryVirtual
     let mut virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>> = HashMap::new();
     virtual_objects.insert(virtual_header, Box::new(virtual_files));
 
-    let mut writer: ZffWriter<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>> = ZffWriter::new(
+    let mut writer: TestZffWriter = ZffWriter::new(
         physical_objects,
         HashMap::new(),
         virtual_objects,
@@ -2179,7 +2184,7 @@ fn a_chunkmap_size_violating_the_specification_is_rejected() {
             ),
             Cursor::new(b"payload".to_vec()),
         );
-        ZffWriter::<Cursor<Vec<u8>>, Mutex<Cursor<Vec<u8>>>>::new(
+        TestZffWriter::new(
             physical_objects,
             HashMap::new(),
             HashMap::new(),
@@ -2246,4 +2251,730 @@ fn tool_name_and_version_survive_a_container_roundtrip() {
 
     assert_eq!(description_header.tool_name(), Some("zffacquire"));
     assert_eq!(description_header.tool_version(), Some("3.0.0"));
+}
+
+// ---------------------------------------------------------------------------
+// Logical acquisition from the filesystem
+// ---------------------------------------------------------------------------
+//
+// The logical object tests above use an in-memory source. Real acquisitions go
+// through [LogicalObjectSourceFilesystem], which walks the filesystem and
+// resolves directories, symlinks, hardlinks and metadata. These tests exercise
+// that path against a real temporary directory tree.
+
+/// Encodes the given filesystem paths into a logical container.
+fn encode_filesystem_container(paths: Vec<PathBuf>, chunk_size: u64) -> Vec<u8> {
+    let source = LogicalObjectSourceFilesystem::new(paths).unwrap();
+    let mut logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>> = HashMap::new();
+    logical_objects.insert(logical_object_header(1, chunk_size), Box::new(source));
+
+    let mut writer: TestZffWriter = ZffWriter::new(
+        HashMap::new(),
+        logical_objects,
+        HashMap::new(),
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::Stream,
+    )
+    .unwrap();
+    let mut container = Vec::new();
+    writer.read_to_end(&mut container).unwrap();
+    container
+}
+
+/// Maps the file names of a logical object to their file numbers.
+fn file_numbers_by_name(reader: &mut ZffReader<Mutex<Cursor<Vec<u8>>>>) -> HashMap<String, u64> {
+    let mut by_name = HashMap::new();
+    // File numbers are assigned sequentially starting at 1.
+    for file_number in 1..=64u64 {
+        if reader.set_active_file(file_number).is_err() {
+            continue;
+        }
+        let header = reader.current_fileheader().unwrap();
+        by_name.insert(header.filename.to_string_lossy(), file_number);
+    }
+    by_name
+}
+
+#[test]
+fn filesystem_acquisition_preserves_file_contents() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("first.txt"), b"first file contents").unwrap();
+    std::fs::write(dir.path().join("second.bin"), vec![0xAB; 300]).unwrap();
+    std::fs::write(dir.path().join("empty.txt"), b"").unwrap();
+
+    let container = encode_filesystem_container(vec![dir.path().to_path_buf()], 64);
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    for (name, expected) in [
+        ("first.txt", b"first file contents".to_vec()),
+        ("second.bin", vec![0xAB; 300]),
+        ("empty.txt", Vec::new()),
+    ] {
+        let file_number = by_name
+            .get(name)
+            .unwrap_or_else(|| panic!("{name} is missing from the container: {by_name:?}"));
+        reader.set_active_file(*file_number).unwrap();
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, expected, "contents of {name}");
+    }
+}
+
+#[test]
+fn filesystem_acquisition_preserves_a_nested_directory_tree() {
+    let dir = tempfile::tempdir().unwrap();
+    let nested = dir.path().join("outer").join("inner");
+    std::fs::create_dir_all(&nested).unwrap();
+    std::fs::write(nested.join("deep.txt"), b"deeply nested").unwrap();
+    std::fs::write(dir.path().join("outer").join("mid.txt"), b"mid level").unwrap();
+
+    let container = encode_filesystem_container(vec![dir.path().to_path_buf()], 64);
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    for name in ["outer", "inner", "deep.txt", "mid.txt"] {
+        assert!(by_name.contains_key(name), "{name} missing: {by_name:?}");
+    }
+
+    // The parent chain has to survive: deep.txt -> inner -> outer.
+    reader.set_active_file(by_name["deep.txt"]).unwrap();
+    let deep_parent = reader.current_fileheader().unwrap().parent_file_number;
+    assert_eq!(deep_parent, by_name["inner"]);
+
+    reader.set_active_file(by_name["inner"]).unwrap();
+    let inner_header = reader.current_fileheader().unwrap();
+    assert_eq!(inner_header.file_type, FileType::Directory);
+    assert_eq!(inner_header.parent_file_number, by_name["outer"]);
+
+    reader.set_active_file(by_name["deep.txt"]).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, b"deeply nested");
+}
+
+#[test]
+fn filesystem_acquisition_records_file_types() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("a_directory")).unwrap();
+    std::fs::write(dir.path().join("a_file.txt"), b"regular").unwrap();
+
+    let container = encode_filesystem_container(vec![dir.path().to_path_buf()], 64);
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    reader.set_active_file(by_name["a_directory"]).unwrap();
+    assert_eq!(
+        reader.current_fileheader().unwrap().file_type,
+        FileType::Directory
+    );
+
+    reader.set_active_file(by_name["a_file.txt"]).unwrap();
+    assert_eq!(
+        reader.current_fileheader().unwrap().file_type,
+        FileType::File
+    );
+}
+
+#[test]
+fn filesystem_acquisition_handles_a_file_larger_than_one_chunk() {
+    let dir = tempfile::tempdir().unwrap();
+    let contents: Vec<u8> = (0..4096u32).map(|i| (i % 251) as u8).collect();
+    std::fs::write(dir.path().join("large.bin"), &contents).unwrap();
+
+    let container = encode_filesystem_container(vec![dir.path().to_path_buf()], 64);
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    reader.set_active_file(by_name["large.bin"]).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+
+    assert_eq!(output, contents);
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn filesystem_acquisition_preserves_a_symlink_target() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("target.txt"), b"link target").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("target.txt"), dir.path().join("link.txt")).unwrap();
+
+    let container = encode_filesystem_container(vec![dir.path().to_path_buf()], 64);
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    reader.set_active_file(by_name["link.txt"]).unwrap();
+    let header = reader.current_fileheader().unwrap();
+    assert_eq!(header.file_type, FileType::Symlink);
+
+    // The target is stored as the file's data, encoded as a PlatformString, so
+    // that the exact bytes of the original path are preserved.
+    let mut encoded_target = Vec::new();
+    reader.read_to_end(&mut encoded_target).unwrap();
+    let target = PlatformString::decode_directly(&mut Cursor::new(encoded_target)).unwrap();
+
+    assert_eq!(
+        target,
+        PlatformString::from(dir.path().join("target.txt").into_os_string())
+    );
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn filesystem_acquisition_preserves_unix_metadata() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("perm.txt");
+    std::fs::write(&path, b"metadata carrier").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+
+    let container = encode_filesystem_container(vec![dir.path().to_path_buf()], 64);
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    reader.set_active_file(by_name["perm.txt"]).unwrap();
+    let header = reader.current_fileheader().unwrap();
+
+    // The specification predefines these metadata extension keys.
+    for key in ["uid", "gid", "mode", "mtime", "atime"] {
+        assert!(
+            header.metadata_ext.contains_key(key),
+            "metadata key {key} is missing: {:?}",
+            header.metadata_ext.keys().collect::<Vec<_>>()
+        );
+    }
+    match header.metadata_ext.get("mode") {
+        Some(MetadataExtendedValue::U32(mode)) => {
+            assert_eq!(mode & 0o777, 0o640, "permission bits");
+        }
+        other => panic!("expected mode to be stored as an u32, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// On-disk containers
+// ---------------------------------------------------------------------------
+//
+// Every test above writes to [ZffFilesOutput::Stream]. Real acquisitions use
+// [ZffFilesOutput::NewContainer], which writes numbered segment files through
+// [ZffWriter::generate_files], and [ZffFilesOutput::ExtendContainer], which
+// appends further objects to an existing container.
+
+/// Opens a set of segment files as a reader over the container.
+fn reader_over_files(paths: &[PathBuf]) -> ZffReader<Mutex<File>> {
+    let readers = paths
+        .iter()
+        .map(|path| Mutex::new(File::open(path).unwrap()))
+        .collect();
+    let mut reader = ZffReader::with_reader(readers).unwrap();
+    reader.initialize_objects_all().unwrap();
+    reader
+}
+
+/// Writes the given physical objects to segment files below `prefix`.
+fn generate_container_files(
+    objects: Vec<(ObjectHeader, Vec<u8>)>,
+    prefix: PathBuf,
+    target_segment_size: Option<u64>,
+) -> Vec<PathBuf> {
+    let mut physical_objects = HashMap::new();
+    for (object_header, input) in objects {
+        physical_objects.insert(object_header, Cursor::new(input));
+    }
+    let params = ZffCreationParameters {
+        target_segment_size,
+        ..default_creation_parameters()
+    };
+    let mut writer: TestZffWriter = ZffWriter::new(
+        physical_objects,
+        HashMap::new(),
+        HashMap::new(),
+        vec![HashType::Blake3],
+        params,
+        ZffFilesOutput::NewContainer(prefix),
+    )
+    .unwrap();
+    writer.generate_files().unwrap()
+}
+
+#[test]
+fn generate_files_writes_a_single_readable_segment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = b"on-disk container payload ".repeat(32);
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+
+    let files = generate_container_files(
+        vec![(object_header, input.clone())],
+        dir.path().join("container"),
+        None,
+    );
+
+    assert_eq!(files.len(), 1);
+    assert_eq!(
+        files[0].extension().and_then(|e| e.to_str()),
+        Some("z01"),
+        "the first segment file has to use the .z01 extension"
+    );
+    assert!(files[0].is_file());
+
+    let mut reader = reader_over_files(&files);
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, input);
+}
+
+#[test]
+fn generate_files_splits_into_numbered_segment_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let input: Vec<u8> = (0..32768u32).map(|i| (i % 251) as u8).collect();
+    let object_header = physical_object_header(
+        128,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let target_segment_size = 4096;
+
+    let files = generate_container_files(
+        vec![(object_header, input.clone())],
+        dir.path().join("container"),
+        Some(target_segment_size),
+    );
+
+    assert!(files.len() > 2, "expected several segments, got {files:?}");
+    // Extensions have to run z01, z02, z03, ... in order.
+    for (index, path) in files.iter().enumerate() {
+        assert_eq!(
+            path.extension().and_then(|e| e.to_str()),
+            Some(format!("z{:02}", index + 1).as_str()),
+            "unexpected extension for segment {index}"
+        );
+        assert!(path.is_file(), "{path:?} was reported but not written");
+        // The size cap has to hold for files on disk, not only for streams.
+        let written = std::fs::metadata(path).unwrap().len();
+        assert!(
+            written <= target_segment_size,
+            "segment {index} is {written} bytes, target was {target_segment_size}"
+        );
+    }
+
+    let mut reader = reader_over_files(&files);
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, input);
+}
+
+#[test]
+fn generate_files_rolls_the_extension_past_z09() {
+    // file_extension_next_value switches format after z09, which only shows up
+    // once a container needs more than nine segments.
+    let dir = tempfile::tempdir().unwrap();
+    let input: Vec<u8> = (0..32768u32).map(|i| (i % 251) as u8).collect();
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+
+    let files = generate_container_files(
+        vec![(object_header, input.clone())],
+        dir.path().join("container"),
+        Some(2048),
+    );
+
+    assert!(
+        files.len() > 10,
+        "expected more than ten segments to exercise the rollover, got {}",
+        files.len()
+    );
+    assert_eq!(files[8].extension().and_then(|e| e.to_str()), Some("z09"));
+    assert_eq!(files[9].extension().and_then(|e| e.to_str()), Some("z10"));
+
+    let mut reader = reader_over_files(&files);
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, input);
+}
+
+#[test]
+fn generate_files_is_rejected_for_a_stream_output() {
+    let mut physical_objects = HashMap::new();
+    physical_objects.insert(
+        physical_object_header(
+            64,
+            CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+        ),
+        Cursor::new(b"payload".to_vec()),
+    );
+    let mut writer: TestZffWriter = ZffWriter::new(
+        physical_objects,
+        HashMap::new(),
+        HashMap::new(),
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::Stream,
+    )
+    .unwrap();
+
+    assert!(writer.generate_files().is_err());
+}
+
+/// Appends a further physical object to the container made of `existing_files`.
+fn extend_container_files(
+    existing_files: Vec<PathBuf>,
+    object_input: Vec<u8>,
+    chunk_size: u64,
+) -> Vec<PathBuf> {
+    // The object number is assigned by the writer, continuing the existing
+    // container, so the number given here is not the one that ends up stored.
+    let mut physical_objects = HashMap::new();
+    physical_objects.insert(
+        physical_object_header_with_number(
+            1,
+            chunk_size,
+            CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+        ),
+        Cursor::new(object_input),
+    );
+    let mut writer: TestZffWriter = ZffWriter::new(
+        physical_objects,
+        HashMap::new(),
+        HashMap::new(),
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::ExtendContainer(existing_files),
+    )
+    .unwrap();
+    writer.generate_files().unwrap()
+}
+
+#[test]
+fn an_existing_container_can_be_extended_with_another_object() {
+    let dir = tempfile::tempdir().unwrap();
+    let first_input = b"the originally acquired object ".repeat(16);
+    let second_input = b"the appended object ".repeat(16);
+
+    let created = generate_container_files(
+        vec![(
+            physical_object_header(
+                64,
+                CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            ),
+            first_input.clone(),
+        )],
+        dir.path().join("container"),
+        None,
+    );
+    let appended = extend_container_files(created.clone(), second_input.clone(), 64);
+
+    // Reading the container has to expose both objects.
+    let mut all_files = created;
+    for path in appended {
+        if !all_files.contains(&path) {
+            all_files.push(path);
+        }
+    }
+    let mut reader = reader_over_files(&all_files);
+    let objects = reader.list_objects().unwrap();
+    assert_eq!(objects.len(), 2, "expected two objects, got {objects:?}");
+
+    let mut outputs = Vec::new();
+    for object_number in objects.keys() {
+        reader.set_active_object(*object_number).unwrap();
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        outputs.push(output);
+    }
+
+    assert!(
+        outputs.contains(&first_input),
+        "the original object is no longer readable after extending"
+    );
+    assert!(
+        outputs.contains(&second_input),
+        "the appended object is not readable"
+    );
+}
+
+#[test]
+fn extending_a_container_assigns_the_next_object_number() {
+    let dir = tempfile::tempdir().unwrap();
+    let created = generate_container_files(
+        vec![(
+            physical_object_header(
+                64,
+                CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            ),
+            b"first".repeat(16),
+        )],
+        dir.path().join("container"),
+        None,
+    );
+
+    let appended = extend_container_files(created.clone(), b"second".repeat(16), 64);
+
+    let mut all_files = created;
+    for path in appended {
+        if !all_files.contains(&path) {
+            all_files.push(path);
+        }
+    }
+    let reader = reader_over_files(&all_files);
+    let objects = reader.list_objects().unwrap();
+
+    // The original object keeps number 1, the appended one continues at 2.
+    assert_eq!(
+        objects.keys().copied().collect::<Vec<_>>(),
+        vec![1, 2],
+        "object numbers have to continue the existing container"
+    );
+}
+
+#[test]
+fn extending_a_non_container_file_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let bogus = dir.path().join("not-a-container.z01");
+    std::fs::write(&bogus, b"this is not a zff container").unwrap();
+
+    let mut physical_objects = HashMap::new();
+    physical_objects.insert(
+        physical_object_header(
+            64,
+            CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+        ),
+        Cursor::new(b"payload".to_vec()),
+    );
+    let result: Result<TestZffWriter> = ZffWriter::new(
+        physical_objects,
+        HashMap::new(),
+        HashMap::new(),
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::ExtendContainer(vec![bogus]),
+    );
+
+    assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Decoder robustness
+// ---------------------------------------------------------------------------
+//
+// A forensic container is untrusted input: it may be corrupt, truncated, or
+// deliberately malformed. The decoders must reject such input with an error
+// rather than panicking, over-allocating, or looping.
+//
+// These tests use a fixed seed so a failure is reproducible; the `fuzz`
+// directory holds the matching cargo-fuzz targets for unbounded exploration.
+
+/// A small deterministic PRNG, so a failing case can always be reproduced.
+struct Xorshift64(u64);
+
+impl Xorshift64 {
+    fn next_u64(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x
+    }
+
+    fn next_usize(&mut self, bound: usize) -> usize {
+        if bound == 0 {
+            return 0;
+        }
+        (self.next_u64() % bound as u64) as usize
+    }
+}
+
+/// Runs every header and footer decoder over the given bytes. None of them may
+/// panic; returning an error is the expected outcome for malformed input.
+fn decode_with_every_decoder(bytes: &[u8]) {
+    macro_rules! try_decode {
+        ($($ty:ty),* $(,)?) => {
+            $(
+                let _ = <$ty>::decode_directly(&mut Cursor::new(bytes));
+            )*
+        };
+    }
+    try_decode!(
+        SegmentHeader,
+        ObjectHeader,
+        FileHeader,
+        CompressionHeader,
+        DescriptionHeader,
+        EncryptionHeader,
+        PBEHeader,
+        HashHeader,
+        SegmentFooter,
+        MainFooter,
+        ObjectFooterPhysical,
+        ObjectFooterLogical,
+        ObjectFooterVirtual,
+        FileFooter,
+    );
+    let _ = <ChunkHeader as HeaderCoding>::decode_directly(&mut Cursor::new(bytes));
+}
+
+#[test]
+fn decoders_reject_random_bytes_without_panicking() {
+    let mut rng = Xorshift64(0x5AFF_0001);
+    for _ in 0..2048 {
+        let len = rng.next_usize(160);
+        let bytes: Vec<u8> = (0..len).map(|_| rng.next_u64() as u8).collect();
+        decode_with_every_decoder(&bytes);
+    }
+}
+
+#[test]
+fn decoders_reject_random_bytes_behind_a_valid_identifier() {
+    // Random bytes almost never carry a valid magic number, so the decoders
+    // would bail out immediately. Prefixing a real identifier drives the input
+    // deeper into each decoder, where the length and content parsing happens.
+    let mut rng = Xorshift64(0x5AFF_0002);
+    let identifiers = [
+        HEADER_IDENTIFIER_SEGMENT_HEADER,
+        HEADER_IDENTIFIER_OBJECT_HEADER,
+        HEADER_IDENTIFIER_FILE_HEADER,
+        HEADER_IDENTIFIER_COMPRESSION_HEADER,
+        HEADER_IDENTIFIER_DESCRIPTION_HEADER,
+        HEADER_IDENTIFIER_ENCRYPTION_HEADER,
+        HEADER_IDENTIFIER_PBE_HEADER,
+        HEADER_IDENTIFIER_HASH_HEADER,
+        HEADER_IDENTIFIER_CHUNK_HEADER,
+    ];
+
+    for identifier in identifiers {
+        for _ in 0..512 {
+            let mut bytes = identifier.to_be_bytes().to_vec();
+            // A plausible length field, sometimes wildly wrong on purpose.
+            let declared_length = match rng.next_usize(4) {
+                0 => rng.next_u64(),
+                1 => u64::MAX,
+                2 => 0,
+                _ => rng.next_usize(128) as u64,
+            };
+            bytes.extend_from_slice(&declared_length.to_le_bytes());
+            let payload_len = rng.next_usize(128);
+            bytes.extend((0..payload_len).map(|_| rng.next_u64() as u8));
+            decode_with_every_decoder(&bytes);
+        }
+    }
+}
+
+#[test]
+fn a_reader_over_mutated_containers_never_panics() {
+    // Single-byte mutations of a real container: the reader has to fail
+    // cleanly, whatever the mutation hits.
+    let input = b"mutation resistance payload ".repeat(24);
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let original = encode_physical_container(vec![(object_header, input)]);
+
+    let mut rng = Xorshift64(0x5AFF_0003);
+    for _ in 0..768 {
+        let mut mutated = original.clone();
+        // Between one and three flipped bytes per iteration.
+        for _ in 0..=rng.next_usize(3) {
+            let index = rng.next_usize(mutated.len());
+            mutated[index] ^= 1 << rng.next_usize(8);
+        }
+
+        let Ok(mut reader) = ZffReader::with_reader(vec![Mutex::new(Cursor::new(mutated))]) else {
+            continue;
+        };
+        let Ok(objects) = reader.list_objects() else {
+            continue;
+        };
+        for object_number in objects.keys().copied().collect::<Vec<_>>() {
+            if reader.initialize_object(object_number).is_err() {
+                continue;
+            }
+            if reader.set_active_object(object_number).is_err() {
+                continue;
+            }
+            // Bounded: a corrupted length field must not make this read forever.
+            let mut output = Vec::new();
+            let _ = std::io::Read::by_ref(&mut reader)
+                .take(1 << 20)
+                .read_to_end(&mut output);
+        }
+    }
+}
+
+#[test]
+fn a_reader_over_truncated_containers_never_panics() {
+    let input = b"truncation resistance payload ".repeat(24);
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let original = encode_physical_container(vec![(object_header, input)]);
+
+    // Every truncation length, not a sample: this is cheap and exhaustive.
+    for length in 0..original.len() {
+        let truncated = original[..length].to_vec();
+        let Ok(mut reader) = ZffReader::with_reader(vec![Mutex::new(Cursor::new(truncated))])
+        else {
+            continue;
+        };
+        if reader.initialize_objects_all().is_err() {
+            continue;
+        }
+        if reader.set_active_object(1).is_err() {
+            continue;
+        }
+        let mut output = Vec::new();
+        let _ = std::io::Read::by_ref(&mut reader)
+            .take(1 << 20)
+            .read_to_end(&mut output);
+    }
+}
+
+#[test]
+fn every_single_bit_mutation_of_a_container_is_handled_cleanly() {
+    // Exhaustive rather than sampled: every bit of a real container is flipped
+    // in turn. This is the test that caught an unbounded allocation driven by a
+    // corrupted length field, where a single flipped bit made the reader try to
+    // allocate 2^60 bytes and abort the process.
+    let input = b"mutation resistance payload ".repeat(8);
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let original = encode_physical_container(vec![(object_header, input)]);
+
+    for index in 0..original.len() {
+        for bit in 0..8 {
+            let mut mutated = original.clone();
+            mutated[index] ^= 1 << bit;
+
+            let Ok(mut reader) = ZffReader::with_reader(vec![Mutex::new(Cursor::new(mutated))])
+            else {
+                continue;
+            };
+            if reader.initialize_objects_all().is_err() || reader.set_active_object(1).is_err() {
+                continue;
+            }
+            let mut output = Vec::new();
+            let _ = std::io::Read::by_ref(&mut reader)
+                .take(1 << 20)
+                .read_to_end(&mut output);
+        }
+    }
 }

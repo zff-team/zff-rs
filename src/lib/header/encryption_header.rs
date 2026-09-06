@@ -1,9 +1,9 @@
 // - STD
 use std::fmt;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 
 // - internal
-use crate::helper::decode_len;
+use crate::helper::{decode_len, read_exact_buffer};
 use crate::prelude::*;
 use crate::{
     decrypt_argon2_aes128cbc, decrypt_argon2_aes256cbc, decrypt_pbkdf2sha256_aes128cbc,
@@ -296,10 +296,7 @@ impl HeaderCoding for EncryptionHeader {
             }
         };
         let key_length = decode_len(&mut cursor)?;
-        let mut encryption_key = Vec::new();
-        encryption_key.try_reserve_exact(key_length)?;
-        encryption_key.resize(key_length, 0);
-        cursor.read_exact(&mut encryption_key)?;
+        let encryption_key = read_exact_buffer(&mut cursor, key_length)?;
         Ok(EncryptionHeader::new(
             pbe_header,
             encryption_algorithm,

@@ -342,8 +342,6 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
                 ZffFilesOutput::ExtendContainer(path_vec) => path_vec[0].clone(), // should never get out of bound when fn setup_container was used before.
             };
 
-            generated_files.push(segment_filename.clone());
-
             let mut output_file = match initial_extend {
                 false => {
                     segment_filename.set_extension(&file_extension);
@@ -356,11 +354,16 @@ impl<R: Read, C: ReadAt> ZffWriter<R, C> {
                     let mut file = OpenOptions::new()
                         .append(true)
                         .read(true)
-                        .open(segment_filename)?;
+                        .open(&segment_filename)?;
                     file.seek(SeekFrom::End(0))?;
                     file
                 }
             };
+
+            // Record the path only once the final file name is known: the
+            // extension is applied above, so pushing earlier would return paths
+            // that do not name the files this method actually writes.
+            generated_files.push(segment_filename.clone());
 
             let mut buffer = vec![0u8; DEFAULT_BUFFER_SIZE];
 

@@ -23,6 +23,7 @@ use std::fmt;
 use std::io::Read;
 
 // - internal
+use crate::helper::read_exact_buffer;
 #[cfg(feature = "serde")]
 use crate::helper::string_to_str;
 use crate::{helper::decode_header_content_len, prelude::*};
@@ -202,10 +203,7 @@ pub trait ChunkMap {
         let object_number = u64::decode_directly(data)?;
         let structure_content_length =
             decode_header_content_len(header_length, 1 + object_number.encoded_size())?;
-        let mut structure_content = Vec::new();
-        structure_content.try_reserve_exact(structure_content_length)?;
-        structure_content.resize(structure_content_length, 0);
-        data.read_exact(&mut structure_content)?;
+        let structure_content = read_exact_buffer(data, structure_content_length)?;
         Ok(ChunkMapInnerStructureData::new(
             object_number,
             structure_content,

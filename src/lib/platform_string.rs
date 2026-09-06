@@ -18,7 +18,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::os::windows::ffi::OsStrExt;
 
 // - internal
-use crate::helper::decode_len;
+use crate::helper::{decode_len, read_exact_buffer};
 use crate::prelude::*;
 
 // - external
@@ -247,10 +247,7 @@ impl ValueDecoder for PlatformString {
     fn decode_directly<R: Read>(data: &mut R) -> Result<Self::Item> {
         let encoding_flag = u8::decode_directly(data)?;
         let length = decode_len(data)?;
-        let mut buffer = Vec::new();
-        buffer.try_reserve_exact(length)?;
-        buffer.resize(length, 0);
-        data.read_exact(&mut buffer)?;
+        let buffer = read_exact_buffer(data, length)?;
 
         match encoding_flag {
             0 => Ok(PlatformString::Unix(buffer)),

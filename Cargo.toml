@@ -69,4 +69,10 @@ virtual_object_sources = ["vos_tar"]
 vos_tar = ["dep:tar"]
 
 [dev-dependencies]
+criterion = "0.7"
 hex = "0.4.3"
+tempfile = "3.23.0"
+
+[[bench]]
+name = "container"
+harness = false

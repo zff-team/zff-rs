@@ -216,6 +216,27 @@ pub(crate) fn copy_chunk_content_to_buf(
     Ok(())
 }
 
+/// Reads exactly `length` bytes from `data`.
+///
+/// Lengths are decoded from the container and are therefore untrusted.
+/// Allocating one up front lets a corrupted value reserve, and then zero, an
+/// arbitrary amount of memory: under Linux overcommit the reservation succeeds
+/// and the zeroing turns a malformed container into minutes of page faults
+/// instead of a clean error. The buffer is grown while the data is actually
+/// read, so memory use stays proportional to the bytes that really exist, and a
+/// short read is reported as a malformed segment.
+pub(crate) fn read_exact_buffer<R: Read>(data: &mut R, length: usize) -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let read_bytes = data.take(length as u64).read_to_end(&mut buffer)?;
+    if read_bytes != length {
+        return Err(ZffError::new(
+            ZffErrorKind::EncodingError,
+            ERROR_MALFORMED_SEGMENT,
+        ));
+    }
+    Ok(buffer)
+}
+
 pub(crate) fn decode_len<R: Read>(data: &mut R) -> Result<usize> {
     let length = u64::decode_directly(data)?;
     usize::try_from(length).map_err(|_| {

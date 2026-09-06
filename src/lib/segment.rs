@@ -288,9 +288,35 @@ impl<R: ReadAt> Segment<R> {
             Some(flags) => flags,
         };
 
-        let mut raw_data_buffer = vec![0u8; chunk_size as usize];
-        self.data
-            .read_exact_at(&mut raw_data_buffer, chunk_offset)?;
+        // The chunk size comes from the container and is therefore untrusted: a
+        // corrupted or hostile value must not be turned into an allocation of
+        // that size. The buffer is grown in bounded steps while the data is
+        // actually read, so memory use stays proportional to the bytes the
+        // segment really holds, and a failed allocation becomes an error rather
+        // than an abort.
+        let chunk_size = usize::try_from(chunk_size).map_err(|_| {
+            ZffError::new(
+                ZffErrorKind::Invalid,
+                format!("{ERROR_CHUNK_SIZE_EXCEEDS_SEGMENT}{chunk_number}"),
+            )
+        })?;
+        let mut raw_data_buffer: Vec<u8> = Vec::new();
+        let mut bytes_filled = 0;
+        while bytes_filled < chunk_size {
+            let step = CHUNK_READ_ALLOCATION_STEP.min(chunk_size - bytes_filled);
+            raw_data_buffer.try_reserve(step).map_err(|_| {
+                ZffError::new(
+                    ZffErrorKind::Invalid,
+                    format!("{ERROR_CHUNK_ALLOCATION_FAILED}{chunk_number}"),
+                )
+            })?;
+            raw_data_buffer.resize(bytes_filled + step, 0);
+            self.data.read_exact_at(
+                &mut raw_data_buffer[bytes_filled..],
+                chunk_offset + bytes_filled as u64,
+            )?;
+            bytes_filled += step;
+        }
 
         if let Some(enc_info) = encryption_information {
             let enc_info = enc_info.borrow();
