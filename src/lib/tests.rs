@@ -2087,13 +2087,42 @@ fn file_header_layout_matches_the_specification() {
     assert_eq!(&encoded[4..12], &(encoded.len() as u64).to_le_bytes());
     assert_eq!(&encoded[13..21], &7u64.to_le_bytes(), "file number");
     assert_eq!(encoded[21], FileType::File as u8);
-    // Encoding.md, PlatformString: encoding byte (unix = 0x00), length, bytes.
-    assert_eq!(encoded[22], 0x00, "PlatformString unix encoding marker");
-    assert_eq!(&encoded[23..31], &1u64.to_le_bytes());
-    assert_eq!(encoded[31], b'a');
-    assert_eq!(&encoded[32..40], &3u64.to_le_bytes(), "parent file number");
-    assert_eq!(&encoded[40..48], &0u64.to_le_bytes(), "empty metadata map");
-    assert_eq!(encoded.len(), 48);
+
+    // Encoding.md, PlatformString: an encoding marker, the byte length, then
+    // the raw bytes in that encoding. A file name is created in the encoding of
+    // the acquiring platform, so which variant appears here depends on the
+    // platform; the marker value for each variant is pinned separately by
+    // both_platform_string_encodings_match_the_specification.
+    let name = PlatformString::from(OsString::from("a"));
+    let (expected_marker, expected_name_bytes) = match &name {
+        PlatformString::Unix(bytes) => (0x00u8, bytes.clone()),
+        PlatformString::WindowsUtf16Le(bytes) => (0x01u8, bytes.clone()),
+    };
+
+    assert_eq!(
+        encoded[22], expected_marker,
+        "PlatformString encoding marker"
+    );
+    let name_len = expected_name_bytes.len();
+    assert_eq!(
+        &encoded[23..31],
+        &(name_len as u64).to_le_bytes(),
+        "PlatformString byte length"
+    );
+    assert_eq!(&encoded[31..31 + name_len], expected_name_bytes.as_slice());
+
+    let after_name = 31 + name_len;
+    assert_eq!(
+        &encoded[after_name..after_name + 8],
+        &3u64.to_le_bytes(),
+        "parent file number"
+    );
+    assert_eq!(
+        &encoded[after_name + 8..after_name + 16],
+        &0u64.to_le_bytes(),
+        "empty metadata map"
+    );
+    assert_eq!(encoded.len(), after_name + 16);
 }
 
 #[test]
@@ -4129,4 +4158,43 @@ fn switching_between_two_fresh_redb_chunkmaps_works() {
     let mut output = Vec::new();
     reader.read_to_end(&mut output).unwrap();
     assert_eq!(output, input);
+}
+
+#[test]
+fn both_platform_string_encodings_match_the_specification() {
+    // Encoding.md, PlatformString: an encoding marker (unix = 0x00,
+    // UTF-16LE = 0x01), the byte length as uint64, then the raw bytes.
+    //
+    // The file header layout test can only check the marker of the platform it
+    // runs on. Both variants are constructed explicitly here, so a change to
+    // either encoding is caught on every platform.
+    let unix = PlatformString::Unix(b"a".to_vec());
+    let encoded = unix.encode_directly();
+    assert_eq!(encoded[0], 0x00, "unix encoding marker");
+    assert_eq!(&encoded[1..9], &1u64.to_le_bytes());
+    assert_eq!(encoded[9], b'a');
+    assert_eq!(encoded.len(), 10);
+    assert_eq!(unix.encoded_size(), encoded.len());
+
+    // "a" as UTF-16LE is 0x0061, stored little endian.
+    let windows = PlatformString::WindowsUtf16Le(vec![b'a', 0x00]);
+    let encoded = windows.encode_directly();
+    assert_eq!(encoded[0], 0x01, "UTF-16LE encoding marker");
+    assert_eq!(&encoded[1..9], &2u64.to_le_bytes());
+    assert_eq!(&encoded[9..11], &[b'a', 0x00]);
+    assert_eq!(encoded.len(), 11);
+    assert_eq!(windows.encoded_size(), encoded.len());
+
+    // Both round-trip back to the same variant and bytes.
+    for original in [unix, windows] {
+        let decoded =
+            PlatformString::decode_directly(&mut Cursor::new(original.encode_directly())).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    // An unknown marker has to be rejected rather than guessed at.
+    let mut malformed = vec![0x02];
+    malformed.extend_from_slice(&1u64.to_le_bytes());
+    malformed.push(b'a');
+    assert!(PlatformString::decode_directly(&mut Cursor::new(malformed)).is_err());
 }
