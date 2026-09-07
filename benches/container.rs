@@ -168,6 +168,11 @@ fn bench_deduplication(c: &mut Criterion) {
     let mut group = c.benchmark_group("deduplication");
     group.throughput(Throughput::Bytes(payload.len() as u64));
 
+    // Note: the "disabled" arm measures the same path as write/uncompressed and
+    // matches it (~1.7 ms) when this group is run on its own, but reads roughly
+    // three times slower when the whole suite runs in one process. Compare the
+    // two arms of this group against each other, and use `cargo bench --bench
+    // container -- deduplication` before concluding anything from a change here.
     group.bench_function("disabled", |b| {
         b.iter(|| {
             write_container(
