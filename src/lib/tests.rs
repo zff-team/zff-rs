@@ -3,8 +3,12 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "los_tar")]
+use crate::LogicalObjectSourceTar;
+#[cfg(feature = "vos_tar")]
+use crate::VirtualObjectSourceLogicalTar;
 use crate::io::{
     ZffCreationParameters, compress_buffer,
     zffreader::{ObjectType as ReaderObjectType, ZffReader},
@@ -12,11 +16,12 @@ use crate::io::{
 };
 use crate::prelude::*;
 use crate::{
-    FileTypeEncodingInformation, HashType, LogicalObjectSource, LogicalObjectSourceFilesystem,
-    Signature, VirtualFileContent, decompress_buffer, decrypt_argon2_aes128cbc,
-    decrypt_argon2_aes256cbc, decrypt_pbkdf2sha256_aes256cbc, decrypt_scrypt_aes256cbc,
-    encrypt_argon2_aes128cbc, encrypt_argon2_aes256cbc, encrypt_pbkdf2sha256_aes256cbc,
-    encrypt_scrypt_aes256cbc, gen_random_iv, gen_random_key, gen_random_salt,
+    EncodingThreadPoolManager, FileFooterMetadata, FileTypeEncodingInformation, HashType,
+    LogicalObjectSource, LogicalObjectSourceFilesystem, Signature, VirtualFileContent,
+    decompress_buffer, decrypt_argon2_aes128cbc, decrypt_argon2_aes256cbc,
+    decrypt_pbkdf2sha256_aes256cbc, decrypt_scrypt_aes256cbc, encrypt_argon2_aes128cbc,
+    encrypt_argon2_aes256cbc, encrypt_pbkdf2sha256_aes256cbc, encrypt_scrypt_aes256cbc,
+    gen_random_iv, gen_random_key, gen_random_salt,
 };
 
 /// The writer used throughout these tests: an in-memory input source and an
@@ -1583,6 +1588,28 @@ fn virtual_file(
 /// Writes a container holding one physical source object (number 1) and one
 /// virtual object (number 2) that references it.
 fn encode_virtual_container(source_data: Vec<u8>, virtual_files: InMemoryVirtualSource) -> Vec<u8> {
+    encode_virtual_container_with_header(
+        source_data,
+        virtual_files,
+        ObjectHeader::new(
+            2,
+            None,
+            64,
+            CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            DescriptionHeader::new_empty(),
+            ObjectType::Virtual,
+            ObjectFlags::default(),
+        ),
+    )
+}
+
+/// Same, but with a caller supplied header for the virtual object, so that an
+/// encrypted virtual object can be built.
+fn encode_virtual_container_with_header(
+    source_data: Vec<u8>,
+    virtual_files: InMemoryVirtualSource,
+    virtual_header: ObjectHeader,
+) -> Vec<u8> {
     let mut physical_objects = HashMap::new();
     let mut source_header = physical_object_header_with_number(
         1,
@@ -1592,15 +1619,6 @@ fn encode_virtual_container(source_data: Vec<u8>, virtual_files: InMemoryVirtual
     source_header.flags.passive_object = true;
     physical_objects.insert(source_header, Cursor::new(source_data));
 
-    let virtual_header = ObjectHeader::new(
-        2,
-        None,
-        64,
-        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
-        DescriptionHeader::new_empty(),
-        ObjectType::Virtual,
-        ObjectFlags::default(),
-    );
     let mut virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>> = HashMap::new();
     virtual_objects.insert(virtual_header, Box::new(virtual_files));
 
@@ -2977,4 +2995,1138 @@ fn every_single_bit_mutation_of_a_container_is_handled_cleanly() {
                 .read_to_end(&mut output);
         }
     }
+}
+
+/// Writes a set of valid containers into the fuzzing corpus.
+///
+/// The `read_container` fuzz target explores far deeper when it starts from
+/// real containers instead of random bytes, because it then mutates structures
+/// that actually parse. Run with:
+/// `cargo test --all-features seed_fuzzing_corpus -- --ignored`
+#[test]
+#[ignore]
+fn seed_fuzzing_corpus() {
+    let corpus = PathBuf::from("fuzz/corpus/read_container");
+    std::fs::create_dir_all(&corpus).unwrap();
+
+    let mut seeds: Vec<(&str, Vec<u8>)> = vec![
+        (
+            "physical_uncompressed",
+            encode_physical_container(vec![(
+                physical_object_header(
+                    64,
+                    CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+                ),
+                b"corpus payload ".repeat(16),
+            )]),
+        ),
+        (
+            "physical_zstd",
+            encode_physical_container(vec![(
+                physical_object_header(
+                    128,
+                    CompressionHeader::new(CompressionAlgorithm::Zstd, 3, 1.01),
+                ),
+                b"compressible corpus payload ".repeat(32),
+            )]),
+        ),
+        (
+            "physical_encrypted",
+            encode_physical_container(vec![(
+                encrypted_physical_object_header(1, 64, EncryptionAlgorithm::AES256GCM, "s3cret"),
+                b"encrypted corpus payload ".repeat(16),
+            )]),
+        ),
+        (
+            "same_bytes",
+            encode_physical_container(vec![(
+                physical_object_header(
+                    64,
+                    CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+                ),
+                vec![0xAA; 512],
+            )]),
+        ),
+    ];
+
+    let logical_source = InMemoryLogicalSource::new(
+        vec![(
+            FileTypeEncodingInformation::File(Box::new(Cursor::new(b"corpus file".to_vec()))),
+            file_header(1, FileType::File, "corpus.txt", 0),
+        )],
+        vec![1],
+        HashMap::new(),
+    );
+    seeds.push((
+        "logical",
+        encode_logical_container(logical_object_header(1, 64), logical_source),
+    ));
+
+    seeds.push(("golden_v3_physical", GOLDEN_V3_PHYSICAL.to_vec()));
+
+    for (name, bytes) in &seeds {
+        std::fs::write(corpus.join(name), bytes).unwrap();
+    }
+
+    // Individual segments of a multi-segment container are useful seeds too.
+    let segments = encode_segmented_container(
+        vec![(
+            physical_object_header(
+                64,
+                CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            ),
+            (0..4096u32).map(|i| (i % 251) as u8).collect(),
+        )],
+        1024,
+    );
+    for (index, segment) in segments.iter().enumerate() {
+        std::fs::write(corpus.join(format!("segment_{index:02}")), segment).unwrap();
+    }
+
+    println!(
+        "wrote {} seeds to {}",
+        seeds.len() + segments.len(),
+        corpus.display()
+    );
+}
+
+#[test]
+fn a_logical_object_footer_with_an_absurd_element_count_is_rejected() {
+    // Regression test for a crash found by the `decode_structures` fuzz target.
+    //
+    // The root directory file numbers of a logical object footer are decoded as
+    // a Vec<u64> whose element count comes from the container. The count was
+    // reserved directly, so a corrupted value asked the allocator for
+    // count * 8 bytes -- here 0x5050505050505050 -- and aborted the process.
+    let crash_input: &[u8] = &[
+        122, 102, 102, 76, 65, 0, 0, 0, 0, 0, 0, 0, 2, 0, 10, 122, 102, 102, 112, 15, 0, 0, 0, 0,
+        0, 0, 0, 255, 15, 169, 0, 2, 0, 37, 255, 255, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 68, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 255, 255,
+    ];
+
+    let result = ObjectFooterLogical::decode_directly(&mut Cursor::new(crash_input));
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn collection_decoders_reject_absurd_element_counts() {
+    // The same class, checked directly: an element count that would require an
+    // enormous allocation has to fail while decoding rather than while
+    // reserving, because there is nowhere near that much input to decode.
+    for count in [u64::MAX, u64::MAX / 8, 0x0A0A_0A0A_0A0A_0A0A, 1 << 40] {
+        let mut encoded = count.to_le_bytes().to_vec();
+        encoded.extend_from_slice(&[0xAB; 32]);
+
+        assert!(Vec::<u64>::decode_directly(&mut Cursor::new(encoded.clone())).is_err());
+        assert!(Vec::<u8>::decode_directly(&mut Cursor::new(encoded.clone())).is_err());
+        assert!(HashMap::<u64, u64>::decode_directly(&mut Cursor::new(encoded.clone())).is_err());
+        assert!(BTreeMap::<u64, u64>::decode_directly(&mut Cursor::new(encoded)).is_err());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Encrypted and signed logical / virtual objects
+// ---------------------------------------------------------------------------
+//
+// The encryption tests above cover physical objects. Logical and virtual
+// objects encrypt additional structures -- file headers, file footers, virtual
+// file maps and the object footer -- so they are exercised separately here.
+
+/// Builds an encrypted object header of the given type.
+fn encrypted_object_header(
+    object_number: u64,
+    chunk_size: u64,
+    object_type: ObjectType,
+    algorithm: EncryptionAlgorithm,
+    password: &str,
+) -> ObjectHeader {
+    let (mut encryption_header, _) = encryption_header_with_password(algorithm, password);
+    encryption_header.decrypt_encryption_key(password).unwrap();
+    ObjectHeader::new(
+        object_number,
+        Some(encryption_header),
+        chunk_size,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+        DescriptionHeader::new_empty(),
+        object_type,
+        ObjectFlags {
+            encryption: true,
+            sign_hash: false,
+            passive_object: false,
+        },
+    )
+}
+
+#[test]
+fn encrypted_logical_object_roundtrips_for_every_algorithm() {
+    for algorithm in [
+        EncryptionAlgorithm::AES128GCM,
+        EncryptionAlgorithm::AES256GCM,
+        EncryptionAlgorithm::CHACHA20POLY1305,
+    ] {
+        let contents = b"encrypted logical file contents ".repeat(8);
+        let source = InMemoryLogicalSource::new(
+            vec![(
+                FileTypeEncodingInformation::File(Box::new(Cursor::new(contents.clone()))),
+                file_header(1, FileType::File, "secret.txt", 0),
+            )],
+            vec![1],
+            HashMap::new(),
+        );
+        let object_header =
+            encrypted_object_header(1, 64, ObjectType::Logical, algorithm, "s3cret");
+        let container = encode_logical_container(object_header, source);
+
+        // Neither the contents nor the file name may appear in the clear.
+        assert!(
+            !container
+                .windows(contents.len())
+                .any(|window| window == contents.as_slice())
+        );
+        assert!(
+            !container
+                .windows(b"secret.txt".len())
+                .any(|window| window == b"secret.txt")
+        );
+
+        let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+        assert_eq!(
+            reader.list_objects().unwrap().get(&1),
+            Some(&ReaderObjectType::Encrypted)
+        );
+        reader.initialize_object(1).unwrap();
+        assert_eq!(
+            reader.decrypt_object(1, "s3cret").unwrap(),
+            ReaderObjectType::Logical
+        );
+        reader.set_active_object(1).unwrap();
+        reader.set_active_file(1).unwrap();
+
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, contents);
+        assert_eq!(
+            reader.current_fileheader().unwrap().filename,
+            PlatformString::from(OsString::from("secret.txt"))
+        );
+    }
+}
+
+#[test]
+fn an_encrypted_logical_object_rejects_a_wrong_password() {
+    let source = InMemoryLogicalSource::new(
+        vec![(
+            FileTypeEncodingInformation::File(Box::new(Cursor::new(b"secret".to_vec()))),
+            file_header(1, FileType::File, "secret.txt", 0),
+        )],
+        vec![1],
+        HashMap::new(),
+    );
+    let object_header = encrypted_object_header(
+        1,
+        64,
+        ObjectType::Logical,
+        EncryptionAlgorithm::AES256GCM,
+        "s3cret",
+    );
+    let container = encode_logical_container(object_header, source);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_object(1).unwrap();
+
+    assert!(reader.decrypt_object(1, "wrong-password").is_err());
+}
+
+#[test]
+fn an_encrypted_logical_object_with_a_directory_tree_roundtrips() {
+    let first = b"first encrypted file".repeat(4);
+    let second = b"second encrypted file".repeat(4);
+    let mut directory_children = HashMap::new();
+    directory_children.insert(1, vec![2, 3]);
+
+    let source = InMemoryLogicalSource::new(
+        vec![
+            (
+                FileTypeEncodingInformation::Directory(vec![2, 3]),
+                file_header(1, FileType::Directory, "evidence", 0),
+            ),
+            (
+                FileTypeEncodingInformation::File(Box::new(Cursor::new(first.clone()))),
+                file_header(2, FileType::File, "first.txt", 1),
+            ),
+            (
+                FileTypeEncodingInformation::File(Box::new(Cursor::new(second.clone()))),
+                file_header(3, FileType::File, "second.txt", 1),
+            ),
+        ],
+        vec![1],
+        directory_children,
+    );
+    let object_header = encrypted_object_header(
+        1,
+        64,
+        ObjectType::Logical,
+        EncryptionAlgorithm::AES256GCM,
+        "s3cret",
+    );
+    let container = encode_logical_container(object_header, source);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_object(1).unwrap();
+    reader.decrypt_object(1, "s3cret").unwrap();
+    reader.set_active_object(1).unwrap();
+
+    reader.set_active_file(2).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, first);
+    assert_eq!(reader.current_fileheader().unwrap().parent_file_number, 1);
+
+    reader.set_active_file(3).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, second);
+}
+
+#[test]
+fn a_signed_logical_object_records_verifiable_signatures() {
+    let contents = b"signed logical file".repeat(8);
+    let signing_key = Signature::new_signing_key();
+    let verifying_key = signing_key.verifying_key().to_bytes();
+
+    let source = InMemoryLogicalSource::new(
+        vec![(
+            FileTypeEncodingInformation::File(Box::new(Cursor::new(contents.clone()))),
+            file_header(1, FileType::File, "signed.txt", 0),
+        )],
+        vec![1],
+        HashMap::new(),
+    );
+    let mut object_header = logical_object_header(1, 64);
+    object_header.flags.sign_hash = true;
+
+    let mut logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>> = HashMap::new();
+    logical_objects.insert(object_header, Box::new(source));
+    let mut writer: TestZffWriter = ZffWriter::new(
+        HashMap::new(),
+        logical_objects,
+        HashMap::new(),
+        vec![HashType::Blake3],
+        ZffCreationParameters {
+            signature_key: Some(signing_key),
+            ..default_creation_parameters()
+        },
+        ZffFilesOutput::Stream,
+    )
+    .unwrap();
+    let mut container = Vec::new();
+    writer.read_to_end(&mut container).unwrap();
+
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    reader.set_active_file(1).unwrap();
+
+    let hash_header = match &reader.current_filemetadata().unwrap().footer {
+        FileFooterMetadata::FileFooter(footer) => footer.hash_header.clone(),
+        other => panic!("expected a file footer, got {other:?}"),
+    };
+
+    assert!(!hash_header.hashes.is_empty());
+    for hash_value in &hash_header.hashes {
+        let signature = hash_value
+            .ed25519_signature()
+            .expect("a signature was requested but is missing");
+        assert!(
+            Signature::verify(verifying_key, hash_value.hash(), signature).unwrap(),
+            "the recorded file signature does not verify"
+        );
+        // And the recorded hash has to match the file contents.
+        let mut hasher = Hash::new_hasher(hash_value.hash_type());
+        hasher.update(&contents);
+        assert_eq!(hash_value.hash(), &hasher.finalize().to_vec());
+    }
+}
+
+#[test]
+fn encrypted_virtual_object_roundtrips_for_every_algorithm() {
+    for algorithm in [
+        EncryptionAlgorithm::AES128GCM,
+        EncryptionAlgorithm::AES256GCM,
+        EncryptionAlgorithm::CHACHA20POLY1305,
+    ] {
+        let source_data: Vec<u8> = (0..512u32).map(|i| (i % 251) as u8).collect();
+        let virtual_files = InMemoryVirtualSource::new(
+            vec![virtual_file(
+                1,
+                "encrypted_view.bin",
+                vec![(0, VirtualFileExtent::new(1, 0, 128, 200))],
+            )],
+            vec![1],
+        );
+        let virtual_header =
+            encrypted_object_header(2, 64, ObjectType::Virtual, algorithm, "s3cret");
+        let container = encode_virtual_container_with_header(
+            source_data.clone(),
+            virtual_files,
+            virtual_header,
+        );
+
+        let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+        let objects = reader.list_objects().unwrap();
+        assert_eq!(objects.get(&1), Some(&ReaderObjectType::Physical));
+        assert_eq!(objects.get(&2), Some(&ReaderObjectType::Encrypted));
+
+        reader.initialize_objects_all().unwrap();
+        assert_eq!(
+            reader.decrypt_object(2, "s3cret").unwrap(),
+            ReaderObjectType::Virtual
+        );
+        reader.set_active_object(2).unwrap();
+        reader.set_active_file(1).unwrap();
+
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, source_data[128..328]);
+    }
+}
+
+#[test]
+fn an_encrypted_virtual_object_rejects_a_wrong_password() {
+    let source_data: Vec<u8> = (0..256u32).map(|i| (i % 251) as u8).collect();
+    let virtual_files = InMemoryVirtualSource::new(
+        vec![virtual_file(
+            1,
+            "view.bin",
+            vec![(0, VirtualFileExtent::new(1, 0, 0, 64))],
+        )],
+        vec![1],
+    );
+    let virtual_header = encrypted_object_header(
+        2,
+        64,
+        ObjectType::Virtual,
+        EncryptionAlgorithm::AES256GCM,
+        "s3cret",
+    );
+    let container =
+        encode_virtual_container_with_header(source_data, virtual_files, virtual_header);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_objects_all().unwrap();
+
+    assert!(reader.decrypt_object(2, "not-the-password").is_err());
+}
+
+#[test]
+fn an_encrypted_virtual_object_assembles_several_extents() {
+    let source_data: Vec<u8> = (0..1024u32).map(|i| (i % 251) as u8).collect();
+    let virtual_files = InMemoryVirtualSource::new(
+        vec![virtual_file(
+            1,
+            "assembled.bin",
+            vec![
+                (0, VirtualFileExtent::new(1, 0, 900, 100)),
+                (100, VirtualFileExtent::new(1, 0, 30, 70)),
+            ],
+        )],
+        vec![1],
+    );
+    let virtual_header = encrypted_object_header(
+        2,
+        64,
+        ObjectType::Virtual,
+        EncryptionAlgorithm::AES256GCM,
+        "s3cret",
+    );
+    let container =
+        encode_virtual_container_with_header(source_data.clone(), virtual_files, virtual_header);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_objects_all().unwrap();
+    reader.decrypt_object(2, "s3cret").unwrap();
+    reader.set_active_object(2).unwrap();
+    reader.set_active_file(1).unwrap();
+
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+
+    let mut expected = Vec::new();
+    expected.extend_from_slice(&source_data[900..1000]);
+    expected.extend_from_slice(&source_data[30..100]);
+    assert_eq!(output, expected);
+}
+
+// ---------------------------------------------------------------------------
+// Tar backed sources
+// ---------------------------------------------------------------------------
+
+/// Builds a tar archive containing the given (path, contents) entries plus the
+/// directories they live in.
+#[cfg(any(feature = "los_tar", feature = "vos_tar"))]
+fn build_tar_archive(path: &std::path::Path, entries: &[(&str, &[u8])], directories: &[&str]) {
+    use tar::{Builder, Header};
+
+    let mut builder = Builder::new(File::create(path).unwrap());
+    for directory in directories {
+        let mut header = Header::new_gnu();
+        header.set_size(0);
+        header.set_mode(0o755);
+        header.set_mtime(0);
+        header.set_entry_type(tar::EntryType::Directory);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, directory, std::io::empty())
+            .unwrap();
+    }
+    for (name, contents) in entries {
+        let mut header = Header::new_gnu();
+        header.set_size(contents.len() as u64);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_cksum();
+        builder.append_data(&mut header, name, *contents).unwrap();
+    }
+    builder.finish().unwrap();
+}
+
+#[cfg(feature = "los_tar")]
+#[test]
+fn a_tar_archive_can_be_acquired_as_a_logical_object() {
+    let dir = tempfile::tempdir().unwrap();
+    let archive_path = dir.path().join("evidence.tar");
+    let first = b"contents of the first tar member".to_vec();
+    let second = vec![0xCD; 300];
+    build_tar_archive(
+        &archive_path,
+        &[("first.txt", &first), ("second.bin", &second)],
+        &[],
+    );
+
+    let source = LogicalObjectSourceTar::try_from(archive_path.as_path()).unwrap();
+    let mut logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>> = HashMap::new();
+    logical_objects.insert(logical_object_header(1, 64), Box::new(source));
+    let mut writer: TestZffWriter = ZffWriter::new(
+        HashMap::new(),
+        logical_objects,
+        HashMap::new(),
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::Stream,
+    )
+    .unwrap();
+    let mut container = Vec::new();
+    writer.read_to_end(&mut container).unwrap();
+
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    for (name, expected) in [("first.txt", first), ("second.bin", second)] {
+        let file_number = by_name
+            .get(name)
+            .unwrap_or_else(|| panic!("{name} missing from the container: {by_name:?}"));
+        reader.set_active_file(*file_number).unwrap();
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        assert_eq!(output, expected, "contents of {name}");
+    }
+}
+
+#[cfg(feature = "los_tar")]
+#[test]
+fn a_tar_archive_with_directories_preserves_the_tree() {
+    let dir = tempfile::tempdir().unwrap();
+    let archive_path = dir.path().join("tree.tar");
+    let nested = b"nested tar member".to_vec();
+    build_tar_archive(&archive_path, &[("outer/inner.txt", &nested)], &["outer/"]);
+
+    let source = LogicalObjectSourceTar::try_from(archive_path.as_path()).unwrap();
+    let mut logical_objects: HashMap<ObjectHeader, Box<dyn LogicalObjectSource>> = HashMap::new();
+    logical_objects.insert(logical_object_header(1, 64), Box::new(source));
+    let mut writer: TestZffWriter = ZffWriter::new(
+        HashMap::new(),
+        logical_objects,
+        HashMap::new(),
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::Stream,
+    )
+    .unwrap();
+    let mut container = Vec::new();
+    writer.read_to_end(&mut container).unwrap();
+
+    let mut reader = initialized_reader(container);
+    reader.set_active_object(1).unwrap();
+    let by_name = file_numbers_by_name(&mut reader);
+
+    let inner = by_name
+        .get("inner.txt")
+        .unwrap_or_else(|| panic!("inner.txt missing: {by_name:?}"));
+    reader.set_active_file(*inner).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, nested);
+
+    // The member has to be attached to its directory, not to the root.
+    let parent = reader.current_fileheader().unwrap().parent_file_number;
+    assert_ne!(parent, 0, "inner.txt should live inside a directory");
+}
+
+#[cfg(feature = "los_tar")]
+#[test]
+fn a_file_that_is_not_a_tar_archive_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("not-a-tar.bin");
+    std::fs::write(&path, b"this is definitely not a tar archive").unwrap();
+
+    assert!(LogicalObjectSourceTar::try_from(path.as_path()).is_err());
+}
+
+#[cfg(feature = "vos_tar")]
+#[test]
+fn a_tar_stored_in_a_container_is_exposed_through_a_virtual_object() {
+    // A tar archive acquired as a physical object is opaque: its members cannot
+    // be browsed. A virtual object built with VirtualObjectSourceLogicalTar maps
+    // each member back onto the byte ranges of the stored tar, so the members
+    // become readable without copying their payloads.
+    let dir = tempfile::tempdir().unwrap();
+    let archive_path = dir.path().join("evidence.tar");
+    let first = b"first member of the stored tar".to_vec();
+    let second = vec![0xEF; 200];
+    build_tar_archive(
+        &archive_path,
+        &[("first.txt", &first), ("second.bin", &second)],
+        &[],
+    );
+    let archive_bytes = std::fs::read(&archive_path).unwrap();
+
+    // Acquire the tar itself as a passive physical object, on disk so that the
+    // container can be extended afterwards.
+    let mut source_header = physical_object_header(
+        512,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    source_header.flags.passive_object = true;
+    let container_files = generate_container_files(
+        vec![(source_header, archive_bytes.clone())],
+        dir.path().join("container"),
+        None,
+    );
+
+    // Build the virtual object over the stored tar.
+    let reader = reader_over_files(&container_files);
+    let virtual_source =
+        VirtualObjectSourceLogicalTar::new(reader, 1, None, vec![HashType::Blake3]).unwrap();
+
+    let virtual_header = ObjectHeader::new(
+        2,
+        None,
+        512,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+        DescriptionHeader::new_empty(),
+        ObjectType::Virtual,
+        ObjectFlags::default(),
+    );
+    let mut virtual_objects: HashMap<ObjectHeader, Box<dyn VirtualObjectSource>> = HashMap::new();
+    virtual_objects.insert(virtual_header, Box::new(virtual_source));
+
+    let mut writer: TestZffWriter = ZffWriter::new(
+        HashMap::new(),
+        HashMap::new(),
+        virtual_objects,
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+        ZffFilesOutput::ExtendContainer(container_files.clone()),
+    )
+    .unwrap();
+    let appended = writer.generate_files().unwrap();
+
+    let mut all_files = container_files;
+    for path in appended {
+        if !all_files.contains(&path) {
+            all_files.push(path);
+        }
+    }
+
+    let mut reader = reader_over_files(&all_files);
+    let objects = reader.list_objects().unwrap();
+    assert_eq!(
+        objects.get(&2),
+        Some(&ReaderObjectType::Virtual),
+        "expected a virtual object, got {objects:?}"
+    );
+
+    reader.set_active_object(2).unwrap();
+    let mut found = HashMap::new();
+    for file_number in 1..=8u64 {
+        if reader.set_active_file(file_number).is_err() {
+            continue;
+        }
+        let name = reader
+            .current_fileheader()
+            .unwrap()
+            .filename
+            .to_string_lossy();
+        let mut output = Vec::new();
+        if reader.read_to_end(&mut output).is_ok() {
+            found.insert(name, output);
+        }
+    }
+
+    assert_eq!(
+        found.get("first.txt"),
+        Some(&first),
+        "tar member contents not readable through the virtual object: {:?}",
+        found.keys().collect::<Vec<_>>()
+    );
+    assert_eq!(found.get("second.bin"), Some(&second));
+}
+
+// ---------------------------------------------------------------------------
+// Redb backed chunkmaps and deduplication
+// ---------------------------------------------------------------------------
+//
+// Both the reader's preloaded chunkmaps and the deduplication map can be backed
+// by a redb database instead of memory, trading I/O for a smaller footprint on
+// large containers.
+
+#[test]
+fn a_container_reads_correctly_with_redb_backed_preloaded_chunkmaps() {
+    let dir = tempfile::tempdir().unwrap();
+    let input: Vec<u8> = (0..8192u32).map(|i| (i % 251) as u8).collect();
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let container = encode_physical_container(vec![(object_header, input.clone())]);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_objects_all().unwrap();
+    let database = redb::Database::create(dir.path().join("chunkmaps.redb")).unwrap();
+    reader.set_preload_chunkmap_mode_redb(database).unwrap();
+    reader.preload_chunk_header_map_full().unwrap();
+    reader.preload_chunk_samebytes_map_full().unwrap();
+    reader.preload_chunk_deduplication_map_full().unwrap();
+
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+
+    assert_eq!(output, input);
+}
+
+#[test]
+fn redb_and_in_memory_preloaded_chunkmaps_return_the_same_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let input: Vec<u8> = (0..8192u32).map(|i| (i % 241) as u8).collect();
+    let object_header = physical_object_header(
+        128,
+        CompressionHeader::new(CompressionAlgorithm::Zstd, 3, 1.01),
+    );
+    let container = encode_physical_container(vec![(object_header, input.clone())]);
+
+    let read_with = |redb_path: Option<PathBuf>| {
+        let mut reader =
+            ZffReader::with_reader(vec![Mutex::new(Cursor::new(container.clone()))]).unwrap();
+        reader.initialize_objects_all().unwrap();
+        match redb_path {
+            Some(path) => {
+                let database = redb::Database::create(path).unwrap();
+                reader.set_preload_chunkmap_mode_redb(database).unwrap();
+            }
+            None => reader.set_preload_chunkmaps_mode_in_memory().unwrap(),
+        }
+        reader.preload_chunk_header_map_full().unwrap();
+        reader.set_active_object(1).unwrap();
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output).unwrap();
+        output
+    };
+
+    let in_memory = read_with(None);
+    let redb_backed = read_with(Some(dir.path().join("compare.redb")));
+
+    assert_eq!(in_memory, input);
+    assert_eq!(redb_backed, in_memory);
+}
+
+#[test]
+fn deduplication_with_a_redb_backed_map_roundtrips() {
+    let dir = tempfile::tempdir().unwrap();
+    let chunk_size = 1024;
+    let distinct: Vec<Vec<u8>> = (0..4u8)
+        .map(|seed| {
+            (0..chunk_size)
+                .map(|i| {
+                    (i as u8)
+                        .wrapping_mul(31)
+                        .wrapping_add(seed.wrapping_mul(97))
+                })
+                .collect()
+        })
+        .collect();
+    let mut input = Vec::new();
+    for _ in 0..16 {
+        for chunk in &distinct {
+            input.extend_from_slice(chunk);
+        }
+    }
+
+    let params = ZffCreationParameters {
+        deduplication_metadata: Some(DeduplicationMetadata {
+            deduplication_map: DeduplicationChunkMap::new_from_path(dir.path().join("dedup.redb"))
+                .unwrap(),
+            original_zffreader: None,
+        }),
+        ..default_creation_parameters()
+    };
+    let deduplicated = encode_physical_container_with_params(
+        vec![(
+            physical_object_header(
+                chunk_size as u64,
+                CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            ),
+            input.clone(),
+        )],
+        vec![HashType::Blake3],
+        params,
+    );
+    let plain = encode_physical_container_with_params(
+        vec![(
+            physical_object_header(
+                chunk_size as u64,
+                CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+            ),
+            input.clone(),
+        )],
+        vec![HashType::Blake3],
+        default_creation_parameters(),
+    );
+
+    assert!(
+        deduplicated.len() < plain.len(),
+        "the redb backed deduplication map did not deduplicate: {} vs {} bytes",
+        deduplicated.len(),
+        plain.len()
+    );
+
+    let mut reader = initialized_reader(deduplicated);
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, input);
+}
+
+#[test]
+fn a_container_with_inconsistent_chunk_offsets_is_rejected() {
+    // Regression test for a crash found by the `read_container` fuzz target.
+    //
+    // calc_seek_offset_chunk_header combined a chunkmap offset, a chunk number
+    // and a first chunk number, all decoded from the container, with unchecked
+    // arithmetic. A corrupted combination overflowed u64, which panics in a
+    // debug build and silently wraps to a meaningless offset in release.
+    let crash_input: Vec<u8> = vec![
+        122, 102, 102, 109, 37, 0, 0, 0, 0, 0, 0, 0, 3, 1, 90, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+        0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 122, 102, 102, 79, 71, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0,
+        0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 99, 19, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        0, 0, 0, 128, 63, 122, 102, 102, 100, 21, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 122, 102, 102, 102, 57, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 10, 0, 0,
+        0, 0, 0, 0, 0, 99, 111, 114, 112, 117, 115, 46, 116, 120, 116, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 99, 111, 114, 112, 117, 115, 32, 102, 105, 108, 101, 122, 102, 102,
+        73, 136, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 214, 157, 106, 0, 0, 0, 0, 1,
+        214, 157, 106, 0, 0, 0, 0, 122, 102, 102, 104, 75, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0,
+        0, 0, 0, 122, 102, 102, 72, 54, 0, 0, 0, 0, 0, 0, 0, 2, 4, 32, 0, 0, 0, 0, 0, 0, 0, 165,
+        177, 2, 224, 223, 216, 250, 51, 145, 204, 227, 221, 34, 66, 199, 254, 148, 198, 1, 239,
+        162, 185, 18, 6, 41, 61, 132, 207, 30, 10, 58, 193, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 11, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 120, 75, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
+        0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 67, 38, 0, 0,
+        0, 0, 0, 0, 0, 2, 165, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 0, 0, 0, 0, 0, 251, 130, 211, 47,
+        65, 209, 6, 5, 122, 102, 102, 76, 150, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 214, 157, 106, 0, 0, 0, 0, 1, 214, 157, 106, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 108, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 176, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 70, 125, 0, 0, 0, 0, 0, 0, 0, 3, 11,
+        3, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 37, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 131, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 25, 2, 0, 0, 0, 0, 0, 0, 122, 102,
+        102, 77, 117, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 2, 0, 0, 0, 0, 0, 0,
+    ];
+
+    let Ok(mut reader) = ZffReader::with_reader(vec![Mutex::new(Cursor::new(crash_input))]) else {
+        return;
+    };
+    if reader.initialize_objects_all().is_err() {
+        return;
+    }
+    for object_number in reader
+        .list_objects()
+        .unwrap()
+        .keys()
+        .copied()
+        .collect::<Vec<_>>()
+    {
+        if reader.set_active_object(object_number).is_err() {
+            continue;
+        }
+        let mut output = Vec::new();
+        // Must return an error, not panic.
+        let _ = std::io::Read::by_ref(&mut reader)
+            .take(1 << 20)
+            .read_to_end(&mut output);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// POSIX ACLs
+// ---------------------------------------------------------------------------
+
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[test]
+fn posix_acls_use_the_key_format_of_the_specification() {
+    // Header-layout.md, "Posix ACL": an access ACL is keyed "acl:<qualifier>",
+    // a default ACL "acl::d:<qualifier>". Access and default entries for the
+    // same qualifier are distinct keys and must not overwrite each other.
+    use posix_acl::{PosixACL, Qualifier};
+
+    let mut access = PosixACL::new(0o644);
+    access.set(Qualifier::User(1002), 4);
+    access.set(Qualifier::Group(1001), 6);
+    access.set(Qualifier::Mask, 7);
+
+    let mut default = PosixACL::new(0o644);
+    default.set(Qualifier::User(1002), 5);
+
+    let metadata = crate::io::get_posix_acls(&access, Some(&default));
+
+    assert_eq!(
+        metadata.get("acl:user:1002"),
+        Some(&MetadataExtendedValue::String("4".to_string())),
+        "access ACL key or value wrong: {:?}",
+        metadata.keys().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        metadata.get("acl:group:1001"),
+        Some(&MetadataExtendedValue::String("6".to_string()))
+    );
+    assert_eq!(
+        metadata.get("acl:mask"),
+        Some(&MetadataExtendedValue::String("7".to_string()))
+    );
+    // The default entry for the same user must survive alongside the access one.
+    assert_eq!(
+        metadata.get("acl::d:user:1002"),
+        Some(&MetadataExtendedValue::String("5".to_string())),
+        "default ACL key wrong: {:?}",
+        metadata.keys().collect::<Vec<_>>()
+    );
+}
+
+#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[test]
+fn a_default_acl_does_not_overwrite_the_access_acl() {
+    // Regression test: both entries were keyed identically, so the default ACL
+    // silently replaced the access ACL for the same qualifier.
+    use posix_acl::{PosixACL, Qualifier};
+
+    let mut access = PosixACL::new(0o644);
+    access.set(Qualifier::User(1500), 7);
+    let mut default = PosixACL::new(0o644);
+    default.set(Qualifier::User(1500), 1);
+
+    let metadata = crate::io::get_posix_acls(&access, Some(&default));
+
+    assert_ne!(
+        metadata.get("acl:user:1500"),
+        metadata.get("acl::d:user:1500"),
+        "access and default ACL entries collapsed into one key"
+    );
+    assert_eq!(metadata.len(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Encoding worker threads
+// ---------------------------------------------------------------------------
+//
+// The encoding pipeline runs hashing, compression, xxhash and same-byte checks
+// on worker threads that share one buffer. A panic in any participant poisons
+// that lock; the pipeline has to report an error instead of every later access
+// panicking in turn and aborting an acquisition.
+
+#[test]
+fn a_poisoned_data_lock_is_reported_as_an_error() {
+    let mut manager =
+        EncodingThreadPoolManager::new(CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0));
+
+    // A normal update has to succeed first, so the failure below is clearly
+    // caused by the poisoning and not by an unrelated problem.
+    manager.update(b"healthy payload".to_vec()).unwrap();
+
+    // Poison the shared buffer the way a panicking peer thread would.
+    let data = Arc::clone(&manager.data);
+    let _ = std::thread::spawn(move || {
+        let _guard = data.write().unwrap();
+        panic!("poisoning the shared buffer on purpose");
+    })
+    .join();
+    assert!(manager.data.is_poisoned());
+
+    let result = manager.update(b"payload after poisoning".to_vec());
+
+    assert!(
+        result.is_err(),
+        "a poisoned lock has to surface as an error rather than a panic"
+    );
+    assert!(matches!(
+        result.unwrap_err().kind_ref(),
+        ZffErrorKind::PoisonError
+    ));
+}
+
+#[test]
+fn a_poisoned_lock_does_not_panic_the_hashing_finalisation() {
+    let mut manager =
+        EncodingThreadPoolManager::new(CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0));
+    manager.add_hashing_thread(HashType::Blake3);
+    manager.update(b"payload".to_vec()).unwrap();
+
+    let data = Arc::clone(&manager.data);
+    let _ = std::thread::spawn(move || {
+        let _guard = data.write().unwrap();
+        panic!("poisoning the shared buffer on purpose");
+    })
+    .join();
+
+    // Whatever the outcome, this must not panic.
+    let _ = manager.finalize_all_hashing_threads();
+}
+
+#[test]
+fn a_container_with_a_deduplication_cycle_is_rejected() {
+    // Regression test for a stack overflow found by the `read_container` fuzz
+    // target. Resolving a duplicate chunk recursed into the chunk it points at;
+    // a container whose duplicates chain or point at each other recursed until
+    // the stack was exhausted.
+    let crash_input: Vec<u8> = vec![
+        122, 102, 102, 109, 37, 0, 0, 0, 0, 0, 0, 0, 3, 255, 90, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 122, 102, 102, 79, 71, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0,
+        0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 99, 19, 0, 0, 0, 0, 0, 0, 0, 1,
+        0, 0, 0, 0, 128, 63, 122, 102, 102, 100, 21, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 170, 170, 170, 170, 170, 170, 170, 170, 122, 102, 102, 120, 141, 1, 0, 0, 0, 0, 0, 0,
+        1, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 122, 102, 0, 0,
+        0, 0, 2, 0, 0, 0, 0, 0, 0, 129, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102,
+        104, 75, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 72, 54, 0, 0, 0, 0,
+        0, 0, 0, 2, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 77, 207, 130, 151, 249, 49, 158, 130, 3,
+        0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 67, 38, 0, 0, 0, 0, 0, 0, 0, 2, 110, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 77, 207, 130, 151, 249, 49, 158, 130, 4, 0, 0, 0, 0, 0, 0, 0,
+        122, 102, 102, 67, 38, 0, 0, 0, 0, 0, 0, 0, 2, 111, 0, 0, 0, 0, 0, 0, 253, 0, 0, 0, 0, 0,
+        0, 0, 0, 4, 77, 207, 130, 151, 249, 49, 158, 130, 5, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102,
+        67, 38, 0, 0, 0, 0, 0, 0, 0, 2, 112, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 77,
+        207, 130, 151, 249, 49, 158, 130, 6, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 67, 38, 0, 0, 0,
+        0, 0, 0, 0, 2, 113, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 77, 207, 130, 151, 249,
+        49, 158, 130, 7, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 67, 38, 0, 0, 0, 0, 0, 0, 0, 2, 114,
+        0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 77, 207, 130, 151, 249, 49, 158, 130, 8, 0,
+        0, 0, 0, 0, 0, 0, 122, 102, 102, 67, 38, 0, 0, 0, 0, 0, 0, 0, 2, 115, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 4, 77, 207, 130, 151, 249, 49, 158, 130, 122, 102, 102, 83, 101, 0,
+        0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+        0, 170, 2, 0, 0, 0, 0, 0, 0, 0, 170, 3, 0, 0, 0, 0, 0, 0, 0, 170, 4, 0, 0, 0, 0, 0, 0, 0,
+        170, 5, 0, 0, 0, 0, 0, 0, 0, 170, 6, 0, 0, 0, 0, 0, 7, 0, 0, 170, 0, 0, 0, 0, 0, 0, 0, 170,
+        8, 0, 0, 0, 0, 0, 0, 0, 170, 122, 102, 102, 80, 137, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0,
+        0, 0, 0, 0, 1, 214, 157, 106, 0, 0, 0, 0, 1, 214, 157, 106, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0,
+        0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 104, 75, 0, 0, 0, 0,
+        0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 122, 102, 102, 72, 54, 0, 0, 0, 0, 0, 0, 0, 2, 4, 32,
+        0, 0, 0, 0, 0, 0, 0, 136, 224, 184, 230, 103, 111, 27, 56, 18, 44, 73, 228, 237, 119, 240,
+        171, 60, 88, 59, 142, 152, 164, 83, 69, 39, 108, 81, 49, 141, 69, 240, 52, 122, 102, 102,
+        70, 141, 0, 0, 0, 0, 0, 0, 0, 3, 1, 4, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 37, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+        102, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 116, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 239, 2, 0, 0, 0, 0, 0, 0, 122, 102, 102, 77, 133, 0,
+        0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 124,
+        3, 0, 0, 0, 0, 0, 0,
+    ];
+
+    let Ok(mut reader) = ZffReader::with_reader(vec![Mutex::new(Cursor::new(crash_input))]) else {
+        return;
+    };
+    if reader.initialize_objects_all().is_err() {
+        return;
+    }
+    for object_number in reader
+        .list_objects()
+        .unwrap()
+        .keys()
+        .copied()
+        .collect::<Vec<_>>()
+    {
+        if reader.set_active_object(object_number).is_err() {
+            continue;
+        }
+        let mut output = Vec::new();
+        // Must terminate with an error rather than exhausting the stack.
+        let _ = std::io::Read::by_ref(&mut reader)
+            .take(1 << 20)
+            .read_to_end(&mut output);
+    }
+}
+
+#[test]
+fn switching_a_fresh_redb_chunkmap_back_to_memory_works() {
+    // A caller may select redb mode and then switch back before anything has
+    // been preloaded. The redb database is empty at that point, so the
+    // conversion must treat missing tables as empty rather than failing.
+    let dir = tempfile::tempdir().unwrap();
+    let input: Vec<u8> = (0..2048u32).map(|i| (i % 251) as u8).collect();
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let container = encode_physical_container(vec![(object_header, input.clone())]);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_objects_all().unwrap();
+    let database = redb::Database::create(dir.path().join("empty.redb")).unwrap();
+    reader.set_preload_chunkmap_mode_redb(database).unwrap();
+
+    reader.set_preload_chunkmaps_mode_in_memory().unwrap();
+
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, input);
+}
+
+#[test]
+fn switching_between_two_fresh_redb_chunkmaps_works() {
+    let dir = tempfile::tempdir().unwrap();
+    let input: Vec<u8> = (0..2048u32).map(|i| (i % 241) as u8).collect();
+    let object_header = physical_object_header(
+        64,
+        CompressionHeader::new(CompressionAlgorithm::None, 0, 1.0),
+    );
+    let container = encode_physical_container(vec![(object_header, input.clone())]);
+
+    let mut reader = ZffReader::with_reader(vec![Mutex::new(Cursor::new(container))]).unwrap();
+    reader.initialize_objects_all().unwrap();
+    reader
+        .set_preload_chunkmap_mode_redb(redb::Database::create(dir.path().join("a.redb")).unwrap())
+        .unwrap();
+    reader
+        .set_preload_chunkmap_mode_redb(redb::Database::create(dir.path().join("b.redb")).unwrap())
+        .unwrap();
+
+    reader.set_active_object(1).unwrap();
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output).unwrap();
+    assert_eq!(output, input);
 }

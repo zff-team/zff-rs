@@ -13,7 +13,7 @@ use crate::prelude::*;
 
 // - external
 use blake3::Hash as Blake3Hash;
-use redb::{Database, ReadableDatabase};
+use redb::{Database, ReadableDatabase, TableError};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 
@@ -288,10 +288,16 @@ impl DeduplicationChunkMap {
             }
             DeduplicationChunkMap::Redb(db) => {
                 let read_txn = db.begin_read()?;
-                let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
-                let mut inner_vec = match table.get(xxhash)? {
-                    Some(ag_vec) => ag_vec.value(),
-                    None => Vec::new(),
+                // A freshly created database contains no tables until a write
+                // transaction creates them, so a missing table here simply
+                // means that nothing has been recorded yet.
+                let mut inner_vec = match read_txn.open_table(CHUNK_MAP_TABLE) {
+                    Ok(table) => match table.get(xxhash)? {
+                        Some(ag_vec) => ag_vec.value(),
+                        None => Vec::new(),
+                    },
+                    Err(TableError::TableDoesNotExist(_)) => Vec::new(),
+                    Err(e) => return Err(e.into()),
                 };
                 if !inner_vec.contains(&chunk_no) {
                     inner_vec.push(chunk_no);
@@ -341,7 +347,14 @@ impl DeduplicationChunkMap {
                 .cloned(),
             DeduplicationChunkMap::Redb(db) => {
                 let read_txn = db.begin_read()?;
-                let table = read_txn.open_table(CHUNK_MAP_TABLE)?;
+                // Nothing recorded yet is "not found", not a database error.
+                let table = match read_txn.open_table(CHUNK_MAP_TABLE) {
+                    Ok(table) => table,
+                    Err(TableError::TableDoesNotExist(_)) => {
+                        return Err(ZffError::new(ZffErrorKind::NotFound, ERROR_NOT_IN_MAP));
+                    }
+                    Err(e) => return Err(e.into()),
+                };
                 let inner_vec = table
                     .get(xxhash)?
                     .ok_or(ZffError::new(ZffErrorKind::NotFound, ERROR_NOT_IN_MAP))?
@@ -359,7 +372,12 @@ impl DeduplicationChunkMap {
             }
             DeduplicationChunkMap::Redb(db) => {
                 let read_txn = db.begin_read()?;
-                let table = read_txn.open_table(CHUNK_MAP_B3_TABLE)?;
+                let table = match read_txn.open_table(CHUNK_MAP_B3_TABLE) {
+                    Ok(table) => table,
+                    // No verification hash has been recorded yet.
+                    Err(TableError::TableDoesNotExist(_)) => return Ok(None),
+                    Err(e) => return Err(e.into()),
+                };
                 Ok(table
                     .get(chunk_no)?
                     .map(|access_guard| Blake3Hash::from_bytes(*access_guard.value())))

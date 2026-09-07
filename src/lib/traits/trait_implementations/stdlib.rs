@@ -563,7 +563,9 @@ impl ValueDecoder for Vec<u64> {
     fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<u64>> {
         let length = decode_len(data)?;
         let mut vec = Vec::new();
-        vec.try_reserve_exact(length)?;
+        // The count is untrusted: reserve a bounded amount and let the vector
+        // grow as elements are actually decoded.
+        vec.try_reserve(length.min(MAX_PREALLOCATED_ELEMENTS))?;
         for _ in 0..length {
             vec.push(u64::decode_directly(data)?);
         }
@@ -581,7 +583,9 @@ where
     fn decode_directly<R: Read>(data: &mut R) -> Result<HashMap<K, V>> {
         let length = decode_len(data)?;
         let mut hash_map = HashMap::new();
-        hash_map.try_reserve(length)?;
+        // The count is untrusted: reserve a bounded amount and let the map grow
+        // as entries are actually decoded.
+        hash_map.try_reserve(length.min(MAX_PREALLOCATED_ELEMENTS))?;
         for _ in 0..length {
             let key = K::decode_directly(data)?;
             let value = V::decode_directly(data)?;
@@ -634,7 +638,9 @@ where
     fn decode_directly<R: Read>(data: &mut R) -> Result<Vec<H>> {
         let length = decode_len(data)?;
         let mut vec = Vec::new();
-        vec.try_reserve_exact(length)?;
+        // The count is untrusted: reserve a bounded amount and let the vector
+        // grow as elements are actually decoded.
+        vec.try_reserve(length.min(MAX_PREALLOCATED_ELEMENTS))?;
         for _ in 0..length {
             vec.push(H::decode_directly(data)?);
         }

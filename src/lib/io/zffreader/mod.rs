@@ -1063,6 +1063,29 @@ fn get_chunk_data<R>(
 where
     R: ReadAt,
 {
+    resolve_chunk_data(current_object_no, metadata, current_chunk_number, 0)
+}
+
+/// Resolves a chunk, following at most [MAX_CHUNK_DEDUPLICATION_HOPS]
+/// deduplication references.
+///
+/// The references come from the container and are untrusted: they may form a
+/// chain or a cycle, which would otherwise recurse until the stack is exhausted.
+fn resolve_chunk_data<R>(
+    current_object_no: &u64,
+    metadata: ArcZffReaderMetadata<R>,
+    current_chunk_number: u64,
+    hops: usize,
+) -> std::result::Result<ChunkContent, std::io::Error>
+where
+    R: ReadAt,
+{
+    if hops > MAX_CHUNK_DEDUPLICATION_HOPS {
+        return Err(std::io::Error::other(format!(
+            "{ERROR_TOO_MANY_DEDUPLICATION_HOPS}{current_chunk_number}"
+        )));
+    }
+
     // Scoped so the read guard is released before the recursive call below.
     let (optional_chunk_header, optional_chunk_deduplication) = {
         let preloaded_chunkmaps = metadata
@@ -1082,7 +1105,7 @@ where
     };
 
     if let Some(dedup_chunk_no) = optional_chunk_deduplication {
-        return get_chunk_data(current_object_no, metadata, dedup_chunk_no);
+        return resolve_chunk_data(current_object_no, metadata, dedup_chunk_no, hops + 1);
     };
 
     //let original_chunk_size;
@@ -1150,9 +1173,12 @@ where
 
         //Ok(vec![single_byte; original_chunk_size as usize])
         //},
-        ChunkContent::Duplicate(dedup_chunk_no) => {
-            get_chunk_data(current_object_no, Arc::clone(&metadata), dedup_chunk_no)
-        }
+        ChunkContent::Duplicate(dedup_chunk_no) => resolve_chunk_data(
+            current_object_no,
+            Arc::clone(&metadata),
+            dedup_chunk_no,
+            hops + 1,
+        ),
     }
 }
 

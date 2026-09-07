@@ -106,7 +106,7 @@ jobs:
   # would silently rot as the API changes.
   benches-and-fuzz:
     runs-on: ubuntu-latest
-    name: Benchmarks and fuzz targets compile
+    name: Benchmarks build, fuzz targets run
     steps:
     - uses: actions/checkout@v4
 
@@ -126,6 +126,22 @@ jobs:
     - name: Build fuzz targets
       working-directory: fuzz
       run: cargo build
+
+    - name: Install cargo-fuzz
+      run: cargo install cargo-fuzz --locked
+
+    # A short run per target. This will not explore much on its own, but it
+    # replays the checked-in corpus and the crashes found so far, so a
+    # regression in the decoders is caught here rather than by a user opening a
+    # corrupt container.
+    - name: Seed the fuzzing corpus
+      run: cargo test --all-features seed_fuzzing_corpus -- --ignored
+
+    - name: Fuzz the structure decoders
+      run: cargo fuzz run decode_structures -- -max_total_time=60 -rss_limit_mb=2048
+
+    - name: Fuzz the container reader
+      run: cargo fuzz run read_container -- -max_total_time=60 -rss_limit_mb=2048
 
   deny:
     runs-on: ubuntu-latest

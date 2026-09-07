@@ -421,7 +421,7 @@ pub(crate) fn get_posix_acls(
     }
     if let Some(default_acls) = default_acls {
         for entry in default_acls.entries() {
-            if let Some((key, value)) = gen_acl_key_value(false, &entry) {
+            if let Some((key, value)) = gen_acl_key_value(true, &entry) {
                 metadata_ext_map.insert(key, value.into());
             }
         }
@@ -475,9 +475,9 @@ fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)
 #[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_key_uid(default: bool, uid: u32) -> String {
     let start = if default {
-        ACL_PREFIX
-    } else {
         ACL_DEFAULT_PREFIX
+    } else {
+        ACL_PREFIX
     };
     format!("{start}:user:{uid}")
 }
@@ -485,9 +485,9 @@ fn gen_acl_key_uid(default: bool, uid: u32) -> String {
 #[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_key_gid(default: bool, gid: u32) -> String {
     let start = if default {
-        ACL_PREFIX
-    } else {
         ACL_DEFAULT_PREFIX
+    } else {
+        ACL_PREFIX
     };
     format!("{start}:group:{gid}")
 }
@@ -495,9 +495,9 @@ fn gen_acl_key_gid(default: bool, gid: u32) -> String {
 #[cfg(all(target_family = "unix", feature = "posix-acl"))]
 fn gen_acl_mask(default: bool) -> String {
     let start = if default {
-        ACL_PREFIX
-    } else {
         ACL_DEFAULT_PREFIX
+    } else {
+        ACL_PREFIX
     };
     format!("{start}:mask")
 }

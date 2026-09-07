@@ -1,71 +1,101 @@
 // - Parent
 use super::*;
 
+/// Opens a table for reading, treating a table that does not exist as empty.
+///
+/// A redb database contains no tables until a write transaction creates them,
+/// so reading from a database that has not been filled yet must not fail. This
+/// happens whenever a caller selects the redb backed chunkmap mode and switches
+/// away again before anything has been preloaded.
+fn open_optional_table<K, V>(
+    read_txn: &redb::ReadTransaction,
+    definition: redb::TableDefinition<'_, K, V>,
+) -> Result<Option<redb::ReadOnlyTable<K, V>>>
+where
+    K: redb::Key + 'static,
+    V: redb::Value + 'static,
+{
+    match read_txn.open_table(definition) {
+        Ok(table) => Ok(Some(table)),
+        Err(redb::TableError::TableDoesNotExist(_)) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 // Will copy a redb to another redb.
 pub(crate) fn copy_redb(input_db: &Database, output_db: &mut Database) -> Result<()> {
     // prepare read context of input_db
     let read_txn = input_db.begin_read()?;
-    let read_table = read_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE)?;
-    let mut table_iterator = read_table.iter()?;
 
     // prepare write context of output_db
     let write_txn = output_db.begin_write()?;
-    let mut write_table = write_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE)?;
 
-    while let Some(data) = table_iterator.next_back() {
-        let (key, value) = data?;
-        write_table.insert(key.value(), value.value())?;
+    if let Some(read_table) = open_optional_table(&read_txn, PRELOADED_CHUNK_OFFSET_MAP_TABLE)? {
+        let mut table_iterator = read_table.iter()?;
+        let mut write_table = write_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE)?;
+
+        while let Some(data) = table_iterator.next_back() {
+            let (key, value) = data?;
+            write_table.insert(key.value(), value.value())?;
+        }
     }
 
     // prepare read context of input_db
-    let read_table = read_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE)?;
-    let mut table_iterator = read_table.iter()?;
-    let mut write_table = write_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE)?;
+    if let Some(read_table) = open_optional_table(&read_txn, PRELOADED_CHUNK_SIZE_MAP_TABLE)? {
+        let mut table_iterator = read_table.iter()?;
+        let mut write_table = write_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE)?;
 
-    while let Some(data) = table_iterator.next_back() {
-        let (key, value) = data?;
-        write_table.insert(key.value(), value.value())?;
+        while let Some(data) = table_iterator.next_back() {
+            let (key, value) = data?;
+            write_table.insert(key.value(), value.value())?;
+        }
     }
 
     // prepare read context of input_db
-    let read_table = read_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE)?;
-    let mut table_iterator = read_table.iter()?;
-    let mut write_table = write_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE)?;
+    if let Some(read_table) = open_optional_table(&read_txn, PRELOADED_CHUNK_FLAGS_MAP_TABLE)? {
+        let mut table_iterator = read_table.iter()?;
+        let mut write_table = write_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE)?;
 
-    while let Some(data) = table_iterator.next_back() {
-        let (key, value) = data?;
-        write_table.insert(key.value(), value.value())?;
+        while let Some(data) = table_iterator.next_back() {
+            let (key, value) = data?;
+            write_table.insert(key.value(), value.value())?;
+        }
     }
 
     // prepare read context of input_db
-    let read_table = read_txn.open_table(PRELOADED_CHUNK_XXHASH_MAP_TABLE)?;
-    let mut table_iterator = read_table.iter()?;
-    let mut write_table = write_txn.open_table(PRELOADED_CHUNK_XXHASH_MAP_TABLE)?;
+    if let Some(read_table) = open_optional_table(&read_txn, PRELOADED_CHUNK_XXHASH_MAP_TABLE)? {
+        let mut table_iterator = read_table.iter()?;
+        let mut write_table = write_txn.open_table(PRELOADED_CHUNK_XXHASH_MAP_TABLE)?;
 
-    while let Some(data) = table_iterator.next_back() {
-        let (key, value) = data?;
-        let buf = value.value();
-        write_table.insert(key.value(), buf)?;
+        while let Some(data) = table_iterator.next_back() {
+            let (key, value) = data?;
+            let buf = value.value();
+            write_table.insert(key.value(), buf)?;
+        }
     }
 
     // prepare read context of input_db
-    let read_table = read_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?;
-    let mut table_iterator = read_table.iter()?;
-    let mut write_table = write_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?;
+    if let Some(read_table) = open_optional_table(&read_txn, PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?
+    {
+        let mut table_iterator = read_table.iter()?;
+        let mut write_table = write_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?;
 
-    while let Some(data) = table_iterator.next_back() {
-        let (key, value) = data?;
-        write_table.insert(key.value(), value.value())?;
+        while let Some(data) = table_iterator.next_back() {
+            let (key, value) = data?;
+            write_table.insert(key.value(), value.value())?;
+        }
     }
 
     // prepare read context of input_db
-    let read_table = read_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?;
-    let mut table_iterator = read_table.iter()?;
-    let mut write_table = write_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?;
+    if let Some(read_table) = open_optional_table(&read_txn, PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?
+    {
+        let mut table_iterator = read_table.iter()?;
+        let mut write_table = write_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?;
 
-    while let Some(data) = table_iterator.next_back() {
-        let (key, value) = data?;
-        write_table.insert(key.value(), value.value())?;
+        while let Some(data) = table_iterator.next_back() {
+            let (key, value) = data?;
+            write_table.insert(key.value(), value.value())?;
+        }
     }
 
     Ok(())
@@ -150,10 +180,15 @@ pub(crate) fn extract_redb_chunk_header_map(
 ) -> Result<HashMap<u64, ChunkHeader>> {
     let mut new_map = HashMap::new();
     let read_txn = db.begin_read()?;
-    let table_offset = read_txn.open_table(PRELOADED_CHUNK_OFFSET_MAP_TABLE)?;
-    let table_size = read_txn.open_table(PRELOADED_CHUNK_SIZE_MAP_TABLE)?;
-    let table_flags = read_txn.open_table(PRELOADED_CHUNK_FLAGS_MAP_TABLE)?;
-    let table_integrity_hash = read_txn.open_table(PRELOADED_CHUNK_XXHASH_MAP_TABLE)?;
+    let (Some(table_offset), Some(table_size), Some(table_flags), Some(table_integrity_hash)) = (
+        open_optional_table(&read_txn, PRELOADED_CHUNK_OFFSET_MAP_TABLE)?,
+        open_optional_table(&read_txn, PRELOADED_CHUNK_SIZE_MAP_TABLE)?,
+        open_optional_table(&read_txn, PRELOADED_CHUNK_FLAGS_MAP_TABLE)?,
+        open_optional_table(&read_txn, PRELOADED_CHUNK_XXHASH_MAP_TABLE)?,
+    ) else {
+        // Nothing has been preloaded into this database yet.
+        return Ok(new_map);
+    };
     let mut table_iterator = table_offset.iter()?;
     while let Some(offset_data) = table_iterator.next_back() {
         let (chunk_no, offset) = offset_data?;
@@ -180,7 +215,10 @@ pub(crate) fn extract_redb_chunk_header_map(
 pub(crate) fn extract_redb_samebytes_map(db: &mut Database) -> Result<HashMap<u64, u8>> {
     let mut new_map = HashMap::new();
     let read_txn = db.begin_read()?;
-    let table = read_txn.open_table(PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)?;
+    let Some(table) = open_optional_table(&read_txn, PRELOADED_CHUNK_SAME_BYTES_MAP_TABLE)? else {
+        // Nothing has been preloaded into this database yet.
+        return Ok(new_map);
+    };
     let mut table_iterator = table.iter()?;
     while let Some(data) = table_iterator.next_back() {
         let (key, value) = data?;
@@ -192,7 +230,10 @@ pub(crate) fn extract_redb_samebytes_map(db: &mut Database) -> Result<HashMap<u6
 pub(crate) fn extract_redb_dedup_map(db: &mut Database) -> Result<HashMap<u64, u64>> {
     let mut new_map = HashMap::new();
     let read_txn = db.begin_read()?;
-    let table = read_txn.open_table(PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)?;
+    let Some(table) = open_optional_table(&read_txn, PRELOADED_CHUNK_DUPLICATION_MAP_TABLE)? else {
+        // Nothing has been preloaded into this database yet.
+        return Ok(new_map);
+    };
     let mut table_iterator = table.iter()?;
     while let Some(data) = table_iterator.next_back() {
         let (key, value) = data?;

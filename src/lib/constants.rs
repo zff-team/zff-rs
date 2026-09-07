@@ -168,6 +168,28 @@ pub(crate) const CHUNK_SEGMENT_OVERHEAD: u64 = 96;
 /// Upper bound for a single allocation step while reading chunk data. A chunk
 /// size decoded from a container is untrusted, so the buffer grows in steps of
 /// this size as data is actually read instead of being allocated up front.
+/// Upper bound for the capacity reserved up front when decoding a collection.
+///
+/// The element count is decoded from the container and is therefore untrusted:
+/// reserving it directly turns a corrupted count into an allocation of
+/// `count * size_of::<T>()` bytes. Only this many elements are reserved; the
+/// collection then grows as elements are actually decoded, which stops at the
+/// end of the input.
+pub(crate) const MAX_PREALLOCATED_ELEMENTS: usize = 1024;
+/// Encoded size of one chunk header map entry: the chunk number (8) plus the
+/// encoded [ChunkHeader](crate::header::ChunkHeader) (38).
+pub(crate) const CHUNK_HEADER_MAP_ENTRY_SIZE: u64 = 8 + 38;
+pub(crate) const ERROR_SEGMENT_OFFSET_OVERFLOW: &str =
+    "The offsets stored in this segment are inconsistent for chunk number: ";
+/// Maximum number of deduplication hops followed while resolving a chunk.
+///
+/// A duplicate chunk refers to the chunk that first held the data, and that one
+/// is stored directly, so a well formed container needs a single hop. A
+/// corrupted or hostile container can chain duplicates or point them at each
+/// other in a cycle; following that without a limit exhausts the stack.
+pub(crate) const MAX_CHUNK_DEDUPLICATION_HOPS: usize = 8;
+pub(crate) const ERROR_TOO_MANY_DEDUPLICATION_HOPS: &str =
+    "Too many deduplication hops while resolving chunk number: ";
 pub(crate) const CHUNK_READ_ALLOCATION_STEP: usize = 1024 * 1024;
 pub(crate) const ERROR_CHUNK_SIZE_EXCEEDS_SEGMENT: &str =
     "The chunk exceeds the segment it is stored in, for chunk number: ";

@@ -174,6 +174,21 @@ impl<R: ReadAt> Segment<R> {
         &self.footer
     }
 
+    /// Adds an offset to a value decoded from the container.
+    ///
+    /// Every operand in the seek calculations below comes from an untrusted
+    /// container, so the arithmetic is checked: a corrupted offset or chunk
+    /// number has to produce an error rather than a panic in a debug build, or
+    /// a silently wrapped and meaningless offset in a release build.
+    fn checked_seek_offset(base: u64, add: u64, chunk_number: u64) -> Result<u64> {
+        base.checked_add(add).ok_or_else(|| {
+            ZffError::new(
+                ZffErrorKind::Invalid,
+                format!("{ERROR_SEGMENT_OFFSET_OVERFLOW}{chunk_number}"),
+            )
+        })
+    }
+
     // calculates the offset of the appropriate chunk header.
     fn calc_seek_offset_chunk_header(&self, chunk_number: u64) -> Result<u64> {
         let chunkmap_offset =
@@ -186,14 +201,27 @@ impl<R: ReadAt> Segment<R> {
         )?;
 
         // skips the chunk map header and the other chunk entries.
-        let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
-					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier 
-						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
-						  1 + // skip the ChunkMap header version
-						  8 + // skip the object number
-						  8 + // skip the length of the map
-						  ((chunk_number - first_chunk_number_of_map) * (8 + 38)) +//skip the other chunk entries
-						  8; // skip the chunk number itself
+        let entries_size = chunk_number
+            .checked_sub(first_chunk_number_of_map)
+            .and_then(|index| index.checked_mul(CHUNK_HEADER_MAP_ENTRY_SIZE))
+            .ok_or_else(|| {
+                ZffError::new(
+                    ZffErrorKind::Invalid,
+                    format!("{ERROR_SEGMENT_OFFSET_OVERFLOW}{chunk_number}"),
+                )
+            })?;
+        let seek_offset = Self::checked_seek_offset(
+            chunkmap_offset, // go to the appropriate chunkmap
+            DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier
+                DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
+                1 + // skip the ChunkMap header version
+                8 + // skip the object number
+                8, // skip the length of the map
+            chunk_number,
+        )?;
+        // skip the other chunk entries and the chunk number itself
+        let seek_offset = Self::checked_seek_offset(seek_offset, entries_size, chunk_number)?;
+        let seek_offset = Self::checked_seek_offset(seek_offset, 8, chunk_number)?;
         Ok(seek_offset)
     }
 
@@ -203,10 +231,13 @@ impl<R: ReadAt> Segment<R> {
             get_chunkmap_offset(&self.footer.chunk_header_map_table, chunk_number)?;
 
         // skips the chunk map header and the other chunk entries.
-        let seek_offset = chunkmap_offset + // go to the appropriate chunkmap
-					      DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier 
-						  DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
-						  1; // skip the ChunkMap header version
+        let seek_offset = Self::checked_seek_offset(
+            chunkmap_offset, // go to the appropriate chunkmap
+            DEFAULT_LENGTH_HEADER_IDENTIFIER as u64 + //skip the chunk map identifier
+                DEFAULT_LENGTH_VALUE_HEADER_LENGTH as u64 + //skip the structure map length value
+                1, // skip the ChunkMap header version
+            chunk_number,
+        )?;
         u64::decode_at(&self.data, seek_offset)
     }
 
@@ -222,10 +253,8 @@ impl<R: ReadAt> Segment<R> {
     /// Returns the offset of the appropriate chunk (number).
     pub fn get_chunk_offset(&self, chunk_number: &u64) -> Result<u64> {
         let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
-        let seek_offset = chunk_header_offset + // go to the appropriate chunk header
-						  4 + // skip the magic bytes
-						  8 + // skip the header length
-						  1;
+        // skip the magic bytes, the header length and the chunk type
+        let seek_offset = Self::checked_seek_offset(chunk_header_offset, 4 + 8 + 1, *chunk_number)?;
         // read the appropriate offset
         let offset = u64::decode_at(&self.data, seek_offset)?;
         Ok(offset)
@@ -234,11 +263,9 @@ impl<R: ReadAt> Segment<R> {
     /// Returns the size of the appropriate (encrypted, compressed, ...) chunk (number)
     pub fn get_chunk_size(&self, chunk_number: &u64) -> Result<u64> {
         let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
-        let seek_offset = chunk_header_offset + // go to the appropriate chunk header
-						  4 + // skip the magic bytes
-						  8 + // skip the header length
-						  1 + // skip the chunk type
-						  8; // skip the chunk offset
+        // skip the magic bytes, the header length, the chunk type and the offset
+        let seek_offset =
+            Self::checked_seek_offset(chunk_header_offset, 4 + 8 + 1 + 8, *chunk_number)?;
 
         // read the appropriate offset
         let size = u64::decode_at(&self.data, seek_offset)?;
@@ -248,12 +275,9 @@ impl<R: ReadAt> Segment<R> {
     /// Returns the flags of the appropriate (encrypted, compressed, ...) chunk (number)
     pub fn get_chunk_flags(&self, chunk_number: &u64) -> Result<ChunkFlags> {
         let chunk_header_offset = self.calc_seek_offset_chunk_header(*chunk_number)?;
-        let seek_offset = chunk_header_offset + // go to the appropriate chunk header
-						  4 + // skip the magic bytes
-						  8 + // skip the header length
-						  1 + // skip the chunk type
-						  8 + // skip the chunk offset
-						  8; // skip the chunk size
+        // skip the magic bytes, header length, chunk type, offset and size
+        let seek_offset =
+            Self::checked_seek_offset(chunk_header_offset, 4 + 8 + 1 + 8 + 8, *chunk_number)?;
 
         // read the appropriate offset
         let flags = ChunkFlags::decode_at(&self.data, seek_offset)?;
