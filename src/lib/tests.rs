@@ -3916,8 +3916,13 @@ fn a_container_with_inconsistent_chunk_offsets_is_rejected() {
 // ---------------------------------------------------------------------------
 // POSIX ACLs
 // ---------------------------------------------------------------------------
+//
+// Linux rather than unix: macOS exposes the same C entry points but follows
+// NFSv4 semantics, where acl_get_entry fails and the posix-acl crate turns that
+// into an assertion failure rather than an error. Reading ACLs there would
+// abort the process, so both the feature and these tests stop at Linux.
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 #[test]
 fn posix_acls_use_the_key_format_of_the_specification() {
     // Header-layout.md, "Posix ACL": an access ACL is keyed "acl:<qualifier>",
@@ -3958,7 +3963,7 @@ fn posix_acls_use_the_key_format_of_the_specification() {
     );
 }
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 #[test]
 fn a_default_acl_does_not_overwrite_the_access_acl() {
     // Regression test: both entries were keyed identically, so the default ACL

@@ -33,7 +33,7 @@ use crate::{
 use ed25519_dalek::SigningKey;
 #[cfg(feature = "log")]
 use log::{debug, info, warn};
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 use posix_acl::{ACLEntry, PosixACL, Qualifier};
 #[cfg(target_family = "unix")]
 use time::OffsetDateTime;
@@ -256,8 +256,8 @@ fn get_metadata_ext<P: AsRef<Path>>(path: P) -> Result<HashMap<String, MetadataE
     metadata_ext.insert(METADATA_CTIME.into(), ctime.into());
     metadata_ext.insert(METADATA_BTIME.into(), btime.into());
 
-    // check acls on unix systems
-    #[cfg(feature = "posix-acl")]
+    // check acls on linux systems
+    #[cfg(all(target_os = "linux", feature = "posix-acl"))]
     if let Ok(acl) = PosixACL::read_acl(path.as_ref()) {
         metadata_ext.extend(get_posix_acls(
             &acl,
@@ -408,7 +408,7 @@ fn get_xattr_metadata<P: AsRef<Path>>(
     Ok(metadata_ext_map)
 }
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 pub(crate) fn get_posix_acls(
     acl: &PosixACL,
     default_acls: Option<&PosixACL>,
@@ -461,7 +461,7 @@ pub(crate) fn check_same_byte(vec: &[u8]) -> bool {
     }
 }
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)> {
     let key = match entry.qual {
         Qualifier::User(uid) => gen_acl_key_uid(default, uid),
@@ -472,7 +472,7 @@ fn gen_acl_key_value(default: bool, entry: &ACLEntry) -> Option<(String, String)
     Some((key, entry.perm.to_string()))
 }
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 fn gen_acl_key_uid(default: bool, uid: u32) -> String {
     let start = if default {
         ACL_DEFAULT_PREFIX
@@ -482,7 +482,7 @@ fn gen_acl_key_uid(default: bool, uid: u32) -> String {
     format!("{start}:user:{uid}")
 }
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 fn gen_acl_key_gid(default: bool, gid: u32) -> String {
     let start = if default {
         ACL_DEFAULT_PREFIX
@@ -492,7 +492,7 @@ fn gen_acl_key_gid(default: bool, gid: u32) -> String {
     format!("{start}:group:{gid}")
 }
 
-#[cfg(all(target_family = "unix", feature = "posix-acl"))]
+#[cfg(all(target_os = "linux", feature = "posix-acl"))]
 fn gen_acl_mask(default: bool) -> String {
     let start = if default {
         ACL_DEFAULT_PREFIX

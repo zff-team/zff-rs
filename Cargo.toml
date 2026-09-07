@@ -56,6 +56,12 @@ zstd = "0.13.3"
 # platform specific dependencies
 [target.'cfg(target_family = "unix")'.dependencies]
 xattr = "1.6.1"
+
+# POSIX.1e ACLs are a Linux facility here: acl-sys links libacl only on Linux,
+# and on macOS the ACL API follows NFSv4 semantics, where iterating entries
+# fails. Reading ACLs there would abort instead of returning an error, so the
+# dependency and the code using it are limited to Linux.
+[target.'cfg(target_os = "linux")'.dependencies]
 posix-acl = { version = "1.1.0", optional = true }
 
 [features]
