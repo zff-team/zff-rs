@@ -1,6 +1,6 @@
 [package]
 name = "zff"
-version = "3.0.0"
+version = "3.0.1"
 authors = ["ph0llux <ph0llux@pm.me"]
 edition = "2024"
 rust-version = "1.89.0"
@@ -37,7 +37,7 @@ log = { version = "0.4.33", optional = true }
 lz4_flex = "0.14.0"
 moka = { version = "0.12.15", features = ["sync"] }
 ordered-float = "5.2.0"
-phollpers = { version = "0.1.1", features = ["compression", "read_at"]}
+phollpers = { version = "0.1.2", features = ["compression", "read_at"]}
 pkcs5 = { version = "0.8.1", features = [ "pbes2", "alloc" ] }
 rand = { version = "0.10.2", features = ["sys_rng"]}
 redb = "4.1.0"
@@ -51,7 +51,7 @@ time = { version = "0.3.53" }
 typenum = "1.20.1"
 twox-hash = { version = "2.1.2" }
 zeroize = {version = "1.9.0", features = ["derive"] }
-zstd = "0.13.3"
+zstd = "0.14.3"
 
 # platform specific dependencies
 [target.'cfg(target_family = "unix")'.dependencies]
